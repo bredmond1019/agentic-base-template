@@ -5,6 +5,20 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-17 — OKF Phase 2 plan seeded (planning, not yet executed)
+
+Wrote a self-contained Phase 2 execution plan into `planning/okf-phase-2/plan.md` so a session
+opened in this repo is fully primed without needing the brain. It restates the settled decisions
+(brain D15–D18 + the `sdlc/` path resolution) and gives the ordered task list: rewrite the three
+SDLC engines to `planning/<concept>/` + `planning/<concept>/sdlc/`, restructure the scaffold to
+lowercase names + concept-folders + `index.md`, update the harness skills, generalize the
+stack-coupling (closing D3), self-apply to this repo's meta, and regression-check. Added
+`planning/index.md` (active-work pointer + D17 self-application) and a "Before you change anything"
+pointer in `CLAUDE.md`. **No harness/scaffold files changed yet** — the rewrite (and its provenance
+commit + the D4 ADR that supersedes D3) happens when the plan is executed.
+
+---
+
 ## 2026-06-17 — Template established (WS3)
 
 Stood up `base-template/` as its own git repo, gitignored from the brain. Seeded the harness

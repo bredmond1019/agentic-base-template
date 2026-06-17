@@ -7,6 +7,11 @@ generation flow.
 
 ## Before you change anything
 
+- **Active work:** `planning/index.md` → currently **OKF Phase 2** (`planning/okf-phase-2/plan.md`),
+  a self-contained plan to converge the harness/scaffold to lowercase names, the concept-folder
+  `planning/` model, and the `sdlc/` pipeline-state convention. If you're here to do that work,
+  read the plan first — it supersedes standing rule #3 below (which still describes the pre-Phase-2
+  names) and closes the D3 engine-generalization deferral.
 - **What this is + layout:** `README.md`
 - **Why the harness looks the way it does:** `planning/decisions/` (keep/drop ADRs, the
   scaffold-split decision)
