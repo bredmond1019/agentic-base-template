@@ -5,7 +5,7 @@
 // A parallel-safe variant of sdlc-run that:
 //   1. Auto-creates a git worktree for this specific task
 //   2. Runs the full SDLC pipeline inside that worktree
-//   3. Defers STATUS.md / DEVLOG.md updates to a task log file
+//   3. Defers status.md / log.md updates to a task log file
 //      (applied at merge time via /clean-worktree)
 //
 // This lets multiple tasks run simultaneously with zero shared file writes,
@@ -23,19 +23,19 @@
 //   Plan       → generate task spec (skipped if spec already exists)
 //   Implement  → execute the task from spec
 //   Fix        → targeted fixes for FAIL/PARTIAL review (up to 3 attempts)
-//   Test       → 7-check suite: lint, tsc, content-validate, jest collect + full, build, emoji
-//   Review     → fresh npm test + acceptance criteria; verdict gates next stage
+//   Test       → run the project's validation suite from planning/harness.json (+ universal emoji gate)
+//   Review     → fresh validation run + acceptance criteria; verdict gates next stage
 //   Document   → surgical patches to docs/ (gates on PASS verdict)
-//   Wrap-up    → write task log file (defers STATUS/DEVLOG to merge time)
+//   Wrap-up    → write task log file (defers status/log to merge time)
 //
 // WHAT RUNS IN THE WORKTREE vs. MAIN
 //   Worktree branch: all code, content, doc, and report changes
-//   Main (at merge): STATUS.md + DEVLOG.md updates (applied by /clean-worktree)
+//   Main (at merge): status.md + log.md updates (applied by /clean-worktree)
 //
 // MERGE FLOW
 //   After pipeline completes:
 //     /clean-worktree <branchName>
-//   This: merges the branch → applies the task log → updates STATUS/DEVLOG →
+//   This: merges the branch → applies the task log → updates status/log →
 //         commits → removes worktree → deletes branch.
 //
 // WORKTREE PATH CONVENTION
@@ -78,11 +78,11 @@ export const meta = {
     { title: 'Plan',       detail: 'Generate task spec (only if spec file does not yet exist)' },
     { title: 'Implement',  detail: 'Execute the task' },
     { title: 'Fix',        detail: 'Targeted fixes for FAIL/PARTIAL review' },
-    { title: 'Test',       detail: 'Run 7-check validation suite in the worktree' },
+    { title: 'Test',       detail: "Run the project's validation suite (from planning/harness.json) in the worktree" },
     { title: 'Review',     detail: 'Verify acceptance criteria; issue verdict' },
     { title: 'UI Test',    detail: 'Browser smoke check via playwright-cli (frontend-touching specs only)' },
     { title: 'Document',   detail: 'Patch docs/ (gates on PASS verdict)' },
-    { title: 'Wrap-up',    detail: 'Write task log file (STATUS/DEVLOG deferred to merge time)' },
+    { title: 'Wrap-up',    detail: 'Write task log file (status/log deferred to merge time)' },
   ]
 }
 
@@ -111,9 +111,9 @@ if (taskNumber === null || isNaN(taskNumber)) {
   return { error: 'Task number required', rawArgs }
 }
 
-const specFile    = `planning/tasks/${blockId}/tasks.md`
+const specFile    = `planning/${blockId}/tasks.md`
 const stem        = `${blockId}-task${taskNumber}`
-const reportsDir  = `planning/tasks/${blockId}/reports`
+const reportsDir  = `planning/${blockId}/sdlc/reports`
 const taskPrefix  = `task${taskNumber}-`
 const implementReport = `${reportsDir}/${taskPrefix}implement.md`
 const testReport      = `${reportsDir}/${taskPrefix}test.md`
@@ -122,11 +122,11 @@ const documentReport  = `${reportsDir}/${taskPrefix}document.md`
 const uitestReport    = `${reportsDir}/${taskPrefix}ui-test.md`
 const workflowReport  = `${reportsDir}/${taskPrefix}workflow.md`
 const logFile         = `${reportsDir}/${taskPrefix}log.md`
-const breakdownFile   = `planning/tasks/${blockId}/breakdown.md`
+const breakdownFile   = `planning/${blockId}/breakdown.md`
 
 // Base branch name (suffix may be appended by setup agent).
 // Dots are kept so a phase-dotted spec slug (e.g. 1.1-site-credibility-fixes) round-trips
-// to its planning/tasks/<slug>/ directory; git allows '.' in a branch name (just not '..').
+// to its planning/<slug>/ directory; git allows '.' in a branch name (just not '..').
 const baseBranchName = `${blockId}-task${taskNumber}`.toLowerCase().replace(/[^a-z0-9.-]/g, '-')
 
 log(`Target: ${blockId} task ${taskNumber}`)
@@ -272,7 +272,7 @@ const MODEL = {
   review:        'sonnet',   // verify criteria; gated by an authoritative fresh-test run
   uiTest:        'sonnet',   // live browser smoke checks via playwright-cli; needs judgment to interpret results
   document:      'sonnet',   // surgical doc patches, gated on PASS
-  taskLog:       'sonnet',   // authors the human-facing DEVLOG prose + STATUS lines — keep the quality
+  taskLog:       'sonnet',   // authors the human-facing log prose + status lines — keep the quality
   finalize:      'haiku',    // assembles a JS-precomputed table + scripted git add; can't break the pipeline
 }
 
@@ -280,6 +280,99 @@ const MODEL = {
 // so the agent inherits the session model rather than receiving model: undefined).
 function withModel(base, model) {
   return model ? { ...base, model } : base
+}
+
+// ----------------------------------------------------------------
+// HARNESS CONFIG — mechanism/policy split (see planning/harness.json)
+//
+// The engine ships NO stack defaults. A project declares its validation policy in
+// planning/harness.json. The workflow runtime has no filesystem access, so a dedicated
+// micro-loader agent reads + parses the file (the same way sdlc-block loads execution-plan.json).
+// Returns the parsed config object, or null when the file is absent or invalid — callers then
+// degrade to the spec's `## Validation Commands` section and disable the UI-test stage.
+//
+// NOTE (P4): this task engine runs inside a git worktree — when wired, the loader's cat must run
+// as `cd ${worktreePath} && cat planning/harness.json` (the worktree carries the project's config).
+// ----------------------------------------------------------------
+const HARNESS_CONFIG_SCHEMA = {
+  type: 'object',
+  required: ['present'],
+  properties: {
+    present: { type: 'boolean', description: 'true if planning/harness.json exists and parsed as valid JSON' },
+    config: {
+      type: 'object',
+      description: 'The parsed harness.json (omit when present is false)',
+      properties: {
+        stack: { type: 'string' },
+        validation: {
+          type: 'object',
+          properties: {
+            checks: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name:    { type: 'string' },
+                  command: { type: 'string' },
+                  purpose: { type: 'string' },
+                  gates:   { type: 'boolean' }
+                }
+              }
+            }
+          }
+        },
+        uiTest: {
+          type: 'object',
+          properties: {
+            enabled:          { type: 'boolean' },
+            devServerCommand: { type: 'string' },
+            readySignal:      { type: 'string' },
+            port:             { type: 'integer' },
+            routes:           { type: 'array', items: { type: 'string' } }
+          }
+        }
+      }
+    },
+    notes: { type: 'string' }
+  }
+}
+
+// Spawn the micro-loader agent and return the parsed config (or null). Wired into the stages
+// in P4; defined here so the loader path exists from P1. No stack defaults on absence.
+// cwd: optional working-directory prefix (the worktree path) for the cat command.
+async function loadHarnessConfig(cwd) {
+  const prefix = cwd ? `cd ${cwd} && ` : ''
+  const result = await agent(`
+You are the harness-config loader for the SDLC pipeline. Your ONLY job is to read the project's
+validation-policy file and return it as structured data. Do not run any checks or modify anything.
+
+STEP 1 — Read the config file:
+  ${prefix}cat planning/harness.json 2>/dev/null && echo "__HARNESS_PRESENT__" || echo "__HARNESS_ABSENT__"
+
+STEP 2 — Decide:
+  - "__HARNESS_ABSENT__" (file missing) → present=false, omit config.
+  - File printed but NOT valid JSON → present=false, notes="harness.json present but invalid JSON: <reason>".
+  - File printed and valid JSON → present=true, and copy the parsed object into "config", keeping ONLY
+    these fields when present: stack; validation.checks[] ({name, command, purpose, gates});
+    uiTest ({enabled, devServerCommand, readySignal, port, routes[]}). Ignore any other fields.
+
+Return your findings using the StructuredOutput tool.
+`, { label: 'harness-config', schema: HARNESS_CONFIG_SCHEMA, model: 'haiku' })
+
+  if (!result || !result.present || !result.config) return null
+  return result.config
+}
+
+// Render the inner validation-check list for the Test stage from harness config.
+// STUB — body filled in P4. Not yet wired into the Test stage.
+function renderCheckList(cfg, { changedPaths } = {}) {
+  return '' // P4: build the ordered CHECK list from cfg.validation.checks[]
+}
+
+// Render the UI-test stage prompt body from harness config.
+// STUB — body filled in P4. Not yet wired into the UI-test stage.
+function renderUiTestPrompt(cfg, port) {
+  return '' // P4: interpolate cfg.uiTest.{devServerCommand, readySignal, port, routes}
 }
 
 // ----------------------------------------------------------------
@@ -398,7 +491,7 @@ const W = `
 ║
 ║  "repo root" = ${worktreePath}
 ║  Run npm commands (npm test, npm run build, etc.) from the repo root.
-║  Relative paths (planning/tasks/...) resolve from: ${worktreePath}
+║  Relative paths (planning/...) resolve from: ${worktreePath}
 ╚══════════════════════════════════════════════════════════════════╝
 `
 
@@ -431,11 +524,11 @@ STEP 2 — Check report files:
   cd ${worktreePath} && ls ${documentReport} 2>/dev/null && echo "HAS_DOCUMENT" || echo "NO_DOCUMENT"
   cd ${worktreePath} && ls ${reportsDir}/*.md 2>/dev/null | head -20 || echo "NO_BLOCK_REPORTS"
 
-STEP 3 — Read STATUS.md:
-  cd ${worktreePath} && head -60 planning/STATUS.md
+STEP 3 — Read status.md:
+  cd ${worktreePath} && head -60 planning/status.md
 
-STEP 4 — Read recent DEVLOG (at the worktree root):
-  cd ${worktreePath} && head -60 DEVLOG.md
+STEP 4 — Read recent log (at the worktree root):
+  cd ${worktreePath} && head -60 log.md
 
 STEP 5 — If review report exists, extract the verdict:
   cd ${worktreePath} && grep -iE "\\*\\*Verdict|## Verdict|^Verdict:" ${reviewReport} 2>/dev/null | head -5 || echo "NO_REVIEW_REPORT"
@@ -450,10 +543,10 @@ STEP 6 — Determine startStage using this EXACT priority order:
   7. Review report with PASS verdict, ui-test report exists, no document report → "document"
   8. Document report exists → "wrap-up"
 
-STEP 7 — Find this spec's status in STATUS.md progress table. Look for a row containing
+STEP 7 — Find this spec's status in status.md progress table. Look for a row containing
   "${blockId}" and extract its Status column value (title-case: Not started / In progress / Done / Blocked / Skipped).
 
-STEP 8 — Note any discrepancy between DEVLOG and report files.
+STEP 8 — Note any discrepancy between log and report files.
 
 Return your findings using the StructuredOutput tool.
 `, withModel({ label: 'scout', schema: SCOUT_SCHEMA, phase: 'Scout' }, MODEL.scout))
@@ -467,13 +560,13 @@ log(`Scout: start from "${scout.startStage}" | block status: "${scout.blockStatu
 if (scout.discrepancies) log(`Discrepancies: ${scout.discrepancies}`)
 if (scout.statusSummary) log(scout.statusSummary)
 
-// Block "Not started" warning — do NOT edit STATUS.md in the worktree.
-// STATUS.md changes are always deferred to the task log (applied at merge time).
+// Block "Not started" warning — do NOT edit status.md in the worktree.
+// status.md changes are always deferred to the task log (applied at merge time).
 // If the block needs to be flipped before parallel tasks start, run /start-block first.
 if (scout.blockStatus === 'Not started') {
-  log(`Note: Spec "${blockId}" is "Not started" in STATUS.md.`)
+  log(`Note: Spec "${blockId}" is "Not started" in status.md.`)
   log(`The task log will record the status flip — applied when this branch merges to main.`)
-  log(`To update STATUS.md immediately (e.g. before other parallel tasks start), run /start-block ${blockId} from the main session.`)
+  log(`To update status.md immediately (e.g. before other parallel tasks start), run /start-block ${blockId} from the main session.`)
 }
 
 let currentStage = scout.startStage
@@ -502,18 +595,18 @@ Worktree root: ${worktreePath}
 
 Instructions:
 
-1. Read planning/MASTER_PLAN.md (at the worktree root) — find the section covering "${blockId}".
-   Run: cd ${worktreePath} && cat planning/MASTER_PLAN.md
+1. Read planning/master-plan.md (at the worktree root) — find the section covering "${blockId}".
+   Run: cd ${worktreePath} && cat planning/master-plan.md
 
 2. Read CLAUDE.md — note all standing rules (bilingual parity, public-narrative rule,
    no fabricated metrics, validate:content + build must pass).
    Run: cd ${worktreePath} && cat CLAUDE.md
 
 3. Read an existing spec as format reference:
-   cd ${worktreePath} && cat planning/tasks/1.1-site-credibility-fixes/tasks.md
+   cd ${worktreePath} && cat planning/1.1-site-credibility-fixes/tasks.md
 
    Also create the spec directory structure now if it does not exist:
-   cd ${worktreePath} && mkdir -p planning/tasks/${blockId}/reports
+   cd ${worktreePath} && mkdir -p planning/${blockId}/sdlc/reports
 
 4. Write ${specFile} (absolute path: ${worktreePath}/${specFile}) following the standard format.
 
@@ -820,11 +913,11 @@ CHECK 1 — ESLint (lint gate):
 
 CHECK 2 — TypeScript (type gate, replaces pylint):
   cd ${worktreePath} && npx tsc --noEmit 2>&1 | tail -80
-  echo "CHECK2_EXIT:\${PIPESTATUS[0]}"
+  echo "CHECK2_EXIT:\${PIPEstatus[0]}"
 
 CHECK 3 — Content validation (frontmatter / MDX / internal refs):
   cd ${worktreePath} && npm run validate:content 2>&1 | tail -80
-  echo "CHECK3_EXIT:\${PIPESTATUS[0]}"
+  echo "CHECK3_EXIT:\${PIPEstatus[0]}"
 
 CHECK 4 — Jest collect (syntax check — does NOT resolve module imports):
   cd ${worktreePath} && npm test -- --listTests > /tmp/check4-list.txt 2>&1; echo "CHECK4_EXIT:$?"
@@ -837,11 +930,11 @@ CHECK 4 — Jest collect (syntax check — does NOT resolve module imports):
 
 CHECK 5 — Jest full (authoritative unit/integration run):
   cd ${worktreePath} && npm test 2>&1 | tail -80
-  echo "CHECK5_EXIT:\${PIPESTATUS[0]}"
+  echo "CHECK5_EXIT:\${PIPEstatus[0]}"
 
 CHECK 6 — Next build (production build gate):
   cd ${worktreePath} && npm run build 2>&1 | tail -80
-  echo "CHECK6_EXIT:\${PIPESTATUS[0]}"
+  echo "CHECK6_EXIT:\${PIPEstatus[0]}"
 
 CHECK 7 — Emoji prohibition (CLAUDE.md standing rule):
   Two passes: task-introduced files cause hard FAIL; pre-existing files emit WARN only.
@@ -1298,7 +1391,7 @@ Return using StructuredOutput:
 }
 
 // ================================================================
-// PHASE 7: WRAP-UP — write task log (deferred STATUS/DEVLOG) + finalize
+// PHASE 7: WRAP-UP — write task log (deferred status/log) + finalize
 // ================================================================
 phase('Wrap-up')
 
@@ -1310,15 +1403,15 @@ const stageResultsSummary = stageResults
 log(`Wrap-up. Final verdict: ${finalVerdict}. Pipeline: ${stageResultsSummary}`)
 
 // ----------------------------------------------------------------
-// TASK LOG: write deferred STATUS/DEVLOG content — do NOT touch those files
+// TASK LOG: write deferred status/log content — do NOT touch those files
 // ----------------------------------------------------------------
-log('Writing task log (STATUS/DEVLOG deferred to merge time)...')
+log('Writing task log (status/log deferred to merge time)...')
 
 const logResult = await agent(`${W}
 You are the task-log agent for the SDLC pipeline.
 
-Your job is to write a structured task log file that records what STATUS.md and DEVLOG.md
-should be updated to. Do NOT modify planning/STATUS.md or DEVLOG.md directly — those files
+Your job is to write a structured task log file that records what status.md and log.md
+should be updated to. Do NOT modify planning/status.md or log.md directly — those files
 are updated when the worktree branch is merged into main via /clean-worktree.
 
 Target:
@@ -1338,8 +1431,8 @@ Instructions:
    Look for the section "### ${taskNumber + 1}." to get the next task's title.
    If no task ${taskNumber + 1} exists, note "spec complete".
 
-2. Read current STATUS.md to understand the progress-table notes format (title-case status):
-   cd ${worktreePath} && head -30 planning/STATUS.md
+2. Read current status.md to understand the progress-table notes format (title-case status):
+   cd ${worktreePath} && head -30 planning/status.md
 
 3. Get the git log for this pipeline run:
    cd ${worktreePath} && git log --oneline main..HEAD 2>/dev/null || git log --oneline -8
@@ -1362,26 +1455,26 @@ Instructions:
 
    ---
 
-   ## STATUS.md — Spec Status
+   ## status.md — Spec Status
    [Only include this section if the spec was "Not started" when this task ran (blockStatus: ${scout.blockStatus}).
     Write: "In progress" to flip it. Omit this section entirely if it was already In progress or Done.]
 
-   ## STATUS.md — Current Focus Line
+   ## status.md — Current Focus Line
    [The COMPLETE replacement string for the "Current focus:" line.
     If task ${taskNumber + 1} exists: "${blockId} — Task ${taskNumber + 1}: [task title]"
     If spec complete: the next spec's focus line]
 
-   ## STATUS.md — Last Updated Line
+   ## status.md — Last Updated Line
    [The COMPLETE replacement string for the "Last updated:" line.
     Format: "YYYY-MM-DD — ${blockId} in progress (Tasks 1–${taskNumber} complete; Tasks ${taskNumber + 1}–N next — [brief description])"]
 
-   ## STATUS.md — Notes Column
+   ## status.md — Notes Column
    [The updated Notes column text for this spec's row in the progress table.
     Summarizes which tasks are done and which remain.]
 
    ---
 
-   ## DEVLOG Entry
+   ## Log Entry
 
    ## [today's date] (task ${taskNumber} — [brief description matching the task])
 
@@ -1426,7 +1519,7 @@ const stageTable = stageResults.map(r => {
 const finalizeResult = await agent(`${W}
 You are the finalize agent for the SDLC pipeline.
 
-IMPORTANT: Do NOT modify planning/STATUS.md or DEVLOG.md. Those are applied at merge time.
+IMPORTANT: Do NOT modify planning/status.md or log.md. Those are applied at merge time.
 Your chore commit includes ONLY: test report, review report, document report, task log,
 and the workflow report you write here.
 
@@ -1479,13 +1572,13 @@ STEP 2 — Write the workflow report: ${worktreePath}/${workflowReport}
   [relevant lines from git log --oneline]
 
   ## Next Step
-  To merge this task into main and apply STATUS/DEVLOG updates:
+  To merge this task into main and apply status/log updates:
     /clean-worktree ${branchName}
 
 STEP 3 — Commit the report files. Never use git add -A or git add .
 
   Run: cd ${worktreePath} && git status
-  Stage ONLY report files (NOT STATUS.md or DEVLOG.md — never touch those in the worktree):
+  Stage ONLY report files (NOT status.md or log.md — never touch those in the worktree):
     cd ${worktreePath} && git add ${testReport} 2>/dev/null || true
     cd ${worktreePath} && git add ${reviewReport} 2>/dev/null || true
     cd ${worktreePath} && git add ${uitestReport} 2>/dev/null || true
@@ -1509,7 +1602,7 @@ STEP 4 — Print the merge instructions EXACTLY as shown:
   ║  Worktree: ${worktreePath}
   ║  Branch:   ${branchName}
   ║
-  ║  To merge and apply STATUS/DEVLOG updates, run from main session:
+  ║  To merge and apply status/log updates, run from main session:
   ║    /clean-worktree ${branchName}
   ╚══════════════════════════════════════════════════════════════════╝
 
@@ -1532,7 +1625,7 @@ if (finalizeResult) {
 log(`Pipeline complete. Verdict: ${finalVerdict} | Worktree: ${worktreePath} | Branch: ${branchName}`)
 log(`To merge: /clean-worktree ${branchName}`)
 log(`IMPORTANT: If running multiple tasks in parallel, merge them in task-number order.`)
-log(`Merging out of order will cause STATUS.md "Current focus" to point to the wrong next task.`)
+log(`Merging out of order will cause status.md "Current focus" to point to the wrong next task.`)
 
 return {
   blockId,

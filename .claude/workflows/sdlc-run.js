@@ -11,21 +11,21 @@
 //   /sdlc-run 1.1-site-credibility-fixes 2    scopes every stage to task 2 only
 //
 // PIPELINE STAGES (in order)
-//   Scout      → detect current stage from report files + STATUS.md + DEVLOG
+//   Scout      → detect current stage from report files + status.md + log
 //   Plan       → generate task spec (skipped if spec file already exists)
 //   Implement  → execute tasks from spec
 //   Fix        → targeted fixes for FAIL/PARTIAL review (one pass per retry)
-//   Test       → 7-check suite: lint, types, content, jest collect + full, build, emoji
-//   Review     → fresh npm test + acceptance criteria check; verdict gates next
+//   Test       → run the project's validation suite from planning/harness.json (+ universal emoji gate)
+//   Review     → fresh validation run + acceptance criteria check; verdict gates next
 //   Document   → surgical patches to docs/ (skipped if verdict is not PASS)
-//   Wrap-up    → update STATUS.md + DEVLOG, commit planning files, write report
+//   Wrap-up    → update status.md + log, commit planning files, write report
 //
 // COMMIT STRATEGY
 //   Each agent commits its own work immediately after completing it:
 //     feat: implement <stem>          implement agent (fix: if validation failed)
 //     fix: fix pass N for <stem>      fix agent — one commit per pass
 //     docs: update docs for <stem>    document agent
-//     chore: wrap up <stem>           finalize agent (STATUS/DEVLOG/reports)
+//     chore: wrap up <stem>           finalize agent (status/log/reports)
 //
 //   This ensures crash recovery: if the pipeline dies mid-run, all completed
 //   work is already in git history and visible to future agents via git log.
@@ -40,7 +40,7 @@
 //     review = FAIL     → fix
 //     no document.md    → document
 //     document.md exists → wrap-up
-//   Report files are authoritative; DEVLOG is a cross-reference sanity check.
+//   Report files are authoritative; log is a cross-reference sanity check.
 //   Safe to re-run — the scout will pick up exactly where the pipeline stopped.
 //
 // RETRY LOOP (max 3 review attempts)
@@ -59,7 +59,7 @@
 //   path stays on Sonnet; a genuinely hard failure that has already failed twice gets one strong
 //   shot. Set null to disable.
 //
-// REPORT FILES  (all written to planning/tasks/<name>/reports/)
+// REPORT FILES  (all written to planning/<name>/sdlc/reports/)
 //   [taskN-]implement.md  implement agent; overwritten by each fix pass
 //   [taskN-]test.md       test agent
 //   [taskN-]review.md     review agent
@@ -73,15 +73,15 @@ export const meta = {
   description: 'Run the SDLC pipeline for a content/feature spec from current stage to completion',
   whenToUse: 'When starting or resuming a spec through the full implement→test→review→document→wrap-up cycle. Usage: /sdlc-run 1.1-site-credibility-fixes or /sdlc-run 1.1-site-credibility-fixes 2',
   phases: [
-    { title: 'Scout',     detail: 'Determine current pipeline stage from files and DEVLOG' },
+    { title: 'Scout',     detail: 'Determine current pipeline stage from files and log' },
     { title: 'Plan',      detail: 'Generate task spec (only if spec file does not yet exist)' },
     { title: 'Implement', detail: 'Execute implementation tasks' },
     { title: 'Fix',       detail: 'Targeted fixes for FAIL/PARTIAL review — overwrites implement report' },
-    { title: 'Test',      detail: 'Run 7-check validation suite' },
+    { title: 'Test',      detail: "Run the project's validation suite (from planning/harness.json)" },
     { title: 'Review',    detail: 'Verify acceptance criteria; run fresh tests; issue verdict' },
     { title: 'UI Test',   detail: 'Browser smoke check via playwright-cli (frontend-touching specs only)' },
     { title: 'Document',  detail: 'Surgically patch docs/ (gates on PASS verdict)' },
-    { title: 'Wrap-up',   detail: 'Log work, chore commit (STATUS/DEVLOG/reports), write workflow report' },
+    { title: 'Wrap-up',   detail: 'Log work, chore commit (status/log/reports), write workflow report' },
   ]
 }
 
@@ -99,9 +99,9 @@ if (!rawArgs) {
 const parts = rawArgs.split(/\s+/)
 const blockId = parts[0]
 const taskNumber = parts.length > 1 ? parseInt(parts[1], 10) : null
-const specFile = `planning/tasks/${blockId}/tasks.md`
+const specFile = `planning/${blockId}/tasks.md`
 const stem = taskNumber !== null ? `${blockId}-task${taskNumber}` : blockId
-const reportsDir = `planning/tasks/${blockId}/reports`
+const reportsDir = `planning/${blockId}/sdlc/reports`
 const taskPrefix = taskNumber !== null ? `task${taskNumber}-` : ''
 const implementReport = `${reportsDir}/${taskPrefix}implement.md`
 const testReport      = `${reportsDir}/${taskPrefix}test.md`
@@ -109,7 +109,7 @@ const reviewReport    = `${reportsDir}/${taskPrefix}review.md`
 const documentReport  = `${reportsDir}/${taskPrefix}document.md`
 const uitestReport    = `${reportsDir}/${taskPrefix}ui-test.md`
 const workflowReport  = `${reportsDir}/${taskPrefix}workflow.md`
-const breakdownFile   = `planning/tasks/${blockId}/breakdown.md`
+const breakdownFile   = `planning/${blockId}/breakdown.md`
 
 log(`Target: ${blockId}${taskNumber !== null ? ` task ${taskNumber}` : ' (all tasks)'}`)
 log(`Spec: ${specFile} | Stem: ${stem}`)
@@ -130,7 +130,7 @@ const SCOUT_SCHEMA = {
     blockStatus: {
       type: 'string',
       enum: ['Not started', 'In progress', 'Done', 'Blocked', 'Skipped', 'Unknown'],
-      description: 'Current status of this spec in STATUS.md progress table'
+      description: 'Current status of this spec in status.md progress table'
     },
     existingReports: {
       type: 'array',
@@ -141,10 +141,10 @@ const SCOUT_SCHEMA = {
       type: 'string',
       description: 'Verdict extracted from the review report if it exists: PASS, FAIL, PARTIAL, or empty string if no review report'
     },
-    currentFocus: { type: 'string', description: 'The Current focus line from STATUS.md' },
-    lastDevlogEntry: { type: 'string', description: 'Summary of the most recent DEVLOG entry (first 6 lines)' },
+    currentFocus: { type: 'string', description: 'The Current focus line from status.md' },
+    lastDevlogEntry: { type: 'string', description: 'Summary of the most recent log entry (first 6 lines)' },
     statusSummary: { type: 'string', description: 'Human-readable summary of what the scout found and why it chose startStage' },
-    discrepancies: { type: 'string', description: 'Any discrepancies between DEVLOG entries and report files, or empty string if none' }
+    discrepancies: { type: 'string', description: 'Any discrepancies between log entries and report files, or empty string if none' }
   }
 }
 
@@ -235,7 +235,7 @@ const UI_TEST_SCHEMA = {
 // ----------------------------------------------------------------
 const MODEL = {
   scout:         'haiku',    // deterministic decision tree: ls a few files, apply a fixed 7-rule order
-  startBlock:    'haiku',    // one surgical STATUS.md edit + a date stamp
+  startBlock:    'haiku',    // one surgical status.md edit + a date stamp
   generateTasks: 'opus',     // PLANNING — authors the spec that drives everything (fallback path)
   implement:     'sonnet',   // writes content/code + tests against a scoped spec/breakdown
   fix:           'sonnet',   // targeted fixes; failures escalate, never silently ship
@@ -243,7 +243,7 @@ const MODEL = {
   review:        'sonnet',   // verify criteria; gated by an authoritative fresh-test run
   uiTest:        'sonnet',   // live browser smoke checks via playwright-cli; needs judgment to interpret results
   document:      'sonnet',   // surgical doc patches, gated on PASS
-  logWork:       'sonnet',   // authors the human-facing DEVLOG prose + edits STATUS — keep the quality
+  logWork:       'sonnet',   // authors the human-facing log prose + edits status — keep the quality
   finalize:      'haiku',    // assembles a JS-precomputed table + scripted git add; can't break the pipeline
 }
 
@@ -251,6 +251,94 @@ const MODEL = {
 // so the agent inherits the session model rather than receiving model: undefined).
 function withModel(base, model) {
   return model ? { ...base, model } : base
+}
+
+// ----------------------------------------------------------------
+// HARNESS CONFIG — mechanism/policy split (see planning/harness.json)
+//
+// The engine ships NO stack defaults. A project declares its validation policy in
+// planning/harness.json. The workflow runtime has no filesystem access, so a dedicated
+// micro-loader agent reads + parses the file (the same way sdlc-block loads execution-plan.json).
+// Returns the parsed config object, or null when the file is absent or invalid — callers then
+// degrade to the spec's `## Validation Commands` section and disable the UI-test stage.
+// ----------------------------------------------------------------
+const HARNESS_CONFIG_SCHEMA = {
+  type: 'object',
+  required: ['present'],
+  properties: {
+    present: { type: 'boolean', description: 'true if planning/harness.json exists and parsed as valid JSON' },
+    config: {
+      type: 'object',
+      description: 'The parsed harness.json (omit when present is false)',
+      properties: {
+        stack: { type: 'string' },
+        validation: {
+          type: 'object',
+          properties: {
+            checks: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name:    { type: 'string' },
+                  command: { type: 'string' },
+                  purpose: { type: 'string' },
+                  gates:   { type: 'boolean' }
+                }
+              }
+            }
+          }
+        },
+        uiTest: {
+          type: 'object',
+          properties: {
+            enabled:          { type: 'boolean' },
+            devServerCommand: { type: 'string' },
+            readySignal:      { type: 'string' },
+            port:             { type: 'integer' },
+            routes:           { type: 'array', items: { type: 'string' } }
+          }
+        }
+      }
+    },
+    notes: { type: 'string' }
+  }
+}
+
+// Spawn the micro-loader agent and return the parsed config (or null). Wired into the stages
+// in P4; defined here so the loader path exists from P1. No stack defaults on absence.
+async function loadHarnessConfig() {
+  const result = await agent(`
+You are the harness-config loader for the SDLC pipeline. Your ONLY job is to read the project's
+validation-policy file and return it as structured data. Do not run any checks or modify anything.
+
+STEP 1 — Read the config file (from the repo root):
+  cat planning/harness.json 2>/dev/null && echo "__HARNESS_PRESENT__" || echo "__HARNESS_ABSENT__"
+
+STEP 2 — Decide:
+  - "__HARNESS_ABSENT__" (file missing) → present=false, omit config.
+  - File printed but NOT valid JSON → present=false, notes="harness.json present but invalid JSON: <reason>".
+  - File printed and valid JSON → present=true, and copy the parsed object into "config", keeping ONLY
+    these fields when present: stack; validation.checks[] ({name, command, purpose, gates});
+    uiTest ({enabled, devServerCommand, readySignal, port, routes[]}). Ignore any other fields.
+
+Return your findings using the StructuredOutput tool.
+`, { label: 'harness-config', schema: HARNESS_CONFIG_SCHEMA, model: 'haiku' })
+
+  if (!result || !result.present || !result.config) return null
+  return result.config
+}
+
+// Render the inner validation-check list for the Test stage from harness config.
+// STUB — body filled in P4. Not yet wired into the Test stage.
+function renderCheckList(cfg, { changedPaths } = {}) {
+  return '' // P4: build the ordered CHECK list from cfg.validation.checks[]
+}
+
+// Render the UI-test stage prompt body from harness config.
+// STUB — body filled in P4. Not yet wired into the UI-test stage.
+function renderUiTestPrompt(cfg, port) {
+  return '' // P4: interpolate cfg.uiTest.{devServerCommand, readySignal, port, routes}
 }
 
 // ----------------------------------------------------------------
@@ -286,11 +374,11 @@ STEP 2 — Check report files (spec directory: ${reportsDir}):
   ls ${documentReport} 2>/dev/null && echo "HAS_DOCUMENT" || echo "NO_DOCUMENT"
   ls ${reportsDir}/*.md 2>/dev/null | head -20 || echo "NO_BLOCK_REPORTS"
 
-STEP 3 — Read STATUS.md to find this spec's status and Current focus line:
-  head -60 planning/STATUS.md
+STEP 3 — Read status.md to find this spec's status and Current focus line:
+  head -60 planning/status.md
 
-STEP 4 — Read the most recent DEVLOG entry (at repo root):
-  head -60 DEVLOG.md
+STEP 4 — Read the most recent log entry (at repo root):
+  head -60 log.md
 
 STEP 5 — If the review report exists, extract the verdict:
   grep -iE "\\*\\*Verdict|## Verdict|^Verdict:" ${reviewReport} 2>/dev/null | head -5 || echo "NO_REVIEW_REPORT"
@@ -305,9 +393,9 @@ STEP 6 — Determine startStage using this EXACT priority order:
   7. Review report exists with PASS verdict, ui-test report exists, no document report → "document"
   8. Document report exists → "wrap-up"
 
-STEP 7 — Find the spec's status in STATUS.md progress table. Look for a row containing "${blockId}" and extract its Status column value (Not started / In progress / Done / Blocked / Skipped).
+STEP 7 — Find the spec's status in status.md progress table. Look for a row containing "${blockId}" and extract its Status column value (Not started / In progress / Done / Blocked / Skipped).
 
-STEP 8 — Note any discrepancy: if DEVLOG says a stage is done but the matching report file is missing, record that.
+STEP 8 — Note any discrepancy: if log says a stage is done but the matching report file is missing, record that.
 
 Collect the list of existing report files from the ls output in STEP 2 and STEP 6.
 
@@ -325,12 +413,12 @@ if (scout.statusSummary) log(scout.statusSummary)
 
 // Auto-flip spec to "In progress" if it is "Not started"
 if (scout.blockStatus === 'Not started') {
-  log(`Spec "${blockId}" is Not started — marking In progress in STATUS.md...`)
+  log(`Spec "${blockId}" is Not started — marking In progress in status.md...`)
   await agent(`
-You need to mark spec "${blockId}" as "In progress" in planning/STATUS.md.
+You need to mark spec "${blockId}" as "In progress" in planning/status.md.
 
 Instructions:
-1. Read the file: planning/STATUS.md
+1. Read the file: planning/status.md
 2. Find the row in the Progress Table where the Spec column contains "${blockId}"
 3. Change that row's Status cell from "Not started" to "In progress"
 4. Update the "Current focus:" line near the top of the file to:
@@ -365,15 +453,15 @@ Spec file to create: ${specFile}
 
 Instructions:
 
-1. Read planning/MASTER_PLAN.md — find the section covering "${blockId}". Look for phase/block headers. Read that entire section.
+1. Read planning/master-plan.md — find the section covering "${blockId}". Look for phase/block headers. Read that entire section.
 
 2. Read CLAUDE.md — note all standing rules (bilingual parity, public-narrative rule, no fabricated metrics, validate:content + build must pass before done).
 
-3. Read an existing spec as format reference: planning/tasks/1.1-site-credibility-fixes/tasks.md
+3. Read an existing spec as format reference: planning/1.1-site-credibility-fixes/tasks.md
    Study its structure carefully: Goal, Context Pointers, Step-by-Step Tasks (numbered ### sections with sub-steps), Acceptance Criteria, Validation Commands, Notes section.
 
    Also create the spec directory structure now if it does not yet exist:
-   mkdir -p planning/tasks/${blockId}/reports
+   mkdir -p planning/${blockId}/sdlc/reports
 
 4. Write ${specFile} following that exact format:
    ## Goal
@@ -1247,12 +1335,12 @@ const stageResultsSummary = stageResults
 log(`Wrap-up. Final verdict: ${finalVerdict}. Pipeline: ${stageResultsSummary}`)
 
 // ----------------------------------------------------------------
-// LOG-WORK: update STATUS.md + append DEVLOG entry
+// LOG-WORK: update status.md + append log entry
 // ----------------------------------------------------------------
 log('Running log-work...')
 
 const wrapupResult = await agent(`
-You are the log-work agent for the SDLC pipeline. Update STATUS.md and append a DEVLOG entry.
+You are the log-work agent for the SDLC pipeline. Update status.md and append a log entry.
 
 Target:
   Spec:            ${blockId}
@@ -1263,13 +1351,13 @@ Target:
 
 Instructions:
 
-1. Read planning/STATUS.md
+1. Read planning/status.md
 2. Read ${specFile}
-3. Read DEVLOG.md (at the repo root — NOT in planning/)
+3. Read log.md (at the repo root — NOT in planning/)
 4. Run: git log --oneline -10
    (Code and doc changes are already committed by their respective agents — git log shows the full picture)
 
-6. Update planning/STATUS.md using the Edit tool:
+6. Update planning/status.md using the Edit tool:
    ${taskNumber !== null
      ? `- Task ${taskNumber} is done. Check if there are more tasks in the spec.
         - If more tasks remain: keep spec status as "In progress", update "Current focus" to the next task.
@@ -1278,7 +1366,7 @@ Instructions:
         - Update "Current focus" to the next spec or phase.`}
    - Update "Last updated" — run: date +%Y-%m-%d
 
-7. Append a new entry to DEVLOG.md (prepend at the TOP, newest entries first).
+7. Append a new entry to log.md (prepend at the TOP, newest entries first).
    The entry must follow this format:
 
    ## [YYYY-MM-DD — run date +%Y-%m-%d to get this]
@@ -1291,9 +1379,9 @@ Instructions:
 8. If the implement report's "Decisions and Trade-offs" section contains any settled choices, mention them in your notes — but do NOT edit DECISIONS.md yourself (that is a manual step).
 
 Return your result using the StructuredOutput tool:
-  statusUpdated: true if STATUS.md was successfully updated
-  devlogUpdated: true if DEVLOG.md was successfully updated
-  nextFocus: the new "Current focus" value written to STATUS.md
+  statusUpdated: true if status.md was successfully updated
+  devlogUpdated: true if log.md was successfully updated
+  nextFocus: the new "Current focus" value written to status.md
   notes: any settled decisions that should be added to DECISIONS.md
 `, withModel({ label: 'log-work', schema: WRAPUP_SCHEMA, phase: 'Wrap-up' }, MODEL.logWork))
 
@@ -1322,7 +1410,7 @@ const finalizeResult = await agent(`
 You are the finalize agent for the SDLC pipeline. Write the workflow report and make the final wrap-up commit.
 
 Context: Code, doc, and fix changes have already been committed by their respective agents during the pipeline run.
-Your job is to write the workflow report, then commit the remaining planning files (STATUS.md, DEVLOG.md,
+Your job is to write the workflow report, then commit the remaining planning files (status.md, log.md,
 test/review reports, and the workflow report itself) as a single chore: commit.
 
 Target:
@@ -1376,12 +1464,12 @@ STEP 3 — Commit the remaining planning files as a single chore: commit.
   Never use git add -A or git add . — stage files explicitly by name.
 
   Run: git status
-  Look for any uncommitted files in: planning/STATUS.md, DEVLOG.md,
+  Look for any uncommitted files in: planning/status.md, log.md,
   ${testReport}, ${reviewReport},
   and ${workflowReport} (which you just wrote).
 
   Stage them:
-    git add planning/STATUS.md DEVLOG.md ${workflowReport}
+    git add planning/status.md log.md ${workflowReport}
     git add ${testReport} 2>/dev/null || true
     git add ${reviewReport} 2>/dev/null || true
     git add ${uitestReport} 2>/dev/null || true

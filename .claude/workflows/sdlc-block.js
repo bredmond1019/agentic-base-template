@@ -14,7 +14,7 @@
 //   /sdlc-block 1.3-projects-add-current --max-retries 2 --max-wave-width 4
 //
 //   ARGS
-//     <specSlug>          required — the planning/tasks/<specSlug>/ directory name
+//     <specSlug>          required — the planning/<specSlug>/ directory name
 //     [range]             optional 2nd positional, or --tasks — e.g. 1-7, 1,3,5, 1-3,7. Default: all.
 //     --max-retries N     total /sdlc-task attempts per task before escalation (default 2)
 //     --max-wave-width W   max full pipelines run concurrently per batch (default 3)
@@ -22,7 +22,7 @@
 // DESIGN (see docs/agentic-workflows/sdlc-orchestration.md)
 //   0. Pre-flight (NEW)
 //        - Guarantee a clean main tree with the spec committed BEFORE any wave runs.
-//        - tasks.md missing        -> generate it from MASTER_PLAN (+ referenced plan) and COMMIT (Opus).
+//        - tasks.md missing        -> generate it from master-plan (+ referenced plan) and COMMIT (Opus).
 //        - tasks.md uncommitted     -> commit it ("chore: commit spec for <slug>").
 //        - any UNRELATED file dirty -> ABORT fast, listing them (failing at second 0 beats
 //          escalating tasks mid-run when the merge step's clean-tree guard later trips).
@@ -33,7 +33,7 @@
 //        - Worktree resume-scout (NEW): classify each task's EXISTING worktree/branch into one of
 //          done-on-main | complete-unmerged-pass | complete-unmerged-fail | partial-post-implement |
 //          partial-pre-implement | fresh — so a re-run MERGES or RESUMES instead of duplicating.
-//        - Load planning/tasks/<specSlug>/execution-plan.json if present & valid.
+//        - Load planning/<specSlug>/sdlc/execution-plan.json if present & valid.
 //        - Otherwise an agent reads tasks.md + breakdown.md and emits a DEPENDENCY
 //          GRAPH WITH EVIDENCE (per task: filesCreated, filesModified, dependsOn,
 //          and the quote that establishes each edge) plus an ADDITIVE-file allow-list.
@@ -56,10 +56,10 @@
 //   3. Merge (per wave, in task-number order)
 //        - Plain git merge first; on conflict, union-merge ONLY if every conflicted
 //          file is on the additive allow-list, else abort + escalate that task.
-//        - STATUS.md / DEVLOG.md are NEVER touched inside worktrees.
+//        - status.md / log.md are NEVER touched inside worktrees.
 //   4. Report
-//        - Write block-workflow.md, apply DEVLOG entries + a SINGLE authoritative
-//          STATUS.md update (spec done/partial, focus -> next spec), and print
+//        - Write block-workflow.md, apply log entries + a SINGLE authoritative
+//          status.md update (spec done/partial, focus -> next spec), and print
 //          escalations with their worktree paths + the resume command.
 //
 // RESUMPTION
@@ -82,7 +82,7 @@ export const meta = {
     { title: 'Wave',       detail: 'Run wave tasks via /sdlc-task with retry + triage; escalate major failures' },
     { title: 'Merge',      detail: 'Merge passing branches in order (additive union only; else escalate)' },
     { title: 'Playwright', detail: 'Live browser sweep after all merges; fix regressions before reporting' },
-    { title: 'Report',     detail: 'Write spec report, apply STATUS/DEVLOG once, surface escalations' },
+    { title: 'Report',     detail: 'Write spec report, apply status/log once, surface escalations' },
   ]
 }
 
@@ -139,11 +139,11 @@ if (rangeSpec) {
   selectedTasks = new Set(parsed)
 }
 
-const blockDir    = `planning/tasks/${blockId}`
+const blockDir    = `planning/${blockId}`
 const tasksFile   = `${blockDir}/tasks.md`
 const breakdownFile = `${blockDir}/breakdown.md`
-const reportsDir  = `${blockDir}/reports`
-const planFile    = `planning/tasks/${blockId}/execution-plan.json`
+const reportsDir  = `${blockDir}/sdlc/reports`
+const planFile    = `${blockDir}/sdlc/execution-plan.json`
 const blockReport = `${reportsDir}/block-workflow.md`
 
 log(`Spec: ${blockId} | plan: ${planFile}`)
@@ -344,6 +344,89 @@ function isPoisoned(taskNum, taskMap, badSet) {
   return (taskMap[taskNum]?.dependsOn || []).some(d => badSet.has(d))
 }
 
+// ----------------------------------------------------------------
+// HARNESS CONFIG — mechanism/policy split (see planning/harness.json)
+//
+// The engine ships NO stack defaults. A project declares its validation policy in
+// planning/harness.json. The workflow runtime has no filesystem access, so a dedicated
+// micro-loader agent reads + parses the file (the same way the Analyze stage loads
+// execution-plan.json). Returns the parsed config object, or null when the file is absent or
+// invalid. For sdlc-block the relevant policy is uiTest — when wired in P4, the Playwright sweep
+// runs only if cfg.uiTest.enabled, using cfg.uiTest.{port,routes}; absent/disabled → skip it.
+// ----------------------------------------------------------------
+const HARNESS_CONFIG_SCHEMA = {
+  type: 'object',
+  required: ['present'],
+  properties: {
+    present: { type: 'boolean', description: 'true if planning/harness.json exists and parsed as valid JSON' },
+    config: {
+      type: 'object',
+      description: 'The parsed harness.json (omit when present is false)',
+      properties: {
+        stack: { type: 'string' },
+        validation: {
+          type: 'object',
+          properties: {
+            checks: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name:    { type: 'string' },
+                  command: { type: 'string' },
+                  purpose: { type: 'string' },
+                  gates:   { type: 'boolean' }
+                }
+              }
+            }
+          }
+        },
+        uiTest: {
+          type: 'object',
+          properties: {
+            enabled:          { type: 'boolean' },
+            devServerCommand: { type: 'string' },
+            readySignal:      { type: 'string' },
+            port:             { type: 'integer' },
+            routes:           { type: 'array', items: { type: 'string' } }
+          }
+        }
+      }
+    },
+    notes: { type: 'string' }
+  }
+}
+
+// Spawn the micro-loader agent and return the parsed config (or null). Wired into the Playwright
+// stage in P4; defined here so the loader path exists from P1. No stack defaults on absence.
+async function loadHarnessConfig() {
+  const result = await agent(`
+You are the harness-config loader for the SDLC pipeline. Your ONLY job is to read the project's
+validation-policy file and return it as structured data. Do not run any checks or modify anything.
+
+STEP 1 — Read the config file (from the main repo root):
+  cat planning/harness.json 2>/dev/null && echo "__HARNESS_PRESENT__" || echo "__HARNESS_ABSENT__"
+
+STEP 2 — Decide:
+  - "__HARNESS_ABSENT__" (file missing) → present=false, omit config.
+  - File printed but NOT valid JSON → present=false, notes="harness.json present but invalid JSON: <reason>".
+  - File printed and valid JSON → present=true, and copy the parsed object into "config", keeping ONLY
+    these fields when present: stack; validation.checks[] ({name, command, purpose, gates});
+    uiTest ({enabled, devServerCommand, readySignal, port, routes[]}). Ignore any other fields.
+
+Return your findings using the StructuredOutput tool.
+`, { label: 'harness-config', schema: HARNESS_CONFIG_SCHEMA, model: 'haiku' })
+
+  if (!result || !result.present || !result.config) return null
+  return result.config
+}
+
+// Render the post-merge browser-sweep prompt body from harness config.
+// STUB — body filled in P4. Not yet wired into the Playwright stage.
+function renderUiTestPrompt(cfg, port) {
+  return '' // P4: interpolate cfg.uiTest.{devServerCommand, readySignal, port, routes}
+}
+
 // ================================================================
 // PRE-FLIGHT: guarantee a clean main tree with the spec committed.
 //
@@ -383,13 +466,13 @@ STEP 3 — Ensure the spec exists and is committed:
 
   CASE A — SPEC_MISSING:
     Generate the spec, mirroring the /generate-tasks skill:
-      - mkdir -p ${blockDir}/reports
-      - cat planning/MASTER_PLAN.md  → find the section defining "${blockId}".
+      - mkdir -p ${reportsDir}
+      - cat planning/master-plan.md  → find the section defining "${blockId}".
       - If that section references a plan file under planning/plans/, cat it and read the
         relevant per-path / per-block portion.
       - cat CLAUDE.md → internalize standing rules (bilingual parity, public-narrative rule,
         no fabricated metrics, validate:content + build must pass).
-      - cat planning/tasks/1.1-site-credibility-fixes/tasks.md → use as the FORMAT reference.
+      - cat planning/1.1-site-credibility-fixes/tasks.md → use as the FORMAT reference.
       - Write ${tasksFile} in the standard spec format: ## Goal, ## Context Pointers,
         ## Step-by-Step Tasks (numbered "### 1.", "### 2.", ... ; final task is always Validate),
         ## Acceptance Criteria, ## Validation Commands (npm run lint / npx tsc --noEmit /
@@ -500,9 +583,9 @@ STEP 5 — Worktree resume scout: classify each task's EXISTING worktree/branch 
     1. task${'${N}'}-workflow.md present on MAIN  → state="done-on-main".
     2. Else, if a worktree dir trees/${blockId.toLowerCase()}-taskN exists, inspect it:
        cd trees/${blockId.toLowerCase()}-taskN 2>/dev/null
-       ls planning/tasks/${blockId}/reports/task${'${N}'}-workflow.md 2>/dev/null && echo HAS_WF || echo NO_WF
-       ls planning/tasks/${blockId}/reports/task${'${N}'}-implement.md 2>/dev/null && echo HAS_IMPL || echo NO_IMPL
-       grep -iE "\\*\\*Verdict|## Verdict" planning/tasks/${blockId}/reports/task${'${N}'}-review.md 2>/dev/null | head -1
+       ls planning/${blockId}/sdlc/reports/task${'${N}'}-workflow.md 2>/dev/null && echo HAS_WF || echo NO_WF
+       ls planning/${blockId}/sdlc/reports/task${'${N}'}-implement.md 2>/dev/null && echo HAS_IMPL || echo NO_IMPL
+       grep -iE "\\*\\*Verdict|## Verdict" planning/${blockId}/sdlc/reports/task${'${N}'}-review.md 2>/dev/null | head -1
        (then cd back to the main repo root)
        - HAS_WF and review verdict PASS         → state="complete-unmerged-pass" (merge it, do NOT re-run).
        - HAS_WF and verdict FAIL/PARTIAL        → state="complete-unmerged-fail" (escalate; preserve).
@@ -848,7 +931,7 @@ STEP 4 — On success, capture the commit and clean up the worktree:
   git worktree remove "${p.worktreePath}" --force 2>/dev/null || true
   git branch -D ${p.branchName} 2>/dev/null || true
   git worktree prune
-  (Do NOT touch planning/STATUS.md or DEVLOG.md — those are applied once in Report.)
+  (Do NOT touch planning/status.md or log.md — those are applied once in Report.)
 
 STEP 5 — On escalation, PRESERVE the worktree and branch (the user will inspect them). Do not remove them.
 
@@ -1015,7 +1098,7 @@ Return using StructuredOutput: fixed (bool), commitHash, changesSummary, notes.
 }
 
 // ================================================================
-// REPORT — spec report + single STATUS/DEVLOG update + escalations
+// REPORT — spec report + single status/log update + escalations
 // ================================================================
 phase('Report')
 
@@ -1093,28 +1176,28 @@ ${escalationBlock}${playwrightEscalation}
    Completed tasks are detected on main and skipped; escalated tasks are retried.
    ${playwrightFailed ? `Playwright failed — fix the regression first, then re-promote to production.` : ''}
 
-2. Apply DEVLOG + STATUS ONCE (the per-task logs deferred these). The merged branches each carry a
-   planning/tasks/${blockId}/reports/task<N>-log.md committed on main with "Applied: false".
+2. Apply log + status ONCE (the per-task logs deferred these). The merged branches each carry a
+   planning/${blockId}/sdlc/reports/task<N>-log.md committed on main with "Applied: false".
    For EACH merged task N in ${JSON.stringify(mergedTaskNums)} (ascending):
      - cat ${reportsDir}/task${'${N}'}-log.md
-     - Append everything under its "## DEVLOG Entry" heading (from the "## YYYY-MM-DD" line onward,
-       NOT the "## DEVLOG Entry" header itself) to the TOP of DEVLOG.md (most-recent-first), once.
+     - Append everything under its "## Log Entry" heading (from the "## YYYY-MM-DD" line onward,
+       NOT the "## Log Entry" header itself) to the TOP of log.md (most-recent-first), once.
      - Flip that log's "**Applied:** false" -> "**Applied:** true".
-   Then update planning/STATUS.md ONCE:
+   Then update planning/status.md ONCE:
      - If ALL tasks in the spec are now merged: mark the spec "Done" in the progress table and set
        "**Current focus:**" to the NEXT spec; otherwise mark it "In progress" and set Current focus to
        the lowest not-yet-merged task.
      - Bump the "**Last updated:**" line (today's date + one-line summary).
-   Apply each merged task's "## STATUS.md — *" sections from its log where present. Do NOT apply
-   STATUS/DEVLOG for escalated or skipped tasks.
+   Apply each merged task's "## status.md — *" sections from its log where present. Do NOT apply
+   status/log for escalated or skipped tasks.
 
 3. Commit:
-   git add ${blockReport} DEVLOG.md planning/STATUS.md ${reportsDir}/task*-log.md
+   git add ${blockReport} log.md planning/status.md ${reportsDir}/task*-log.md
    git commit -m "chore: spec orchestration report + status for ${blockId}"
    git log --oneline -1
 
 Return using StructuredOutput: reportFile="${blockReport}", overallVerdict="${overall}",
-statusUpdated (true if STATUS.md was updated), nextFocus (the Current focus string you wrote), notes.
+statusUpdated (true if status.md was updated), nextFocus (the Current focus string you wrote), notes.
 `, { label: 'report', schema: REPORT_SCHEMA, phase: 'Report', model: 'sonnet' })
 
 // ----------------------------------------------------------------
