@@ -1,0 +1,70 @@
+---
+name: session-recap
+description: >-
+  Summarize recent work and current standing before starting a coding session — read
+  the latest DEVLOG entries, planning/STATUS.md, the current spec, and its reports/
+  dir to produce a tight (<300-word) briefing: what was done, where work left off,
+  remaining tasks, and the exact next command. Use at the start of a session, or when
+  the user asks "recap", "catch me up", or "where did we leave off". Read-only.
+---
+
+# Session Recap — Summarize recent work and current standing before starting a session.
+
+Reads the most recent DEVLOG entries and STATUS.md to produce a tight briefing: what was
+completed recently, where work left off, and the exact next command to run. Use this at the
+start of a coding session before doing anything else.
+
+## Instructions
+
+1. Read `DEVLOG.md`. Focus on the three most recent entries (identified by `## YYYY-MM-DD`
+   headings). Extract: what was built or changed, any decisions made, and any explicit
+   "left off at" or "next step" notes the author wrote.
+
+2. Read `planning/STATUS.md`. Extract:
+   - Current focus block
+   - Which blocks are `In progress`, `Done`, and `Not started` (status is title-case in
+     STATUS.md; tolerate lowercase variants if present)
+   - Last updated date
+
+3. If a task spec exists for the current focus block at
+   `planning/tasks/<name>/tasks.md`, read it. Identify:
+   - Which steps are marked done (have ✅)
+   - Which steps remain
+   - Any notes in the `## Notes` section
+
+4. Check `planning/tasks/<name>/reports/` for any existing pipeline reports for the current
+   block (e.g. `implement.md`, `task3-test.md`). Note which pipeline steps have been completed
+   (have a report file) and which haven't.
+
+5. Output the briefing in this exact format — keep it under 300 words:
+
+---
+
+## Recent Work
+<2–4 bullet points from the latest DEVLOG entries — what was built, changed, or decided.
+Use the author's own language where possible.>
+
+## Where We Left Off
+<One paragraph. State: current block, last completed pipeline step (based on report files
+present), last completed spec task (based on ✅ markers), and anything explicitly noted
+as "in flight" or "next" in the DEVLOG.>
+
+## Remaining Spec Tasks
+<Numbered list of un-checked (no ✅) steps from the current task spec.
+If the spec is missing, say so. If all steps are done, say "All steps marked complete.">
+
+## Next Pipeline Step
+<Single line: the exact next action, naming the skill to invoke and the full argument.>
+Example: invoke the **test** skill on `planning/tasks/1.1-site-credibility-fixes/tasks.md 2`
+If the block is complete: invoke the **log-work** skill to wrap up, then **start-block** for the next block.
+
+---
+
+Do not read any source code files. Do not run any commands. This is read-only.
+
+## Context / Files to Read
+
+- `DEVLOG.md` (last 3 entries)
+- `planning/STATUS.md`
+- `planning/tasks/<name>/tasks.md` (current block's spec, if it exists)
+- `planning/tasks/<name>/reports/` (directory listing to check which step reports exist)

@@ -1,0 +1,206 @@
+---
+name: review-workflow
+description: >-
+  Audit a completed SDLC pipeline RUN (not the implementation) for a block —
+  check that all pipeline report files are present and well-formed, commits follow
+  conventional format, DEVLOG and STATUS.md reflect the outcome, and issue a
+  PASS/PARTIAL/FAIL verdict on the run mechanics. Does NOT re-run tests. Use after an
+  automated pipeline run to confirm it executed correctly end-to-end.
+---
+
+# Review Workflow — Verify that a completed pipeline run executed correctly.
+
+## Inputs
+
+Block ID with an optional task number suffix, taken from the user's request. Examples:
+- `phase0-blockC` — review the full-block workflow run
+- `phase0-blockC 2` — review the task-2-scoped workflow run
+
+## Instructions
+
+1. If no input is provided, stop and ask for the block ID.
+
+2. Parse the input: split on the last space. If the trailing token is a number, treat it as the
+   **task number**; the remainder is the block ID.
+
+3. Orient first (the `prime` skill's read-list): read `README.md`, `CLAUDE.md`, `planning/CONTEXT.md`, `planning/STATUS.md` to load standing rules and architecture before reading any files.
+
+4. **Derive file paths** from the block ID:
+
+   | Item | Path |
+   |---|---|
+   | Spec | `planning/tasks/<blockId>/tasks.md` |
+   | Reports dir | `planning/tasks/<blockId>/reports/` |
+   | Task prefix | `task<N>-` if task number given, else empty |
+
+   Report files (prefix applied to all):
+   - Implement report: `planning/tasks/<blockId>/reports/[taskN-]implement.md`
+   - Test report:      `planning/tasks/<blockId>/reports/[taskN-]test.md`
+   - Review report:    `planning/tasks/<blockId>/reports/[taskN-]review.md`
+   - Document report:  `planning/tasks/<blockId>/reports/[taskN-]document.md`
+   - Workflow report:  `planning/tasks/<blockId>/reports/[taskN-]workflow.md`
+   - **Output (this skill):** `planning/tasks/<blockId>/reports/[taskN-]workflow-review.md`
+
+5. **Check which report files exist** — run `ls` for each expected path. Record present/missing.
+
+6. **Read all existing reports** in this order:
+   a. Workflow report — primary source: pipeline metadata, stage results table, commit list
+   b. Implement report — what was built; did validation pass?
+   c. Test report — 6-check suite results; pass/fail counts
+   d. Review report — verdict, acceptance criteria check, fresh test outcome
+   e. Document report — which docs were patched (relevant only if verdict was PASS)
+
+7. **Check git log** for commits made during this pipeline run:
+   ```
+   git log --oneline -20
+   ```
+   Look for commits matching the block/task stem. Expected commit pattern:
+   - `feat: implement <stem>` (or `fix:` if validation failed)
+   - `fix: fix pass N for <stem>` — one per fix pass (if fix cycles ran)
+   - `docs: update docs for <stem>` — document agent commit (if verdict was PASS)
+   - `chore: wrap up <stem>` — finalize agent commit
+
+8. **Check DEVLOG.md** — does an entry exist for this run? Does it accurately describe the outcome?
+   ```
+   head -60 DEVLOG.md
+   ```
+
+9. **Check STATUS.md** — is the block/task marked correctly?
+   ```
+   grep -A3 "<blockId>" planning/STATUS.md
+   ```
+   Expected:
+   - Full block run, verdict PASS → block status "Done"
+   - Task-scoped run or verdict FAIL → block status "In progress"
+
+10. **Evaluate each stage** using the checks in the Checks section below.
+
+11. Write the workflow review report (see Report section) and summarize findings to the user.
+
+## Checks
+
+### Stage Completeness
+For each expected report, check: is the file present? Does it contain the required sections?
+
+| Stage | Required Sections |
+|---|---|
+| Implement | `## What Was Built`, `## Files Created or Modified`, `## Validation Output` |
+| Test | `## Summary` table with 6 rows (8 when the two content gates apply), pass/fail counts, `## Full Results (JSON)` |
+| Review | `## Acceptance Criteria Check` table, `**Verdict:**` line |
+| Document | `## Docs Patched` table, `## Docs Flagged NEEDS_REVIEW` (only if review PASS) |
+| Workflow | `## Stage Results` table, `## Final Verdict`, `## Commits (this pipeline run)` |
+
+The 6-check suite a passing Test stage records: `npm run lint`, `npx tsc --noEmit`,
+`npm run validate:content`, `npm test -- --listTests`, `npm test`, and `npm run build`.
+Content-touching specs add two more gates (bilingual parity, link/handle hygiene) for 8 rows.
+
+### Verdict Chain
+- What verdict did the review report? (PASS / FAIL / PARTIAL)
+- How many review attempts occurred?
+- If FAIL or PARTIAL: did the fix→test→review retry cycle run? Are fix pass commits present?
+- If PASS: did the document stage run and produce a report?
+
+### Commit Audit
+Map expected commits to `git log` output. For each expected commit:
+- Is it present? (search by prefix + stem keyword)
+- Does the commit message follow the conventional commit format?
+
+
+### DEVLOG Quality
+- Is there an entry dated to this run?
+- Does it cover: what was built, review outcome, any notable decisions, "Next:" pointer?
+- Does the git log block in the entry show the pipeline commits?
+
+### STATUS Accuracy
+- Is the block's Status column in the Progress Table correct for the outcome?
+- Is the "Current focus" line updated to the next task or block?
+- Is "Last updated" current?
+
+## Context / Files to Read
+
+- All five pipeline report files (implement, test, review, document, workflow)
+- `planning/STATUS.md`
+- `DEVLOG.md`
+- `git log --oneline -20`
+
+Do NOT re-run the test suite — this skill reviews the pipeline's execution record, not the implementation itself. Use the **review-task** skill if you need to re-verify the implementation.
+
+## Report
+
+Write the workflow review report to:
+`planning/tasks/<blockId>/reports/[taskN-]workflow-review.md`
+
+Use EXACTLY this format:
+
+```markdown
+# Workflow Review — <blockId> [Task <N> | All Tasks]
+
+**Date:** <YYYY-MM-DD>
+**Block:** <blockId>
+**Scope:** Task <N> | All tasks
+**Pipeline verdict:** PASS / FAIL / PARTIAL (from review report)
+**Review attempts:** N of 3 max
+**Overall verdict:** PASS / PARTIAL / FAIL
+
+## Report Completeness
+
+| Stage | Report File | Present | Well-formed |
+|---|---|---|---|
+| Implement | [taskN-]implement.md | ✓ / ✗ | ✓ / ✗ / N/A |
+| Test | [taskN-]test.md | ✓ / ✗ | ✓ / ✗ / N/A |
+| Review | [taskN-]review.md | ✓ / ✗ | ✓ / ✗ / N/A |
+| Document | [taskN-]document.md | ✓ / ✗ | ✓ / ✗ / N/A |
+| Workflow | [taskN-]workflow.md | ✓ / ✗ | ✓ / ✗ / N/A |
+
+## Pipeline Outcome
+
+**Implementation verdict:** PASSED / FAILED (from Validation Output in implement report)
+**Review verdict:** PASS / FAIL / PARTIAL
+**Review attempts:** N
+**Fix passes:** N
+**Document stage:** ran / skipped — <reason if skipped>
+
+## Commit Audit
+
+| Expected Commit | Present | Hash | Notes |
+|---|---|---|---|
+| feat/fix: implement <stem> | ✓ / ✗ | abc1234 | — |
+| fix: fix pass 1 for <stem> | ✓ / ✗ | — | only if fix cycle ran |
+| docs: update docs for <stem> | ✓ / ✗ | abc1234 | only if verdict PASS |
+| chore: wrap up <stem> | ✓ / ✗ | abc1234 | — |
+
+## DEVLOG Check
+
+**Entry present:** yes / no
+**Describes outcome accurately:** yes / partially / no
+**Git log block included:** yes / no
+**Notes:** <any gaps or inaccuracies>
+
+## STATUS.md Check
+
+**Block status:** Done / In progress / Not started
+**Correct for this outcome:** yes / no
+**Current focus updated:** yes / no
+**Notes:** <any discrepancy>
+
+## Issues Found
+
+- <concrete problem with report/commit/DEVLOG reference, or "None">
+
+## Verdict
+
+<One paragraph: did the pipeline execute correctly end-to-end? Were all stages completed
+and committed? Are records (DEVLOG, STATUS) accurate? If PASS, state clearly.
+If PARTIAL or FAIL, list the specific blocking items that need manual follow-up.>
+```
+
+**Verdict rules:**
+- **PASS** — all expected reports present and well-formed, commits match the expected conventional
+  commit pattern, DEVLOG entry exists and describes the outcome, STATUS.md is accurate.
+- **PARTIAL** — minor gaps: a report section is thin, DEVLOG entry is sparse, a commit message
+  is slightly off-format, or STATUS is correct but "Current focus" wasn't updated.
+- **FAIL** — critical failures: required reports missing, expected commits absent, DEVLOG not
+  updated, STATUS.md still shows "Not started" or wrong state, or the pipeline review verdict
+  was FAIL and no fix cycle was attempted.
+
+Then summarize the verdict and any issues requiring manual follow-up to the user in the chat.

@@ -1,0 +1,188 @@
+---
+name: clean-worktree
+description: >-
+  Merge a completed SDLC worktree branch into main and remove it — show
+  uncommitted/unpushed work as a safety gate, fast-forward merge, apply any deferred
+  STATUS.md + DEVLOG.md updates from the branch's task log, then remove the worktree and
+  delete the branch (merge before delete). Use for standalone worktree runs when the user
+  says "clean up the worktree" or "merge and remove <slug>". Not for block-orchestrated runs.
+---
+
+# Clean Worktree — Merge a completed SDLC worktree branch into main and remove it.
+
+## Inputs
+
+One of, taken from the user's request:
+- `1.1-site-credibility-fixes`            → worktree name: `1.1-site-credibility-fixes`
+- `1.1-site-credibility-fixes 3`          → worktree name: `1.1-site-credibility-fixes-task3`
+- `1.1-site-credibility-fixes-task8`      → literal worktree name (already lowercased, single token)
+- `1.1-site-credibility-fixes-task8-2`    → literal worktree name with suffix (from an auto-incremented worktree)
+
+The literal single-token form is what an auto-suffixed worktree (e.g. `-2`, `-3`) is named.
+Pass it exactly as printed.
+
+## Instructions
+
+1. If no input is provided, stop and print usage:
+   ```
+   Usage: clean-worktree <spec-slug> [task-N]
+          clean-worktree <literal-worktree-name>
+   Examples:
+     clean-worktree 1.1-site-credibility-fixes
+     clean-worktree 1.1-site-credibility-fixes 3
+     clean-worktree 1.1-site-credibility-fixes-task8
+     clean-worktree 1.1-site-credibility-fixes-task8-2
+   ```
+
+2. **Parse arguments:**
+   - If the input is a **single token with no spaces** that is already lowercase and contains
+     only letters, digits, dots, and hyphens → treat it as the literal `worktreeName` directly.
+     (Spec slugs carry a phase-dotted prefix, e.g. `1.1-site-credibility-fixes-task8`.)
+   - Otherwise, apply the same transform as the **init-worktree** skill: lowercase `specSlug`, append
+     `-task<taskNum>` if a second token is a number. Derive `worktreeName`.
+   - Always: `worktreePath = trees/<worktreeName>`
+   - Extract `taskNum` from `worktreeName` for use in the task log step:
+     - Pattern: `<spec-slug>-task<N>` or `<spec-slug>-task<N>-<suffix>`
+     - Extract `taskNum` as the integer after the last `-task` in the name.
+     - `logFile = planning/tasks/<spec-slug-placeholder>/reports/task<taskNum>-log.md`
+     - **Note:** the actual `specSlug` (with original casing) is read from the log file itself
+       (`**Spec:** 1.1-site-credibility-fixes`) rather than derived from the lowercased branch name.
+       Use the branch name only to locate the approximate path; then read the log's `**Spec:**`
+       field and use that value as the authoritative spec slug for all STATUS.md path lookups.
+
+3. **Check if the worktree exists:**
+   ```bash
+   git worktree list | grep <worktreePath>
+   ```
+   If not found, skip to step 8 (branch-only cleanup).
+
+4. **SAFETY — Show uncommitted changes in the worktree:**
+   ```bash
+   git -C <worktreePath> status --short
+   git -C <worktreePath> diff --stat
+   ```
+   If there are uncommitted changes, print:
+   ```
+   WARNING: The worktree has uncommitted changes (shown above).
+   These will be permanently lost if the worktree is removed.
+   Proceed anyway? (yes/no)
+   ```
+   Stop and wait for user confirmation. If the user says anything other than "yes", abort.
+
+5. **SAFETY — Show unpushed commits on the worktree branch:**
+   ```bash
+   git -C <worktreePath> log --oneline main..HEAD
+   ```
+   Display this list clearly. These are the commits that will be merged into `main`.
+
+6. **Merge the branch into main (fast-forward only):**
+
+   Run from the main working tree (not from within the worktree):
+   ```bash
+   git merge --ff-only <worktreeName>
+   ```
+
+   **If fast-forward succeeds:** continue to step 7.
+
+   **If fast-forward fails** (main has advanced since the worktree was created):
+   - Print the divergence: `git log --oneline <worktreeName>..main` to show which commits on main are not in the worktree branch.
+   - Stop. Do NOT delete the worktree or branch.
+   - Print resolution options:
+     ```
+     Fast-forward merge failed. The worktree branch is behind main.
+     The worktree at <worktreePath> has been left intact.
+
+     To resolve, choose one of:
+       Option A — Create a merge commit:
+         git merge <worktreeName>
+
+       Option B — Rebase the worktree branch onto main (from inside the worktree):
+         cd <worktreePath>
+         git rebase main
+         cd <back to repo root>
+         clean-worktree <original-args>   ← retry after rebasing
+     ```
+
+6.5. **Apply task log (if present) — update STATUS.md and DEVLOG.md:**
+
+   This step only applies when a task number was identified in `worktreeName`.
+
+   ```bash
+   ls <logFile> 2>/dev/null && echo "LOG_EXISTS" || echo "NO_LOG"
+   grep "^\*\*Applied:\*\* false" <logFile> 2>/dev/null && echo "NOT_YET_APPLIED" || echo "ALREADY_APPLIED"
+   ```
+
+   **If log file exists AND `Applied: false`:**
+
+   a. Read `<logFile>` in full.
+   b. Extract the `**Spec:**` field from the log file to get the authoritative spec slug
+      (e.g. `1.1-site-credibility-fixes`). Use this value — not the lowercased branch name — for
+      all `planning/tasks/<spec-slug>/` path lookups.
+   c. If `## STATUS.md — Spec Status` section is present → flip the spec's Status column
+      in `planning/STATUS.md` progress table to the value specified (e.g. "In progress").
+      Omit this sub-step if that section is absent from the log file.
+   d. Apply `## STATUS.md — Current Focus Line` → replace the `**Current focus:**` line in
+      `planning/STATUS.md` with the exact string from the log.
+   e. Apply `## STATUS.md — Last Updated Line` → replace the `**Last updated:**` line in
+      `planning/STATUS.md` with the exact string from the log.
+   f. Apply `## STATUS.md — Notes Column` → update the Notes column of the matching
+      spec row in `planning/STATUS.md` with the text from the log.
+   g. Prepend the **content under** `## DEVLOG Entry` to `DEVLOG.md` — this means
+      everything from the `## YYYY-MM-DD` date header line onward, NOT the `## DEVLOG Entry`
+      section header itself. Insert it immediately after the `# DEVLOG —` header line
+      (which is below the YAML frontmatter block, keeping the frontmatter at the very top of the file),
+      preserving a blank line between the new entry and the one below.
+   h. Edit `<logFile>`: change `**Applied:** false` → `**Applied:** true`.
+   i. Stage and commit these three files only:
+      ```bash
+      git add planning/STATUS.md DEVLOG.md <logFile>
+      git commit -m "$(cat <<'EOF'
+      chore: apply task log for <stem>
+      EOF
+      )"
+      ```
+   j. Report: "STATUS.md and DEVLOG.md updated from task log."
+
+   **If `Applied: true`:** report "Task log already applied — skipping STATUS/DEVLOG update."
+
+   **If log file not found:** report "No task log found — STATUS/DEVLOG not updated.
+   If this task was run by the SDLC task pipeline, check that the pipeline completed its wrap-up stage."
+
+7. **Remove the worktree and delete the branch:**
+   ```bash
+   git worktree remove <worktreePath> --force
+   git worktree prune
+   git branch -D <worktreeName>
+   ```
+
+8. **Branch-only cleanup** (worktree directory not found, but branch may still exist):
+   ```bash
+   git branch --list <worktreeName>
+   ```
+   If the branch exists:
+   - Show any commits not yet on main: `git log --oneline main..<worktreeName>`
+   - Delete the branch: `git branch -D <worktreeName>`
+   If neither worktree nor branch exists, report: "Nothing to clean — '<worktreeName>' does not exist."
+
+9. **Verify cleanup — run these and display output:**
+   ```bash
+   git worktree list
+   git branch --list <worktreeName>
+   git log --oneline -6
+   ```
+
+10. **Report one of:**
+    - **Success:** "Worktree '<worktreeName>' merged and cleaned. Branch deleted. Pipeline commits are now on main."
+    - **Merge failed:** "Fast-forward failed. Worktree left intact at <worktreePath>. See options above."
+    - **Branch-only cleanup:** "Worktree directory not found. Branch '<worktreeName>' deleted (if it existed)."
+    - **Already clean:** "Nothing to clean — '<worktreeName>' does not exist."
+
+## Notes
+
+- **Merge before delete.** This skill never deletes the worktree or branch until the merge succeeds. Work is preserved until confirmed safe.
+- **Fast-forward only** is the correct default for this pipeline: worktrees branch from `main` at init time, run the full pipeline, and then merge back. If `main` has advanced concurrently (e.g., a hotfix), `--ff-only` fails with a clear error rather than silently creating a merge commit.
+- **Uncommitted changes** in the worktree are unusual — the SDLC pipeline commits after each stage. If they appear, it likely means the pipeline was interrupted mid-stage.
+- Run this skill from the **main repo session** (CWD: repo root), not from inside the worktree.
+- **Task log:** When a task was run by the SDLC task pipeline, the worktree branch contains a `task<N>-log.md` file instead of STATUS.md/DEVLOG.md changes. Step 6.5 reads that file and applies the updates to main after the merge. Always merge tasks in task-number order so STATUS.md's "Current focus" ends up pointing to the right next task.
+- **Suffix worktrees:** If a collision produced `1.1-site-credibility-fixes-task8-2`, pass the full name as a single argument. The task log is still found at `planning/tasks/1.1-site-credibility-fixes/reports/task8-log.md` (based on the task number extracted from the branch name).
+- **Block-orchestrated runs do their own merges.** Do not use this skill for tasks driven by the block orchestrator — it merges each wave for you. Use this skill only for standalone task runs or manual worktrees from the **init-worktree** skill.
