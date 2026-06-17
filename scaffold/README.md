@@ -36,7 +36,7 @@ description: {{DESCRIPTION}}
 {{SLUG}}/
 ├── .claude/        ← Claude Code commands + SDLC workflow engines
 ├── .agents/        ← Gemini/Antigravity skill twins
-├── planning/       ← CONTEXT, STATUS, MASTER_PLAN, decisions/, tasks/
+├── planning/       ← context, status, master-plan, harness.json, decisions/, <concept>/
 └── <source dirs>
 ```
 
@@ -44,9 +44,10 @@ description: {{DESCRIPTION}}
 
 | Doc | Contents |
 |---|---|
-| [planning/CONTEXT.md](planning/CONTEXT.md) | Orientation + governing principles |
-| [planning/MASTER_PLAN.md](planning/MASTER_PLAN.md) | Strategy + phase specifications |
-| [planning/STATUS.md](planning/STATUS.md) | Current progress |
+| [planning/context.md](planning/context.md) | Orientation + governing principles |
+| [planning/master-plan.md](planning/master-plan.md) | Strategy + phase specifications |
+| [planning/status.md](planning/status.md) | Current progress |
+| [planning/harness.json](planning/harness.json) | SDLC validation/UI-test config (see `harness.examples.md`) |
 
 ---
 

@@ -12,16 +12,17 @@ description: Project initialized on the standard OKF documentation structure.
 ## Decision
 
 {{PROJECT_NAME}} is initialized on the standard **OKF (Open Knowledge Format)** documentation
-structure: a `planning/` folder with `CONTEXT.md`, `STATUS.md`, `MASTER_PLAN.md`, an atomic
-`decisions/` registry, and per-spec `tasks/<name>/`; OKF YAML frontmatter on every markdown
-file; and the curated SDLC harness (`.claude/` + `.agents/`) for the implement → test →
-review → document pipeline.
+structure: a `planning/` folder with `context.md`, `status.md`, `master-plan.md`, a
+`harness.json` pipeline config, an atomic `decisions/` registry, and per-spec concept folders
+`planning/<concept>/` (with pipeline state under a reserved `<concept>/sdlc/`); OKF YAML
+frontmatter on every markdown file; and the curated SDLC harness (`.claude/` + `.agents/`) for
+the implement → test → review → document pipeline.
 
 ## Why
 
 Consistency with the company brain and the other projects in the practice. The structure is
-load-bearing for the SDLC workflows (they read `STATUS.md`, `MASTER_PLAN.md`, and
-`planning/tasks/<name>/`), so adopting it from day one means the pipeline runs without path
+load-bearing for the SDLC workflows (they read `status.md`, `master-plan.md`, and
+`planning/<concept>/`), so adopting it from day one means the pipeline runs without path
 fixes.
 
 ## Rejected Alternatives

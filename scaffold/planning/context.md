@@ -8,7 +8,7 @@ description: Core context, governing principles, and documentation router for {{
 
 > **Read this first.** Stable orientation for {{PROJECT_NAME}}: *why* this body of work
 > exists, the rules that govern how it is built, and a router to the rest of `planning/`.
-> This file orients; it does not track. For state, open `STATUS.md`. For why choices were
+> This file orients; it does not track. For state, open `status.md`. For why choices were
 > made, open `decisions/`.
 
 ## What This Project Is
@@ -26,17 +26,18 @@ description: Core context, governing principles, and documentation router for {{
 
 | File | Role | Volatility | Read it when… |
 |---|---|---|---|
-| **CONTEXT.md** | Orientation + router (read first) | Stable | You need to understand the project or find the right file |
-| **STATUS.md** | Current progress | Volatile | You need to know what's done / what's next |
-| **MASTER_PLAN.md** | Strategy + phase specifications | Semi-stable | You need to understand the sequence of work |
+| **context.md** | Orientation + router (read first) | Stable | You need to understand the project or find the right file |
+| **status.md** | Current progress | Volatile | You need to know what's done / what's next |
+| **master-plan.md** | Strategy + phase specifications | Semi-stable | You need to understand the sequence of work |
+| **harness.json** | Validation/UI-test config the SDLC engines read | Semi-stable | You're adapting the pipeline to this stack |
 | **decisions/** | Architectural decisions (atomic, append-only) | Append-only | You want to check a prior architectural choice |
-| **README.md** | Navigation index for `planning/` | Stable | You need a map of the planning folder |
-| **DEVLOG.md** (root) | Dated narrative of work completed | Append-only | You want the chronological dev history |
+| **index.md** | Navigation index for `planning/` | Stable | You need a map of the planning folder |
+| **log.md** (root) | Dated narrative of work completed | Append-only | You want the chronological dev history |
 
 ## The Project Sequence at a Glance
 
 <!-- Phase names only, one line each. The sequence is load-bearing; details live in
-     MASTER_PLAN.md. -->
+     master-plan.md. -->
 
 - **Phase 0 — Foundation**
 - **Phase 1 — Core**
@@ -65,5 +66,5 @@ description: Core context, governing principles, and documentation router for {{
 
 ---
 
-*This file orients; it does not track. For state, open STATUS.md. For why choices were made,
+*This file orients; it does not track. For state, open status.md. For why choices were made,
 open decisions/.*

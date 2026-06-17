@@ -15,7 +15,7 @@ description: Current state and progress tracker for {{PROJECT_NAME}}.
 
 - Status values: `Not started` · `In progress` · `Done` · `Blocked` · `Skipped`
 - Keep `Current focus` and `Last updated` accurate; update as work happens.
-- This file is **state only**. For what the work means, see `MASTER_PLAN.md`.
+- This file is **state only**. For what the work means, see `master-plan.md`.
 
 ---
 
@@ -45,4 +45,4 @@ description: Current state and progress tracker for {{PROJECT_NAME}}.
 
 ---
 
-*State only. For what things mean, see MASTER_PLAN.md. For orientation, see CONTEXT.md.*
+*State only. For what things mean, see master-plan.md. For orientation, see context.md.*

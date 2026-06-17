@@ -1,0 +1,13 @@
+{
+  "$schema": "../.claude/workflows/harness.schema.json",
+  "stack": "REPLACE-ME",
+  "_comment": "SDLC pipeline config. Fill validation.checks[] with this project's real format/lint/test/build commands (run top-to-bottom; gates:true blocks the review verdict). Set uiTest.enabled:true only for web projects, then fill devServerCommand/readySignal/port/routes. Copy a ready-made profile (Rust / Python / Next.js) from harness.examples.md. If this file is absent, the engines fall back to the spec's `## Validation Commands` section and skip the UI-test stage.",
+  "validation": {
+    "checks": [
+      { "name": "REPLACE-ME", "command": "echo 'fill me in'", "purpose": "Replace with this project's real checks — see harness.examples.md", "gates": true }
+    ]
+  },
+  "uiTest": {
+    "enabled": false
+  }
+}
