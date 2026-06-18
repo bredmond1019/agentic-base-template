@@ -5,6 +5,22 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-18 — planning/ cleanup: okf-phase-2/ removed; status.md and index.md rewritten
+
+With `docs/` created and D5 capturing all the key decisions, `planning/okf-phase-2/` (15 files:
+plan, context, per-phase implement/report pairs) was deleted — it is now fully historical and
+redundant. `planning/status.md` was rewritten from the OKF Phase 2 tracking table to a stable
+"completed efforts / upcoming work" format. `planning/index.md` was trimmed to remove the
+active-work pointer and now leads directly to the decisions index and D5.
+
+```diff
+- planning/okf-phase-2/   (15 files removed)
+M planning/status.md      (rewritten: stable format, completed efforts, upcoming work)
+M planning/index.md       (trimmed: removed active-work block; points to D5)
+```
+
+---
+
 ## 2026-06-18 — docs/ created; DEVLOG renamed to log.md; README/CLAUDE/context/status updated
 
 OKF Phase 2 is committed and complete. This session cleaned up the post-Phase-2 state:
