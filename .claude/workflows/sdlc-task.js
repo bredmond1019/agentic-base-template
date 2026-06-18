@@ -500,7 +500,7 @@ STEP 5 — Compute the absolute worktree path:
 
 Return your result using the StructuredOutput tool:
   branchName:   the final chosen branch name (e.g. "${baseBranchName}" or "${baseBranchName}-2")
-  worktreePath: the ABSOLUTE path to the worktree (e.g. ~/agentic-portfolio)
+  worktreePath: the ABSOLUTE path to the worktree (e.g. <repoRoot>/trees/${baseBranchName})
   wasCreated:   true if a NEW worktree was created; false if an existing one was reused (resume mode)
   notes:        any issues encountered
 `, withModel({ label: 'worktree-setup', schema: SETUP_SCHEMA, phase: 'Worktree' }, MODEL.worktreeSetup))

@@ -5,6 +5,29 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-18 — OKF Phase 2 P6: regression dry-run — all scenarios PASS; OKF Phase 2 complete
+
+**Verification:** P6 exercised the committed engine helpers (`renderCheckList`,
+`renderUiTestPrompt`, `loadHarnessConfig`) against three `harness.json` states — config present
+(Rust profile), config absent, and uiTest enabled (Next.js profile) — plus path resolution and
+the example-spec fallback. All five scenarios verified PASS. The inline fix
+(`sdlc-task.js:503`: `~/agentic-portfolio` example path → `<repoRoot>/trees/${baseBranchName}`)
+closed the last identity leak; the narrative grep is now fully clean in `.claude/workflows/`.
+
+**Provenance stamp:** this commit is the reference point for the next generated project using the
+fully agnostic harness. Downstream projects (`learn-ai`, `python-orchestration-system`) pull the
+rewritten engines manually and author their own `planning/harness.json` per D18.
+
+```diff
++ planning/okf-phase-2/phase6/report.md   (P6 review — PASS)
+M .claude/workflows/sdlc-task.js          (line 503: generalize example worktree path)
+M planning/okf-phase-2/index.md           (P6 status — complete)
+M planning/status.md                      (P6 Done / Reviewed PASS; OKF Phase 2 complete)
+M DEVLOG.md                               (this entry)
+```
+
+---
+
 ## 2026-06-18 — OKF Phase 2 P5: self-applied the agnostic decouple to the template's own meta
 
 With the engines generalized (P1–P4), this pass made `base-template` **dogfood its own conventions**
