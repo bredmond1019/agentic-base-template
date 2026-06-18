@@ -7,13 +7,11 @@ These drive **structured spec work**: a spec lives at `planning/<name>/tasks.md`
 the pipeline takes it through implement → test → review → document → wrap-up, writing
 predictably-named reports alongside it.
 
-> **Project-agnostic harness.** This command set was curated down to the stack-neutral SDLC
-> core. The skill *bodies* and the `workflows/*.js` engines were seeded from a Next.js
-> project and still carry some stack-specific assumptions (npm validation scripts, a
-> browser UI-test stage, content/bilingual gates). Generalizing the engines to be fully
-> stack-agnostic is **deferred to OKF Phase 2** — see the template `log.md` and
-> `planning/decisions/`. Until then, adapt the validation commands to your project's stack
-> when you wire it up.
+> **Project-agnostic harness.** The command set and `workflows/*.js` engines are fully
+> stack-neutral. Validation commands, ports/routes, and the UI-test stage are all driven by
+> each project's `planning/harness.json` — the engines carry no stack defaults. Copy a profile
+> from `planning/harness.examples.md` to configure your project's stack.
+> See `planning/decisions/D5-okf-phase-2-adopted.md` for the adoption record.
 
 ---
 
@@ -107,13 +105,14 @@ planning/
   <spec>/
     tasks.md          ← spec (written by /generate-tasks)
     breakdown.md      ← optional (written by /breakdown)
-    reports/
-      implement.md         ← or task3-implement.md for task-scoped
-      test.md              ← or task3-test.md
-      review.md            ← or task3-review.md
-      document.md          ← or task3-document.md
-      workflow.md          ← or task3-workflow.md (written by /sdlc-run)
-      workflow-review.md   ← or task3-workflow-review.md (written by /review-workflow)
+    sdlc/
+      reports/
+        implement.md         ← or task3-implement.md for task-scoped
+        test.md              ← or task3-test.md
+        review.md            ← or task3-review.md
+        document.md          ← or task3-document.md
+        workflow.md          ← or task3-workflow.md (written by /sdlc-run)
+        workflow-review.md   ← or task3-workflow-review.md (written by /review-workflow)
 ```
 
 ### Report File Naming

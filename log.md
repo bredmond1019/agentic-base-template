@@ -1,7 +1,35 @@
-# DEVLOG — base-template
+# log.md — base-template
 
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
+
+---
+
+## 2026-06-18 — docs/ created; DEVLOG renamed to log.md; README/CLAUDE/context/status updated
+
+OKF Phase 2 is committed and complete. This session cleaned up the post-Phase-2 state:
+renamed `DEVLOG.md` → `log.md` (consistent with the scaffold convention and D15); updated all
+references in `CLAUDE.md`, `README.md`, `planning/context.md`, and `planning/status.md`;
+removed the "Active work: OKF Phase 2" pointer from `CLAUDE.md` and updated `context.md` to
+mark the effort historical. Created `docs/` with four files: `index.md` (navigation),
+`architecture.md` (two-halves model, OKF conventions, mechanism/policy split),
+`using-the-template.md` (generate → configure → run pipeline), and `harness-json.md` (full
+schema reference + all three stack profiles). Also fixed an outdated "deferred to OKF Phase 2"
+note in `.claude/commands/README.md` and corrected a `reports/` → `sdlc/reports/` path bug
+in the Directory Layout section of that same file.
+
+```diff
++ docs/index.md
++ docs/architecture.md
++ docs/using-the-template.md
++ docs/harness-json.md
+R DEVLOG.md → log.md
+M CLAUDE.md                          (remove OKF Phase 2 active-work section; log.md refs)
+M README.md                          (layout tree; log.md refs; docs/ entry)
+M planning/context.md                (log.md refs; current-effort → stable; okf-phase-2 → historical)
+M planning/status.md                 (current focus → stable; P6 commit confirmed; log.md ref)
+M .claude/commands/README.md         (remove outdated deferred note; fix sdlc/reports/ path)
+```
 
 ---
 

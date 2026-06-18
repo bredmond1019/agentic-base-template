@@ -7,16 +7,13 @@ generation flow.
 
 ## Before you change anything
 
-- **Orientation + current state:** `planning/index.md` → `planning/context.md` (why this repo
-  exists + governing rules) → `planning/status.md` (current focus + progress). Or run `/prime`.
-- **Active work:** **OKF Phase 2** (`planning/okf-phase-2/index.md` → `plan.md`) — the agnostic
-  decouple: converge the harness/scaffold to lowercase names, the concept-folder `planning/<concept>/`
-  model, and the `sdlc/` pipeline-state convention, and drive all validation from
-  `planning/harness.json`. P1–P5 are done; P6 (regression dry-run) is the open phase.
+- **Orientation + current state:** `planning/context.md` (why this repo exists + governing rules)
+  → `planning/status.md` (current focus + progress). Or run `/prime`.
 - **What this is + layout:** `README.md`
-- **Why the harness looks the way it does:** `planning/decisions/` (keep/drop ADRs, the
-  scaffold-split decision, the Phase-2 adoption record D5).
-- **What changed and when:** `DEVLOG.md`
+- **How to use it:** `docs/using-the-template.md`
+- **Why the harness looks the way it does:** `planning/decisions/` (keep/drop ADRs + the
+  Phase-2 adoption record D5).
+- **What changed and when:** `log.md`
 
 ## The two halves — don't mix them
 
@@ -24,10 +21,10 @@ generation flow.
 |---|---|---|---|
 | **Harness** | `.claude/` | The SDLC pipeline (commands + engines) — ships *mechanism* only | Yes — copied as-is |
 | **Scaffold** | `scaffold/` | Tokenized project docs (CLAUDE, README, log, planning/ incl. `harness.json` stub) | Yes — copied + token-substituted |
-| **Template meta** | `CLAUDE.md`, `README.md`, `DEVLOG.md`, `planning/` | The template's *own* docs, change history, and pipeline config | **No** — never copied into a project |
+| **Template meta** | `CLAUDE.md`, `README.md`, `log.md`, `planning/`, `docs/` | The template's *own* docs, change history, and pipeline config | **No** — never copied into a project |
 
 A new project must start with a **clean** log and a `D1-initial-okf` decision — so the template's
-own `DEVLOG.md` / `planning/` (this repo's harness history, decisions, and `harness.json`) stay at
+own `log.md` / `planning/` (this repo's harness history, decisions, and `harness.json`) stay at
 the root and out of `scaffold/`.
 
 ## The update loop (how to evolve the harness)
@@ -37,7 +34,7 @@ When a discovery in a downstream project improves the harness:
 1. Make the change **here**, in `base-template` — not only in the project where you found it.
 2. If it's a keep/drop or behavioral call, add an atomic ADR under `planning/decisions/`
    explaining *why*.
-3. Append a dated `DEVLOG.md` entry describing *what* changed.
+3. Append a dated `log.md` entry describing *what* changed.
 4. Commit. The new commit hash becomes the provenance stamp for the next generated project.
 
 Downstream projects **do not auto-sync**. They pull improvements manually and diverge by
@@ -54,10 +51,10 @@ design — so keep changes here additive and well-documented.
    parallel port = `port + taskNumber`) stay hardcoded — they are mechanism, not facts.
 2. **Tokenize, don't hardcode** in `scaffold/`. Use the tokens in `README.md`; never bake a
    real project name/slug/date into a scaffold file.
-3. **Preserve the load-bearing names** the SDLC engines depend on — the OKF Phase-2 conventions:
+3. **Preserve the load-bearing names** the SDLC engines depend on — the settled OKF conventions:
    lowercase docs (`status.md`, `master-plan.md`, `context.md`, scaffold `log.md`), the
    concept-folder `planning/<concept>/` model with pipeline state under a reserved
    `planning/<concept>/sdlc/`, and `index.md` for directory listings. Renames are a
-   lockstep-with-the-workflows change, not piecemeal. (The template's *own* root `DEVLOG.md` and
-   `README.md` keep those names by design.)
+   lockstep-with-the-workflows change, not piecemeal. (The template's *own* root `README.md`
+   keeps its name by design.)
 4. **Never edit a settled decision** — supersede it with a new atomic ADR and link back.
