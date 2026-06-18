@@ -10,20 +10,23 @@ change to the factory records *what* changed and *why*.
 
 ---
 
-## Canonical document names (Phase-2 rename surface)
+## Canonical document names (OKF Phase-2 conventions — settled)
 
-The scaffold deliberately keeps the **load-bearing names the SDLC workflows depend on**, so a
-freshly generated project runs the pipeline on day one:
+The scaffold ships the **load-bearing names the SDLC workflows depend on**, so a freshly generated
+project runs the pipeline on day one. As of OKF Phase 2 ([D5](planning/decisions/D5-okf-phase-2-adopted.md))
+these are the settled lowercase / concept-folder conventions:
 
-- `planning/STATUS.md`
-- `planning/MASTER_PLAN.md`
-- root `DEVLOG.md`
-- `planning/tasks/<stem>/`
+- `planning/status.md`, `planning/master-plan.md`, `planning/context.md`
+- scaffold `log.md` (the project's change history; the *template's own* root `DEVLOG.md` keeps its name)
+- `planning/<concept>/` concept folders, with pipeline machine-state under a reserved
+  `planning/<concept>/sdlc/` (`execution-plan.json`, `reports/`)
+- `index.md` for directory-listing files; root `README.md` keeps its name
+- `planning/harness.json` — the per-project pipeline config the engines read (validation commands +
+  optional UI-test config). The scaffold ships a neutral stub + `planning/harness.examples.md`
+  (Rust / Python / Next.js profiles); the engines carry no stack defaults of their own.
 
-> ⚠️ These names are the **OKF Phase-2 rename surface**. If/when the practice settles canonical
-> names (e.g. UPPERCASE vs the brain's lowercase `status.md`/`log.md`, `README.md` → `index.md`),
-> the renames must move in lockstep with the SDLC workflow JS that reads them. Do **not** rename
-> them piecemeal here. See the brain's `planning/okf-phase-2/plan.md`.
+> These names are read by the SDLC engine JS. Any future rename must move in **lockstep** with the
+> workflow code in `.claude/workflows/`, not piecemeal. See `planning/okf-phase-2/plan.md`.
 
 ---
 
@@ -31,14 +34,17 @@ freshly generated project runs the pipeline on day one:
 
 ```
 base-template/
-├── .claude/              ← curated, project-agnostic Claude Code harness
+├── .claude/              ← curated, project-agnostic Claude Code harness (mechanism only)
 │   ├── commands/         ← 22 SDLC + general commands (project-specific ones stripped)
-│   └── workflows/        ← sdlc-run / sdlc-task / sdlc-block engines
+│   └── workflows/        ← sdlc-run / sdlc-task / sdlc-block engines + harness.schema.json
+│                           + templates/spec-template.md
 ├── scaffold/             ← TOKENIZED project templates — copied into each new project
-│   ├── CLAUDE.md  README.md  DEVLOG.md
-│   └── planning/         ← CONTEXT, STATUS, MASTER_PLAN, README, decisions/, tasks/
-├── planning/
-│   └── decisions/        ← THIS template's own harness ADRs (why a skill was kept/dropped)
+│   ├── CLAUDE.md  README.md  log.md
+│   └── planning/         ← context, status, master-plan, index, decisions/,
+│                           harness.json (neutral stub) + harness.examples.md
+├── planning/             ← THIS template's own meta (context, status, decisions, okf-phase-2/)
+│   ├── decisions/        ← harness ADRs (why a skill was kept/dropped; the Phase-2 adoption D5)
+│   └── harness.json      ← the template's OWN pipeline config (non-web: node --check the engines)
 ├── CLAUDE.md             ← agent guide for working *on the template* + the update loop
 ├── DEVLOG.md             ← the template's own change history
 └── README.md            ← this file

@@ -5,6 +5,51 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-18 — OKF Phase 2 P5: self-applied the agnostic decouple to the template's own meta
+
+With the engines generalized (P1–P4), this pass made `base-template` **dogfood its own conventions**
+and recorded the adoption. The factory now eats what it ships: its docs use the lowercase OKF names,
+`okf-phase-2/` is a proper concept folder, and it carries its own `planning/harness.json`.
+
+Changes:
+- **Adoption ADR** `planning/decisions/D5-okf-phase-2-adopted.md` — records (a) engines generalized
+  to zero stack defaults, (b) the `planning/harness.json` mechanism/policy split (MVP schema:
+  `validation.checks[]` + `uiTest.enabled` and enabled-only fields; deferred fields listed),
+  (c) adoption of D15–D18 (lowercase docs / concept folders / reserved `sdlc/` / `index.md`), and
+  (d) the MVP scope calls (emoji + `port + taskNumber` hardcoded as mechanism; narrative
+  externalization opportunistic). **Supersedes D3.** Registered in `planning/decisions/index.md`.
+- **base-template's own `planning/harness.json`** — non-web profile dogfooding the loader: a single
+  gating `engines-parse` check (`node --check` over the three SDLC engines), `uiTest.enabled:false`.
+  Proves the agnostic / non-web path on the factory itself. (Template meta — never copied downstream;
+  generated projects get the neutral `scaffold/planning/harness.json` stub.)
+- **`planning/okf-phase-2/index.md`** (D17) — directory listing for the concept folder (plan,
+  context, per-phase reports). Concept folder registered in `planning/index.md` (P-status refreshed
+  to P1–P4 done / P5 now).
+- **Root `CLAUDE.md`** — rule #1 now cites `planning/harness.json` as the agnostic seam (mechanism
+  vs. policy, no stack defaults, universal rules stay hardcoded); rule #3 states the settled OKF
+  names + concept-folder + `sdlc/` convention (was the pre-Phase-2 UPPERCASE/`tasks/` names);
+  "Before you change anything" repointed at `planning/` + `okf-phase-2/index.md`; the two-halves
+  table updated (scaffold `log.md`, harness ships mechanism only).
+- **Root `README.md`** — layout block + canonical-names section rewritten to the settled lowercase /
+  concept-folder conventions and the `harness.json` config; documents the template's own
+  `planning/harness.json` and the scaffold stub + examples.
+- **`init-worktree.md` sparse-checkout residual — RESOLVED** (the P4-deferred follow-up). The
+  hardcoded learn-ai cone dir list (`app components hooks lib content scripts docs planning .claude
+  __tests__ __mocks__ types`) → `git ls-tree HEAD --name-only -d` (cone all tracked top-level dirs).
+  Stack-agnostic, no config field needed (chose option (b) over a `harness.json worktree.*` field).
+
+P6 (regression dry-run) is the only open phase.
+
+```diff
++ planning/harness.json                                  (template's own pipeline config)
++ planning/okf-phase-2/index.md                          (D17 concept-folder index)
++ planning/decisions/D5-okf-phase-2-adopted.md           (supersedes D3)
+~ CLAUDE.md, README.md, planning/index.md, planning/decisions/index.md
+~ .claude/commands/init-worktree.md                      (sparse-checkout → ls-tree, residual resolved)
+```
+
+---
+
 ## 2026-06-18 — Dropped the `.agents/` twin (single-harness)
 
 Removed the `.agents/` tree (Gemini/Antigravity skill twins + `compute-waves.ts`) from the

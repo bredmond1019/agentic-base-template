@@ -55,12 +55,14 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
 8. **Configure sparse checkout (cone mode):**
    ```bash
    git -C trees/<worktreeName> sparse-checkout init --cone
-   git -C trees/<worktreeName> sparse-checkout set app components hooks lib content scripts docs planning .claude __tests__ __mocks__ types
+   # Cone ALL tracked top-level directories — stack-agnostic, no project layout assumptions.
+   git -C trees/<worktreeName> sparse-checkout set $(git ls-tree HEAD --name-only -d | tr '\n' ' ')
    git -C trees/<worktreeName> checkout
    ```
-   This checks out the source, content, test, and planning trees. Root-level files
-   (`CLAUDE.md`, manifests/lockfiles, build/config files, etc.) are included automatically by
-   cone mode.
+   `git ls-tree HEAD --name-only -d` lists every tracked top-level **directory**, so the cone set
+   adapts to whatever trees the project has (source, tests, `docs/`, `planning/`, `.claude/`, …)
+   without naming any one stack's layout. Root-level files (`CLAUDE.md`, manifests/lockfiles,
+   build/config files, etc.) are included automatically by cone mode.
 
 9. **Copy local env files if present** (both are gitignored and must be copied manually):
    ```bash
@@ -99,7 +101,7 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
 
 ## Notes
 
-- Sparse checkout includes `planning/` in full so the scout, plan, and wrap-up agents can read status.md, master-plan.md, and write report files. Include any content/asset trees the project's tasks need in full as well.
+- Sparse checkout cones **all tracked top-level directories** (step 8), so `planning/` is included in full (the scout, plan, and wrap-up agents read status.md / master-plan.md and write report files) along with every source/content/asset tree the project has — no per-project tuning needed.
 - `.claude/` is included so all commands and workflows resolve correctly when the CWD is the worktree.
 - Root-level files are included automatically by cone mode — no need to list them explicitly.
 - **Dependencies are not part of the checkout and are not shared between worktrees.** Install the project's dependencies inside the worktree before running its validation suite. (`/sdlc-task` handles this itself; only matters for a manual session.)
