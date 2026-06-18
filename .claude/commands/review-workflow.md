@@ -38,7 +38,7 @@ Examples:
 6. **Read all existing reports** in this order:
    a. Workflow report — primary source: pipeline metadata, stage results table, commit list
    b. Implement report — what was built; did validation pass?
-   c. Test report — 6-check suite results; pass/fail counts
+   c. Test report — validation check results (one row per check + emoji gate); pass/fail counts
    d. Review report — verdict, acceptance criteria check, fresh test outcome
    e. Document report — which docs were patched (relevant only if verdict was PASS)
 
@@ -77,14 +77,14 @@ For each expected report, check: is the file present? Does it contain the requir
 | Stage | Required Sections |
 |---|---|
 | Implement | `## What Was Built`, `## Files Created or Modified`, `## Validation Output` |
-| Test | `## Summary` table with 6 rows (8 when the two content gates apply), pass/fail counts, `## Full Results (JSON)` |
+| Test | `## Summary` table (one row per validation check + the emoji gate), pass/fail counts, `## Full Results (JSON)` |
 | Review | `## Acceptance Criteria Check` table, `**Verdict:**` line |
 | Document | `## Docs Patched` table, `## Docs Flagged NEEDS_REVIEW` (only if review PASS) |
 | Workflow | `## Stage Results` table, `## Final Verdict`, `## Commits (this pipeline run)` |
 
-The 6-check suite a passing Test stage records: `npm run lint`, `npx tsc --noEmit`,
-`npm run validate:content`, `npm test -- --listTests`, `npm test`, and `npm run build`.
-Content-touching specs add two more gates (bilingual parity, link/handle hygiene) for 8 rows.
+The checks a passing Test stage records come from the project's `planning/harness.json`
+(`validation.checks[]`, in order) plus the universal emoji gate — so the row count and commands
+vary by project. There are no hardcoded stack commands.
 
 ### Verdict Chain
 - What verdict did the review report? (PASS / FAIL / PARTIAL)

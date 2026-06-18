@@ -13,7 +13,7 @@
 // for sequential use.
 //
 // USAGE
-//   /sdlc-task 1.1-site-credibility-fixes 2   runs task 2 in an isolated worktree
+//   /sdlc-task <spec-slug> 2   runs task 2 in an isolated worktree
 //
 //   Task number is REQUIRED. For full-spec runs use /sdlc-run instead.
 //
@@ -39,7 +39,7 @@
 //         commits → removes worktree → deletes branch.
 //
 // WORKTREE PATH CONVENTION
-//   trees/<specSlug-lowercased>-task<N>   e.g. trees/1.1-site-credibility-fixes-task2
+//   trees/<specSlug-lowercased>-task<N>   e.g. trees/<spec-slug>-task2
 //   If that name is taken, auto-increments: trees/...-task2-2, -3, etc.
 //   The actual branch name is always reported in the pipeline output and task log.
 //
@@ -71,7 +71,7 @@
 export const meta = {
   name: 'sdlc-task',
   description: 'Run the SDLC pipeline for a single task in an isolated worktree — parallel-safe variant of sdlc-run',
-  whenToUse: 'When running a specific numbered task in parallel with other tasks. Task number is required. Usage: /sdlc-task 1.1-site-credibility-fixes 2',
+  whenToUse: 'When running a specific numbered task in parallel with other tasks. Task number is required. Usage: /sdlc-task <spec-slug> 2',
   phases: [
     { title: 'Worktree',   detail: 'Auto-create (or suffix-increment) git worktree for isolated execution' },
     { title: 'Scout',      detail: 'Determine current pipeline stage from report files' },
@@ -80,19 +80,19 @@ export const meta = {
     { title: 'Fix',        detail: 'Targeted fixes for FAIL/PARTIAL review' },
     { title: 'Test',       detail: "Run the project's validation suite (from planning/harness.json) in the worktree" },
     { title: 'Review',     detail: 'Verify acceptance criteria; issue verdict' },
-    { title: 'UI Test',    detail: 'Browser smoke check via playwright-cli (frontend-touching specs only)' },
+    { title: 'UI Test',    detail: 'Browser smoke check (only when planning/harness.json enables uiTest)' },
     { title: 'Document',   detail: 'Patch docs/ (gates on PASS verdict)' },
     { title: 'Wrap-up',    detail: 'Write task log file (status/log deferred to merge time)' },
   ]
 }
 
 // ----------------------------------------------------------------
-// Parse args: REQUIRE "1.1-site-credibility-fixes 2" — task number is mandatory
+// Parse args: REQUIRE "<spec-slug> 2" — task number is mandatory
 // ----------------------------------------------------------------
 const rawArgs = typeof args === 'string' ? args.trim() : ''
 if (!rawArgs) {
   log('ERROR: No arguments provided.')
-  log('Usage: /sdlc-task 1.1-site-credibility-fixes 2')
+  log('Usage: /sdlc-task <spec-slug> 2')
   log('Task number is required. For full-spec runs, use /sdlc-run instead.')
   return { error: 'Missing required arguments: spec name and task number' }
 }
@@ -106,7 +106,7 @@ const resumeMode = parts.includes('--resume')
 
 if (taskNumber === null || isNaN(taskNumber)) {
   log(`ERROR: Task number is required but not provided (got: "${rawArgs}").`)
-  log('Usage: /sdlc-task 1.1-site-credibility-fixes 2')
+  log('Usage: /sdlc-task <spec-slug> 2')
   log('For full-spec runs use /sdlc-run instead.')
   return { error: 'Task number required', rawArgs }
 }
@@ -125,7 +125,7 @@ const logFile         = `${reportsDir}/${taskPrefix}log.md`
 const breakdownFile   = `planning/${blockId}/breakdown.md`
 
 // Base branch name (suffix may be appended by setup agent).
-// Dots are kept so a phase-dotted spec slug (e.g. 1.1-site-credibility-fixes) round-trips
+// Dots are kept so a phase-dotted spec slug (e.g. <spec-slug>) round-trips
 // to its planning/<slug>/ directory; git allows '.' in a branch name (just not '..').
 const baseBranchName = `${blockId}-task${taskNumber}`.toLowerCase().replace(/[^a-z0-9.-]/g, '-')
 
@@ -245,8 +245,8 @@ const UI_TEST_SCHEMA = {
 // purely-mechanical stages; Sonnet handles the judgment work in between.
 //   • Opus   — generate-tasks (authors the spec; fallback path only)
 //   • Haiku  — scout / test / finalize. Each is a fixed procedure with no real judgment:
-//              scout is a deterministic file-existence decision tree, test runs 6 commands and
-//              reads exit codes (review re-runs npm test authoritatively anyway), and finalize
+//              scout is a deterministic file-existence decision tree, test runs the project's
+//              validation suite and reads exit codes (review re-runs the gating checks anyway), and finalize
 //              just fills a JS-precomputed table and runs scripted git adds.
 //   • Sonnet — implement / fix / review / document / task-log. A sharp spec + breakdown makes
 //              these well-scoped enough that Sonnet does them reliably. (Review is gated by an
@@ -268,9 +268,9 @@ const MODEL = {
   generateTasks: 'opus',     // PLANNING — authors the spec that drives everything (fallback path)
   implement:     'sonnet',   // writes content/code + tests against a scoped spec/breakdown
   fix:           'sonnet',   // targeted fixes; failures escalate, never silently ship
-  test:          'haiku',    // run 6 fixed commands, read exit codes; review re-runs npm test authoritatively
-  review:        'sonnet',   // verify criteria; gated by an authoritative fresh-test run
-  uiTest:        'sonnet',   // live browser smoke checks via playwright-cli; needs judgment to interpret results
+  test:          'haiku',    // runs the project's validation suite, reads exit codes; review re-runs the gating checks
+  review:        'sonnet',   // verify criteria; gated by an authoritative fresh run of the gating checks
+  uiTest:        'sonnet',   // live browser smoke checks (when uiTest.enabled); needs judgment to interpret results
   document:      'sonnet',   // surgical doc patches, gated on PASS
   taskLog:       'sonnet',   // authors the human-facing log prose + status lines — keep the quality
   finalize:      'haiku',    // assembles a JS-precomputed table + scripted git add; can't break the pipeline
@@ -363,16 +363,53 @@ Return your findings using the StructuredOutput tool.
   return result.config
 }
 
-// Render the inner validation-check list for the Test stage from harness config.
-// STUB — body filled in P4. Not yet wired into the Test stage.
-function renderCheckList(cfg, { changedPaths } = {}) {
-  return '' // P4: build the ordered CHECK list from cfg.validation.checks[]
+// Render the inner project-validation check list for the Test stage from harness config.
+// Returns the numbered CHECK blocks the agent runs (each prefixed `cd <cwd> &&` so it runs in the
+// worktree) before the universal emoji gate. cfg null / no checks → fall back to the spec's
+// `## Validation Commands`. The engine ships NO stack defaults. changedPaths is reserved for the
+// deferred conditionalChecks feature (unused in the MVP).
+function renderCheckList(cfg, { changedPaths, cwd } = {}) {
+  const pre = cwd ? `cd ${cwd} && ` : ''
+  const checks = cfg?.validation?.checks ?? []
+  if (!checks.length) {
+    return `The project ships no \`planning/harness.json\` validation suite, so derive the checks
+from the spec instead:
+  - Read the spec's optional "## Validation Commands" section.
+  - Run each command it lists, IN ORDER (from the worktree root: ${cwd || 'repo root'}). Each command
+    is one check — record test_name (a short slug), execution_command, test_purpose ("from the spec's
+    Validation Commands"), passed (true iff exit code 0), and error (output on failure).
+  - If the spec has no "## Validation Commands" section, run no project checks — record a single
+    informational row (test_name "no_validation_suite", passed true, empty error). Then run the
+    universal emoji gate below.`
+  }
+  return checks.map((c, i) => {
+    const n = i + 1
+    const gate = c.gates
+      ? 'GATING — a failure here blocks the review verdict'
+      : 'non-gating — informational; a failure here does not block the verdict'
+    return `CHECK ${n} — ${c.name} (${c.purpose}) [${gate}]:
+  ${pre}${c.command}
+  echo "CHECK${n}_EXIT:$?"`
+  }).join('\n\n')
 }
 
-// Render the UI-test stage prompt body from harness config.
-// STUB — body filled in P4. Not yet wired into the UI-test stage.
+// Render the UI-test stage prompt parts from harness config. Called ONLY when cfg.uiTest.enabled.
+// Interpolates the MVP fields (devServerCommand / readySignal / port / routes); the stage gate
+// decides whether this runs at all. port is the resolved per-task port (base + taskNumber).
 function renderUiTestPrompt(cfg, port) {
-  return '' // P4: interpolate cfg.uiTest.{devServerCommand, readySignal, port, routes}
+  const ui = cfg.uiTest
+  const routes = (Array.isArray(ui.routes) && ui.routes.length) ? ui.routes : ['/']
+  const ready = ui.readySignal || 'ready'
+  const devCmd = ui.devServerCommand || 'echo "ERROR: uiTest.enabled but devServerCommand missing in planning/harness.json" && false'
+  const routeChecks = routes.map((r, i) => `  CHECK ${i + 1} — Route ${r} renders without error:
+    playwright-cli goto http://localhost:${port}${r}
+    playwright-cli snapshot
+    playwright-cli console
+    Verify: the page title / headings do not contain "404", "500", "Error", or "Not Found";
+    the page shows real content (not a bare framework error screen); the console has no
+    error-level entries ("warning"-level entries → WARN, not FAIL).`).join('\n\n')
+  const routeRows = routes.map(r => `  | Route ${r} renders | PASS/WARN/FAIL | |`).join('\n')
+  return { routes, ready, devCmd, port, routeChecks, routeRows }
 }
 
 // ----------------------------------------------------------------
@@ -490,7 +527,7 @@ const W = `
 ║    cd ${worktreePath} &&
 ║
 ║  "repo root" = ${worktreePath}
-║  Run npm commands (npm test, npm run build, etc.) from the repo root.
+║  Run all build/test/validation commands from the repo root.
 ║  Relative paths (planning/...) resolve from: ${worktreePath}
 ╚══════════════════════════════════════════════════════════════════╝
 `
@@ -598,12 +635,14 @@ Instructions:
 1. Read planning/master-plan.md (at the worktree root) — find the section covering "${blockId}".
    Run: cd ${worktreePath} && cat planning/master-plan.md
 
-2. Read CLAUDE.md — note all standing rules (bilingual parity, public-narrative rule,
-   no fabricated metrics, validate:content + build must pass).
+2. Read CLAUDE.md and planning/context.md — internalize and enforce the project's standing rules.
+   CLAUDE.md is the authority; do not assume any stack, locale-parity, narrative, or content-layout
+   rule unless written there. Universal harness rules always apply: no fabricated metrics or quotes,
+   no emoji, every change ships with tests.
    Run: cd ${worktreePath} && cat CLAUDE.md
 
-3. Read an existing spec as format reference:
-   cd ${worktreePath} && cat planning/1.1-site-credibility-fixes/tasks.md
+3. Read the generic spec skeleton as a format reference:
+   cd ${worktreePath} && cat .claude/workflows/templates/spec-template.md
 
    Also create the spec directory structure now if it does not exist:
    cd ${worktreePath} && mkdir -p planning/${blockId}/sdlc/reports
@@ -611,13 +650,14 @@ Instructions:
 4. Write ${specFile} (absolute path: ${worktreePath}/${specFile}) following the standard format.
 
    Rules:
-   - Every task ships with the validation that proves it (npm run validate:content + npm run build pass)
-   - Content tasks must respect bilingual parity (EN + pt-BR) or record the deferral in ## Notes
+   - Every task ships with the validation that proves it (the project's validation suite passes)
+   - Follow every CLAUDE.md standing rule; record any deferral in ## Notes
    - The final task must always be "Validate"
    - Tasks should be numbered ### 1., ### 2., etc.
-   - Include exact file paths (.ts / .tsx / .mdx) and component/function names
-   - Include a ## Validation Commands block using: npm run lint, npx tsc --noEmit,
-     npm run validate:content, npm test, npm run build
+   - Include exact file paths and component/function names
+   - Include a ## Validation Commands block that mirrors planning/harness.json
+     (validation.checks[].command, in order); if that file is absent, use the project's
+     documented build/test commands from CLAUDE.md
 
 Return using StructuredOutput:
   reportFile: "${specFile}"
@@ -635,6 +675,14 @@ Return using StructuredOutput:
   log(`Task spec written: ${genResult.reportFile}`)
   currentStage = 'implement'
 }
+
+// Load the project's validation policy once (mechanism/policy split — see planning/harness.json).
+// Read from the worktree checkout. null when absent/invalid → Test falls back to the spec's
+// ## Validation Commands and the UI-test stage is skipped. The engine ships no stack defaults.
+const harnessCfg = await loadHarnessConfig(worktreePath)
+log(harnessCfg
+  ? `Harness config loaded: ${(harnessCfg.validation?.checks || []).length} validation check(s); uiTest ${harnessCfg.uiTest?.enabled ? 'enabled' : 'disabled'}.`
+  : 'No planning/harness.json — validation falls back to the spec; UI-test disabled.')
 
 // ================================================================
 // PHASES 3–5: IMPLEMENT → (FIX →) TEST → REVIEW (with retry loop)
@@ -684,18 +732,15 @@ Instructions:
      cd ${worktreePath} && <command>
 
 4. As you implement, follow every CLAUDE.md standing rule:
-   - Bilingual parity: a content change in one locale (content/.../en/) must be mirrored in
-     pt-BR (content/.../pt-BR/) or the deferral recorded in the spec's ## Notes / deviations
-   - Public-narrative rule: Brandon is the subject; never name/criticize a former employer;
-     de-identify Helpscout & AI Scribe; the April-2025 proposal story stays private
-   - No fabricated metrics — every number must be verifiable
-   - Pages are defined ONCE under app/[locale]/; content is MDX under content/
-   - Add or update tests for any new lib/ or component logic
+   - CLAUDE.md is the authority — do not assume any stack, locale-parity, narrative, or
+     content-layout rule unless written there; if it is, enforce it exactly
+   - No fabricated metrics or quotes — every number must be verifiable
+   - No emoji in any file
+   - Add or update tests for any new code/logic — every change ships with the validation that proves it
 
-5. Run the Validation Commands from the spec to confirm correctness:
-   cd ${worktreePath} && npm test 2>&1 | tail -20
-   cd ${worktreePath} && npm run lint 2>&1 | tail -20
-   cd ${worktreePath} && npm run validate:content 2>&1 | tail -20   # for content-touching tasks
+5. Run the Validation Commands from the spec to confirm correctness (the project's own suite —
+   from planning/harness.json, or the spec's ## Validation Commands):
+   cd ${worktreePath} && <each validation command from the spec> 2>&1 | tail -20
 
 6. Write the implementation report:
    Absolute path: ${worktreePath}/${implementReport}
@@ -886,10 +931,11 @@ Return using StructuredOutput:
   // ----------------------------------------------------------
   if (currentStage === 'test') {
     phase('Test')
-    log('Running 7-check test suite...')
+    log('Running the project validation suite...')
 
     const testResult = await agent(`${W}
-You are the test agent for the SDLC pipeline. Run the 7-check validation suite in the worktree.
+You are the test agent for the SDLC pipeline. Run the project's validation suite (from
+planning/harness.json, or the spec fallback) plus the universal emoji gate, in the worktree.
 
 Target:
   Spec:            ${specFile}
@@ -901,45 +947,17 @@ PRE-FLIGHT — Verify all top-level tracked directories exist in this sparse-che
   If any "MISSING_DIR:" lines appear above, materialize all tracked directories now:
     cd ${worktreePath} && git sparse-checkout reapply && ls -d */ | head -20
   This catches any directory added to main after this worktree was initialized (not just hooks/),
-  preventing silent module-resolution failures on checks 2, 5, and 6.
+  preventing silent module-resolution failures in the validation checks below.
 
-Run ALL 7 checks IN ORDER. Capture full output (stdout + stderr) for each.
-All commands start with: cd ${worktreePath} &&
+Run EVERY check below IN ORDER. Capture full output (stdout + stderr) for each.
+All commands run from the worktree root (each is already prefixed with cd ${worktreePath}).
 
-CHECK 1 — ESLint (lint gate):
-  cd ${worktreePath} && npm run lint > /tmp/check1-lint.txt 2>&1; echo "CHECK1_EXIT:$?"
-  tail -20 /tmp/check1-lint.txt
-  grep -E "[0-9]+ (problem|error|warning)" /tmp/check1-lint.txt | tail -3 || echo "(no ESLint problem-count line found)"
+${renderCheckList(harnessCfg, { cwd: worktreePath })}
 
-CHECK 2 — TypeScript (type gate, replaces pylint):
-  cd ${worktreePath} && npx tsc --noEmit 2>&1 | tail -80
-  echo "CHECK2_EXIT:\${PIPEstatus[0]}"
+EMOJI CHECK — Emoji prohibition (universal harness gate — always runs last):
+  Hard FAIL if any markdown file changed by THIS TASK introduces an emoji.
 
-CHECK 3 — Content validation (frontmatter / MDX / internal refs):
-  cd ${worktreePath} && npm run validate:content 2>&1 | tail -80
-  echo "CHECK3_EXIT:\${PIPEstatus[0]}"
-
-CHECK 4 — Jest collect (syntax check — does NOT resolve module imports):
-  cd ${worktreePath} && npm test -- --listTests > /tmp/check4-list.txt 2>&1; echo "CHECK4_EXIT:$?"
-  tail -20 /tmp/check4-list.txt
-  CHECK4_COUNT=$(grep -c '\.test\.' /tmp/check4-list.txt 2>/dev/null || echo 0)
-  echo "CHECK 4: $CHECK4_COUNT test files discovered"
-  [ "$CHECK4_COUNT" -lt 45 ] && echo "WARNING: only $CHECK4_COUNT test files discovered (expected >= 45) — sparse-checkout may be incomplete"
-  NOTE: A passing CHECK 4 does NOT guarantee imports work — missing modules cause CHECK 5 to
-  fail while CHECK 4 still passes. CHECK 5 is the authoritative module-resolution gate.
-
-CHECK 5 — Jest full (authoritative unit/integration run):
-  cd ${worktreePath} && npm test 2>&1 | tail -80
-  echo "CHECK5_EXIT:\${PIPEstatus[0]}"
-
-CHECK 6 — Next build (production build gate):
-  cd ${worktreePath} && npm run build 2>&1 | tail -80
-  echo "CHECK6_EXIT:\${PIPEstatus[0]}"
-
-CHECK 7 — Emoji prohibition (CLAUDE.md standing rule):
-  Two passes: task-introduced files cause hard FAIL; pre-existing files emit WARN only.
-
-  Pass A — files modified by THIS TASK vs main (hard FAIL if emoji found):
+  Files modified by THIS TASK vs main (hard FAIL if emoji found):
   cd ${worktreePath} && python3 - <<'PYEOF'
 import subprocess, re, sys, os
 EMOJI = re.compile(r'[\U0001F300-\U0001FAFF\U00002600-\U000027BF]')
@@ -951,36 +969,16 @@ for path in md_files:
         if EMOJI.search(line):
             hits.append(f'{path}:{n}: {line.rstrip()[:100]}')
 if hits:
-    print('CHECK 7 FAIL: emoji in task-modified files (violates CLAUDE.md no-emoji rule):')
+    print('EMOJI CHECK FAIL: emoji in modified files (violates the no-emoji harness rule):')
     for h in hits[:25]: print(h)
     sys.exit(1)
-print('CHECK 7 Pass A: OK — no emoji in task-modified files')
+print('EMOJI CHECK: OK — no emoji in modified files')
 sys.exit(0)
 PYEOF
-  echo "CHECK7_EXIT:$?"
+  echo "EMOJI_EXIT:$?"
 
-  Pass B — full content/ scan for pre-existing emoji (WARN only — does NOT affect allPassed):
-  cd ${worktreePath} && python3 - <<'PYEOF'
-import os, re
-EMOJI = re.compile(r'[\U0001F300-\U0001FAFF\U00002600-\U000027BF]')
-hits = []
-for root, _, files in os.walk('content'):
-    for f in files:
-        if not f.endswith(('.md', '.mdx')): continue
-        path = os.path.join(root, f)
-        for n, line in enumerate(open(path, errors='ignore'), 1):
-            if EMOJI.search(line):
-                hits.append(f'{path}:{n}: {line.rstrip()[:100]}')
-if hits:
-    print('CHECK 7 WARN (pre-existing, NOT introduced by this task — fix separately):')
-    for h in hits[:25]: print(h)
-else:
-    print('CHECK 7 Pass B: OK — no pre-existing emoji in content/')
-PYEOF
-  (Pass B exit code is intentionally ignored — only Pass A determines CHECK7_EXIT)
-
-For content-touching tasks, ALSO note in the report whether bilingual parity (EN/pt-BR mirror)
-and link/handle hygiene hold — npm run validate:content partially covers this.
+Note in the report any project-specific standing-rule checks the spec or CLAUDE.md calls for
+(the project's own validation suite covers most of these).
 
 Write the test report to: ${worktreePath}/${testReport}
 
@@ -1004,9 +1002,9 @@ Format:
 
 Return using StructuredOutput:
   reportFile: "${testReport}"
-  allPassed: true only if ALL 7 checks passed (exit code 0)
-  passCount: integer (out of 7)
-  failCount: integer (out of 7)
+  allPassed: true only if EVERY check passed (each exit code 0, emoji gate clean)
+  passCount: integer count of checks that passed
+  failCount: integer count of checks that failed
   failedTests: array of test_name strings for failed checks
   notes: one-line summary
 `, withModel({ label: 'test', schema: TEST_SCHEMA, phase: 'Test' }, MODEL.test))
@@ -1061,10 +1059,13 @@ Instructions:
 3. Read the test report:
    cd ${worktreePath} && cat ${testReport}
 
-4. Run FRESH authoritative tests (this result determines the verdict):
-   cd ${worktreePath} && npm test 2>&1
-   For specs that change routing/pages/components, also run the co-gate:
-   cd ${worktreePath} && npm run build 2>&1
+4. Run FRESH authoritative checks (this result determines the verdict, not the test report):
+   Re-run each GATING validation check — those whose test_purpose in the test report (${testReport})
+   is marked "GATING", i.e. the checks with gates:true in planning/harness.json. Use each check's
+   execution_command verbatim, from the worktree root:
+   cd ${worktreePath} && <gating check command>
+   If the project ships no harness suite, re-run the spec's "## Validation Commands". A fresh
+   failure of any gating check ALWAYS prevents PASS.
 
 5. Scope your review to Task ${taskNumber} only.
    The spec may list acceptance criteria spanning multiple tasks. For each criterion:
@@ -1077,25 +1078,26 @@ Instructions:
    MET — fully satisfied by this task's changes
    PARTIAL — partially satisfied
    NOT_MET — not satisfied (counts as a verdict failure)
-   Also check CLAUDE.md standing-rules compliance (bilingual parity, public-narrative rule,
-   no fabricated metrics, validate:content + build pass) — a violation is a failing criterion.
-   URL INTEGRITY: When reading rewritten content, flag any GitHub URLs (github.com/*,
-   raw.githubusercontent.com/*) that do NOT use the handle bredmond1019. Mark as NOT_MET
-   under "No fabricated metrics" — only bredmond1019 is a verified Brandon handle.
+   Also check the project's CLAUDE.md standing-rules compliance — a violation is a failing
+   criterion. CLAUDE.md is the authority: do not assume any stack, locale-parity, narrative, or
+   content-layout rule unless written there. Universal harness rules always apply: no fabricated
+   metrics or quotes, no emoji, every change ships with tests.
+   IDENTITY INTEGRITY: flag any handle, profile link, or URL that contradicts the verified
+   identities/handles declared in CLAUDE.md, or that appears fabricated. Mark such a criterion
+   NOT_MET — only the CLAUDE.md-declared identities are authoritative.
 
 5.5. HARD RULE — do NOT fix environment or infrastructure issues yourself:
-   If the fresh npm test or npm run build fails due to environment/infrastructure causes
-   (missing module files, sparse-checkout gaps, missing hooks, missing directories), do NOT
-   fix them yourself. Return verdict: FAIL with failureReasons: ["Environment issue —
-   missing files or sparse-checkout gap; the fix agent must resolve them and re-run the
-   pipeline."]. A review agent that resolves infrastructure issues itself bypasses the
-   test gate that validates the fix.
+   If a fresh gating check fails due to environment/infrastructure causes (missing module files,
+   sparse-checkout gaps, missing hooks, missing directories), do NOT fix them yourself. Return
+   verdict: FAIL with failureReasons: ["Environment issue — missing files or sparse-checkout gap;
+   the fix agent must resolve them and re-run the pipeline."]. A review agent that resolves
+   infrastructure issues itself bypasses the test gate that validates the fix.
 
 6. Determine verdict:
-   PASS — ALL criteria MET AND fresh npm test passes (exit 0)
-   PARTIAL — some criteria PARTIAL, OR tests pass but some criteria not fully met
-   FAIL — any criterion NOT_MET, OR fresh npm test fails
-   (A fresh test failure ALWAYS prevents PASS)
+   PASS — ALL criteria MET AND every fresh gating check passes (exit 0)
+   PARTIAL — some criteria PARTIAL, OR gating checks pass but some criteria not fully met
+   FAIL — any criterion NOT_MET, OR any fresh gating check fails
+   (A fresh gating-check failure ALWAYS prevents PASS)
 
 7. Write the review report: ${worktreePath}/${reviewReport}
 
@@ -1113,7 +1115,7 @@ Instructions:
    | [criterion] | MET / PARTIAL / NOT_MET | [file:line or test name] |
 
    ## Fresh Test Results
-   [npm test summary — pass/fail counts, failure output; build result if run]
+   [the fresh gating-check output — per-check pass/fail and any failure output]
 
    ## Verdict: PASS / PARTIAL / FAIL
    [one paragraph explaining the verdict]
@@ -1158,92 +1160,80 @@ Return using StructuredOutput:
   // ----------------------------------------------------------
   if (currentStage === 'ui-test') {
     phase('UI Test')
-    log('Running UI test stage...')
 
-    const devPort = 3003 + taskNumber
+    if (!harnessCfg?.uiTest?.enabled) {
+      log('UI test stage disabled (harness.json uiTest.enabled is false or config absent) — SKIPPED.')
+      stageResults.push({ stage: 'ui-test', verdict: 'SKIPPED', success: true, notes: 'uiTest disabled in harness.json' })
+      currentStage = 'document'
+    } else {
+      log('Running UI test stage...')
+      // Parallel-safe: each task gets a unique port (base port + task number).
+      const devPort = (harnessCfg.uiTest.port ?? 3000) + taskNumber
+      const ui = renderUiTestPrompt(harnessCfg, devPort)
 
-    const uitestResult = await agent(`${W}
-You are the UI test agent for the SDLC pipeline. Your job is to run a quick live browser smoke
-check using playwright-cli to catch visual/runtime regressions that Jest cannot catch.
+      const uitestResult = await agent(`${W}
+You are the UI test agent for the SDLC pipeline. Run a quick live browser smoke check using
+playwright-cli to catch visual/runtime regressions that the validation suite cannot catch.
 
 Target:
   Spec:              ${blockId}
   Task:              Task ${taskNumber}
   Implement report:  ${implementReport}
   Report to write:   ${uitestReport}
-  Dev server URL:    http://localhost:${devPort}
+  Dev server URL:    http://localhost:${ui.port}
   Worktree root:     ${worktreePath}
 
-STEP 1 — Triage: does this task touch the frontend?
+STEP 1 — Triage: did this task change application source?
 
   Read the implement report:
     cd ${worktreePath} && cat ${implementReport}
-  Scan the "Files Modified" list for any paths under app/, components/, or lib/.
-  - If ALL changes are under content/ (MDX, JSON) only → set verdict = SKIPPED, write the report, and stop.
-    SKIPPED means "no frontend code was modified — browser check is not applicable."
-  - If ANY file under app/, components/, or lib/ was modified → continue to STEP 2.
+  Scan the "Files Modified" list. If EVERY changed file is documentation/markdown or planning
+  metadata only (no application source), set verdict = SKIPPED, write the report, and stop.
+  Otherwise continue to STEP 2.
 
-STEP 2 — Start the dev server on port ${devPort} (unique per task to avoid conflicts).
+STEP 2 — Start the dev server on port ${ui.port} (unique per task to avoid conflicts).
 
-  Check if port ${devPort} is already in use:
-    lsof -ti :${devPort} 2>/dev/null && echo "PORT_IN_USE" || echo "PORT_FREE"
+  Check if port ${ui.port} is already in use:
+    lsof -ti :${ui.port} 2>/dev/null && echo "PORT_IN_USE" || echo "PORT_FREE"
 
   If PORT_IN_USE: the server is already running — skip to STEP 3.
   If PORT_FREE: start the server in the background from the worktree:
-    cd ${worktreePath} && PORT=${devPort} npm run dev > /tmp/uitest-${stem}.log 2>&1 &
-    echo "SERVER_PID=\$!"
+    cd ${worktreePath} && PORT=${ui.port} ${ui.devCmd} > /tmp/uitest-${stem}.log 2>&1 &
+    echo "SERVER_PID=$!"
 
   Wait up to 60 seconds for the ready signal:
-    for i in \$(seq 1 30); do grep -q "Ready in" /tmp/uitest-${stem}.log 2>/dev/null && echo "READY" && break; sleep 2; done
+    for i in $(seq 1 30); do grep -q "${ui.ready}" /tmp/uitest-${stem}.log 2>/dev/null && echo "READY" && break; sleep 2; done
     tail -20 /tmp/uitest-${stem}.log
 
   If "READY" not seen within 60 s, write the report with verdict = FAIL (dev server did not start),
   kill the background process, and stop.
 
-STEP 3 — Run smoke checks using playwright-cli.
+STEP 3 — Run smoke checks using playwright-cli, one per configured route.
 
   Open a browser session:
-    playwright-cli open http://localhost:${devPort}/en/
+    playwright-cli open http://localhost:${ui.port}${ui.routes[0]}
 
-  Run all 5 checks. For each, record PASS, WARN, or FAIL with evidence:
+  For each route below, record PASS, WARN, or FAIL with quoted evidence:
 
-  CHECK 1 — Homepage renders:
-    playwright-cli goto http://localhost:${devPort}/en/
-    playwright-cli snapshot
-    Verify: page title is not blank and does not contain "404", "500", "Error", "Not Found".
-    Verify: at least one nav element is present in the snapshot.
+${ui.routeChecks}
 
-  CHECK 2 — No JS console errors on homepage:
-    playwright-cli console
-    Verify: no "error"-level entries. "warning"-level entries → WARN (not FAIL).
-
-  CHECK 3 — Nav element present:
-    From the snapshot in CHECK 1 — confirm a navigation/header element exists (nav, header, or
-    an element with "nav" in its accessible role or text).
-
-  CHECK 4 — Internal link works (pick any link from the homepage snapshot and click it):
-    playwright-cli click <ref of any internal link>
-    playwright-cli snapshot
-    Verify: the target page loads without an error page. URL changed to an expected path.
-
-  CHECK 5 — No 500 errors (sanity check on the /en/about route):
-    playwright-cli goto http://localhost:${devPort}/en/about
-    playwright-cli snapshot
-    Verify: page does not show a 500/error page. Title does not contain "Error" or "500".
+  Also confirm at least one internal link works: from any route's snapshot, pick an internal link
+  and \`playwright-cli click <ref>\`, then \`playwright-cli snapshot\` — the target must load without
+  an error page.
 
   Close the browser session:
     playwright-cli close
 
 STEP 4 — Kill the dev server (only if YOU started it in STEP 2).
-  If SERVER_PID was captured: kill \$SERVER_PID 2>/dev/null || true
+  If SERVER_PID was captured: kill $SERVER_PID 2>/dev/null || true
 
 STEP 5 — Determine verdict and write report.
 
   Verdict rules:
-  - PASS:    All 5 checks passed with no errors.
+  - PASS:    All route checks passed with no errors.
   - WARN:    All checks passed but console warnings were found.
   - FAIL:    One or more checks failed — list each with quoted evidence.
-  - SKIPPED: No frontend files modified (from STEP 1 triage).
+  - SKIPPED: No application source changed (from STEP 1 triage).
 
   Write the report to ${uitestReport} (absolute: ${worktreePath}/${uitestReport}):
   \`\`\`markdown
@@ -1256,11 +1246,7 @@ STEP 5 — Determine verdict and write report.
 
   | Check | Result | Notes |
   |---|---|---|
-  | Homepage renders | PASS/FAIL/WARN | |
-  | No JS console errors | PASS/WARN | |
-  | Nav present | PASS/FAIL | |
-  | Internal link works | PASS/FAIL | |
-  | /en/about no 500 | PASS/FAIL | |
+${ui.routeRows}
 
   ## Summary
   <one paragraph — what was tested and what was found>
@@ -1291,6 +1277,7 @@ Return the result using StructuredOutput.
       } else {
         currentStage = 'document'
       }
+    }
     }
   }
 } // end implement→fix→test→review→ui-test retry loop
@@ -1333,8 +1320,8 @@ Instructions:
    - Never delete documented items that still exist
    - Use the Edit tool with absolute paths: ${worktreePath}/docs/filename.md
 
-5. If a change touched core wiring (lib/, middleware.ts, next.config.mjs, or app/[locale]/ routing)
-   and an architecture/patterns doc would need updating, add that doc to NEEDS_REVIEW in the
+5. If a change touched core wiring (entry points, shared modules, routing/config) and an
+   architecture/patterns doc would need updating, add that doc to NEEDS_REVIEW in the
    document report but do NOT edit it directly.
 
 6. Write the document report: ${worktreePath}/${documentReport}

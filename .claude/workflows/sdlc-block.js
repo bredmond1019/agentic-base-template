@@ -8,10 +8,10 @@
 // hardcoded to a specific spec.
 //
 // USAGE
-//   /sdlc-block 1.3-projects-add-current                  run every task in the spec
-//   /sdlc-block 1.3-projects-add-current 1-7              run only tasks 1–7 (range/list selection)
-//   /sdlc-block 1.3-projects-add-current --tasks 1,3,5-7  same selection via explicit flag
-//   /sdlc-block 1.3-projects-add-current --max-retries 2 --max-wave-width 4
+//   /sdlc-block <spec-slug>                  run every task in the spec
+//   /sdlc-block <spec-slug> 1-7              run only tasks 1–7 (range/list selection)
+//   /sdlc-block <spec-slug> --tasks 1,3,5-7  same selection via explicit flag
+//   /sdlc-block <spec-slug> --max-retries 2 --max-wave-width 4
 //
 //   ARGS
 //     <specSlug>          required — the planning/<specSlug>/ directory name
@@ -75,7 +75,7 @@
 export const meta = {
   name: 'sdlc-block',
   description: 'Orchestrate a full spec through dependency-ordered waves of parallel /sdlc-task pipelines, with bounded retries, failure triage, escalation, and ordered merges.',
-  whenToUse: 'When driving a spec (a tasks.md) to completion across many parallel tasks. Optional task range, e.g. /sdlc-block 1.3-projects-add-current 1-7. Usage: /sdlc-block 1.3-projects-add-current',
+  whenToUse: 'When driving a spec (a tasks.md) to completion across many parallel tasks. Optional task range, e.g. /sdlc-block <spec-slug> 1-7. Usage: /sdlc-block <spec-slug>',
   phases: [
     { title: 'Pre-flight', detail: 'Commit (or generate) the spec and guarantee a clean main tree before any merge', model: 'opus' },
     { title: 'Analyze',    detail: 'Resume-scout main, load or generate the dependency-ordered execution plan' },
@@ -92,7 +92,7 @@ export const meta = {
 const rawArgs = typeof args === 'string' ? args.trim() : ''
 if (!rawArgs) {
   log('ERROR: No spec slug provided.')
-  log('Usage: /sdlc-block 1.3-projects-add-current [--max-retries 2] [--max-wave-width 4]')
+  log('Usage: /sdlc-block <spec-slug> [--max-retries 2] [--max-wave-width 4]')
   return { error: 'Missing required argument: spec slug' }
 }
 
@@ -126,7 +126,7 @@ function parseRange(spec) {
 const MAX_TASK_ATTEMPTS = Math.max(1, flag('--max-retries', 2))                 // total sdlc-task runs per task
 const MAX_WAVE_WIDTH    = Math.max(1, flag('--max-wave-width', DEFAULT_MAX_WAVE_WIDTH)) // pipelines per batch
 
-// Optional task selection: `--tasks 1-7` OR a positional range as the 2nd token (`/sdlc-block 1.3-projects-add-current 1-7`).
+// Optional task selection: `--tasks 1-7` OR a positional range as the 2nd token (`/sdlc-block <spec-slug> 1-7`).
 // Defaults to ALL tasks in the spec.
 const rangeSpec = flagStr('--tasks') || (tokens[1] && !tokens[1].startsWith('--') ? tokens[1] : null)
 let selectedTasks = null
@@ -421,10 +421,15 @@ Return your findings using the StructuredOutput tool.
   return result.config
 }
 
-// Render the post-merge browser-sweep prompt body from harness config.
-// STUB — body filled in P4. Not yet wired into the Playwright stage.
+// Render the post-merge browser-sweep prompt parts from harness config. Called ONLY when
+// cfg.uiTest.enabled. Interpolates the MVP fields (devServerCommand / readySignal / port / routes).
 function renderUiTestPrompt(cfg, port) {
-  return '' // P4: interpolate cfg.uiTest.{devServerCommand, readySignal, port, routes}
+  const ui = cfg.uiTest
+  const routes = (Array.isArray(ui.routes) && ui.routes.length) ? ui.routes : ['/']
+  const ready = ui.readySignal || 'ready'
+  const devCmd = ui.devServerCommand || 'echo "ERROR: uiTest.enabled but devServerCommand missing in planning/harness.json" && false'
+  const routeList = routes.join('  ')
+  return { routes, routeList, ready, devCmd, port }
 }
 
 // ================================================================
@@ -470,14 +475,15 @@ STEP 3 — Ensure the spec exists and is committed:
       - cat planning/master-plan.md  → find the section defining "${blockId}".
       - If that section references a plan file under planning/plans/, cat it and read the
         relevant per-path / per-block portion.
-      - cat CLAUDE.md → internalize standing rules (bilingual parity, public-narrative rule,
-        no fabricated metrics, validate:content + build must pass).
-      - cat planning/1.1-site-credibility-fixes/tasks.md → use as the FORMAT reference.
+      - cat CLAUDE.md and planning/context.md → internalize and enforce the project's standing
+        rules. CLAUDE.md is the authority; assume no stack/locale/narrative/content rule unless
+        written there. Universal: no fabricated metrics or quotes, no emoji, every change ships with tests.
+      - cat .claude/workflows/templates/spec-template.md → use as the FORMAT reference.
       - Write ${tasksFile} in the standard spec format: ## Goal, ## Context Pointers,
         ## Step-by-Step Tasks (numbered "### 1.", "### 2.", ... ; final task is always Validate),
-        ## Acceptance Criteria, ## Validation Commands (npm run lint / npx tsc --noEmit /
-        npm run validate:content / npm test / npm run build). Content tasks ship EN + pt-BR or
-        record the deferral in ## Notes.
+        ## Acceptance Criteria, ## Validation Commands (mirror planning/harness.json's
+        validation.checks[].command in order; if absent, use the project's documented build/test
+        commands). Record any deferral in ## Notes.
     Then commit:
       git add ${blockDir}
       git commit -m "chore: add spec for ${blockId}"
@@ -539,31 +545,29 @@ STEP 2 — Read the spec and (if present) the breakdown:
   Enumerate every task by its "### N." heading. That set is "allTasks".
 
 STEP 3 — Build the dependency graph. For EACH task determine:
-  - filesCreated:  new files the task creates (e.g. components/ProjectCard.tsx, lib/services/feed.ts,
-                   content/blog/published/my-post.mdx AND its pt-BR mirror content/blog/published/pt-BR/my-post.mdx).
-  - filesModified: EXISTING shared files the task edits (e.g. lib/services/index.ts barrel,
-                   app/[locale]/layout.tsx nav, a shared component, content/*/index.json registries).
+  - filesCreated:  new files the task creates (e.g. a new module/component and its own test file,
+                   a new content/asset file the task adds).
+  - filesModified: EXISTING shared files the task edits (e.g. an index/barrel re-export, a shared
+                   module, a registry/manifest file).
   - dependsOn:     task numbers whose output this task consumes. A depends on B if A's text
-                   references a symbol/component/file B creates (e.g. "renders <ProjectCard> (Task 7)").
+                   references a symbol/module/file B creates (e.g. "renders the widget added in Task 7").
   - evidence:      quote the exact phrase(s) from tasks.md/breakdown.md proving each dependsOn edge.
   Then classify shared files into "additiveFiles": a file belongs here if every task that touches it
   only CONTRIBUTES its own independent piece (an export line, a registry entry, a doc section for the
-  component IT created) rather than rewriting another task's lines.
+  unit IT created) rather than rewriting another task's lines.
   ADDITIVE BY DEFAULT — include these whenever more than one task touches them:
-    - Barrel / index re-export files (e.g. lib/services/index.ts, components/index.ts, lib/content/index.ts)
-      — each task adds an export line for the symbol it created.
-    - Registry / manifest files where each task appends one independent entry (e.g. a content index JSON,
-      a route/nav list, a feature flag map) — each task appends its own row.
-    - Auto-generated reference docs (docs/*.md, e.g. docs/OPERATIONS.md) — each task's document stage
-      appends a section describing its OWN component.
-    - Bilingual CONTENT a task adds is filesCreated (its own EN + pt-BR slug), NOT a shared modification,
-      so it never conflicts with another task's content.
+    - Barrel / index re-export files — each task adds an export line for the symbol it created.
+    - Registry / manifest files where each task appends one independent entry (e.g. an index JSON,
+      a route/command list, a feature-flag map) — each task appends its own row.
+    - Auto-generated reference docs (docs/*.md) — each task's document stage appends a section
+      describing its OWN unit.
+    - A standalone file a task adds (with any sibling files it owns) is filesCreated, NOT a shared
+      modification, so it never conflicts with another task's additions.
     Treating barrel/registry/doc files as EXCLUSIVE is the common failure mode here (it can falsely
     serialize independent tasks into a dependency CYCLE and then block their merges), so default them
     to ADDITIVE.
-  Stay CONSERVATIVE only for real in-place source edits (e.g. middleware.ts, next.config.mjs,
-  app/[locale]/layout.tsx, a shared component edited by more than one task): if unsure whether one of
-  THOSE is additive, LEAVE IT OUT (treat as exclusive).
+  Stay CONSERVATIVE only for real in-place edits to a shared source/config file edited by more than
+  one task: if unsure whether one of THOSE is additive, LEAVE IT OUT (treat as exclusive).
   For dependsOn edges: if unsure whether an edge exists, INCLUDE it. Over-serializing logical deps is
   safe; wrongly marking an in-place-edited source file additive is not.
 
@@ -916,11 +920,11 @@ STEP 3 — Conflict handling:
         if [ -f /tmp/sdlc-attrs.bak ]; then cp /tmp/sdlc-attrs.bak .git/info/attributes; else rm -f .git/info/attributes; fi
     If no conflicts remain -> stage all, commit the merge if not already committed -> strategy="union",
     merged=true. Go to STEP 4.
-    If conflicts STILL remain on a barrel/index.ts (its single all-different hunk can leave a union
-    artifact — duplicated re-export lines), you MAY hand-resolve that ONE file: keep every
-    "export ... from ..." / "export { ... }" line, dedup, and drop any duplicated import block. Then
-    "npx tsc --noEmit" (or a scoped check of that file) to confirm it still type-checks; if it does ->
-    strategy="union", merged=true. Otherwise:
+    If conflicts STILL remain on a barrel/index re-export file (its single all-different hunk can
+    leave a union artifact — duplicated re-export lines), you MAY hand-resolve that ONE file: keep
+    every re-export/export line, dedup, and drop any duplicated import block. Then re-run the
+    project's compile/build gating check (a validation.checks[] command in planning/harness.json) to
+    confirm it still builds; if it does -> strategy="union", merged=true. Otherwise:
         git merge --abort -> strategy="aborted", merged=false, escalated=true. Go to STEP 5.
   - If ANY conflicted file is NOT additive (a real code/content conflict):
         git merge --abort
@@ -966,8 +970,12 @@ let playwrightFixNotes = []
 const MAX_PLAYWRIGHT_ATTEMPTS = 2
 
 const hasMergedTasks = outcomes.some(o => o.merged)
-if (hasMergedTasks) {
+// Load the project's validation policy (mechanism/policy split — see planning/harness.json).
+// The post-merge browser sweep runs ONLY when the project enables it; non-web projects skip it.
+const harnessCfg = await loadHarnessConfig()
+if (hasMergedTasks && harnessCfg?.uiTest?.enabled) {
   phase('Playwright')
+  const ui = renderUiTestPrompt(harnessCfg, harnessCfg.uiTest.port ?? 3000)
   log('Running live browser verification against the dev server...')
 
   for (let attempt = 1; attempt <= MAX_PLAYWRIGHT_ATTEMPTS; attempt++) {
@@ -980,22 +988,22 @@ GOAL: Run live browser checks against the dev server to confirm that the merged 
 spec "${blockId}" renders correctly end-to-end. Report PASS/WARN/FAIL with per-check evidence.
 
 STEP 1 — Dev server:
-  Check if port 3003 is already in use:
-    lsof -ti:3003
+  Check if port ${ui.port} is already in use:
+    lsof -ti:${ui.port}
   If a PID is returned: server is already running — skip startup, set serverStarted=false.
   If not running: start it in the background (use run_in_background=true):
-    npm run dev
-  Poll the output every 5 s for "Ready in" or "Local:" up to 90 s.
+    ${ui.devCmd}
+  Poll the output every 5 s for "${ui.ready}" or "Local:" up to 90 s.
   If startup fails (error / non-zero exit / 90 s timeout), return immediately:
     verdict=FAIL, failureSummary="Dev server failed to start — check build errors."
 
 STEP 2 — Open a browser session:
-  playwright-cli open http://localhost:3003/en/
+  playwright-cli open http://localhost:${ui.port}${ui.routes[0]}
   Take an initial snapshot to confirm the session is live.
 
 STEP 3 — Smoke + routes (scope="routes"):
-  For each route: /en/  /en/about  /en/blog  /en/projects  /en/learn  /en/contact
-    playwright-cli goto http://localhost:3003<route>
+  For each route: ${ui.routeList}
+    playwright-cli goto http://localhost:${ui.port}<route>
     playwright-cli snapshot
     playwright-cli console
     FAIL signals: title/heading contains "404","500","Error","Not Found"; bare framework error body;
@@ -1003,17 +1011,14 @@ STEP 3 — Smoke + routes (scope="routes"):
                   console has error-level entries (warnings are WARN, not FAIL).
   Record each as one check row.
 
-STEP 4 — Content spot-checks (scope="content"):
-  Blog:     goto /en/blog → find a post link in the snapshot → playwright-cli click <ref>
-            → snapshot → verify heading + body paragraph visible.
-  Learn:    goto /en/learn → click any path card → click first module listed
-            → snapshot → verify module heading + at least one content section visible.
-  Projects: goto /en/projects → click any project card
-            → snapshot → verify project title + description visible.
+STEP 4 — Content spot-check (scope="content"):
+  From any route's snapshot, pick an internal link → playwright-cli click <ref> → snapshot →
+  verify the target page renders real content (a heading plus body text), not an error page.
+  Record one check row.
 
 STEP 5 — Close and cleanup:
   playwright-cli close
-  If serverStarted=true: lsof -ti:3003 | xargs kill 2>/dev/null || true
+  If serverStarted=true: lsof -ti:${ui.port} | xargs kill 2>/dev/null || true
 
 Return using StructuredOutput:
   verdict:        PASS (all checks pass) | WARN (all pass but console warnings found) | FAIL (any check fails).
@@ -1044,9 +1049,9 @@ You are a targeted regression-fix agent. A live Playwright browser sweep found f
 the "${blockId}" spec was merged to main. Make the minimal surgical fix directly on main,
 commit it, and return so Playwright can re-verify on the next attempt.
 
-Do NOT run the full test suite (npm test) or npm run build. DO run before committing:
-  npm run validate:content   (must exit 0)
-  npm run lint               (warnings OK; errors are not)
+Do NOT run the full validation suite. Before committing, DO run the project's fast gating checks
+(the gates:true entries in planning/harness.json — e.g. a lint/format check and any content/asset
+validator); they must exit 0.
 
 Playwright failures:
 ${JSON.stringify(playwrightChecks.filter(c => c.result === 'FAIL'), null, 2)}
@@ -1055,17 +1060,16 @@ Failure summary:
 ${failSummary}
 
 Common targeted fixes:
-- Route 404 → missing or misnamed content file; compare content/ against the EN baseline.
-- "Application error" / blank page → malformed frontmatter, missing {#anchor} ID in MDX,
-  or broken component import; run npm run validate:content to surface errors.
-- "Module not found" in console → missing or misspelled import; check app/ and components/.
-- Learn module blank → section source in module JSON references a non-existent {#anchor} ID.
-- pt-BR route 404 → missing pt-BR content file; mirror the EN file and translate it.
+- Route 404 → missing or misnamed file backing that route; compare against a known-good baseline.
+- "Application error" / blank page → malformed data/frontmatter, a missing anchor/ID, or a broken
+  import; re-run the project's content/asset validation check to surface errors.
+- "Module not found" in console → missing or misspelled import; check the relevant source dirs.
+- Missing/empty section → the source references a non-existent anchor/ID.
 
 STEPS:
 1. Diagnose: read the failure evidence carefully; identify the specific file(s) to change.
 2. Fix: make the minimal targeted change. Do NOT refactor or touch unrelated code.
-3. npm run validate:content  (must exit 0 before continuing)
+3. Re-run the project's gating checks (must exit 0 before continuing).
 4. git add <specific files only>
 5. git commit -m "fix: playwright regression after ${blockId}"
 6. git log --oneline -1
@@ -1073,7 +1077,7 @@ STEPS:
 If the issue requires changes that are too large or structural for a targeted patch (e.g. a
 new spec task, a route rewrite, a missing feature block), do NOT attempt it. Return fixed=false
 and in notes describe exactly what the user must do — for example:
-  "Run /sdlc-task ${blockId} <N> to add the missing pt-BR module."
+  "Run /sdlc-task ${blockId} <N> to add the missing piece."
   "Edit tasks.md to add a dedicated fix task, then re-run /sdlc-block ${blockId}."
 
 Return using StructuredOutput: fixed (bool), commitHash, changesSummary, notes.
@@ -1093,8 +1097,10 @@ Return using StructuredOutput: fixed (bool), commitHash, changesSummary, notes.
       playwrightFixNotes.push(`Playwright still FAIL after ${MAX_PLAYWRIGHT_ATTEMPTS} attempt(s). Manual resolution required.`)
     }
   }
-} else {
+} else if (!hasMergedTasks) {
   log('Playwright: skipped — no tasks merged, nothing to verify.')
+} else {
+  log('Playwright: skipped — planning/harness.json uiTest.enabled is false or config absent (non-web project).')
 }
 
 // ================================================================

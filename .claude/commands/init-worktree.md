@@ -59,8 +59,8 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
    git -C trees/<worktreeName> checkout
    ```
    This checks out the source, content, test, and planning trees. Root-level files
-   (`CLAUDE.md`, `package.json`, `package-lock.json`, `tsconfig.json`, `next.config.mjs`,
-   `middleware.ts`, `jest.config.*`, etc.) are included automatically by cone mode.
+   (`CLAUDE.md`, manifests/lockfiles, build/config files, etc.) are included automatically by
+   cone mode.
 
 9. **Copy local env files if present** (both are gitignored and must be copied manually):
    ```bash
@@ -90,8 +90,8 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
            <absolute-path-to-repo>/trees/<worktreeName>
       2. Run: /sdlc-run <specSlug>[ <taskNum>]
 
-    Note: install dependencies in the worktree before any build/test runs:
-      cd trees/<worktreeName> && npm ci   (node_modules is NOT shared across worktrees)
+    Note: install the project's dependencies in the worktree before any build/test runs:
+      cd trees/<worktreeName> && <install command per project>   (dependencies are NOT shared across worktrees)
 
     When the pipeline is done, return to the main repo session and run:
       /clean-worktree <original-args>
@@ -99,10 +99,10 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
 
 ## Notes
 
-- Sparse checkout includes `planning/` in full so the scout, plan, and wrap-up agents can read status.md, master-plan.md, and write report files. It includes `content/` in full so bilingual (EN + pt-BR) content tasks have both locales available.
+- Sparse checkout includes `planning/` in full so the scout, plan, and wrap-up agents can read status.md, master-plan.md, and write report files. Include any content/asset trees the project's tasks need in full as well.
 - `.claude/` is included so all commands and workflows resolve correctly when the CWD is the worktree.
 - Root-level files are included automatically by cone mode — no need to list them explicitly.
-- **`node_modules/` is not part of the checkout and is not shared between worktrees.** Run `npm ci` inside the worktree before `npm test` / `npm run build`. (`/sdlc-task` handles this itself; only matters for a manual session.)
+- **Dependencies are not part of the checkout and are not shared between worktrees.** Install the project's dependencies inside the worktree before running its validation suite. (`/sdlc-task` handles this itself; only matters for a manual session.)
 - `.env` / `.env.local` are gitignored and must be copied manually (step 9).
 - All `git commit` calls inside the pipeline will commit to branch `<worktreeName>`, not `main`, because git detects the worktree context automatically.
 - When the pipeline finishes, run `/clean-worktree` from the main repo session to merge the branch and clean up.
