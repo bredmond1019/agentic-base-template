@@ -16,7 +16,7 @@ Project initialized from `base-template` (commit `{{TEMPLATE_COMMIT}}`) via `/ne
 Planning infrastructure scaffolded: `planning/context.md`, `planning/status.md`,
 `planning/master-plan.md`, `planning/index.md`, `planning/harness.json`, `planning/decisions/`,
 and the root `CLAUDE.md` / `README.md`. Concept folders (`planning/<concept>/`) are created on
-demand by the SDLC pipeline. Curated SDLC harness (`.claude/` + `.agents/`) in place.
+demand by the SDLC pipeline. Curated SDLC harness (`.claude/`) in place.
 
 Next step: run `/generate-tasks` for the first Phase 0 block to begin the pipeline.
 

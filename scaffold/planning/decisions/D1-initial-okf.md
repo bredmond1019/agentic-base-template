@@ -15,7 +15,7 @@ description: Project initialized on the standard OKF documentation structure.
 structure: a `planning/` folder with `context.md`, `status.md`, `master-plan.md`, a
 `harness.json` pipeline config, an atomic `decisions/` registry, and per-spec concept folders
 `planning/<concept>/` (with pipeline state under a reserved `<concept>/sdlc/`); OKF YAML
-frontmatter on every markdown file; and the curated SDLC harness (`.claude/` + `.agents/`) for
+frontmatter on every markdown file; and the curated SDLC harness (`.claude/`) for
 the implement → test → review → document pipeline.
 
 ## Why

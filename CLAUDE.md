@@ -21,7 +21,7 @@ generation flow.
 
 | Half | Path | Purpose | Goes into new projects? |
 |---|---|---|---|
-| **Harness** | `.claude/`, `.agents/` | The SDLC pipeline (commands/skills + engines) | Yes — copied as-is |
+| **Harness** | `.claude/` | The SDLC pipeline (commands + engines) | Yes — copied as-is |
 | **Scaffold** | `scaffold/` | Tokenized project docs (CLAUDE, README, DEVLOG, planning/) | Yes — copied + token-substituted |
 | **Template meta** | `CLAUDE.md`, `README.md`, `DEVLOG.md`, `planning/decisions/` | The template's *own* docs and change history | **No** — never copied into a project |
 
@@ -45,7 +45,7 @@ design — so keep changes here additive and well-documented.
 ## Standing rules
 
 1. **Keep the harness project-agnostic.** No project-specific skills, paths, or stack
-   assumptions in `.claude/` / `.agents/`. (Residual stack assumptions in the SDLC engines are
+   assumptions in `.claude/`. (Residual stack assumptions in the SDLC engines are
    tracked as Phase-2 work — see `DEVLOG.md` and `planning/decisions/`.)
 2. **Tokenize, don't hardcode** in `scaffold/`. Use the tokens in `README.md`; never bake a
    real project name/slug/date into a scaffold file.

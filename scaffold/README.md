@@ -35,7 +35,6 @@ description: {{DESCRIPTION}}
 ```
 {{SLUG}}/
 ├── .claude/        ← Claude Code commands + SDLC workflow engines
-├── .agents/        ← Gemini/Antigravity skill twins
 ├── planning/       ← context, status, master-plan, harness.json, decisions/, <concept>/
 └── <source dirs>
 ```

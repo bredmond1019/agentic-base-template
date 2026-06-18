@@ -5,6 +5,27 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-18 — Dropped the `.agents/` twin (single-harness)
+
+Removed the `.agents/` tree (Gemini/Antigravity skill twins + `compute-waves.ts`) from the
+template. It was generated from `.claude/commands/`, not authored independently, and existed only
+for occasional non-Claude sessions — so maintaining it meant a double-write on every harness edit
+plus OKF Phase 2's dedicated P4b "twin mirror pass" to fight drift. For a solo factory that
+permanent cost outweighed the occasional benefit; if a skill-form runtime is needed again,
+regenerate `.agents/` from `.claude/` rather than hand-maintaining a twin.
+
+Changes: deleted `.agents/`; `/new-project` and both root/scaffold docs no longer reference it;
+OKF Phase 2 **P4b is removed** and all twin-alignment gates voided (`.claude/` is the only harness
+tree); added `planning/decisions/D4-drop-agents-twin.md` (supersedes the `.agents/`-twin
+assumptions in D1/D2; the deferred `.agents` engine-variant note in D3 is moot). The planned
+Phase-2 adoption ADR was renumbered `D4-okf-phase-2-adopted` → `D5` to free D4 for this decision.
+
+```diff
+- .agents/   (skill twins + scripts/compute-waves.ts)
+```
+
+---
+
 ## 2026-06-17 — OKF Phase 2 plan seeded (planning, not yet executed)
 
 Wrote a self-contained Phase 2 execution plan into `planning/okf-phase-2/plan.md` so a session

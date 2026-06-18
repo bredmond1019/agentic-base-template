@@ -34,9 +34,6 @@ base-template/
 ├── .claude/              ← curated, project-agnostic Claude Code harness
 │   ├── commands/         ← 22 SDLC + general commands (project-specific ones stripped)
 │   └── workflows/        ← sdlc-run / sdlc-task / sdlc-block engines
-├── .agents/              ← Gemini/Antigravity skill twins (same pipeline, skill form)
-│   ├── skills/
-│   └── scripts/          ← compute-waves.ts (backs sdlc-block)
 ├── scaffold/             ← TOKENIZED project templates — copied into each new project
 │   ├── CLAUDE.md  README.md  DEVLOG.md
 │   └── planning/         ← CONTEXT, STATUS, MASTER_PLAN, README, decisions/, tasks/
@@ -51,7 +48,7 @@ base-template/
 `DEVLOG.md` and `planning/decisions/` (the harness change history). Those must **not** become a
 new project's starting DEVLOG/decisions — a fresh project starts with a clean DEVLOG and a
 `D1-initial-okf` decision. So the tokenized project docs live under `scaffold/`, and
-`/new-project` copies `.claude/`, `.agents/`, and the **contents** of `scaffold/` into the new
+`/new-project` copies `.claude/` and the **contents** of `scaffold/` into the new
 project (never the template's own root meta or `.git`). See `planning/decisions/D2-scaffold-split.md`.
 
 ---
@@ -76,7 +73,7 @@ The `scaffold/` files use placeholder tokens, substituted by `/new-project` at g
 
 `/new-project` (run from the `agentic-portfolio/` brain root) does the following:
 
-1. Copies `base-template/.claude/` and `base-template/.agents/` into `<slug>/`.
+1. Copies `base-template/.claude/` into `<slug>/`.
 2. Copies the **contents** of `base-template/scaffold/` into `<slug>/` (so `scaffold/planning/`
    becomes `<slug>/planning/`, etc.).
 3. Substitutes the tokens above across the copied files.
