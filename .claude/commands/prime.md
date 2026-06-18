@@ -7,7 +7,7 @@
 3. Summarize your understanding in plain prose:
    - What this repo does (one paragraph).
    - Key directories and what lives in each.
-   - Current project phase and focus (from CONTEXT.md and STATUS.md).
+   - Current project phase and focus (from context.md and status.md).
    - Anything flagged as standing rules worth keeping in mind.
 4. Do not edit any file. This command is read-only.
 
@@ -15,5 +15,5 @@
 
 - `README.md`
 - `CLAUDE.md`
-- `planning/CONTEXT.md`
-- `planning/STATUS.md`
+- `planning/context.md`
+- `planning/status.md`

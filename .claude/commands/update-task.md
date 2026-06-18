@@ -3,16 +3,16 @@
 ## Variables
 
 $ARGUMENTS — space-separated values in this order:
-  1. Target spec identifier, e.g. `1.1-site-credibility-fixes` (optional — if omitted, auto-detects the
-     current spec from `planning/STATUS.md`).
+  1. Target spec identifier, e.g. `<spec-slug>` (optional — if omitted, auto-detects the
+     current spec from `planning/status.md`).
   2. Step number to mark done, e.g. `3`. Pass `0` to append a note without marking a step.
   3. Note text (everything after the step number) to append to the spec's `## Notes` section.
 
 Examples:
   `/update-task 3 Finished scaffolding`                                          ← auto-detect spec, mark step 3, append note
-  `/update-task 0 Still investigating the pt-BR parity gap`                       ← auto-detect spec, note only
-  `/update-task 1.1-site-credibility-fixes 2 Fixed the retired model id in frontmatter`  ← explicit spec, mark step 2, append note
-  `/update-task 1.1-site-credibility-fixes 0 Investigating the pt-BR parity gap`      ← explicit spec, note only
+  `/update-task 0 Still investigating the failing edge case`                      ← auto-detect spec, note only
+  `/update-task <spec-slug> 2 Fixed the retired model id in frontmatter`  ← explicit spec, mark step 2, append note
+  `/update-task <spec-slug> 0 Investigating the failing edge case`     ← explicit spec, note only
 
 ## Execution Model
 
@@ -23,11 +23,11 @@ Return the subagent's result to the user.
 ## Instructions
 
 1. **Resolve the target spec.**
-   - If the first token of `$ARGUMENTS` matches a spec identifier pattern (e.g. `1.1-site-credibility-fixes`,
-     `1.3-projects-add-current`), resolve to `planning/tasks/<name>/tasks.md` and verify the file
+   - If the first token of `$ARGUMENTS` matches a spec identifier pattern (e.g. `<spec-slug>`,
+     `<spec-slug>`), resolve to `planning/<name>/tasks.md` and verify the file
      exists. If it does not exist, stop:
-     > "No spec found at planning/tasks/<name>/tasks.md — run `/generate-tasks <name>` to create it."
-   - Otherwise (first token is a number or `$ARGUMENTS` is empty), read `planning/STATUS.md` to
+     > "No spec found at planning/<name>/tasks.md — run `/generate-tasks <name>` to create it."
+   - Otherwise (first token is a number or `$ARGUMENTS` is empty), read `planning/status.md` to
      identify the current spec and load it. If no spec exists, say so and stop.
 
 2. Parse the remaining arguments:
@@ -51,8 +51,8 @@ Return the subagent's result to the user.
 
 ## Context / Files to Read
 
-- `planning/STATUS.md` — only if no spec identifier was provided in $ARGUMENTS
-- The target `planning/tasks/<name>/tasks.md`
+- `planning/status.md` — only if no spec identifier was provided in $ARGUMENTS
+- The target `planning/<name>/tasks.md`
 
 ## Report
 

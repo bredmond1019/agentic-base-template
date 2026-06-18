@@ -2,7 +2,7 @@
 
 ## Instructions
 
-1. Read `planning/STATUS.md`.
+1. Read `planning/status.md`.
 2. Report exactly:
    - **Current focus** line (verbatim).
    - What is **In progress** (from the progress table).
@@ -12,4 +12,4 @@
 
 ## Context / Files to Read
 
-- `planning/STATUS.md`
+- `planning/status.md`

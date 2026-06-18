@@ -18,7 +18,9 @@
 3. **Sequence, not calendar** — work the order in `master-plan.md`; pick up where you left off.
 4. **Decisions are append-only** — never edit a settled decision; supersede it with a new
    atomic file in `planning/decisions/` and link back.
-5. <!-- Add project-specific standing rules here (prompt handling, registries, deployment
+5. **Verified identity / handles:** {{VERIFIED_HANDLES}} — treat these as the only authoritative
+   identities/URLs; flag any other handle or profile link as unverified before publishing it.
+6. <!-- Add project-specific standing rules here (prompt handling, registries, deployment
    boundaries, code style, etc.). -->
 
 ## Known bugs

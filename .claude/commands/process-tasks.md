@@ -2,9 +2,9 @@
 
 ## Instructions
 
-1. Read `planning/STATUS.md`.
+1. Read `planning/status.md`.
 2. Parse every block in the sequence with its current status.
-3. Apply eligibility rules (status literals in STATUS.md are title-case — tolerate the full set `Not started` · `In progress` · `Done` · `Blocked` · `Skipped`):
+3. Apply eligibility rules (status literals in status.md are title-case — tolerate the full set `Not started` · `In progress` · `Done` · `Blocked` · `Skipped`):
    - `Done` — already complete, not eligible.
    - `In progress` — already running, not eligible to start again.
    - `Skipped` — intentionally not done; treated as satisfied for downstream prerequisites.
@@ -21,7 +21,7 @@
 
 ## Context / Files to Read
 
-- `planning/STATUS.md`
+- `planning/status.md`
 
 ## Output Format
 
@@ -30,7 +30,7 @@ Return a structured list in this format:
 ```
 ## Block Eligibility Report
 
-Current focus: <value from STATUS.md>
+Current focus: <value from status.md>
 
 | Block | Status | Eligible? | Reason |
 |---|---|---|---|

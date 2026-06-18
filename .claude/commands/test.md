@@ -8,8 +8,8 @@ $ARGUMENTS — optional path to the task spec and optional task number. Same for
 
 Examples:
 - (no args) — run full suite; output JSON to chat only; no file written
-- `planning/tasks/1.1-site-credibility-fixes/tasks.md` — run full suite; write report to `planning/tasks/1.1-site-credibility-fixes/reports/test.md`
-- `planning/tasks/1.1-site-credibility-fixes/tasks.md 1` — run full suite; write report to `planning/tasks/1.1-site-credibility-fixes/reports/task1-test.md`
+- `planning/<spec-slug>/tasks.md` — run full suite; write report to `planning/<spec-slug>/sdlc/reports/test.md`
+- `planning/<spec-slug>/tasks.md 1` — run full suite; write report to `planning/<spec-slug>/sdlc/reports/task1-test.md`
 
 The task number N does NOT change which tests run — all checks always run regardless. N only
 determines the output file name so the snapshot is scoped to the right pipeline stage.
@@ -30,8 +30,8 @@ TEST_COMMAND_TIMEOUT: 5 minutes
 
 - **Step 0 — Parse `$ARGUMENTS`:** If provided, split on the last space. Trailing number = task N; remainder = spec path. Derive the report file path from the spec's parent directory:
   - No args: no file will be written.
-  - Spec only: `planning/tasks/1.1-site-credibility-fixes/tasks.md` → `planning/tasks/1.1-site-credibility-fixes/reports/test.md`
-  - Spec + task N: `planning/tasks/1.1-site-credibility-fixes/tasks.md 1` → `planning/tasks/1.1-site-credibility-fixes/reports/task1-test.md`
+  - Spec only: `planning/<spec-slug>/tasks.md` → `planning/<spec-slug>/sdlc/reports/test.md`
+  - Spec + task N: `planning/<spec-slug>/tasks.md 1` → `planning/<spec-slug>/sdlc/reports/task1-test.md`
 - Run `/prime` to orient to the codebase before executing any tests.
 - Execute each test in the sequence provided below
 - Capture the result (passed/failed) and any error messages
@@ -154,7 +154,7 @@ TEST_COMMAND_TIMEOUT: 5 minutes
 ## File Output
 
 If `$ARGUMENTS` was provided, after returning the JSON array to chat, write a report file to the
-derived path. Create `planning/tasks/<name>/reports/` if it does not exist.
+derived path. Create `planning/<name>/sdlc/reports/` if it does not exist.
 
 **Write the report file in this exact format:**
 
@@ -193,5 +193,5 @@ two extra rows in the Summary table and the JSON array, and use `<n>/8` in the O
 
 After writing the file, output one line to chat:
 ```
-Next: /review-task planning/tasks/1.1-site-credibility-fixes/tasks.md [N]
+Next: /review-task planning/<spec-slug>/tasks.md [N]
 ```

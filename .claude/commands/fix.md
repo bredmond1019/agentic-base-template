@@ -5,8 +5,8 @@
 $ARGUMENTS — path to the task spec, with an optional task number suffix. Same format as `/implement`.
 
 Examples:
-- `planning/tasks/phase0-blockC/tasks.md` — fix all tasks in the spec
-- `planning/tasks/phase0-blockC/tasks.md 3` — fix task 3 only
+- `planning/phase0-blockC/tasks.md` — fix all tasks in the spec
+- `planning/phase0-blockC/tasks.md 3` — fix task 3 only
 
 ## Instructions
 
@@ -17,8 +17,8 @@ Examples:
    on all tasks.
 
 3. **Derive the review report path:**
-   - Spec only: `planning/tasks/phase0-blockC/tasks.md` → `planning/tasks/phase0-blockC/reports/review.md`
-   - Spec + task N: `planning/tasks/phase0-blockC/tasks.md 3` → `planning/tasks/phase0-blockC/reports/task3-review.md`
+   - Spec only: `planning/phase0-blockC/tasks.md` → `planning/phase0-blockC/sdlc/reports/review.md`
+   - Spec + task N: `planning/phase0-blockC/tasks.md 3` → `planning/phase0-blockC/sdlc/reports/task3-review.md`
 
 4. Read the review report. **If it does not exist, stop immediately:**
    > Cannot fix: no review report found at `<path>`. Run `/review-task <spec> [N]` first.
@@ -36,8 +36,8 @@ Examples:
 7. Run `/prime` to orient to the codebase.
 
 8. **Derive the implement report path:**
-   - Spec only: `planning/tasks/phase0-blockC/tasks.md` → `planning/tasks/phase0-blockC/reports/implement.md`
-   - Spec + task N: `planning/tasks/phase0-blockC/tasks.md 3` → `planning/tasks/phase0-blockC/reports/task3-implement.md`
+   - Spec only: `planning/phase0-blockC/tasks.md` → `planning/phase0-blockC/sdlc/reports/implement.md`
+   - Spec + task N: `planning/phase0-blockC/tasks.md 3` → `planning/phase0-blockC/sdlc/reports/task3-implement.md`
 
 9. Read the implement report if it exists:
    a. Extract the **Files Created or Modified** table — this is the baseline file list.
@@ -65,15 +65,9 @@ Examples:
     authoritative input for `/document`.
 
 15. **Run the validation commands** from the spec's Validation Commands section exactly as
-    written. If the spec has no Validation Commands, run:
-    ```
-    npm run lint
-    npx tsc --noEmit
-    npm run validate:content
-    npm test
-    npm run build
-    ```
-    Capture the exact output.
+    written. If the spec has none, run the project's checks from `planning/harness.json`
+    (`validation.checks[]`); if that is absent too, stop and ask the user for the validation
+    commands. Capture the exact output.
 
 16. If validation still fails: record the remaining failures clearly in the report —
     do NOT loop or attempt further changes. The subsequent `/test` and `/review-task` cycle is
@@ -102,8 +96,8 @@ Examples:
 ## Report
 
 **Write to the implement report path** (overwrites previous implement or fix report):
-- Spec only: `planning/tasks/phase0-blockC/tasks.md` → `planning/tasks/phase0-blockC/reports/implement.md`
-- Spec + task N: `planning/tasks/phase0-blockC/tasks.md 3` → `planning/tasks/phase0-blockC/reports/task3-implement.md`
+- Spec only: `planning/phase0-blockC/tasks.md` → `planning/phase0-blockC/sdlc/reports/implement.md`
+- Spec + task N: `planning/phase0-blockC/tasks.md 3` → `planning/phase0-blockC/sdlc/reports/task3-implement.md`
 
 **Write the report file in this exact format:**
 

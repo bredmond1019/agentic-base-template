@@ -68,6 +68,7 @@ The `scaffold/` files use placeholder tokens, substituted by `/new-project` at g
 | `{{PROJECT_TYPE}}` | `personal` · `client` · `infrastructure` |
 | `{{DATE}}` | Generation date (YYYY-MM-DD) |
 | `{{TEMPLATE_COMMIT}}` | The `base-template` commit hash the project was generated from (provenance) |
+| `{{VERIFIED_HANDLES}}` | The project's authoritative identities/handles/URLs (or `none` if not applicable) |
 
 ---
 

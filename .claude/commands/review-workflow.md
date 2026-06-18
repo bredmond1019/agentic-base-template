@@ -21,17 +21,17 @@ Examples:
 
    | Item | Path |
    |---|---|
-   | Spec | `planning/tasks/<blockId>/tasks.md` |
-   | Reports dir | `planning/tasks/<blockId>/reports/` |
+   | Spec | `planning/<blockId>/tasks.md` |
+   | Reports dir | `planning/<blockId>/sdlc/reports/` |
    | Task prefix | `task<N>-` if task number given, else empty |
 
    Report files (prefix applied to all):
-   - Implement report: `planning/tasks/<blockId>/reports/[taskN-]implement.md`
-   - Test report:      `planning/tasks/<blockId>/reports/[taskN-]test.md`
-   - Review report:    `planning/tasks/<blockId>/reports/[taskN-]review.md`
-   - Document report:  `planning/tasks/<blockId>/reports/[taskN-]document.md`
-   - Workflow report:  `planning/tasks/<blockId>/reports/[taskN-]workflow.md`
-   - **Output (this command):** `planning/tasks/<blockId>/reports/[taskN-]workflow-review.md`
+   - Implement report: `planning/<blockId>/sdlc/reports/[taskN-]implement.md`
+   - Test report:      `planning/<blockId>/sdlc/reports/[taskN-]test.md`
+   - Review report:    `planning/<blockId>/sdlc/reports/[taskN-]review.md`
+   - Document report:  `planning/<blockId>/sdlc/reports/[taskN-]document.md`
+   - Workflow report:  `planning/<blockId>/sdlc/reports/[taskN-]workflow.md`
+   - **Output (this command):** `planning/<blockId>/sdlc/reports/[taskN-]workflow-review.md`
 
 5. **Check which report files exist** — run `ls` for each expected path. Record present/missing.
 
@@ -52,14 +52,14 @@ Examples:
    - `docs: update docs for <stem>` — document agent commit (if verdict was PASS)
    - `chore: wrap up <stem>` — finalize agent commit
 
-8. **Check DEVLOG.md** — does an entry exist for this run? Does it accurately describe the outcome?
+8. **Check log.md** — does an entry exist for this run? Does it accurately describe the outcome?
    ```
-   head -60 DEVLOG.md
+   head -60 log.md
    ```
 
-9. **Check STATUS.md** — is the block/task marked correctly?
+9. **Check status.md** — is the block/task marked correctly?
    ```
-   grep -A3 "<blockId>" planning/STATUS.md
+   grep -A3 "<blockId>" planning/status.md
    ```
    Expected:
    - Full block run, verdict PASS → block status "Done"
@@ -98,7 +98,7 @@ Map expected commits to `git log` output. For each expected commit:
 - Does the commit message follow the conventional commit format?
 
 
-### DEVLOG Quality
+### Log Quality
 - Is there an entry dated to this run?
 - Does it cover: what was built, review outcome, any notable decisions, "Next:" pointer?
 - Does the git log block in the entry show the pipeline commits?
@@ -111,8 +111,8 @@ Map expected commits to `git log` output. For each expected commit:
 ## Context / Files to Read
 
 - All five pipeline report files (implement, test, review, document, workflow)
-- `planning/STATUS.md`
-- `DEVLOG.md`
+- `planning/status.md`
+- `log.md`
 - `git log --oneline -20`
 
 Do NOT re-run the test suite — this command reviews the pipeline's execution record, not the implementation itself. Use `/review-task` if you need to re-verify the implementation.
@@ -120,7 +120,7 @@ Do NOT re-run the test suite — this command reviews the pipeline's execution r
 ## Report
 
 Write the workflow review report to:
-`planning/tasks/<blockId>/reports/[taskN-]workflow-review.md`
+`planning/<blockId>/sdlc/reports/[taskN-]workflow-review.md`
 
 Use EXACTLY this format:
 
@@ -161,14 +161,14 @@ Use EXACTLY this format:
 | docs: update docs for <stem> | ✓ / ✗ | abc1234 | only if verdict PASS |
 | chore: wrap up <stem> | ✓ / ✗ | abc1234 | — |
 
-## DEVLOG Check
+## Log Check
 
 **Entry present:** yes / no
 **Describes outcome accurately:** yes / partially / no
 **Git log block included:** yes / no
 **Notes:** <any gaps or inaccuracies>
 
-## STATUS.md Check
+## status.md Check
 
 **Block status:** Done / In progress / Not started
 **Correct for this outcome:** yes / no
@@ -177,22 +177,22 @@ Use EXACTLY this format:
 
 ## Issues Found
 
-- <concrete problem with report/commit/DEVLOG reference, or "None">
+- <concrete problem with report/commit/Log reference, or "None">
 
 ## Verdict
 
 <One paragraph: did the pipeline execute correctly end-to-end? Were all stages completed
-and committed? Are records (DEVLOG, STATUS) accurate? If PASS, state clearly.
+and committed? Are records (Log, STATUS) accurate? If PASS, state clearly.
 If PARTIAL or FAIL, list the specific blocking items that need manual follow-up.>
 ```
 
 **Verdict rules:**
 - **PASS** — all expected reports present and well-formed, commits match the expected conventional
-  commit pattern, DEVLOG entry exists and describes the outcome, STATUS.md is accurate.
-- **PARTIAL** — minor gaps: a report section is thin, DEVLOG entry is sparse, a commit message
+  commit pattern, Log entry exists and describes the outcome, status.md is accurate.
+- **PARTIAL** — minor gaps: a report section is thin, Log entry is sparse, a commit message
   is slightly off-format, or STATUS is correct but "Current focus" wasn't updated.
-- **FAIL** — critical failures: required reports missing, expected commits absent, DEVLOG not
-  updated, STATUS.md still shows "Not started" or wrong state, or the pipeline review verdict
+- **FAIL** — critical failures: required reports missing, expected commits absent, Log not
+  updated, status.md still shows "Not started" or wrong state, or the pipeline review verdict
   was FAIL and no fix cycle was attempted.
 
 Then summarize the verdict and any issues requiring manual follow-up to the user in the chat.

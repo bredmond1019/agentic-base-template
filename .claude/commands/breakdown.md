@@ -1,20 +1,20 @@
 # Breakdown — Decompose a task spec into agent-executable sub-steps.
 
-Takes a task spec from `planning/tasks/` and produces a granular breakdown where every
+Takes a task spec from `planning/` and produces a granular breakdown where every
 sub-step names exact file paths, class/function names, and what to write or change —
 precise enough for an agent (or a human) to execute without interpretation.
 
 ## Variables
 
-$ARGUMENTS — path to the task spec to break down (e.g. `planning/tasks/1.1-site-credibility-fixes/tasks.md`).
-             If omitted, default to the current block's spec identified via `planning/STATUS.md`.
+$ARGUMENTS — path to the task spec to break down (e.g. `planning/<spec-slug>/tasks.md`).
+             If omitted, default to the current block's spec identified via `planning/status.md`.
              If no spec exists for the current block, say so and suggest running `/next-task`.
 
 ## Instructions
 
 1. Resolve the target spec:
    - If `$ARGUMENTS` is provided, read that file.
-   - If omitted, read `planning/STATUS.md` to find the current block, then read its spec.
+   - If omitted, read `planning/status.md` to find the current block, then read its spec.
    - If neither yields a file, stop and explain clearly.
 
 2. Read the spec in full. Note:
@@ -22,20 +22,19 @@ $ARGUMENTS — path to the task spec to break down (e.g. `planning/tasks/1.1-sit
    - The **Relevant Files** or **Context Pointers** section
    - The **Acceptance Criteria** and **Validation Commands** (copied verbatim into the breakdown)
 
-3. Read `CLAUDE.md` for standing rules (bilingual parity, public-narrative rule, no fabricated
-   metrics, `validate:content` + `build` must pass). These constraints belong in the relevant
+3. Read `CLAUDE.md` for **the project's standing rules** (do not assume any stack, locale-parity,
+   narrative, or content-layout rule unless written there; plus the universal harness rules — no
+   fabricated metrics, no emoji, gated checks must pass). These constraints belong in the relevant
    sub-steps, not as a separate note.
 
 4. **For each step in the spec, before writing its breakdown:** read the actual source files
    that step touches. This is not optional — the breakdown must name real things:
-   - If a step says "unit test a content loader" → read `lib/services/` to get the actual
-     function names and signatures before writing the test sub-steps.
-   - If a step says "add a content service" → read `lib/services/` to understand the existing
-     service pattern before writing the implementation sub-steps.
-   - If a step adds or edits a page → read an existing route under `app/[locale]/` to match the
-     exact pattern (and confirm the page is defined ONCE under `[locale]`).
-   - If a step edits content → read the corresponding `.mdx` file under `content/` in BOTH
-     locales (EN + pt-BR) so the breakdown captures the parity requirement.
+   - If a step says "unit test X" → read the module under test to get the actual function names
+     and signatures before writing the test sub-steps.
+   - If a step adds new code → read an existing sibling of the same kind to match the project's
+     established pattern before writing the implementation sub-steps.
+   - If a step edits content/docs → read the corresponding file(s), plus any companion files the
+     project's conventions require, so the breakdown captures every artifact the change must touch.
    - Read only what is relevant to each step. Do not load the entire codebase.
 
 5. Decompose each spec step into numbered sub-steps using the format `N.M`
@@ -49,7 +48,7 @@ $ARGUMENTS — path to the task spec to break down (e.g. `planning/tasks/1.1-sit
 6. After each logical group of sub-steps (not only at the end), add an inline **Verify** check:
    a single command or observation that confirms the group succeeded before moving on.
 
-7. Write the breakdown to `planning/tasks/<block-dir>/breakdown.md` — same directory as the spec, named `breakdown.md`.
+7. Write the breakdown to `planning/<block-dir>/breakdown.md` — same directory as the spec, named `breakdown.md`.
 
 8. Return only the path to the file created.
 
@@ -60,7 +59,7 @@ Good sub-step:
 > File: `__tests__/lib/services/content-loader.test.ts`
 > Suite: `describe("getPublishedPosts")`
 > - `returns posts for a locale` — call `getPublishedPosts("en")`, assert the array is non-empty and every item has a `slug`
-> - `mirrors locales` — assert each EN slug also resolves under `pt-BR`, or is listed in the spec's `## Notes / deviations`
+> - `handles empty input` — call `getPublishedPosts("")`, assert it returns an empty array (not an error)
 > - `unknown slug returns null` — assert `getPostBySlug("missing", "en")` returns `null` (or throws — match actual behaviour in `lib/services/`)
 
 Bad sub-step (too vague to execute without interpretation):
@@ -69,7 +68,7 @@ Bad sub-step (too vague to execute without interpretation):
 ## Context / Files to Read
 
 - `$ARGUMENTS` (the spec file, or the current block's spec)
-- `planning/STATUS.md` (only if $ARGUMENTS is omitted)
+- `planning/status.md` (only if $ARGUMENTS is omitted)
 - `CLAUDE.md`
 - Source files relevant to each step (read per-step, not upfront)
 
@@ -133,4 +132,4 @@ checks as you go — do not batch them at the end. Each check must pass before c
 
 ## Report
 
-Return only the path to the file created (e.g. `planning/tasks/1.1-site-credibility-fixes/breakdown.md`).
+Return only the path to the file created (e.g. `planning/<spec-slug>/breakdown.md`).

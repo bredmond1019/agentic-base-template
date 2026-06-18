@@ -5,9 +5,9 @@
 $ARGUMENTS — path to the task spec, with an optional task number suffix (same format as `/implement`).
 
 Examples:
-- `planning/tasks/phase0-blockC/tasks.md` — review all tasks in the spec
-- `planning/tasks/phase0-blockC/tasks.md 1` — review only Task 1
-- `planning/tasks/phase0-blockC/tasks.md 3` — review only Task 3
+- `planning/phase0-blockC/tasks.md` — review all tasks in the spec
+- `planning/phase0-blockC/tasks.md 1` — review only Task 1
+- `planning/phase0-blockC/tasks.md 3` — review only Task 3
 
 ## Instructions
 
@@ -17,12 +17,12 @@ Examples:
 4. **Derive file paths for prior step outputs** (reports live in the spec's `reports/` sibling directory):
 
    Implement report (written by `/implement`):
-   - Plan only: `planning/tasks/phase0-blockC/tasks.md` → `planning/tasks/phase0-blockC/reports/implement.md`
-   - Plan + task N: `planning/tasks/phase0-blockC/tasks.md 3` → `planning/tasks/phase0-blockC/reports/task3-implement.md`
+   - Plan only: `planning/phase0-blockC/tasks.md` → `planning/phase0-blockC/sdlc/reports/implement.md`
+   - Plan + task N: `planning/phase0-blockC/tasks.md 3` → `planning/phase0-blockC/sdlc/reports/task3-implement.md`
 
    Test report (written by `/test`):
-   - Plan only: `planning/tasks/phase0-blockC/tasks.md` → `planning/tasks/phase0-blockC/reports/test.md`
-   - Plan + task N: `planning/tasks/phase0-blockC/tasks.md 3` → `planning/tasks/phase0-blockC/reports/task3-test.md`
+   - Plan only: `planning/phase0-blockC/tasks.md` → `planning/phase0-blockC/sdlc/reports/test.md`
+   - Plan + task N: `planning/phase0-blockC/tasks.md 3` → `planning/phase0-blockC/sdlc/reports/task3-test.md`
 
 5. Read the task spec in full.
 6. Read both prior step outputs as historical context:
@@ -36,20 +36,13 @@ Examples:
 8. **Run a fresh test suite** as the authoritative verification. Do NOT rely on the historical
    test report — run the commands now and capture the results.
    - **Task-scoped:** run the spec's Validation Commands section exactly as written.
-   - **Full block:** run the plan's complete Validation Commands block. If none exist, run:
-     ```
-     npm run lint
-     npx tsc --noEmit
-     npm run validate:content
-     npm test -- --listTests
-     npm test
-     npm run build
-     ```
-   `npm test` is authoritative for the verdict, with `npm run build` as a co-gate for any spec
-   that changes routing, pages, or components. For specs that edit `content/`, also confirm
-   bilingual EN/pt-BR parity for the touched slugs and that `npm run validate:content` passes.
-   A fresh test failure always prevents PASS, even if all acceptance criteria appear MET from
-   reading the code.
+   - **Full block:** run the spec's complete Validation Commands block. If none exist, run the
+     project's checks from `planning/harness.json` (`validation.checks[]`); if that is absent too,
+     stop and ask the user for the validation commands.
+   The checks marked `gates: true` in `planning/harness.json` are authoritative for the verdict
+   (a typical project gates its test suite and build). Also enforce any project-specific gate
+   written in `CLAUDE.md`. A failing gated check always prevents PASS, even if all acceptance
+   criteria appear MET from reading the code.
 9. **Check every Acceptance Criterion** in the spec against the actual code and fresh test output:
    - For each criterion: state whether it is **MET**, **PARTIAL**, or **NOT MET**, and cite the evidence (file + line, test name, command output).
    - A criterion is MET only when you can point to code or test output that directly satisfies it.
@@ -59,16 +52,16 @@ Examples:
 ## Context / Files to Read
 
 - `$ARGUMENTS` (the task spec)
-- `planning/tasks/phase0-blockC/reports/implement.md` (or task-scoped variant — the implementation report, if present)
-- `planning/tasks/phase0-blockC/reports/test.md` (or task-scoped variant — the test report, if present)
+- `planning/phase0-blockC/sdlc/reports/implement.md` (or task-scoped variant — the implementation report, if present)
+- `planning/phase0-blockC/sdlc/reports/test.md` (or task-scoped variant — the test report, if present)
 - `CLAUDE.md` (standing rules — check for violations)
 - All files created or modified by the implementation
 
 ## Report
 
 **Derive the review report file path** (reports live in the spec's `reports/` sibling directory):
-- Plan only: `planning/tasks/phase0-blockC/tasks.md` → `planning/tasks/phase0-blockC/reports/review.md`
-- Plan + task N: `planning/tasks/phase0-blockC/tasks.md 3` → `planning/tasks/phase0-blockC/reports/task3-review.md`
+- Plan only: `planning/phase0-blockC/tasks.md` → `planning/phase0-blockC/sdlc/reports/review.md`
+- Plan + task N: `planning/phase0-blockC/tasks.md 3` → `planning/phase0-blockC/sdlc/reports/task3-review.md`
 
 **Write the review report file** in this exact format:
 
@@ -104,11 +97,12 @@ Result: PASS / FAIL
 
 ## CLAUDE.md Rule Violations
 
-Check against the the project's standing rules:
-- **Bilingual parity** — a content change in one locale mirrored in the other, or the deferral recorded in the spec's `## Notes / deviations`.
-- **Public-narrative rule** — Brandon is the subject; no former employer named or criticized; Helpscout and AI Scribe de-identified; the April-2025 proposal story not used publicly.
-- **No fabricated metrics** — every number verifiable; model ids / package names verified, not from memory.
-- **Gates pass** — `npm run validate:content` and `npm run build` pass before the task is done.
+Check against **the project's standing rules** as written in `CLAUDE.md` and `planning/context.md`
+(stack, locale-parity, narrative, content-layout — only what is actually written there). Plus the
+universal harness rules:
+- **No fabricated metrics/quotes** — every number verifiable; model ids / package names verified, not from memory.
+- **No emoji** in docs or output.
+- **Gated checks pass** — every `planning/harness.json` check with `gates: true` passes before the task is done.
 
 - <any standing-rule violation found, or "None">
 
@@ -130,8 +124,8 @@ Then summarize the verdict and any blocking issues to the user in the chat.
 
 Then output the pipeline next step:
 ```
-If verdict is PASS:     Next: /document planning/tasks/phase0-blockC/tasks.md [N]
-If verdict is not PASS: /fix planning/tasks/phase0-blockC/tasks.md [N]
-                        then: /test planning/tasks/phase0-blockC/tasks.md [N]
-                        then: /review-task planning/tasks/phase0-blockC/tasks.md [N]
+If verdict is PASS:     Next: /document planning/phase0-blockC/tasks.md [N]
+If verdict is not PASS: /fix planning/phase0-blockC/tasks.md [N]
+                        then: /test planning/phase0-blockC/tasks.md [N]
+                        then: /review-task planning/phase0-blockC/tasks.md [N]
 ```

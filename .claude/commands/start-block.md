@@ -1,8 +1,8 @@
-# Start Block — Mark a block as in-progress in STATUS.md.
+# Start Block — Mark a block as in-progress in status.md.
 
 ## Variables
 
-$ARGUMENTS — optional block identifier to start (e.g. `1.1-site-credibility-fixes`). If omitted, defaults to the first block that is not `Done` in STATUS.md.
+$ARGUMENTS — optional block identifier to start (e.g. `<spec-slug>`). If omitted, defaults to the first block that is not `Done` in status.md.
 
 ## Execution Model
 
@@ -12,7 +12,7 @@ Return the subagent's result to the user.
 
 ## Instructions
 
-1. Read `planning/STATUS.md`.
+1. Read `planning/status.md`.
 2. Identify the target block:
    - If `$ARGUMENTS` is provided, find that block by identifier. If not found, say so and stop.
    - If `$ARGUMENTS` is omitted, find the first block that is not `Done`.
@@ -20,14 +20,14 @@ Return the subagent's result to the user.
    - If the block is already `In progress`, report that and stop.
    - If the block is `Done`, report that and stop.
    - If any block that must precede this one (all blocks above it in the sequence) is not `Done`, report which ones are incomplete and stop — do not skip the sequence.
-4. Update the block's status to `In progress` in STATUS.md. Preserve all other content and formatting.
+4. Update the block's status to `In progress` in status.md. Preserve all other content and formatting.
 5. Update the **Current focus** line to reflect this block.
 6. Bump the **Last updated** date.
-7. Write the updated STATUS.md.
+7. Write the updated status.md.
 
 ## Context / Files to Read
 
-- `planning/STATUS.md`
+- `planning/status.md`
 
 ## Report
 

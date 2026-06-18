@@ -5,10 +5,10 @@
 $ARGUMENTS — spec slug with optional task number.
 
 Examples:
-- `1.1-site-credibility-fixes`   → worktree name: `1.1-site-credibility-fixes`   at `trees/1.1-site-credibility-fixes/`
-- `1.1-site-credibility-fixes 3` → worktree name: `1.1-site-credibility-fixes-task3` at `trees/1.1-site-credibility-fixes-task3/`
+- `<spec-slug>`   → worktree name: `<spec-slug>`   at `trees/<spec-slug>/`
+- `<spec-slug> 3` → worktree name: `<spec-slug>-task3` at `trees/<spec-slug>-task3/`
 
-The spec slug is the directory name under `planning/tasks/` (e.g. `1.3-projects-add-current`,
+The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
 `2.2-learn-paths-accuracy-refresh`). This matches the worktree naming `/sdlc-task` uses, so
 `/clean-worktree` can find and merge whatever this command (or `/sdlc-task`) created.
 
@@ -18,15 +18,15 @@ The spec slug is the directory name under `planning/tasks/` (e.g. `1.3-projects-
    ```
    Usage: /init-worktree <spec-slug> [task-N]
    Examples:
-     /init-worktree 1.1-site-credibility-fixes
-     /init-worktree 1.1-site-credibility-fixes 3
+     /init-worktree <spec-slug>
+     /init-worktree <spec-slug> 3
    ```
 
 2. **Parse arguments:** split `$ARGUMENTS` on whitespace. First token is `specSlug`. If a second token exists and is a number, it is `taskNum`; otherwise no task number.
 
 3. **Derive worktree name:** lowercase `specSlug`, append `-task<taskNum>` if `taskNum` is set.
-   - `1.1-site-credibility-fixes`    → `1.1-site-credibility-fixes`
-   - `1.1-site-credibility-fixes 3`  → `1.1-site-credibility-fixes-task3`
+   - `<spec-slug>`    → `<spec-slug>`
+   - `<spec-slug> 3`  → `<spec-slug>-task3`
 
 4. **Verify CWD is repo root:**
    ```bash
@@ -99,7 +99,7 @@ The spec slug is the directory name under `planning/tasks/` (e.g. `1.3-projects-
 
 ## Notes
 
-- Sparse checkout includes `planning/` in full so the scout, plan, and wrap-up agents can read STATUS.md, MASTER_PLAN.md, and write report files. It includes `content/` in full so bilingual (EN + pt-BR) content tasks have both locales available.
+- Sparse checkout includes `planning/` in full so the scout, plan, and wrap-up agents can read status.md, master-plan.md, and write report files. It includes `content/` in full so bilingual (EN + pt-BR) content tasks have both locales available.
 - `.claude/` is included so all commands and workflows resolve correctly when the CWD is the worktree.
 - Root-level files are included automatically by cone mode — no need to list them explicitly.
 - **`node_modules/` is not part of the checkout and is not shared between worktrees.** Run `npm ci` inside the worktree before `npm test` / `npm run build`. (`/sdlc-task` handles this itself; only matters for a manual session.)

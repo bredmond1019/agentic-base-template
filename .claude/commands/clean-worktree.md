@@ -3,10 +3,10 @@
 ## Variables
 
 $ARGUMENTS — one of:
-- `1.1-site-credibility-fixes`            → worktree name: `1.1-site-credibility-fixes`
-- `1.1-site-credibility-fixes 3`          → worktree name: `1.1-site-credibility-fixes-task3`
-- `1.1-site-credibility-fixes-task8`      → literal worktree name (already lowercased, single token)
-- `1.1-site-credibility-fixes-task8-2`    → literal worktree name with suffix (from sdlc-task auto-increment)
+- `<spec-slug>`            → worktree name: `<spec-slug>`
+- `<spec-slug> 3`          → worktree name: `<spec-slug>-task3`
+- `<spec-slug>-task8`      → literal worktree name (already lowercased, single token)
+- `<spec-slug>-task8-2`    → literal worktree name with suffix (from sdlc-task auto-increment)
 
 The literal single-token form is output by `/sdlc-task` when it creates a suffixed worktree
 (e.g. `-2`, `-3`). Pass it exactly as printed.
@@ -18,27 +18,27 @@ The literal single-token form is output by `/sdlc-task` when it creates a suffix
    Usage: /clean-worktree <spec-slug> [task-N]
           /clean-worktree <literal-worktree-name>
    Examples:
-     /clean-worktree 1.1-site-credibility-fixes
-     /clean-worktree 1.1-site-credibility-fixes 3
-     /clean-worktree 1.1-site-credibility-fixes-task8
-     /clean-worktree 1.1-site-credibility-fixes-task8-2
+     /clean-worktree <spec-slug>
+     /clean-worktree <spec-slug> 3
+     /clean-worktree <spec-slug>-task8
+     /clean-worktree <spec-slug>-task8-2
    ```
 
 2. **Parse arguments:**
    - If `$ARGUMENTS` is a **single token with no spaces** that is already lowercase and contains
      only letters, digits, dots, and hyphens → treat it as the literal `worktreeName` directly.
-     (Spec slugs carry a phase-dotted prefix, e.g. `1.1-site-credibility-fixes-task8`.)
+     (Spec slugs carry a phase-dotted prefix, e.g. `<spec-slug>-task8`.)
    - Otherwise, apply the same transform as `/init-worktree`: lowercase `specSlug`, append
      `-task<taskNum>` if a second token is a number. Derive `worktreeName`.
    - Always: `worktreePath = trees/<worktreeName>`
    - Extract `taskNum` from `worktreeName` for use in the task log step:
      - Pattern: `<spec-slug>-task<N>` or `<spec-slug>-task<N>-<suffix>`
      - Extract `taskNum` as the integer after the last `-task` in the name.
-     - `logFile = planning/tasks/<spec-slug-placeholder>/reports/task<taskNum>-log.md`
+     - `logFile = planning/<spec-slug-placeholder>/sdlc/reports/task<taskNum>-log.md`
      - **Note:** the actual `specSlug` (with original casing) is read from the log file itself
-       (`**Spec:** 1.1-site-credibility-fixes`) rather than derived from the lowercased branch name.
+       (`**Spec:** <spec-slug>`) rather than derived from the lowercased branch name.
        Use the branch name only to locate the approximate path; then read the log's `**Spec:**`
-       field and use that value as the authoritative spec slug for all STATUS.md path lookups.
+       field and use that value as the authoritative spec slug for all status.md path lookups.
 
 3. **Check if the worktree exists:**
    ```bash
@@ -93,7 +93,7 @@ The literal single-token form is output by `/sdlc-task` when it creates a suffix
          /clean-worktree <original-args>   ← retry after rebasing
      ```
 
-6.5. **Apply task log (if present) — update STATUS.md and DEVLOG.md:**
+6.5. **Apply task log (if present) — update status.md and log.md:**
 
    This step only applies when a task number was identified in `worktreeName`.
 
@@ -106,35 +106,35 @@ The literal single-token form is output by `/sdlc-task` when it creates a suffix
 
    a. Read `<logFile>` in full.
    b. Extract the `**Spec:**` field from the log file to get the authoritative spec slug
-      (e.g. `1.1-site-credibility-fixes`). Use this value — not the lowercased branch name — for
-      all `planning/tasks/<spec-slug>/` path lookups.
-   c. If `## STATUS.md — Spec Status` section is present → flip the spec's Status column
-      in `planning/STATUS.md` progress table to the value specified (e.g. "In progress").
+      (e.g. `<spec-slug>`). Use this value — not the lowercased branch name — for
+      all `planning/<spec-slug>/` path lookups.
+   c. If `## status.md — Spec Status` section is present → flip the spec's Status column
+      in `planning/status.md` progress table to the value specified (e.g. "In progress").
       Omit this sub-step if that section is absent from the log file.
-   d. Apply `## STATUS.md — Current Focus Line` → replace the `**Current focus:**` line in
-      `planning/STATUS.md` with the exact string from the log.
-   e. Apply `## STATUS.md — Last Updated Line` → replace the `**Last updated:**` line in
-      `planning/STATUS.md` with the exact string from the log.
-   f. Apply `## STATUS.md — Notes Column` → update the Notes column of the matching
-      spec row in `planning/STATUS.md` with the text from the log.
-   g. Prepend the **content under** `## DEVLOG Entry` to `DEVLOG.md` — this means
-      everything from the `## YYYY-MM-DD` date header line onward, NOT the `## DEVLOG Entry`
-      section header itself. Insert it immediately after the `# DEVLOG —` header line
+   d. Apply `## status.md — Current Focus Line` → replace the `**Current focus:**` line in
+      `planning/status.md` with the exact string from the log.
+   e. Apply `## status.md — Last Updated Line` → replace the `**Last updated:**` line in
+      `planning/status.md` with the exact string from the log.
+   f. Apply `## status.md — Notes Column` → update the Notes column of the matching
+      spec row in `planning/status.md` with the text from the log.
+   g. Prepend the **content under** `## Log Entry` to `log.md` — this means
+      everything from the `## YYYY-MM-DD` date header line onward, NOT the `## Log Entry`
+      section header itself. Insert it immediately after the `# Log —` header line
       (before existing entries), preserving a blank line between the new entry and the one below.
    h. Edit `<logFile>`: change `**Applied:** false` → `**Applied:** true`.
    i. Stage and commit these three files only:
       ```bash
-      git add planning/STATUS.md DEVLOG.md <logFile>
+      git add planning/status.md log.md <logFile>
       git commit -m "$(cat <<'EOF'
       chore: apply task log for <stem>
       EOF
       )"
       ```
-   j. Report: "STATUS.md and DEVLOG.md updated from task log."
+   j. Report: "status.md and log.md updated from task log."
 
-   **If `Applied: true`:** report "Task log already applied — skipping STATUS/DEVLOG update."
+   **If `Applied: true`:** report "Task log already applied — skipping STATUS/Log update."
 
-   **If log file not found:** report "No task log found — STATUS/DEVLOG not updated.
+   **If log file not found:** report "No task log found — STATUS/Log not updated.
    If this task was run with /sdlc-task, check that the pipeline completed its wrap-up stage."
 
 7. **Remove the worktree and delete the branch:**
@@ -172,6 +172,6 @@ The literal single-token form is output by `/sdlc-task` when it creates a suffix
 - **Fast-forward only** is the correct default for this pipeline: worktrees branch from `main` at init time, run the full pipeline, and then merge back. If `main` has advanced concurrently (e.g., a hotfix), `--ff-only` fails with a clear error rather than silently creating a merge commit.
 - **Uncommitted changes** in the worktree are unusual — the SDLC pipeline commits after each stage. If they appear, it likely means the pipeline was interrupted mid-stage.
 - Run this command from the **main repo session** (CWD: repo root), not from inside the worktree.
-- **Task log (sdlc-task only):** When a task was run with `/sdlc-task`, the worktree branch contains a `task<N>-log.md` file instead of STATUS.md/DEVLOG.md changes. Step 6.5 reads that file and applies the updates to main after the merge. Always merge tasks in task-number order so STATUS.md's "Current focus" ends up pointing to the right next task.
-- **Suffix worktrees:** If `/sdlc-task` created `1.1-site-credibility-fixes-task8-2` (due to a collision), pass the full name as a single argument: `/clean-worktree 1.1-site-credibility-fixes-task8-2`. The task log is still found at `planning/tasks/1.1-site-credibility-fixes/reports/task8-log.md` (based on the task number extracted from the branch name).
+- **Task log (sdlc-task only):** When a task was run with `/sdlc-task`, the worktree branch contains a `task<N>-log.md` file instead of status.md/log.md changes. Step 6.5 reads that file and applies the updates to main after the merge. Always merge tasks in task-number order so status.md's "Current focus" ends up pointing to the right next task.
+- **Suffix worktrees:** If `/sdlc-task` created `<spec-slug>-task8-2` (due to a collision), pass the full name as a single argument: `/clean-worktree <spec-slug>-task8-2`. The task log is still found at `planning/<spec-slug>/sdlc/reports/task8-log.md` (based on the task number extracted from the branch name).
 - **`/sdlc-block` does its own merges.** Do not run `/clean-worktree` for tasks driven by `/sdlc-block` — it merges each wave for you. Use this command only for standalone `/sdlc-task` runs or manual worktrees from `/init-worktree`.

@@ -3,7 +3,7 @@
 Custom Claude Code commands for projects scaffolded from `base-template/`. Invoke with
 `/command-name` in the prompt.
 
-These drive **structured spec work**: a spec lives at `planning/tasks/<name>/tasks.md`, and
+These drive **structured spec work**: a spec lives at `planning/<name>/tasks.md`, and
 the pipeline takes it through implement → test → review → document → wrap-up, writing
 predictably-named reports alongside it.
 
@@ -11,7 +11,7 @@ predictably-named reports alongside it.
 > core. The skill *bodies* and the `workflows/*.js` engines were seeded from a Next.js
 > project and still carry some stack-specific assumptions (npm validation scripts, a
 > browser UI-test stage, content/bilingual gates). Generalizing the engines to be fully
-> stack-agnostic is **deferred to OKF Phase 2** — see the template `DEVLOG.md` and
+> stack-agnostic is **deferred to OKF Phase 2** — see the template `log.md` and
 > `planning/decisions/`. Until then, adapt the validation commands to your project's stack
 > when you wire it up.
 
@@ -27,22 +27,22 @@ predictably-named output file.
 
 | SDLC Phase | Command | Role | Output |
 |---|---|---|---|
-| Session Start | `/session-recap` | Briefing: recent DEVLOG entries, where you left off, next step | chat only |
+| Session Start | `/session-recap` | Briefing: recent Log entries, where you left off, next step | chat only |
 | Session Start | `/status` | Check current focus and what's in progress | chat only |
 | Session Start | `/process-tasks` | Check which specs are eligible to start | chat only |
-| Block Setup | `/start-block [name]` | Flip a spec to `In progress` in STATUS.md | STATUS.md |
-| **1 — Plan** | `/generate-tasks <name>` | Write the full task spec from the master plan | `planning/tasks/<name>/tasks.md` |
-| **1 — Plan (ad-hoc)** | `/chore` · `/feature` · `/plan <desc>` | Plan ad-hoc work from a free-text description (not a master-plan block) | `planning/tasks/<prefix>-<slug>/{tasks,plan}.md` |
-| **1 — Plan (opt.)** | `/breakdown <spec>` | Decompose spec into atomic, agent-executable sub-steps | `planning/tasks/<name>/breakdown.md` |
-| **2 — Implement** | `/implement <spec> [N]` | Execute every task (or task N) in the spec | `planning/tasks/<name>/reports/[taskN-]implement.md` |
-| **2 — Fix** | `/fix <spec> [N]` | Targeted fixes for FAIL/PARTIAL verdict; reads review report; overwrites implement report | `planning/tasks/<name>/reports/[taskN-]implement.md` |
+| Block Setup | `/start-block [name]` | Flip a spec to `In progress` in status.md | status.md |
+| **1 — Plan** | `/generate-tasks <name>` | Write the full task spec from the master plan | `planning/<name>/tasks.md` |
+| **1 — Plan (ad-hoc)** | `/chore` · `/feature` · `/plan <desc>` | Plan ad-hoc work from a free-text description (not a master-plan block) | `planning/<prefix>-<slug>/{tasks,plan}.md` |
+| **1 — Plan (opt.)** | `/breakdown <spec>` | Decompose spec into atomic, agent-executable sub-steps | `planning/<name>/breakdown.md` |
+| **2 — Implement** | `/implement <spec> [N]` | Execute every task (or task N) in the spec | `planning/<name>/sdlc/reports/[taskN-]implement.md` |
+| **2 — Fix** | `/fix <spec> [N]` | Targeted fixes for FAIL/PARTIAL verdict; reads review report; overwrites implement report | `planning/<name>/sdlc/reports/[taskN-]implement.md` |
 | **2 — Track** | `/update-task [name] <step> [note]` | Mark a step done and/or append a dated note mid-implementation | spec file (in-place) |
 | **2 — Commit** | `/commit [hint]` | Stage + commit with a conventional message | git history |
-| **3 — Test** | `/test <spec> [N]` | Run the project's validation suite; write snapshot | `planning/tasks/<name>/reports/[taskN-]test.md` |
-| **4 — Review** | `/review-task <spec> [N]` | Verify all criteria; run fresh tests; issue verdict | `planning/tasks/<name>/reports/[taskN-]review.md` |
-| **5 — Document** | `/document <spec> [N]` | Surgically patch `docs/`; gates on PASS verdict | `planning/tasks/<name>/reports/[taskN-]document.md` |
-| **6 — Wrap-up** | `/log-work [notes]` | Update STATUS.md + append DEVLOG entry + sync company brain | STATUS.md, DEVLOG.md, brain `docs/projects/<slug>.md`, brain `README.md` |
-| **7 — Verify run** | `/review-workflow <name> [N]` | Audit pipeline execution: reports, commits, DEVLOG, STATUS | `planning/tasks/<name>/reports/[taskN-]workflow-review.md` |
+| **3 — Test** | `/test <spec> [N]` | Run the project's validation suite; write snapshot | `planning/<name>/sdlc/reports/[taskN-]test.md` |
+| **4 — Review** | `/review-task <spec> [N]` | Verify all criteria; run fresh tests; issue verdict | `planning/<name>/sdlc/reports/[taskN-]review.md` |
+| **5 — Document** | `/document <spec> [N]` | Surgically patch `docs/`; gates on PASS verdict | `planning/<name>/sdlc/reports/[taskN-]document.md` |
+| **6 — Wrap-up** | `/log-work [notes]` | Update status.md + append Log entry + sync company brain | status.md, log.md, brain `docs/projects/<slug>.md`, brain `README.md` |
+| **7 — Verify run** | `/review-workflow <name> [N]` | Audit pipeline execution: reports, commits, Log, STATUS | `planning/<name>/sdlc/reports/[taskN-]workflow-review.md` |
 
 ### Pipeline Flow
 
@@ -52,46 +52,46 @@ SESSION START
   /process-tasks                   → read-only: which specs are eligible
 
 BLOCK SETUP
-  /start-block <spec>              → STATUS.md
+  /start-block <spec>              → status.md
 
 PHASE 1 — PLAN
-  /generate-tasks <spec>           → planning/tasks/<spec>/tasks.md
+  /generate-tasks <spec>           → planning/<spec>/tasks.md
         ↓  (optional)
-  /breakdown planning/tasks/<spec>/tasks.md   → planning/tasks/<spec>/breakdown.md
+  /breakdown planning/<spec>/tasks.md   → planning/<spec>/breakdown.md
 
 PHASE 2 — IMPLEMENT
-  /implement planning/tasks/<spec>/tasks.md [N]
-        → planning/tasks/<spec>/reports/[taskN-]implement.md
+  /implement planning/<spec>/tasks.md [N]
+        → planning/<spec>/sdlc/reports/[taskN-]implement.md
   (/update-task and /commit can be called any number of times during this phase)
 
 PHASE 3 — TEST
-  /test planning/tasks/<spec>/tasks.md [N]
-        → planning/tasks/<spec>/reports/[taskN-]test.md
+  /test planning/<spec>/tasks.md [N]
+        → planning/<spec>/sdlc/reports/[taskN-]test.md
 
 PHASE 4 — REVIEW                   ← runs fresh tests; verdict gates next step
-  /review-task planning/tasks/<spec>/tasks.md [N]
-        → planning/tasks/<spec>/reports/[taskN-]review.md
+  /review-task planning/<spec>/tasks.md [N]
+        → planning/<spec>/sdlc/reports/[taskN-]review.md
 
         if PASS → continue to PHASE 5 — DOCUMENT
         if FAIL/PARTIAL → PHASE 2 — FIX:
-  /fix planning/tasks/<spec>/tasks.md [N]
-        → planning/tasks/<spec>/reports/[taskN-]implement.md  (overwritten)
+  /fix planning/<spec>/tasks.md [N]
+        → planning/<spec>/sdlc/reports/[taskN-]implement.md  (overwritten)
   then repeat: /test [N] → /review-task [N] until PASS
 
 PHASE 5 — DOCUMENT                 ← gates on PASS verdict
-  /document planning/tasks/<spec>/tasks.md [N]
-        → planning/tasks/<spec>/reports/[taskN-]document.md
+  /document planning/<spec>/tasks.md [N]
+        → planning/<spec>/sdlc/reports/[taskN-]document.md
 
 PHASE 6 — WRAP-UP
-  /log-work [notes]                → STATUS.md, DEVLOG.md
+  /log-work [notes]                → status.md, log.md
 
 (OPTIONAL) PHASE 7 — VERIFY RUN
-  /review-workflow <spec> [N]      → planning/tasks/<spec>/reports/[taskN-]workflow-review.md
+  /review-workflow <spec> [N]      → planning/<spec>/sdlc/reports/[taskN-]workflow-review.md
 ```
 
 ### Argument Convention
 
-Every step from Phase 2 onward takes the same form: `planning/tasks/<name>/tasks.md [N]`
+Every step from Phase 2 onward takes the same form: `planning/<name>/tasks.md [N]`
 
 Split on the last space. Trailing number = task N (scope to that task only). No number = full
 spec. Use the **same `N`** throughout the pipeline — it determines all report filenames at
@@ -99,11 +99,11 @@ every step.
 
 ### Directory Layout
 
-Each spec gets its own directory under `planning/tasks/`. All reports live in a `reports/`
+Each spec gets its own directory under `planning/`. All reports live in a `reports/`
 subdirectory alongside the spec:
 
 ```
-planning/tasks/
+planning/
   <spec>/
     tasks.md          ← spec (written by /generate-tasks)
     breakdown.md      ← optional (written by /breakdown)
@@ -118,7 +118,7 @@ planning/tasks/
 
 ### Report File Naming
 
-Pattern: `[taskN-]{step}.md` inside `planning/tasks/<name>/reports/`
+Pattern: `[taskN-]{step}.md` inside `planning/<name>/sdlc/reports/`
 
 | Step | Full-spec | Task-scoped |
 |---|---|---|
@@ -143,8 +143,8 @@ unattended.
 
 | Workflow | Scope | Isolation |
 |---|---|---|
-| `/sdlc-run <name> [N]` | one task or a **full spec**, sequential | none — runs on the current branch, updates STATUS/DEVLOG directly |
-| `/sdlc-task <name> N` | **one** task, parallel-safe | own git worktree; defers STATUS/DEVLOG to merge time |
+| `/sdlc-run <name> [N]` | one task or a **full spec**, sequential | none — runs on the current branch, updates STATUS/Log directly |
+| `/sdlc-task <name> N` | **one** task, parallel-safe | own git worktree; defers STATUS/Log to merge time |
 | `/sdlc-block <name> [range]` | a **whole spec** as dependency-ordered waves of parallel `/sdlc-task` runs | one worktree per task; **merges for you** |
 
 ### `/sdlc-block` — spec-level orchestration
@@ -155,13 +155,13 @@ the master plan, commits an uncommitted one, and aborts fast if any *unrelated* 
 Then it reads (or generates) a dependency-ordered execution plan, runs each wave of
 independent tasks through `/sdlc-task`, and merges the wave before the next begins. Adds
 bounded per-task **retries** with failure **triage**, **selective-union merges** (additive
-shared files only; real conflicts escalate), and a single authoritative STATUS/DEVLOG update
+shared files only; real conflicts escalate), and a single authoritative STATUS/Log update
 at the end. **Resumable without duplicating work** — git is the source of truth for which
 tasks are done.
 
 | Arg | Meaning | Default |
 |---|---|---|
-| `<name>` | Required — drives every `planning/tasks/<name>/…` path. | — |
+| `<name>` | Required — drives every `planning/<name>/…` path. | — |
 | `[range]` | Optional task selection (2nd positional **or** `--tasks`): `1-7`, `1,3,5`, `1-3,7`. | all tasks |
 | `--max-retries N` | Total `/sdlc-task` attempts per task before escalation. | `2` |
 | `--max-wave-width W` | Max full pipelines run concurrently per batch. | `3` |
@@ -171,21 +171,21 @@ tasks are done.
 ## Session Orientation
 
 ### `/session-recap`
-Start-of-session briefing: reads the three most recent DEVLOG entries, STATUS.md, the current
+Start-of-session briefing: reads the three most recent Log entries, status.md, the current
 spec's `tasks.md`, and the `reports/` directory listing; outputs a concise briefing (under 300
 words) and the exact next command. Read-only.
 
 ### `/prime`
-Orient to this repo at session start: reads `README.md`, `CLAUDE.md`, `planning/CONTEXT.md`,
-`planning/STATUS.md`; runs `git ls-files`; summarizes the codebase, layout, focus, and standing
+Orient to this repo at session start: reads `README.md`, `CLAUDE.md`, `planning/context.md`,
+`planning/status.md`; runs `git ls-files`; summarizes the codebase, layout, focus, and standing
 rules. Read-only. Embedded in every pipeline command.
 
 ### `/status`
-Reads only `planning/STATUS.md` and reports the Current focus line, what's In progress, and
+Reads only `planning/status.md` and reports the Current focus line, what's In progress, and
 what's Next. Read-only.
 
 ### `/process-tasks`
-Reads `STATUS.md`, applies sequential eligibility rules (a spec is ready only if all specs above
+Reads `status.md`, applies sequential eligibility rules (a spec is ready only if all specs above
 it are `Done`), and returns a status table. Read-only.
 
 ---
@@ -193,8 +193,8 @@ it are `Done`), and returns a status table. Read-only.
 ## Phase 1 — Plan
 
 ### `/generate-tasks`
-Reads the relevant section of `planning/MASTER_PLAN.md`, writes a full task spec to
-`planning/tasks/<name>/tasks.md`, and **commits it** (clean tree for downstream `/sdlc-block`).
+Reads the relevant section of `planning/master-plan.md`, writes a full task spec to
+`planning/<name>/tasks.md`, and **commits it** (clean tree for downstream `/sdlc-block`).
 Each spec carries a **Validation Commands** block and ends with a Validate task.
 
 ### `/breakdown`
@@ -206,15 +206,15 @@ execution guide (HOW); `tasks.md` stays authoritative for scope (WHAT).
 ### Ad-hoc planners — `/chore`, `/feature`, `/plan`
 
 Entry points into Phase 1 for work that **isn't** a master-plan block. Each takes a free-text
-description, researches the codebase, and writes a spec into its own `planning/tasks/<dir>/`
+description, researches the codebase, and writes a spec into its own `planning/<dir>/`
 directory carrying the same Validation Commands block. Output feeds the rest of the pipeline
 unchanged.
 
 | Command | Use for | Writes to |
 |---|---|---|
-| `/chore <description>` | Maintenance / housekeeping | `planning/tasks/chore-<slug>/tasks.md` |
-| `/feature <description>` | A new capability — full design, user story, phased plan | `planning/tasks/feature-<slug>/tasks.md` |
-| `/plan <description>` | Anything else, scaled to complexity | `planning/tasks/plan-<slug>/plan.md` |
+| `/chore <description>` | Maintenance / housekeeping | `planning/chore-<slug>/tasks.md` |
+| `/feature <description>` | A new capability — full design, user story, phased plan | `planning/feature-<slug>/tasks.md` |
+| `/plan <description>` | Anything else, scaled to complexity | `planning/plan-<slug>/plan.md` |
 
 > Downstream commands derive report paths from the spec's **parent directory**, so a `plan.md`
 > spec flows through identically to a `tasks.md` one.
@@ -226,7 +226,7 @@ unchanged.
 ### `/implement`
 Runs `/prime`, reads the plan file, executes every step (or task N) following CLAUDE.md
 conventions, runs the relevant Validation Commands, and writes
-`planning/tasks/<name>/reports/[taskN-]implement.md`.
+`planning/<name>/sdlc/reports/[taskN-]implement.md`.
 
 ### `/fix`
 Reads the review report to extract every failing criterion, orients via `/prime`, and applies
@@ -235,7 +235,7 @@ if the review report is absent; soft-stops if the verdict is already PASS.
 
 ### `/update-task`
 Optionally marks a step done (prepends ✅) and/or appends a dated note to the spec's `## Notes`
-section. Auto-detects the current spec from STATUS.md if not given. Does not touch STATUS.md.
+section. Auto-detects the current spec from status.md if not given. Does not touch status.md.
 
 ### `/commit`
 Inspects `git status`/`git diff --stat`, chooses a commit strategy (code-only, docs-only, or
@@ -249,11 +249,12 @@ pushes, never `--no-verify`, never `git add -A`.
 ### `/test`
 Runs `/prime`, then the project's validation suite (lint, type-check, tests, build, and any
 project-specific gates), returning results as a JSON array sorted failed-first. With a spec path,
-also writes `planning/tasks/<name>/reports/[taskN-]test.md`.
+also writes `planning/<name>/sdlc/reports/[taskN-]test.md`.
 
-> **Stack note:** the seeded suite is npm/Node-shaped (`npm run lint`, `npx tsc --noEmit`,
-> `npm test`, `npm run build`, plus content/bilingual gates). Replace these with your project's
-> actual validation commands — this is part of the Phase 2 engine generalization.
+> **Stack note:** the test stage runs the checks defined in `planning/harness.json`
+> (`validation.checks[]`). The harness ships no stack defaults — define your project's actual
+> validation commands there (copy a profile from `planning/harness.examples.md`). If the config
+> is absent, the stage falls back to the spec's `## Validation Commands` section.
 
 ---
 
@@ -272,15 +273,15 @@ fresh tests pass. Writes a review report.
 Gates strictly on the review verdict being PASS. Reads the implement report's **Files Created
 or Modified** table to scope updates, then surgically patches only affected sections of
 `docs/*.md`. Flags architecture-level changes as `NEEDS_REVIEW`. Never touches `planning/`,
-`DEVLOG.md`, `STATUS.md`, or `CLAUDE.md`.
+`log.md`, `status.md`, or `CLAUDE.md`.
 
 ---
 
 ## Phase 6 — Wrap-up
 
 ### `/log-work`
-Reads `STATUS.md`, the current spec, and `DEVLOG.md`; runs `git diff --stat`. Updates
-`STATUS.md` and appends a `DEVLOG.md` entry. Prompts you to add settled choices to
+Reads `status.md`, the current spec, and `log.md`; runs `git diff --stat`. Updates
+`status.md` and appends a `log.md` entry. Prompts you to add settled choices to
 `planning/decisions/` — never edits decisions directly. Also syncs the company brain
 (`docs/projects/<slug>.md`, `README.md`) to match the new status.
 
@@ -291,7 +292,7 @@ Reads `STATUS.md`, the current spec, and `DEVLOG.md`; runs `git diff --stat`. Up
 ### `/review-workflow`
 Audits a completed `/sdlc-run` pipeline execution — not the implementation, but the mechanics:
 report files present and well-formed, the Test stage ran the suite, commits follow conventional
-format, DEVLOG/STATUS reflect the outcome. Issues PASS/PARTIAL/FAIL and writes
+format, Log/STATUS reflect the outcome. Issues PASS/PARTIAL/FAIL and writes
 `workflow-review.md`. Does **not** re-run tests — use `/review-task` for that.
 
 ---
@@ -306,7 +307,7 @@ are `Done`, then flips it to `In progress` and updates Current focus + Last upda
 Manual entry points for the isolated-worktree lifecycle that `/sdlc-task` and `/sdlc-block`
 automate. `/init-worktree` derives a branch/worktree from the spec slug and creates an isolated
 sparse checkout; `/clean-worktree` **merges before delete** — fast-forward-merges the branch
-into `main`, applies deferred STATUS/DEVLOG updates, then removes the worktree. Do **not** run
+into `main`, applies deferred STATUS/Log updates, then removes the worktree. Do **not** run
 `/clean-worktree` for `/sdlc-block` tasks — that orchestrator merges each wave for you.
 
 ### `/update-docs`

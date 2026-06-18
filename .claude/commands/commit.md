@@ -14,11 +14,11 @@ Return the subagent's result to the user.
 
 1. Run `git status` and `git diff --stat` to see what changed.
 2. Determine the commit strategy:
-   - **Only code changed** (no `planning/` or `DEVLOG.md`): one code commit.
-   - **Only planning/docs changed** (`planning/`, `DEVLOG.md`, `*.md`): one `docs:` commit.
+   - **Only code changed** (no `planning/` or `log.md`): one code commit.
+   - **Only planning/docs changed** (`planning/`, `log.md`, `*.md`): one `docs:` commit.
    - **Both changed**: two commits — code first, then docs.
 3. Draft a short conventional commit message:
-   - Format: `<type>(<scope>): <summary>` — e.g. `feat: add Company Brain post (EN+pt-BR)`, `docs: update STATUS.md for block 2`
+   - Format: `<type>(<scope>): <summary>` — e.g. `feat(auth): add token refresh`, `docs: update status.md for block 2`
    - Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
    - Keep the summary under 72 characters.
    - If `$ARGUMENTS` is provided, use it as the message or incorporate it as the scope/summary.

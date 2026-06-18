@@ -1,10 +1,10 @@
-# Log Work — Sync STATUS.md and append a DEVLOG entry for completed work.
+# Log Work — Sync status.md and append a Log entry for completed work.
 
 ## Variables
 
 $ARGUMENTS — optional free-text explanation of what was done today. May be brief ("ported
-             the credibility-fixes spec and re-ran validate:content") or detailed (several
-             sentences). If provided, it is woven into the DEVLOG prose entry as the primary
+             the parser spec and re-ran the test suite") or detailed (several
+             sentences). If provided, it is woven into the Log prose entry as the primary
              narrative — do not discard or summarise it down. If omitted, derive the narrative
              from git history and the task spec alone.
 
@@ -16,26 +16,26 @@ Return the subagent's result to the user.
 
 ## Instructions
 
-1. Read `planning/STATUS.md` and the current task spec at `planning/tasks/<name>/tasks.md`.
+1. Read `planning/status.md` and the current task spec at `planning/<name>/tasks.md`.
 2. Run `git diff --stat` and `git log --oneline -10` to see what changed.
 
-3. **Determine STATUS.md changes — ask before writing if uncertain.**
+3. **Determine status.md changes — ask before writing if uncertain.**
    - From git history, the task spec, and `$ARGUMENTS`, identify which blocks are newly complete
      and what the next focus should be.
    - If you are confident (e.g. a block's acceptance criteria are clearly met and git confirms
      it), state the proposed changes and proceed.
    - If you are NOT certain which block(s) to flip to `Done`, or which block becomes the new
      current focus, STOP and ask the user:
-     > "Before I update STATUS.md, I want to confirm: should I mark [block X] as done and
+     > "Before I update status.md, I want to confirm: should I mark [block X] as done and
      > set the current focus to [block Y]? Or did something differ from the plan?"
-     Wait for confirmation before writing any STATUS.md changes.
+     Wait for confirmation before writing any status.md changes.
    - Changes to make once confirmed:
      - Flip newly-completed block statuses to `Done`.
      - Update the **Current focus** line to the next block.
      - Bump the **Last updated** date.
      - Append to the **Decisions & Deviations** log if reality diverged from the plan.
 
-4. Append a new dated entry to `DEVLOG.md` in this exact format:
+4. Append a new dated entry to `log.md` in this exact format:
    ```
    ## YYYY-MM-DD
 
@@ -71,21 +71,21 @@ Return the subagent's result to the user.
      ```
    - Register it in `planning/decisions/index.md` by appending a row to the table (newest at
      the bottom — append-only; never edit or renumber prior entries).
-6. Never edit the master plan file (`MASTER_PLAN.md`).
+6. Never edit the master plan file (`master-plan.md`).
 
-7. **Sync the company brain.** After STATUS.md and DEVLOG.md are confirmed:
+7. **Sync the company brain.** After status.md and log.md are confirmed:
    - Read `../docs/projects/{{SLUG}}.md` in the company brain.
-   - Update the **Current Status** date and focus line to match the new STATUS.md state.
+   - Update the **Current Status** date and focus line to match the new status.md state.
    - Update the Status column in the 13-spec table for any rows that changed.
    - Open `../README.md` and update the Quick Status section for learn-ai: the Current
      focus line and any changed status rows.
    - Surgical updates only — do not rewrite sections that didn't change.
-   - If the brain docs are already in sync with STATUS.md, skip this step silently.
+   - If the brain docs are already in sync with status.md, skip this step silently.
 
 ## Context / Files to Read
 
-- `planning/STATUS.md`
-- The current `planning/tasks/<name>/tasks.md`
-- `DEVLOG.md`
+- `planning/status.md`
+- The current `planning/<name>/tasks.md`
+- `log.md`
 - `../docs/projects/{{SLUG}}.md` (brain sync target)
 - `../README.md` (brain sync target)

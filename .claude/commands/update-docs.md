@@ -45,7 +45,7 @@ $ARGUMENTS — optional git ref or range to diff against.
 - **Surgical only.** Never rewrite a doc section that was not affected by the diff.
 - **Source is authoritative.** If the doc and the source disagree, the source wins.
 - **No invention.** Do not add new sections or cover new APIs/components not already in the doc.
-- **Do not touch** `planning/` files, `DEVLOG.md`, `STATUS.md`, or `CLAUDE.md`. Those are managed
+- **Do not touch** `planning/` files, `log.md`, `status.md`, or `CLAUDE.md`. Those are managed
   by `/log-work`.
 - **Architecture-level changes → flag, don't edit.** If the diff touches cross-cutting surfaces
   (shared libraries, build/config files, routing or middleware, or other architecture-level

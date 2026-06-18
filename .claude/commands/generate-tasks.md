@@ -2,12 +2,12 @@
 
 ## Variables
 
-$ARGUMENTS — the spec's `planning/tasks/` directory name (its phase-dotted slug),
-             e.g. `1.3-projects-add-current` or `2.1-learn-paths-structural-fixes`.
+$ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
+             e.g. `<spec-slug>` or `2.1-learn-paths-structural-fixes`.
              New master-plan specs follow the `P.N-slug` convention (see
-             `planning/README.md` → *Task directory naming convention*); ad-hoc work uses
+             `planning/index.md` → *Task directory naming convention*); ad-hoc work uses
              `/chore`, `/feature`, or `/plan` instead.
-             Required. If omitted, stop and say: "Usage: /generate-tasks <P.N-slug>  (e.g. 1.3-projects-add-current)"
+             Required. If omitted, stop and say: "Usage: /generate-tasks <P.N-slug>  (e.g. <spec-slug>)"
 
 ## Instructions
 
@@ -18,39 +18,40 @@ $ARGUMENTS — the spec's `planning/tasks/` directory name (its phase-dotted slu
    - Accept any of these forms: `phase0-blockC`, `phase0blockC`, `0-C`, `Phase 0 Block C`.
    - If the argument cannot be parsed into a phase + block, stop and explain the expected format.
 
-3. Check whether a spec already exists at `planning/tasks/phaseN-blockX/tasks.md` (using the
-   normalized directory form, e.g. `planning/tasks/1.1-site-credibility-fixes/tasks.md`).
+3. Check whether a spec already exists at `planning/phaseN-blockX/tasks.md` (using the
+   normalized directory form, e.g. `planning/<spec-slug>/tasks.md`).
    - If it exists, read it and report: "Spec already exists at <path>. Overwrite? (re-run with
      `--force` appended to overwrite, or run `/breakdown <path>` to decompose it instead.)"
    - If `$ARGUMENTS` contains `--force`, proceed and overwrite.
 
 4. Read ONLY the relevant section for the requested block in:
-   - `planning/MASTER_PLAN.md` (the phase/block definition)
-   - Do NOT read STATUS.md — the target block is given explicitly.
+   - `planning/master-plan.md` (the phase/block definition)
+   - Do NOT read status.md — the target block is given explicitly.
 
 5. THINK HARD about correct scope:
    - Do not invent work beyond what the block defines.
    - Size tasks to roughly 21 hours spread across Mon/Wed/Fri sessions.
-   - Every content task must ship EN + pt-BR in parallel (or record an explicit deferral in `## Notes / deviations`), and must leave `npm run validate:content` and `npm run build` passing (standing rules from CLAUDE.md).
+   - Enforce **the project's standing rules** as written in `CLAUDE.md` — do not assume any stack, locale-parity, or content-layout rule unless written there. Every task must leave the project's gated checks (`planning/harness.json` → `validation.checks[]` with `gates: true`) passing.
    - Foundational steps come first; the final step is always Validate.
 
-6. Create the directory `planning/tasks/phaseN-blockX/` if it does not exist, then write the spec to `planning/tasks/phaseN-blockX/tasks.md` using the Output Format below.
+6. Create the directory `planning/phaseN-blockX/` if it does not exist, then write the spec to `planning/phaseN-blockX/tasks.md` using the Output Format below.
 
 7. **Commit the spec.** Leave the working tree clean so a downstream `/sdlc-block` run never trips
    its clean-tree merge guard (an uncommitted `tasks.md` blocks every merge):
    ```bash
-   git add planning/tasks/phaseN-blockX/
+   git add planning/phaseN-blockX/
    git commit -m "chore: add spec for phaseN-blockX"
    ```
-   (Use the normalized directory slug, e.g. `chore: add spec for 1.3-projects-add-current`.)
+   (Use the normalized directory slug, e.g. `chore: add spec for <spec-slug>`.)
 
 8. Report the path written and suggest the next step:
-   "Spec written and committed to planning/tasks/phaseN-blockX/tasks.md. Run `/breakdown planning/tasks/phaseN-blockX/tasks.md` to decompose into atomic sub-steps."
+   "Spec written and committed to planning/phaseN-blockX/tasks.md. Run `/breakdown planning/phaseN-blockX/tasks.md` to decompose into atomic sub-steps."
 
 ## Context / Files to Read
 
-- `planning/MASTER_PLAN.md` (target block section only)
-- `CLAUDE.md` (standing rules — bilingual parity, public-narrative rule, no fabricated metrics, validate:content + build must pass)
+- `planning/master-plan.md` (target block section only)
+- `CLAUDE.md` (the project's standing rules)
+- `planning/harness.json` (the project's validation checks)
 
 ## Output Format
 
@@ -82,13 +83,9 @@ $ARGUMENTS — the spec's `planning/tasks/` directory name (its phase-dotted slu
 
 ## Validation Commands
 ```
-npm run lint
-npx tsc --noEmit
-npm run validate:content
-npm test
-npm run build
+<the project's validation commands — see `planning/harness.json` (`validation.checks[]`) or CLAUDE.md; one command per line, in order>
 ```
-<!-- Add any spec-specific checks (e.g. bilingual-parity diff) above the standard lines. -->
+<!-- Add any spec-specific checks above the standard project checks. -->
 
 ## Notes
 <filled in as work happens>
@@ -98,11 +95,11 @@ npm run build
 
 Output the path to the file created and the next-step options:
 ```
-planning/tasks/1.1-site-credibility-fixes/tasks.md
+planning/<spec-slug>/tasks.md
 
 Next (optional — decompose into atomic sub-steps):
-  /breakdown planning/tasks/1.1-site-credibility-fixes/tasks.md
+  /breakdown planning/<spec-slug>/tasks.md
 
 Next (skip breakdown — implement directly):
-  /implement planning/tasks/1.1-site-credibility-fixes/tasks.md
+  /implement planning/<spec-slug>/tasks.md
 ```
