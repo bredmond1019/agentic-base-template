@@ -5,6 +5,29 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-19 — Fix the universal emoji gate (regex silently broken by JS template-literal escaping)
+
+A downstream telemetry run surfaced a long-standing bug: the universal no-emoji gate's regex was
+**inert** (worse, false-positiving). The Python `re.compile(r'[\U0001F300-...]')` lives inside a JS
+template literal, where `\U` is not a recognized JS escape — so the backslashes were silently
+stripped at render time and the Python received `[U0001F300-U0001FAFF...]`, a char class that matches
+ASCII digits and `A`–`U` instead of emoji. Every task touching a `.md` file with a digit or capital
+letter tripped the gate's test-stage check (overridden downstream by review, so it limped as noise
+rather than a hard block, and never actually caught an emoji).
+
+Fix: double the backslashes in the source (`\\U0001F300`) so JS renders `\U0001F300` and Python's raw
+string sees the correct unicode ranges. Verified: post-fix the class matches real emoji (🚀, ✨) and
+NOT `Task` / `Heading 3`. Applied in `sdlc-task.js` and `sdlc-run.js` (the two engines with the gate;
+`sdlc-block` delegates). Swept both engines for sibling `\b \d \w \s \U` single-backslash escapes
+inside template-literal strings — none found (the only other matches are legit JS regex literals).
+`node --check` clean. Propagated to the downstream repos.
+
+> Note: harness.json patterns are unaffected — they come from parsed JSON (where `\\.` → `\.`
+> correctly), not from template-literal source. This class of bug only bites regex escapes written
+> directly in engine template-literal strings.
+
+---
+
 ## 2026-06-19 — Telemetry Phase-A robustness fix: deterministic metrics append (downstream-surfaced)
 
 The first downstream `sdlc-block` run (in a test repo) produced task workflow reports **missing** the
