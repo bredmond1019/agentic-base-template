@@ -5,6 +5,47 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-19 — Phase B kickoff: ship B4 + stand up `bastion` as the B1 experiment vehicle
+
+Reviewed the two clean `## Token Metrics` sections from the `markdown-engine-validator` Block C run
+(the first real baseline now that A3-fix lands the section deterministically). The data confirmed the
+plan's sequencing: injected prompts are tiny (every stage <1.6K promptTok, so B4 is a pure multiplier),
+and **review ingestion tracks implement output** — review `filesReadKb` was 17 KB on a thin task vs
+36 KB on a heavier one. That correlation is the B1 signal (review re-`cat`s the full implement/test
+reports), and it scales with task complexity — so we want a more complex before/after than the small
+markdown tasks, plus a loop-rate sample (both baseline tasks were single-attempt PASS, so we have none
+yet).
+
+Acted on it: **shipped B4** (`e60ba6a`) — compressed the per-stage `${W}` worktree header in
+`sdlc-task.js` from a 14-line box-drawing banner to 3 load-bearing lines (repo root, the
+cd-before-every-Bash rule, no-shell-state-persistence, relative-path resolution). Zero behavior change,
+committed alone so the upcoming B1 before/after both sit on top of it. `sdlc-block.js` needs no change
+(it runs from the main repo root, no `${W}`).
+
+Then **set up `bastion` as the B1 vehicle** (chosen with Brandon: a more complex, not-yet-started Rust
+CLI gives bigger review-ingestion numbers + a fresh loop-rate sample). Propagated the A+B4 engines and
+the D6 schema into `bastion/.claude/workflows/` (it was still on the pre-A engines) — `bastion@7500477`,
+`node --check` clean. Authored and committed a Phase 0 Block A spec — `bastion@649d23c` — for
+`bastion status` (config plumbing + DB/API health probes + `.env.example`). Made the spec
+**offline-honest**: the gated checks are all `cargo …` and must pass without live infra, so the
+unreachable-service path is the unit-tested behavior; the "real health against a running orchestrator"
+line is a manual, non-gating acceptance. Stopped at the baseline run — `/sdlc-block phase0-blockA`
+should be launched from a session opened in `bastion/` (the skills prime to CWD + create `./trees`
+worktrees there), and must NOT be merged afterward so the B1 re-run starts from identical main.
+
+Remaining sequence (durably recorded in `status.md` + the plan checklist): run baseline → capture
+metrics + median review attempts → ship B1 (inject structured fields, stop `cat`-ing reports, keep the
+review gate authoritative) → re-run bastion for the after → compare the four gates → D7 ADR + `log.md`
+before/after numbers.
+
+```diff
+ .claude/workflows/sdlc-task.js | 16 +++-------------
+ 1 file changed, 3 insertions(+), 13 deletions(-)
+```
+(Plus, in the separate `bastion` repo: engine propagation `7500477` and spec `649d23c`.)
+
+---
+
 ## 2026-06-19 — Fix the universal emoji gate (regex silently broken by JS template-literal escaping)
 
 A downstream telemetry run surfaced a long-standing bug: the universal no-emoji gate's regex was
