@@ -26,7 +26,7 @@ these are the settled lowercase / concept-folder conventions:
   (Rust / Python / Next.js profiles); the engines carry no stack defaults of their own.
 
 > These names are read by the SDLC engine JS. Any future rename must move in **lockstep** with the
-> workflow code in `.claude/workflows/`, not piecemeal. See `planning/okf-phase-2/plan.md`.
+> workflow code in `.claude/workflows/`, not piecemeal. See [D5](planning/decisions/D5-okf-phase-2-adopted.md).
 
 ---
 
