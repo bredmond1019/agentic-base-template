@@ -5,6 +5,40 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-19 — Richer validation check kinds (D6) — foundation for the downstream telemetry pass
+
+Extended `harness.json`'s `validation.checks[]` with an optional `kind` discriminator so a project's
+suite can be richer than a flat list of exit-code commands. `kind` defaults to `"command"` (the
+original shape — fully backward-compatible); four new kinds are engine-interpreted: `baseline-diff`
+(fail only on net-new items vs a worktree-creation baseline), `count-delta` (fail on a count
+regression vs the previous task), `warning-scan` (exit code gates; pattern matches recorded with
+severity per `gates`), and `forbidden-pattern-scan` (source greps that must find nothing).
+
+Motivation: the in-flight `python-orchestration-system` runs an 8-check suite (net-new ruff diff,
+pytest count-delta, Pydantic warning capture, CLAUDE.md standing-rule scan) whose mechanics a flat
+command list cannot express. Migrating that project onto the agnostic engines to import the
+token-telemetry work would have silently dropped them. These four patterns are generic enough to be
+*mechanism* — carried in the engine, with all stack-specific commands/patterns kept in `harness.json`
+(the D5 split holds; engines still ship zero stack defaults). See
+[D6](planning/decisions/D6-harness-richer-checks.md).
+
+```diff
+M .claude/workflows/harness.schema.json   (check.kind enum + per-kind if/then required fields + rule $def)
+M .claude/workflows/sdlc-task.js           (renderCheckList kind dispatch; snapshotBaselines worktree hook; loader schema/prompt; Test-stage gating prose)
+M .claude/workflows/sdlc-block.js          (loader schema + prompt: preserve kind-specific fields)
+M scaffold/planning/harness.examples.md    (new Python "rich checks" profile + per-kind run notes)
+A planning/decisions/D6-harness-richer-checks.md
+M planning/decisions/index.md              (D6 entry)
+M planning/plans/sdlc-telemetry-updates.md (reserved telemetry ADR renumbered D6 -> D7)
+```
+
+Verification: `node --check` passes on all three engines; all four `harness.examples.md` JSON
+profiles parse. No behavior change for existing flat configs. Next: Phase 2 — adopt these engines in
+`python-orchestration-system` and author its `harness.json` from the new Python profile, then capture
+the Phase-A telemetry baseline.
+
+---
+
 ## 2026-06-18 — planning/ cleanup: okf-phase-2/ removed; status.md and index.md rewritten
 
 With `docs/` created and D5 capturing all the key decisions, `planning/okf-phase-2/` (15 files:

@@ -57,6 +57,98 @@ projects that have a dev server to smoke-test.
 }
 ```
 
+## Python — rich checks (baseline-diff lint, test-count delta, import warnings, standing-rule scan)
+
+The profile above treats every check as a plain command. A maturing project often wants more: gate
+on **net-new** lint only (not pre-existing debt), fail when the **test count regresses**, surface
+import-time **warnings** without failing, and scan source for **standing-rule violations**. Those are
+the four richer `kind`s. Each still keeps all stack-specific commands and patterns here — the engine
+only carries the interpretation. `kind` defaults to `"command"`, so mix plain and rich checks freely.
+
+```json
+{
+  "$schema": "../.claude/workflows/harness.schema.json",
+  "stack": "python-fastapi",
+  "validation": {
+    "checks": [
+      {
+        "kind": "forbidden-pattern-scan",
+        "name": "standing-rules",
+        "purpose": "CLAUDE.md standing-rule scan (non-waivable) — these are rules, not pre-existing debt",
+        "gates": true,
+        "rules": [
+          { "id": "f-string-in-logging", "pattern": "logging\\.[a-z]+\\(.*f[\"']", "paths": "--include=*.py app/" },
+          { "id": "open-without-encoding", "pattern": "open\\(", "paths": "--include=*.py app/", "allowlistPattern": "encoding=|#" },
+          { "id": "param-named-id", "pattern": "def [a-zA-Z_]+\\([^)]*\\bid\\b", "paths": "--include=*.py app/", "allowlistPattern": "obj_id|record_id|node_id|workflow_id|task_id|invalid" }
+        ]
+      },
+      {
+        "name": "no-raise-without-from",
+        "purpose": "In except blocks, raise ... from e (context-sensitive — runs as a plain inverted grep)",
+        "gates": true,
+        "command": "m=$(grep -rnE --include=*.py -A1 'except .* as e:' app/ | grep -E 'raise ' | grep -v 'from e' || true); if [ -n \"$m\" ]; then echo \"VIOLATION raise-without-from-e:\"; echo \"$m\"; exit 1; fi; echo clean"
+      },
+      {
+        "kind": "warning-scan",
+        "name": "app-import",
+        "purpose": "App imports cleanly; surface Pydantic field-shadow warnings (advisory)",
+        "gates": false,
+        "command": "cd app && uv run python -c 'import main'",
+        "warningPatterns": ["UserWarning", "shadows an attribute", "field.*shadow"]
+      },
+      {
+        "kind": "warning-scan",
+        "name": "worker-import",
+        "purpose": "Worker config imports cleanly; surface Pydantic field-shadow warnings (advisory)",
+        "gates": false,
+        "command": "cd app && uv run python -c 'import worker.config'",
+        "warningPatterns": ["UserWarning", "shadows an attribute", "field.*shadow"]
+      },
+      { "name": "db-session-import",    "command": "cd app && uv run python -c 'import database.session'",    "purpose": "Database session imports", "gates": true },
+      { "name": "db-repository-import", "command": "cd app && uv run python -c 'import database.repository'", "purpose": "Repository imports",        "gates": true },
+      {
+        "kind": "baseline-diff",
+        "name": "net-new-lint",
+        "purpose": "Ruff — fail only on violations this task introduced (diff vs worktree-creation baseline)",
+        "gates": true,
+        "baselineCommand": "uv run ruff check app/ --output-format=json",
+        "command": "uv run ruff check app/ --output-format=json",
+        "compareKeys": ["filename", "code", "message"]
+      },
+      { "name": "pylint", "command": "uv run pylint app/", "purpose": "Pylint", "gates": true },
+      {
+        "kind": "count-delta",
+        "name": "pytest-count",
+        "purpose": "Pytest collection count must not drop vs the previous task (catches silently-removed tests)",
+        "gates": true,
+        "command": "uv run pytest --collect-only -q",
+        "countPattern": "[0-9]+ tests? collected",
+        "failOn": "decrease"
+      },
+      { "name": "pytest", "command": "uv run pytest", "purpose": "Full test suite — AUTHORITATIVE for verdict", "gates": true }
+    ]
+  },
+  "uiTest": { "enabled": false }
+}
+```
+
+**How each rich kind runs:**
+
+- **`forbidden-pattern-scan`** — each `rule.pattern` is a `grep -rnE` over `rule.paths` (defaults to the
+  whole tree), minus `rule.allowlistPattern`. Any match is a violation; the check fails if any rule matches.
+- **`baseline-diff`** — `baselineCommand` runs once at **worktree creation** and is stored as an
+  artifact; at test time `command` runs again and the engine fails only on result items whose
+  `compareKeys` tuple is absent from the baseline. Pre-existing violations never gate. (Both commands
+  must emit the same JSON-array format.)
+- **`count-delta`** — `command` runs, the first integer on the line matching `countPattern` is the
+  count, and it is compared against the previous task's recorded count. `failOn: "decrease"` fails on a
+  drop; `"zero-or-decrease"` also fails when it does not grow. Task 1 (no prior count) is SKIPPED.
+- **`warning-scan`** — `command` runs and its **exit code gates as usual**; additionally every
+  `warningPatterns` match is recorded. With `gates: false` matches are advisory WARNs; with
+  `gates: true` a match also fails the check.
+
+---
+
 ## Next.js (web) — UI-test stage enabled
 
 The only profile that exercises the `uiTest` fields. `port` is the base port; in parallel task

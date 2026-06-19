@@ -396,10 +396,29 @@ const HARNESS_CONFIG_SCHEMA = {
               items: {
                 type: 'object',
                 properties: {
+                  kind:    { type: 'string', description: 'command (default) | baseline-diff | count-delta | warning-scan | forbidden-pattern-scan' },
                   name:    { type: 'string' },
                   command: { type: 'string' },
                   purpose: { type: 'string' },
-                  gates:   { type: 'boolean' }
+                  gates:   { type: 'boolean' },
+                  baselineCommand: { type: 'string', description: 'baseline-diff only' },
+                  compareKeys:     { type: 'array', items: { type: 'string' }, description: 'baseline-diff only' },
+                  countPattern:    { type: 'string', description: 'count-delta only' },
+                  failOn:          { type: 'string', description: 'count-delta only: decrease | zero-or-decrease' },
+                  warningPatterns: { type: 'array', items: { type: 'string' }, description: 'warning-scan only' },
+                  rules: {
+                    type: 'array',
+                    description: 'forbidden-pattern-scan only',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id:               { type: 'string' },
+                        pattern:          { type: 'string' },
+                        paths:            { type: 'string' },
+                        allowlistPattern: { type: 'string' }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -435,8 +454,11 @@ STEP 2 — Decide:
   - "__HARNESS_ABSENT__" (file missing) → present=false, omit config.
   - File printed but NOT valid JSON → present=false, notes="harness.json present but invalid JSON: <reason>".
   - File printed and valid JSON → present=true, and copy the parsed object into "config", keeping ONLY
-    these fields when present: stack; validation.checks[] ({name, command, purpose, gates});
-    uiTest ({enabled, devServerCommand, readySignal, port, routes[]}). Ignore any other fields.
+    these fields when present: stack; validation.checks[] (each: {kind, name, command, purpose, gates}
+    plus any kind-specific fields that are present — baselineCommand, compareKeys[], countPattern,
+    failOn, warningPatterns[], rules[] ({id, pattern, paths, allowlistPattern})); uiTest ({enabled,
+    devServerCommand, readySignal, port, routes[]}). Preserve kind-specific fields verbatim; ignore any
+    other fields.
 
 Return your findings using the StructuredOutput tool.
 `, { label: 'harness-config', schema: HARNESS_CONFIG_SCHEMA, model: 'haiku' })

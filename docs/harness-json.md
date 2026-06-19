@@ -56,12 +56,30 @@ An ordered array of checks run top-to-bottom in the Test stage. Each check:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | **Yes** | Short identifier (`fmt`, `clippy`, `test`, `build`) |
-| `command` | string | **Yes** | Shell command to run (`cargo test`, `pytest`, etc.) |
+| `command` | string | Yes¹ | Shell command to run (`cargo test`, `pytest`, etc.) |
 | `purpose` | string | **Yes** | One-line description of what the check gates |
 | `gates` | boolean | **Yes** | Whether failure blocks the review verdict |
+| `kind` | string | No | `command` (default) or a richer kind — see below |
 
 `gates: true` on your test command makes it authoritative — a failing test blocks a PASS
 verdict. Use `gates: false` for advisory checks you want to run but not block on.
+
+#### Check `kind`s
+
+`kind` defaults to `"command"` (a plain exit-code gate — the table above). Four richer kinds let a
+suite express more than "run a command" while keeping every stack-specific command/pattern in this
+file (the engine only carries the interpretation). ¹`command` is required for every kind except
+`forbidden-pattern-scan` (which uses `rules[]` instead).
+
+| `kind` | Extra fields | What it does |
+|---|---|---|
+| `baseline-diff` | `baselineCommand`, `compareKeys[]` | Snapshots a baseline at worktree creation; at test time diffs current output and fails **only on net-new items** (pre-existing ones never gate). Both commands must emit the same JSON-array format. |
+| `count-delta` | `countPattern`, `failOn` | Extracts an integer (first number on the line matching `countPattern`) and fails when it regresses vs the previous task. `failOn`: `decrease` or `zero-or-decrease`. Task 1 → SKIPPED. |
+| `warning-scan` | `warningPatterns[]` | Runs `command` (its **exit code gates**), then records matches of the patterns in its output — advisory WARN when `gates:false`, also-failing when `gates:true`. |
+| `forbidden-pattern-scan` | `rules[]` of `{id, pattern, paths?, allowlistPattern?}` | Source greps that must find nothing; any match is a violation. |
+
+See `planning/harness.examples.md` (the Python "rich checks" profile) for a worked example of all
+four, and [D6](../planning/decisions/D6-harness-richer-checks.md) for the rationale.
 
 ### `uiTest` object
 

@@ -350,10 +350,29 @@ const HARNESS_CONFIG_SCHEMA = {
               items: {
                 type: 'object',
                 properties: {
+                  kind:    { type: 'string', description: 'command (default) | baseline-diff | count-delta | warning-scan | forbidden-pattern-scan' },
                   name:    { type: 'string' },
                   command: { type: 'string' },
                   purpose: { type: 'string' },
-                  gates:   { type: 'boolean' }
+                  gates:   { type: 'boolean' },
+                  baselineCommand: { type: 'string', description: 'baseline-diff only' },
+                  compareKeys:     { type: 'array', items: { type: 'string' }, description: 'baseline-diff only' },
+                  countPattern:    { type: 'string', description: 'count-delta only' },
+                  failOn:          { type: 'string', description: 'count-delta only: decrease | zero-or-decrease' },
+                  warningPatterns: { type: 'array', items: { type: 'string' }, description: 'warning-scan only' },
+                  rules: {
+                    type: 'array',
+                    description: 'forbidden-pattern-scan only',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id:               { type: 'string' },
+                        pattern:          { type: 'string' },
+                        paths:            { type: 'string' },
+                        allowlistPattern: { type: 'string' }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -391,14 +410,43 @@ STEP 2 — Decide:
   - "__HARNESS_ABSENT__" (file missing) → present=false, omit config.
   - File printed but NOT valid JSON → present=false, notes="harness.json present but invalid JSON: <reason>".
   - File printed and valid JSON → present=true, and copy the parsed object into "config", keeping ONLY
-    these fields when present: stack; validation.checks[] ({name, command, purpose, gates});
-    uiTest ({enabled, devServerCommand, readySignal, port, routes[]}). Ignore any other fields.
+    these fields when present: stack; validation.checks[] (each: {kind, name, command, purpose, gates}
+    plus any kind-specific fields that are present — baselineCommand, compareKeys[], countPattern,
+    failOn, warningPatterns[], rules[] ({id, pattern, paths, allowlistPattern})); uiTest ({enabled,
+    devServerCommand, readySignal, port, routes[]}). Preserve kind-specific fields verbatim; ignore any
+    other fields.
 
 Return your findings using the StructuredOutput tool.
 `, { label: 'harness-config', schema: HARNESS_CONFIG_SCHEMA, model: 'haiku' })
 
   if (!result || !result.present || !result.config) return null
   return result.config
+}
+
+// Snapshot baseline artifacts for any `baseline-diff` checks at worktree creation (pre-implement),
+// so the Test stage can diff current output against the pre-task state and fail only on net-new
+// items. Resume-safe: only writes a baseline that does not already exist. No-op when no baseline-diff
+// checks are configured. The engine ships no stack defaults — baselineCommand comes from harness.json.
+async function snapshotBaselines(cfg, cwd) {
+  const checks = (cfg?.validation?.checks || []).filter(c => c.kind === 'baseline-diff' && c.baselineCommand)
+  if (!checks.length) return
+  const pre = cwd ? `cd ${cwd} && ` : ''
+  const steps = checks.map(c => {
+    const slug = (c.name || 'check').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    const path = `${reportsDir}/${taskPrefix}${slug}-baseline.json`
+    return `Baseline "${c.name}" -> ${path}:
+  ${pre}mkdir -p ${reportsDir}
+  ${pre}[ -f ${path} ] && echo "BASELINE EXISTS (kept): ${path}" || { ${c.baselineCommand} > ${path} 2>/dev/null; echo "BASELINE WRITTEN: ${path}"; }`
+  }).join('\n\n')
+  await tracedAgent(`
+You are the baseline-snapshot agent for the SDLC pipeline. Capture the pre-task baseline for each
+baseline-diff validation check, in the worktree, BEFORE any implementation runs. Run each block
+exactly as written. Do NOT modify source. Existing baselines are kept (resume-safe).
+
+${steps}
+
+Return using StructuredOutput: done=true, and note which baselines were written vs already present.
+`, { label: 'baseline-snapshot', schema: { type: 'object', required: ['done'], properties: { done: { type: 'boolean' }, notes: { type: 'string' } } }, model: 'haiku' })
 }
 
 // Render the inner project-validation check list for the Test stage from harness config.
@@ -422,10 +470,99 @@ from the spec instead:
   }
   return checks.map((c, i) => {
     const n = i + 1
+    const kind = c.kind || 'command'
+    const slug = (c.name || `check${n}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
     const gate = c.gates
       ? 'GATING — a failure here blocks the review verdict'
       : 'non-gating — informational; a failure here does not block the verdict'
-    return `CHECK ${n} — ${c.name} (${c.purpose}) [${gate}]:
+    const header = `CHECK ${n} — ${c.name} (${c.purpose}) [${gate}]`
+
+    // --- baseline-diff: fail only on items absent from the worktree-creation baseline ---
+    if (kind === 'baseline-diff') {
+      const baselinePath = `${reportsDir}/${taskPrefix}${slug}-baseline.json`
+      const currentPath = `/tmp/${stem}-${slug}-current.json`
+      const keysLiteral = JSON.stringify(c.compareKeys || [])
+      return `${header} — baseline-diff (fail ONLY on net-new items vs the baseline snapshotted at worktree creation):
+  ${pre}${c.command} > ${currentPath} 2>/dev/null; true
+  ${pre}python3 << 'PYEOF'
+import json, sys
+baseline_path = '${baselinePath}'
+current_path  = '${currentPath}'
+keys = ${keysLiteral}
+try:
+    b = json.load(open(baseline_path, encoding='utf-8'))
+except Exception as e:
+    print(f'WARNING: could not load baseline ({e}) — treating all current items as pre-existing'); b = []
+try:
+    c = json.load(open(current_path, encoding='utf-8'))
+except Exception:
+    c = []
+def k(v): return tuple(str(v.get(x, '')) for x in keys) if isinstance(v, dict) else (str(v),)
+seen = set(k(v) for v in b)
+new = [v for v in c if k(v) not in seen]
+if new:
+    print(f'NET-NEW ({len(new)} introduced by this task, absent from baseline):')
+    for v in new[:20]: print('  ' + json.dumps(v)[:200])
+    sys.exit(1)
+print(f'CHECK ${n} PASSED: no net-new items (baseline {len(b)}, current {len(c)})'); sys.exit(0)
+PYEOF
+  echo "CHECK${n}_EXIT:$?"`
+    }
+
+    // --- count-delta: extract an integer and fail when it regresses vs the previous task ---
+    if (kind === 'count-delta') {
+      const prevReport = taskNumber > 1 ? `${reportsDir}/task${taskNumber - 1}-test.md` : ''
+      const failRule = c.failOn === 'zero-or-decrease'
+        ? 'FAIL if delta <= 0 (count must strictly increase)'
+        : 'FAIL if delta < 0 (count must not decrease)'
+      const prevStep = prevReport
+        ? `  Read the previous task's recorded count:
+    ${pre}grep -oE 'COUNT\\[${slug}\\]: [0-9]+' ${prevReport} | head -1 || echo "NO_PREV_COUNT"
+  If NO_PREV_COUNT (previous report has no marker), treat this check as SKIP — delta unknown, do not fail.`
+        : `  This is task 1 — there is no previous task. Treat this check as SKIP (no delta to compare).`
+      return `${header} — count-delta (${c.failOn}):
+  ${pre}${c.command}
+  Extract the current count: the first integer on the line matching the ERE /${c.countPattern}/.
+${prevStep}
+  Compute delta = current - previous. ${failRule}.
+  IMPORTANT: write the marker line "COUNT[${slug}]: <current>" verbatim into the test report (any
+  section) so the NEXT task can read it. Record the delta and the pass/fail in this check's row.
+  echo "CHECK${n}_EXIT:0  (set to 1 only if the rule above fails; SKIP counts as pass)"`
+    }
+
+    // --- warning-scan: run a command (exit code gates) and record matches of warningPatterns ---
+    if (kind === 'warning-scan') {
+      const outPath = `/tmp/${stem}-${slug}.out`
+      const alternation = (c.warningPatterns || []).map(p => `(${p})`).join('|')
+      const patternSeverity = c.gates
+        ? 'Because gates:true, a pattern match ALSO FAILS this check.'
+        : 'Because gates:false, pattern matches are informational WARN entries — they do NOT fail the check (but DO record them).'
+      return `${header} — warning-scan (run the command, gate on its exit code, then scan its output):
+  ${pre}${c.command} > ${outPath} 2>&1; echo "CMD_EXIT:$?"
+  ${pre}grep -nE '${alternation}' ${outPath} && echo "WARNINGS_FOUND" || echo "NO_WARNINGS"
+  Pass/fail: this check FAILS if CMD_EXIT is non-zero (the command itself failed). Record every matched
+  warning line in this check's row/notes. ${patternSeverity}
+  Set the exit marker accordingly:
+  echo "CHECK${n}_EXIT:<0 if CMD_EXIT==0 and not failed-by-pattern, else 1>"`
+    }
+
+    // --- forbidden-pattern-scan: source greps that must find NO matches ---
+    if (kind === 'forbidden-pattern-scan') {
+      const ruleLines = (c.rules || []).map(r => {
+        const paths = r.paths || '.'
+        const allow = r.allowlistPattern ? ` | grep -vE '${r.allowlistPattern}'` : ''
+        return `  Rule "${r.id}":
+    ${pre}grep -rnE '${r.pattern}' ${paths}${allow} && echo "RULE ${r.id}: MATCHED (violation)" || echo "RULE ${r.id}: clean"`
+      }).join('\n')
+      return `${header} — forbidden-pattern scan (every rule below must find NO matches):
+${ruleLines}
+  This check PASSES only if EVERY rule reports "clean". If any rule MATCHED, the check FAILS and the
+  matched lines are violations — list them in this check's row.
+  echo "CHECK${n}_EXIT:0  (set to 1 if any rule MATCHED, else 0)"`
+    }
+
+    // --- command (default): plain exit-code gate (unchanged behavior) ---
+    return `${header}:
   ${pre}${c.command}
   echo "CHECK${n}_EXIT:$?"`
   }).join('\n\n')
@@ -721,6 +858,8 @@ const harnessCfg = await loadHarnessConfig(worktreePath)
 log(harnessCfg
   ? `Harness config loaded: ${(harnessCfg.validation?.checks || []).length} validation check(s); uiTest ${harnessCfg.uiTest?.enabled ? 'enabled' : 'disabled'}.`
   : 'No planning/harness.json — validation falls back to the spec; UI-test disabled.')
+// Capture pre-task baselines for any baseline-diff checks (resume-safe; no-op when none configured).
+await snapshotBaselines(harnessCfg, worktreePath)
 
 // ================================================================
 // PHASES 3–5: IMPLEMENT → (FIX →) TEST → REVIEW (with retry loop)
@@ -996,6 +1135,13 @@ PRE-FLIGHT — Verify all top-level tracked directories exist in this sparse-che
 Run EVERY check below IN ORDER. Capture full output (stdout + stderr) for each.
 All commands run from the worktree root (each is already prefixed with cd ${worktreePath}).
 
+Most checks are plain commands that pass iff their exit code is 0. Some checks carry their OWN
+pass/fail logic, described inline in the check block (baseline-diff = fail only on net-new items;
+count-delta = fail on a count regression, SKIP when there is no previous task; warning-scan = record
+pattern matches, gating per the [GATING/non-gating] label; forbidden-pattern scan = fail if any rule
+matched). Honor each block's stated logic. A check marked [non-gating] or resolved to SKIP does NOT
+block the verdict.
+
 ${renderCheckList(harnessCfg, { cwd: worktreePath })}
 
 EMOJI CHECK — Emoji prohibition (universal harness gate — always runs last):
@@ -1046,10 +1192,13 @@ Format:
 
 Return using StructuredOutput:
   reportFile: "${testReport}"
-  allPassed: true only if EVERY check passed (each exit code 0, emoji gate clean)
-  passCount: integer count of checks that passed
+  allPassed: true only if every GATING check passed and the emoji gate is clean. [non-gating] checks
+    and SKIPPED checks (e.g. count-delta on task 1) never set allPassed false on their own — but DO
+    record their result.
+  passCount: integer count of checks that passed (count SKIPPED as passed)
   failCount: integer count of checks that failed
-  failedTests: array of test_name strings for failed checks
+  failedTests: array of test_name strings for checks that failed (include non-gating failures here too,
+    flagged as non-gating, so they surface in the report even though they do not block the verdict)
   notes: one-line summary
 `, withModel({ label: 'test', schema: TEST_SCHEMA, phase: 'Test' }, MODEL.test))
 
