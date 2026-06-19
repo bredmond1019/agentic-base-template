@@ -77,16 +77,10 @@ only carries the interpretation. `kind` defaults to `"command"`, so mix plain an
         "purpose": "CLAUDE.md standing-rule scan (non-waivable) — these are rules, not pre-existing debt",
         "gates": true,
         "rules": [
-          { "id": "f-string-in-logging", "pattern": "logging\\.[a-z]+\\(.*f[\"']", "paths": "--include=*.py app/" },
-          { "id": "open-without-encoding", "pattern": "open\\(", "paths": "--include=*.py app/", "allowlistPattern": "encoding=|#" },
-          { "id": "param-named-id", "pattern": "def [a-zA-Z_]+\\([^)]*\\bid\\b", "paths": "--include=*.py app/", "allowlistPattern": "obj_id|record_id|node_id|workflow_id|task_id|invalid" }
+          { "id": "f-string-in-logging", "pattern": "logging\\.[a-z]+\\(.*f[\"']", "paths": "--include='*.py' app/" },
+          { "id": "open-without-encoding", "pattern": "open\\(", "paths": "--include='*.py' app/", "allowlistPattern": "encoding=|#|\\.open\\(" },
+          { "id": "param-named-id", "pattern": "def [a-zA-Z_]+\\([^)]*\\bid\\b", "paths": "--include='*.py' app/", "allowlistPattern": "obj_id|record_id|node_id|workflow_id|task_id|invalid" }
         ]
-      },
-      {
-        "name": "no-raise-without-from",
-        "purpose": "In except blocks, raise ... from e (context-sensitive — runs as a plain inverted grep)",
-        "gates": true,
-        "command": "m=$(grep -rnE --include=*.py -A1 'except .* as e:' app/ | grep -E 'raise ' | grep -v 'from e' || true); if [ -n \"$m\" ]; then echo \"VIOLATION raise-without-from-e:\"; echo \"$m\"; exit 1; fi; echo clean"
       },
       {
         "kind": "warning-scan",
@@ -136,6 +130,9 @@ only carries the interpretation. `kind` defaults to `"command"`, so mix plain an
 
 - **`forbidden-pattern-scan`** — each `rule.pattern` is a `grep -rnE` over `rule.paths` (defaults to the
   whole tree), minus `rule.allowlistPattern`. Any match is a violation; the check fails if any rule matches.
+  Quote any glob in `paths` (`--include='*.py'`, not `--include=*.py`) so it survives shells that
+  glob-expand unquoted args (zsh). Scope patterns to their intent — e.g. exclude method-style `.open(`
+  from a builtin-`open()` rule via the allowlist so `fitz.open(` / `Image.open(` are not false positives.
 - **`baseline-diff`** — `baselineCommand` runs once at **worktree creation** and is stored as an
   artifact; at test time `command` runs again and the engine fails only on result items whose
   `compareKeys` tuple is absent from the baseline. Pre-existing violations never gate. (Both commands
