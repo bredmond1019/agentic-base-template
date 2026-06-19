@@ -5,6 +5,26 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-19 — Telemetry Phase-A robustness fix: deterministic metrics append (downstream-surfaced)
+
+The first downstream `sdlc-block` run (in a test repo) produced task workflow reports **missing** the
+`## Token Metrics` section. The instrumentation was fine — all stages route through `tracedAgent`, the
+table was built and `log()`'d — but the Haiku finalize agent, handed the table inside its report
+"Format" block, silently dropped that one section while writing every other. Lesson: never rely on a
+model to re-emit a machine-generated data table.
+
+Fix — **deterministic heredoc append** in both engines:
+- `sdlc-task.js`: removed `## Token Metrics` from the finalize "Format"; added `STEP 2b` that appends
+  the literal table via `cat >> ${workflowReport} <<'METRICS_EOF' … EOF`.
+- `sdlc-block.js`: the orchestrator roll-up is now computed **before** the Report agent and persisted
+  to the block report as a `## Token Roll-up` section via the same heredoc-append pattern (previously
+  it was console-`log()` only and vanished after the run).
+
+`node --check` clean on all three engines. Plan updated (A3-fix). Propagated to the downstream repos
+running these engines.
+
+---
+
 ## 2026-06-19 — Richer validation check kinds (D6) — foundation for the downstream telemetry pass
 
 Extended `harness.json`'s `validation.checks[]` with an optional `kind` discriminator so a project's
