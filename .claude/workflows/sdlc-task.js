@@ -692,19 +692,9 @@ stageResults.push({ stage: 'worktree-setup', ...setupResult, success: true })
 // ----------------------------------------------------------------
 // Build the worktree path injection header — prepended to EVERY agent prompt
 // ----------------------------------------------------------------
-const W = `
-╔══════════════════════════════════════════════════════════════════╗
-║  WORKING DIRECTORY: ${worktreePath}
-║
-║  You are in a git worktree — NOT the main repo.
-║  Shell state does NOT persist between Bash tool calls.
-║  START EVERY Bash tool call with:
-║    cd ${worktreePath} &&
-║
-║  "repo root" = ${worktreePath}
-║  Run all build/test/validation commands from the repo root.
-║  Relative paths (planning/...) resolve from: ${worktreePath}
-╚══════════════════════════════════════════════════════════════════╝
+const W = `WORKTREE (not the main repo). repo root = ${worktreePath}
+Shell state does NOT persist between Bash calls — START EVERY Bash call with: cd ${worktreePath} &&
+Run all build/test/validation from the repo root; relative paths (planning/...) resolve from there.
 `
 
 // ================================================================
