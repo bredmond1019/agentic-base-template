@@ -214,7 +214,7 @@ const LOG_SCHEMA = {
     logFile:    { type: 'string' },
     applied:    { type: 'boolean' },
     nextFocus:  { type: 'string', description: 'The Current focus string written to the log file' },
-    notes:      { type: 'string', description: 'Any decisions that should be added to DECISIONS.md' }
+    notes:      { type: 'string', description: 'Any decisions that should be added to planning/decisions/' }
   }
 }
 
@@ -1727,7 +1727,7 @@ Return using StructuredOutput:
   logFile: "${logFile}"
   applied: false
   nextFocus: the exact Current Focus Line string you wrote to the log
-  notes: any settled decisions that should be added to DECISIONS.md
+  notes: any settled decisions that should be added to planning/decisions/
 `, withModel({ label: 'task-log', schema: LOG_SCHEMA, phase: 'Wrap-up' }, MODEL.taskLog))
 
 if (logResult) {
@@ -1872,7 +1872,7 @@ Return using StructuredOutput:
   workflowReportFile: "${workflowReport}"
   commitMessage: "chore: wrap up ${stem}"
   commitHash: 7-character short hash from git log --oneline -1
-  notes: any follow-up items (DECISIONS.md entries, NEEDS_REVIEW doc flags)
+  notes: any follow-up items (planning/decisions/ entries, NEEDS_REVIEW doc flags)
 `, withModel({ label: 'finalize', schema: FINALIZE_SCHEMA, phase: 'Wrap-up' }, MODEL.finalize))
 
 if (finalizeResult) {
