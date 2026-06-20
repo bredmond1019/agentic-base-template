@@ -167,6 +167,37 @@ caveats (Rust `unreachable!()` excluded; Python ABCs allowlisted) — live in th
 `planning/harness.examples.md` so generated projects can opt in per stack. The self-check (engine,
 agnostic) always runs; this scan (config, per-project) is the optional hard backstop.
 
+## Extending the suite (what goes where)
+
+Arriving in a project and wanting "more checks" or "more criteria"? First decide *which layer* you
+mean — they are three different files with three different jobs:
+
+| You want to add… | Lives in | Read by | Needs an engine change? |
+|---|---|---|---|
+| A **validation check** (a command/scan that gates the verdict) | `planning/harness.json` → `validation.checks[]` | Test + review stages | No — pure config |
+| An **acceptance criterion** for one task | the spec, `planning/<concept>/tasks.md` → `## Acceptance Criteria` | Review stage (per task) | No — authored via `/generate-tasks` |
+| A project-wide **standing rule** (always applies) | `CLAUDE.md` standing rules, optionally backed by a `forbidden-pattern-scan` check | Review stage + Test stage | No — config + prose |
+
+`harness.json` holds **checks, not acceptance criteria.** Criteria are per-task and live in the spec;
+checks are the always-run gate. Conflating them is the common first mistake.
+
+**The extensibility boundary — config vs engine:**
+
+- **More of an existing shape → `harness.json` (config, per-project, no ADR).** Append as many
+  `checks[]` as you like; mix plain `command` checks with the four richer kinds freely (`kind` defaults
+  to `command`). The engine runs whatever's there — no engine edit. This is the [D5](../planning/decisions/D5-okf-phase-2-adopted.md)
+  mechanism/policy split working as intended.
+- **A new *shape* of check → `base-template` engine + ADR (mechanism, propagates to all projects).**
+  The schema is **strict** (`additionalProperties: false`, and `kind` is a fixed enum of the five
+  values above) — you **cannot** invent new fields or a new `kind` in a project's `harness.json`; they
+  would fail validation or be ignored. A genuinely new gating mechanism (e.g. "fail if coverage < 80%"
+  as a first-class kind) is an engine change made *here*, with an ADR, that then flows to every project
+  via the update loop. Until then, model it as a plain `command` check that exits non-zero.
+
+> Rule of thumb: **more of an existing kind → config; a new kind of check → engine + ADR.** If a real
+> project needs a check the five kinds can't express, that's the signal to bring it back to
+> `base-template` as a mechanism change — not to fork the engine in the project.
+
 ## Hardcoded engine behaviors (not config fields)
 
 These behaviors are intentionally hardcoded in the engine — they are universal mechanism, not

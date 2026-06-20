@@ -5,6 +5,26 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Document the harness.json extensibility model
+
+Added an **"Extending the suite"** section to `docs/harness-json.md`, prompted by a session question
+that the existing reference didn't answer: *is `harness.json` extensible, and where do I add more
+criteria?* The reference documented the schema *shape* thoroughly but never captured the *mental model*
+for extending it. The new section states three things that were previously scattered or absent:
+(1) the **three-layer disambiguation** — validation *checks* live in `harness.json`, acceptance
+*criteria* live per-task in the spec's `tasks.md`, project-wide *standing rules* live in `CLAUDE.md`
+(conflating checks with criteria is the common first mistake); (2) the **config-vs-engine boundary** —
+more of an existing kind is pure config (no ADR), a brand-new *kind* of check is a `base-template`
+engine change with an ADR that propagates via the update loop; (3) that the **schema is strict**
+(`additionalProperties: false`, fixed `kind` enum) so you cannot invent fields/kinds in a project's
+config. No new concepts — consolidates what D5/D6/D8 already established into the durable reference so
+the next session doesn't re-derive it.
+
+```diff
+ docs/harness-json.md | 31 +++++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+```
+
 ## 2026-06-20 — Add WS2-b stub-scan profiles (config companion to WS2-a)
 
 Added ready-to-paste **stub / not-implemented scan** profiles (Rust / Python / TypeScript) to the
