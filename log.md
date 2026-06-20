@@ -5,6 +5,40 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Downstream propagation: D10–D13 + #1 to all four projects (run-review task D)
+
+Run-review task **D** (`planning/plans/sdlc-block-run-review.md`): pulled the rewritten engines into all
+four downstream projects. Recon recipe (diff each project's engines against `base-template` HEAD)
+confirmed the three current projects (`learn-ai`, `bastion`, `markdown-engine-validator`) shared an
+identical engine lag of `sdlc-task.js` 33 / `sdlc-block.js` 76 lines = exactly fdb6be0 (#1 D10
+persistence) + def02fe (D12+D13) = pure lag, safe to overwrite. `python-orchestration-system` lagged
+much further (task 165 / block 167 / schema 18) — it was the **overdue** project that never received
+D10+D11 (skipped mid-`sdlc-block` last session) and now also needed D12/D13/#1.
+
+What was propagated (all target working trees verified clean first):
+- **python-orchestration-system** (caught up two batches): `sdlc-task.js` + `sdlc-block.js` +
+  `harness.schema.json` + `generate-tasks.md` overwritten (all agnostic). `harness.json` left untouched
+  (`breakdown` defaults to `recommend`).
+- **bastion** + **markdown-engine-validator**: `sdlc-task.js` + `sdlc-block.js` + agnostic
+  `generate-tasks.md` overwritten.
+- **learn-ai**: engines overwritten; the D13 heuristic paragraph **surgically inserted** into its still
+  pre-agnostic `generate-tasks.md` (command migration remains a separate effort). Residual 27-line diff
+  is purely learn-ai's stack/policy customization — no heuristic-wording divergence remains.
+
+Verification: all eight propagated engines `node --check` clean; every overwritten file now byte-identical
+to base HEAD (0 diff); learn-ai's command confirmed free of heuristic-wording drift. Changes left
+**uncommitted per-repo for review** (prior-session convention). This resolves the overdue D10+D11 pull and
+brings the whole fleet current through D13.
+
+Also closed run-review task **C** (a learn-ai config change, not base-template): set learn-ai's
+`breakdown.mode` to `"off"` (was defaulting to `recommend` on an empty `{}` harness.json, paying for a
+Sonnet assessment it discarded). learn-ai's content tasks are mostly homogeneous, which D13 now correctly
+declines to flag, so the pass rarely fires usefully — skipping beats a discarded assessment. Rationale
+folded into the file's top-level `_comment` (the `breakdown` object is `additionalProperties:false`, so no
+inline comment there); schema-validated. Left uncommitted in the learn-ai repo for review. Run-review
+tasks A/B/C/D + #1 are now all done; only the LOW opportunistic backlog (E: B3/B5/B7 + learn-ai command
+migration) remains.
+
 ## 2026-06-20 — Breakdown heuristic: file count gated on heterogeneity ([D13](planning/decisions/D13-breakdown-heuristic-homogeneity.md))
 
 Run-review finding #3 (`planning/plans/sdlc-block-run-review.md`): D10's file-count signal over-fires on
