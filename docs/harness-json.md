@@ -34,6 +34,8 @@ If `planning/harness.json` is **absent**:
 - The `/test` and `/review-task` stages fall back to the spec's `## Validation Commands`
   section (a plain markdown list in the task spec).
 - The UI-test stage is disabled — no dev server is started, verdict is SKIPPED.
+- The breakdown assessment defaults to `recommend` (advisory; threshold 3) — coarse tasks are
+  logged but nothing is auto-generated.
 
 This is acceptable for a quick start but is less reliable than a `harness.json`.
 
@@ -48,6 +50,7 @@ This is acceptable for a quick start but is less reliable than a `harness.json`.
 | `_comment` | string | No | Free-form note for humans — ignored by engines |
 | `validation` | object | **Yes** | The always-run validation suite |
 | `uiTest` | object | **Yes** | UI smoke-test stage config |
+| `breakdown` | object | No | Task-decomposition policy (absent → `mode: recommend`, `complexityThreshold: 3`) |
 
 ### `validation.checks[]`
 
@@ -90,6 +93,33 @@ four, and [D6](../planning/decisions/D6-harness-richer-checks.md) for the ration
 | `readySignal` | string | When enabled | Substring in dev-server output that signals readiness |
 | `port` | integer | When enabled | Base port. In parallel task runs the engine uses `port + taskNumber` (hardcoded behavior) |
 | `routes` | string[] | When enabled | Routes to smoke-check once the server is ready |
+
+### `breakdown` object
+
+Optional. Controls whether the engines assess each task for **decomposition** (a `/breakdown` into
+atomic sub-steps) once the spec exists. The coarseness heuristic is universal **mechanism** in the
+engines; this object only sets the **policy** of what to do with the result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `mode` | string | No | `recommend` (default) · `auto` · `off` |
+| `complexityThreshold` | integer | No | A task touching more than this many distinct files is a candidate (default `3`). Multi-concern / multi-layer tasks are flagged regardless of count |
+
+A task is a **breakdown candidate** when ANY hold: it creates/modifies more than
+`complexityThreshold` distinct files; OR it bundles multiple separable concerns; OR it spans multiple
+layers (data model + API + UI); OR it carries a large acceptance-criteria set over independently
+testable units.
+
+| `mode` | What happens when a task is flagged |
+|---|---|
+| `recommend` (default) | Log a recommendation and proceed — no file is written. `/sdlc-block` lists the coarse tasks before the waves; a standalone `/sdlc-task` logs it before implementing. |
+| `auto` | Generate `breakdown.md` sub-steps for the flagged tasks first. `/sdlc-block` writes + commits them on **main before the waves** (so every parallel worktree inherits the same file — no merge conflict); a standalone `/sdlc-task` writes them in its own worktree. Implement then follows the sub-steps. |
+| `off` | Skip the assessment entirely. |
+
+`/sdlc-block` assesses **once** in its Analyze stage (folded into the existing dependency-graph pass,
+near-zero added cost) and passes `--under-block` to each `/sdlc-task` so the per-task engine does not
+re-assess. `/generate-tasks` previews the same recommendation at authoring time. See
+[D10](../planning/decisions/D10-breakdown-assessment.md).
 
 ## Stack profiles
 

@@ -5,6 +5,40 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Breakdown assessment (D10) + targeted model re-tiering (D11)
+
+Two harness changes at the maintainer's request.
+
+**Breakdown assessment ([D10](planning/decisions/D10-breakdown-assessment.md)).** Both engines now
+assess each task against a universal coarseness heuristic (touches > `complexityThreshold` files, or
+bundles separable concerns, or spans layers, or has a large criteria set) and act per a new
+`planning/harness.json` → `breakdown` policy (`mode`: recommend (default) · auto · off;
+`complexityThreshold`: 3).
+- **`sdlc-block`** folds the assessment into the existing Analyze agent (new per-task
+  `recommendBreakdown`/`breakdownReason` fields — file counts were already computed there, so it is
+  near-free), then a breakdown gate before the waves: `recommend` logs the coarse tasks; `auto`
+  generates + commits `breakdown.md` **on main before the waves** so every parallel worktree inherits
+  the same file (no shared-file merge conflict — the D9 class of bug). Passes `--under-block` to each
+  `/sdlc-task` to suppress duplicate assessment.
+- **`sdlc-task`** (standalone) gains a Plan-phase assessment before the implement loop: no-ops if a
+  `### Step N:` section already exists, `recommend` logs, `auto` writes sub-steps into its single
+  worktree (conflict-free). Skipped under `--under-block`. New `breakdownAssess` (sonnet) /
+  `breakdownGen` (opus) model entries.
+- **`/generate-tasks`** previews the same recommendation at authoring time (the recurring "should I
+  break these down?" question after generation).
+- Schema + scaffold stub + `docs/harness-json.md` document the `breakdown` object.
+
+**Model re-tiering ([D11](planning/decisions/D11-model-retier.md)).** Three stages moved down a tier
+where the assignment exceeded the work: pre-flight (`sdlc-block`) opus→sonnet (dominant path is trivial
+scripted git; the rare generate path is a fallback-of-a-fallback), worktree-setup (`sdlc-task`)
+sonnet→haiku (exact git recipe, no judgment), task-log (`sdlc-task`) sonnet→haiku (rigid template +
+one-paragraph summary). Kept: implement/fix/review/document/triage/merge on sonnet, analyze on opus,
+the opus escalation on the final fix/review. Comment blocks updated to match.
+
+Mechanism only — both engines stay project-agnostic; propagates downstream via the manual update loop.
+Both engines `node --check` clean; schema + scaffold `harness.json` valid JSON. Not yet propagated to
+the four downstream projects.
+
 ## 2026-06-20 — Downstream propagation of the telemetry pass + fix stale `DECISIONS.md` engine refs
 
 Pulled the telemetry-pass harness updates (B4 + B1 + WS2-a + B2 + D9 + the WS2-a stub-grep
