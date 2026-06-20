@@ -926,8 +926,11 @@ Instructions:
    (a) NO placeholder/stub bodies remain on any code path a criterion requires — e.g.
        \`todo!()\`/\`unimplemented!()\`/\`unreachable!()\`, \`raise NotImplementedError\`,
        \`throw new Error('not implemented')\`, empty \`pass\`-only bodies, or \`TODO\`/\`FIXME\` markers
-       in required paths. Sanity-grep your changed files, e.g.:
-         cd ${worktreePath} && git diff main..HEAD --name-only | xargs grep -nE 'todo!\\(|unimplemented!\\(|unreachable!\\(|NotImplementedError|not implemented|FIXME' 2>/dev/null
+       in required paths. Sanity-grep ONLY the files the in-scope criteria require (the deliverable
+       files and the source paths those criteria name) — NOT every changed file — so the gate never
+       pushes you to edit files outside this task's scope. Build that path list from the criteria, then:
+         cd ${worktreePath} && grep -nE 'todo!\\(|unimplemented!\\(|unreachable!\\(|NotImplementedError|not implemented|FIXME' <those paths> 2>/dev/null
+       A stub in a file no in-scope criterion requires is OUT OF SCOPE — leave it for its owning task.
    (b) EVERY deliverable file a criterion names actually exists at the stated path (e.g. a required
        \`.env.example\`, config file, or fixture) — \`ls\` it.
    (c) EVERY criterion that says "unit-tested"/"covered by a test" has a real, hermetic test that
@@ -957,13 +960,15 @@ Instructions:
    ## Validation Output
    **Commands run:**
    \`\`\`
-   [commands]
+   [one line per command]
    \`\`\`
-   **Results:**
+   **Result:** PASSED / FAILED
+   On FAIL only, paste the failing command's last 20 lines (\`... 2>&1 | tail -20\`). On PASS, do NOT
+   paste stdout — the Test stage is the authoritative full-output capture, and downstream stages re-run
+   the gating checks fresh.
    \`\`\`
-   [actual output]
+   [failing tail -20 — omit this block entirely when PASSED]
    \`\`\`
-   Status: PASSED / FAILED
 
    ## Decisions and Trade-offs
    [non-obvious choices]
@@ -1076,8 +1081,9 @@ ${handoff(lastImplReport?.filesModified)}
    satisfied — do not assume from your own diff. In particular: NO stub remains on a required path
    (\`todo!()\`/\`unimplemented!()\`/\`unreachable!()\`, \`raise NotImplementedError\`,
    \`throw new Error('not implemented')\`, empty \`pass\` bodies, \`TODO\`/\`FIXME\`), every named
-   deliverable file exists, and every "unit-tested" criterion has a real hermetic test. Quick grep:
-     cd ${worktreePath} && git diff main..HEAD --name-only | xargs grep -nE 'todo!\\(|unimplemented!\\(|unreachable!\\(|NotImplementedError|not implemented|FIXME' 2>/dev/null
+   deliverable file exists, and every "unit-tested" criterion has a real hermetic test. Quick grep —
+   scope it to the files the FLAGGED criteria require, not every changed file:
+     cd ${worktreePath} && grep -nE 'todo!\\(|unimplemented!\\(|unreachable!\\(|NotImplementedError|not implemented|FIXME' <the flagged criteria's paths> 2>/dev/null
    If any flagged criterion is still not met, fix it NOW and re-run step 5 — returning with a known
    remaining gap just burns another review-fail loop.
 
@@ -1102,8 +1108,9 @@ ${handoff(lastImplReport?.filesModified)}
    [IMPORTANT: include ALL files from prior implement report PLUS newly touched files]
 
    ## Validation Output
-   [commands and actual output]
-   Status: PASSED / FAILED
+   [commands run, one per line] — Status: PASSED / FAILED
+   On FAIL only, paste the failing command's last 20 lines; on PASS, do not paste stdout (the Test
+   stage is the authoritative full-output capture).
 
    ## git diff --stat
    \`\`\`
@@ -1224,6 +1231,9 @@ Format:
 \`\`\`json
 [array of {test_name, passed, execution_command, test_purpose, error}]
 \`\`\`
+For each entry: a PASSED check stores \`error: ""\` (empty — never paste passing stdout); a FAILED
+check stores ONLY the last 20 lines of its failing output in \`error\`. Review re-runs the gating
+checks fresh, so the full passing transcript is never read downstream.
 
 Return using StructuredOutput:
   reportFile: "${testReport}"
