@@ -775,6 +775,16 @@ let currentStage = scout.startStage
 let reviewAttempts = 0
 const MAX_REVIEW_ATTEMPTS = 3
 let lastReviewResult = null
+// B1: hand-off context carried structurally between stages so review/fix do NOT re-ingest the
+// upstream prose reports. The review gate stays authoritative — it re-runs gating checks fresh
+// and reads real source; these fields only tell it WHERE to look and what the prior stage claimed.
+let lastImplReport = null   // implement OR fix result (fix overwrites the implement-report slot)
+let lastTestReport = null   // most recent test result
+
+// Render a structured hand-off field as prompt-safe text (arrays → bullet list, empty → "none").
+const handoff = (v) => Array.isArray(v)
+  ? (v.length ? v.map((x) => `     - ${x}`).join('\n') : '     (none)')
+  : (v === undefined || v === null || v === '' ? '(none)' : String(v))
 
 // STAGED MODEL ESCALATION — the FINAL fix pass and FINAL review attempt before the loop
 // gives up run on a stronger model. The common path stays on Sonnet (MODEL.fix/review);
@@ -978,6 +988,7 @@ Return using StructuredOutput:
       break
     }
     stageResults.push({ stage: 'implement', ...implResult })
+    lastImplReport = implResult
     if (!implResult.success) {
       log('Implement reported failure — aborting pipeline')
       break
@@ -1017,12 +1028,18 @@ GATE CHECKS (do these first):
 
 Instructions:
 
-1. Read the review report:
-   cd ${worktreePath} && cat ${reviewReport}
-   Extract: failing criteria, Issues Found section, Fresh Test Results.
+1. Failures to address (structured hand-off from the review — do NOT re-read ${reviewReport}):
+   Review verdict: ${handoff(lastReviewResult?.verdict)}
+   Criteria NOT_MET / PARTIAL (fix every one):
+${handoff(lastReviewResult?.unmetCriteria)}
+   Failure reasons / issues found:
+${handoff(lastReviewResult?.failureReasons)}
+   (The full review report is at ${reviewReport} — read it ONLY if a failure above is ambiguous.)
 
-2. Read the prior implement report:
-   cd ${worktreePath} && cat ${implementReport}
+2. Prior implementation context (structured hand-off — do NOT re-read ${implementReport}):
+   Files touched so far:
+${handoff(lastImplReport?.filesModified)}
+   Prior note: ${handoff(lastImplReport?.notes)}
 
 3. If a breakdown file exists, check the relevant sub-steps for original intent:
    Run: cd ${worktreePath} && ls ${breakdownFile} 2>/dev/null && echo EXISTS || echo MISSING
@@ -1092,6 +1109,7 @@ Return using StructuredOutput:
       break
     }
     stageResults.push({ stage: 'fix', attempt: fixPass, ...fixResult })
+    lastImplReport = fixResult   // fix overwrites the implement-report slot
     if (!fixResult.success) {
       log(`Fix pass ${fixPass} reported failure — aborting pipeline`)
       break
@@ -1194,8 +1212,10 @@ Return using StructuredOutput:
 
     if (!testResult) {
       log('Test agent returned null — recording failure, continuing to review')
+      lastTestReport = { allPassed: false, passCount: 0, failCount: 0, failedTests: ['test agent returned null'] }
       stageResults.push({ stage: 'test', attempt: reviewAttempts + 1, allPassed: false, success: false, notes: 'Agent returned null' })
     } else {
+      lastTestReport = testResult
       stageResults.push({ stage: 'test', attempt: reviewAttempts + 1, ...testResult, success: testResult.allPassed })
       if (!testResult.allPassed) {
         log(`Test failures (${testResult.failCount}): ${(testResult.failedTests || []).join(', ')}`)
@@ -1236,11 +1256,18 @@ Instructions:
    cd ${worktreePath} && cat ${specFile}
    Extract the COMPLETE "## Acceptance Criteria" section.
 
-2. Read the implement report:
-   cd ${worktreePath} && cat ${implementReport}
+2. Implementation hand-off (structured — do NOT re-read ${implementReport}; this is its summary):
+   Files modified by the implementation:
+${handoff(lastImplReport?.filesModified)}
+   Commit: ${handoff(lastImplReport?.commitHash)}
+   Implementer's note: ${handoff(lastImplReport?.notes)}
+   Use the files-modified list to know WHERE to look — you verify against real source (step 5),
+   not against this self-report. (Full report at ${implementReport} only if a claim is ambiguous.)
 
-3. Read the test report:
-   cd ${worktreePath} && cat ${testReport}
+3. Test hand-off (structured — do NOT re-read ${testReport}; you re-run the checks yourself next):
+   All gating checks passed: ${handoff(lastTestReport?.allPassed)}
+   Passed: ${handoff(lastTestReport?.passCount)}   Failed: ${handoff(lastTestReport?.failCount)}
+   Failed checks: ${handoff(lastTestReport?.failedTests)}
 
 4. Run FRESH authoritative checks (this result determines the verdict, not the test report):
    Re-run each GATING validation check — those whose test_purpose in the test report (${testReport})

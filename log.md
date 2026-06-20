@@ -5,6 +5,38 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Ship B1 (structured stage hand-off) + design WS2-a from the bastion baseline
+
+Ran the `bastion` baseline (`/sdlc-block phase0-blockA`) and it taught us more than the tokens. Block
+verdict **PARTIAL**: task 1 merged single-pass (PASS, 1 review, ~69.5K out); **task 2 escalated on a
+merge conflict** across 7 files after 3 review attempts (~114.5K out); tasks 3-5 skipped. The conflict
+is a **spec-decomposition** bug — task 1 and task 2 slices implemented the *same* files — not an engine
+bug, but it poisons a full-block before/after. So B1 is measured **per-task** instead.
+
+**Shipped B1** (`sdlc-task.js`): the review and fix stages stop `cat`-ing the upstream implement / test
+/ review reports and instead inject those stages' structured StructuredOutput fields (hoisted to loop
+scope as `lastImplReport` / `lastTestReport` / `lastReviewResult`). Added a null-safe `handoff()`
+renderer + a "read the report only if ambiguous" escape hatch so a cold `review`/`fix` resume degrades
+gracefully. The review gate is untouched and authoritative — it still reads the spec's full acceptance
+criteria, reads **real source**, and **re-runs every gating check fresh**. `node --check` clean;
+propagated to `bastion`. Rationale + the load-bearing "do not weaken the review gate" call recorded in
+[D7](planning/decisions/D7-token-efficiency-passes.md).
+
+**B1 before/after (bastion task 1, clean isolated signal — review `filesReadKb`):** 17 KB → 12-13 KB
+(~28% lower) across both reviews, verdict PASS held, and the review **still caught a real gap** (a
+missing render-path test) which the fix agent then resolved off B1's *structured* `unmetCriteria`
+(review-2 PASS) — evidence the gate isn't weakened. Honest caveat logged in D7: total per-task tokens
+are confounded by implement non-determinism (B1 doesn't touch implement), so B1 is accepted on the
+clean per-review signal + low-risk mechanism, not on token totals (n=1).
+
+That same run **re-priced the retry loop** the plan flagged: one missing unit test triggered a full
+fix→test→review loop costing ~21.7K out-tokens — far more than B1 saves. So **designed WS2-a** (now in
+the plan): a mandatory implement/fix **completeness self-check** before commit — re-read the in-scope
+acceptance criteria, confirm no stubs (`todo!()`/`unimplemented!()`/`NotImplementedError`/…) remain on
+required paths and every named deliverable file exists, fix any gap before returning `success`. Project-
+agnostic (binds to *the criteria*, hardcodes no stack). Implementing it next, then a loop-rate before/
+after. Median review attempts is the WS2 metric (baseline: task 1 = 1, task 2 = 3).
+
 ## 2026-06-19 — Phase B kickoff: ship B4 + stand up `bastion` as the B1 experiment vehicle
 
 Reviewed the two clean `## Token Metrics` sections from the `markdown-engine-validator` Block C run
