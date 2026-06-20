@@ -919,6 +919,23 @@ Instructions:
    from planning/harness.json, or the spec's ## Validation Commands):
    cd ${worktreePath} && <each validation command from the spec> 2>&1 | tail -20
 
+5.5. SELF-CHECK — completeness gate (do this BEFORE writing the report or committing):
+   Re-read the in-scope "## Acceptance Criteria" for Task ${taskNumber}. For EACH criterion, open the
+   actual file(s) and confirm it is FULLY satisfied by your changes — do not assume from memory.
+   In particular:
+   (a) NO placeholder/stub bodies remain on any code path a criterion requires — e.g.
+       \`todo!()\`/\`unimplemented!()\`/\`unreachable!()\`, \`raise NotImplementedError\`,
+       \`throw new Error('not implemented')\`, empty \`pass\`-only bodies, or \`TODO\`/\`FIXME\` markers
+       in required paths. Sanity-grep your changed files, e.g.:
+         cd ${worktreePath} && git diff main..HEAD --name-only | xargs grep -nE 'todo!\\(|unimplemented!\\(|unreachable!\\(|NotImplementedError|not implemented|FIXME' 2>/dev/null
+   (b) EVERY deliverable file a criterion names actually exists at the stated path (e.g. a required
+       \`.env.example\`, config file, or fixture) — \`ls\` it.
+   (c) EVERY criterion that says "unit-tested"/"covered by a test" has a real, hermetic test that
+       exercises that path — not just a compiling stub.
+   If ANY criterion is not fully met, FIX IT NOW and re-run step 5 before proceeding. Do NOT write the
+   report or return \`success: true\` with a known gap — an unmet criterion shipped here costs a full
+   review-fail loop downstream.
+
 6. Write the implementation report:
    Absolute path: ${worktreePath}/${implementReport}
 
@@ -1053,6 +1070,16 @@ ${handoff(lastImplReport?.filesModified)}
 5. Run the Validation Commands from the spec:
    cd ${worktreePath} && cat ${specFile} | grep -A 20 "## Validation Commands"
    Then run those commands.
+
+5.5. SELF-CHECK — completeness gate (do this BEFORE writing the report or committing):
+   For EACH criterion the review flagged (step 1), open the actual file and confirm it is now FULLY
+   satisfied — do not assume from your own diff. In particular: NO stub remains on a required path
+   (\`todo!()\`/\`unimplemented!()\`/\`unreachable!()\`, \`raise NotImplementedError\`,
+   \`throw new Error('not implemented')\`, empty \`pass\` bodies, \`TODO\`/\`FIXME\`), every named
+   deliverable file exists, and every "unit-tested" criterion has a real hermetic test. Quick grep:
+     cd ${worktreePath} && git diff main..HEAD --name-only | xargs grep -nE 'todo!\\(|unimplemented!\\(|unreachable!\\(|NotImplementedError|not implemented|FIXME' 2>/dev/null
+   If any flagged criterion is still not met, fix it NOW and re-run step 5 — returning with a known
+   remaining gap just burns another review-fail loop.
 
 6. Overwrite the implement report at: ${worktreePath}/${implementReport}
 

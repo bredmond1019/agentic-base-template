@@ -5,6 +5,31 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Ship WS2-a (implement/fix completeness self-check) — the loop is gone
+
+Implemented and measured **WS2-a**, the retry-loop lever designed earlier this session. Added a
+mandatory `5.5. SELF-CHECK` step to the implement **and** fix prompts in `sdlc-task.js`: before writing
+the report or committing, re-read the in-scope acceptance criteria and confirm each is fully met — no
+stubs (`todo!()`/`unimplemented!()`/`NotImplementedError`/…) on required paths, every named deliverable
+file exists, every "unit-tested" criterion has a real hermetic test — fixing any gap before returning
+`success`. Project-agnostic (binds to the criteria, no stack defaults). `node --check` clean; propagated
+to `bastion`. Rationale + evidence in [D8](planning/decisions/D8-implement-completeness-self-check.md).
+
+**Before/after (bastion `phase0-blockA` task 1, same base `506b27f`, B1-only vs B1+WS2-a):** review
+attempts **2 → 1** — the loop eliminated. The B1-only run had looped because the implementer omitted a
+`status()` render test; the WS2-a run included both render tests up front and swept the scaffold stubs,
+matching the self-check behavior. Total task out-tokens **~57.1K → ~35.8K (~37% lower)**, and since both
+runs had near-identical implement output (~14.3K vs ~14.9K), that delta is cleanly the ~21K-token loop
+the self-check removed — not implement variance. The self-check's own cost is small and visible:
+implement `filesReadKb` 31 → 35 KB, `promptTok` 1301 → 1652. n=1 caveat logged in D8 (directionally
+confirmed on a clean comparison, accepted on the low-risk mechanism — same bar as B1).
+
+**Noted follow-up (not blocking):** the stub grep scans all changed files, which nudged the implementer
+to replace scaffold stubs in 6 files outside task 1's scope (harmless, comment-only). Refinement queued
+in the plan: scope the grep to the criteria's required paths. Also still open: the spec-decomposition
+guard (parallel tasks must touch disjoint files — the bastion block escalated on overlapping task 1/2
+slices). Both are in the plan checklist + `status.md` for the next session.
+
 ## 2026-06-20 — Ship B1 (structured stage hand-off) + design WS2-a from the bastion baseline
 
 Ran the `bastion` baseline (`/sdlc-block phase0-blockA`) and it taught us more than the tokens. Block
