@@ -5,6 +5,38 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Downstream propagation of the telemetry pass + fix stale `DECISIONS.md` engine refs
+
+Pulled the telemetry-pass harness updates (B4 + B1 + WS2-a + B2 + D9 + the WS2-a stub-grep
+scoping) into all four downstream projects: `learn-ai`, `python-orchestration-system`,
+`bastion`, `markdown-engine-validator`. All four were on `main` with clean trees; changes left
+uncommitted in each working tree for per-repo review.
+
+**Factory fix surfaced by propagation.** Diffing exposed 6 stale `DECISIONS.md` references in
+this repo's own engines — `sdlc-run.js` (3) and `sdlc-task.js` (3) — left over from before OKF
+Phase 2 settled the lowercase `planning/decisions/` concept-folder convention ([D5](planning/decisions/D5-okf-phase-2-adopted.md)).
+`learn-ai` had already locally patched its `sdlc-run.js` to `planning/decisions/`; the rest still
+carried the old name. Replaced all 6 in `base-template` → `planning/decisions/`. After the fix,
+canonical `sdlc-run.js` converged with learn-ai's local copy (its propagation was a no-op),
+confirming this was a genuine factory miss, not a learn-ai customization. Mechanism-prose only —
+no ADR (it just brings engine text into compliance with D5). Both engines `node --check` clean.
+
+**How each project was handled (engines are agnostic; commands were not uniformly so):**
+- **Engines** (`sdlc-task.js`, `sdlc-run.js`, `sdlc-block.js`, `harness.schema.json`) — pure
+  version-lag everywhere (no project-specific tokens in any diff), overwritten with canonical in
+  all four. `sdlc-block.js` + `harness.schema.json` were already current everywhere (no-ops).
+- **Commands** (`generate-tasks.md`, `breakdown.md`) — `python-orchestration-system`, `bastion`,
+  `markdown-engine-validator` are on the agnostic command generation (only the D9 disjoint-file-
+  ownership text was missing), so overwritten with canonical. **`learn-ai` is on the older
+  pre-agnostic command generation** — its `generate-tasks.md`/`breakdown.md` carry deliberate
+  project facts (npm scripts, EN+pt-BR parity, `app/[locale]/`, `content/` mdx, `lib/services/`).
+  Did **not** overwrite; surgically inserted only the D9 disjoint-file-ownership rule, preserving
+  its customizations.
+
+**Follow-up flagged (not done here):** `learn-ai`'s harness commands predate the OKF-Phase-2
+agnostic refactor and still bake stack/policy into `.claude/` rather than `harness.json` + CLAUDE.md.
+A full migration of learn-ai to the agnostic command set is a separate, larger effort.
+
 ## 2026-06-20 — Three telemetry-pass follow-ups: stub-grep scoping (#1), decomposition guard (#2), slim reports (B2)
 
 Closed three open items from the SDLC telemetry pass in one session. All three are mechanism-only and
