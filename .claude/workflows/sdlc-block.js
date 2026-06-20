@@ -779,12 +779,20 @@ if (selectedTasks) {
 // parallel worktree inherits the SAME file (no shared-file merge conflict, the D9 class of bug). Each
 // /sdlc-task is later invoked with --under-block so it does NOT re-assess. mode 'off' skips this.
 // ================================================================
+// D10 telemetry — capture the assessment outcome so the Report stage can PERSIST it. Previously the
+// recommend-mode recommendation was log()-only: it streamed to the live run and then vanished, leaving
+// no durable trace in block-workflow.md. `action`: off | none | recommend | auto. `committed`: the
+// breakdown.md commit hash (or true/false) when action==='auto'.
+const breakdownAssessment = { mode: breakdownMode, threshold: breakdownThreshold, flagged: [], action: 'off', committed: null }
 if (breakdownMode !== 'off') {
   const flagged = Object.values(taskMap).filter(t =>
     t.recommendBreakdown && !doneTasks.has(t.num) && (!selectedTasks || selectedTasks.has(t.num)))
+  breakdownAssessment.flagged = flagged.map(t => ({ num: t.num, title: t.title, reason: t.breakdownReason || 'coarse' }))
   if (!flagged.length) {
+    breakdownAssessment.action = 'none'
     log(`Breakdown: no tasks flagged as coarse (mode=${breakdownMode}).`)
   } else if (breakdownMode === 'auto') {
+    breakdownAssessment.action = 'auto'
     log(`Breakdown (auto): generating sub-steps for ${flagged.length} coarse task(s): ${flagged.map(t => t.num).join(', ')}...`)
     const stepList = flagged.map(t => `  - Task ${t.num} (${t.title}): ${t.breakdownReason || 'coarse'}`).join('\n')
     const gen = await tracedAgent(`
@@ -819,10 +827,12 @@ ${stepList}
 
 Return using StructuredOutput: reportFile="${breakdownFile}", success, filesModified, commitHash, notes.
 `, { label: 'breakdown-gen', schema: { type: 'object', required: ['success'], properties: { reportFile: { type: 'string' }, success: { type: 'boolean' }, filesModified: { type: 'array', items: { type: 'string' } }, commitHash: { type: 'string' }, notes: { type: 'string' } } }, phase: 'Analyze', model: 'opus' })  // breakdown-gen is PLANNING — keep on Opus
+    breakdownAssessment.committed = gen?.success ? (gen.commitHash || true) : false
     if (gen?.success) log(`Breakdown committed${gen.commitHash ? ` (${gen.commitHash})` : ''} — worktrees will inherit it.`)
     else log(`Breakdown generation did not complete — tasks will implement from tasks.md only.`)
   } else {
     // recommend mode — surface the recommendation; proceed without writing anything.
+    breakdownAssessment.action = 'recommend'
     log(`Breakdown recommendation (mode=recommend): ${flagged.length} task(s) look coarse. Consider running`)
     log(`  /breakdown ${tasksFile}`)
     log(`before this block, or set breakdown.mode:"auto" in planning/harness.json. Flagged:`)
@@ -1289,6 +1299,26 @@ const blockMetricsTable = metrics.map(m => {
 const totalOut = metrics.reduce((s, m) => s + (m.outTok || 0), 0)
 const worstByPrompt = [...metrics].sort((a, b) => b.promptTokEst - a.promptTokEst).slice(0, 3)
 
+// D10 — Breakdown assessment summary, built deterministically here so the Report agent appends it
+// verbatim (like the token roll-up). Makes recommend-mode recommendations durable in block-workflow.md.
+const breakdownSection = (() => {
+  const ba = breakdownAssessment
+  if (ba.mode === 'off') return `_Skipped — \`breakdown.mode\` is "off" in planning/harness.json._`
+  if (!ba.flagged.length) return `**Mode:** ${ba.mode} · **threshold:** >${ba.threshold} files. No tasks flagged as coarse.`
+  const rows = ba.flagged.map(f => `| ${f.num} | ${f.title || '—'} | ${f.reason} |`).join('\n')
+  const action = ba.action === 'auto'
+    ? (ba.committed ? `Auto mode — generated and committed \`breakdown.md\`${typeof ba.committed === 'string' ? ` (${ba.committed})` : ''} on main before the waves; every worktree inherited it.`
+                    : `Auto mode — breakdown generation did NOT complete; tasks implemented from tasks.md only.`)
+    : `Recommend mode — no file written. Consider running \`/breakdown ${tasksFile}\` before this block, or set \`breakdown.mode:"auto"\` in planning/harness.json.`
+  return `**Mode:** ${ba.mode} · **threshold:** >${ba.threshold} files · **${ba.flagged.length} task(s) flagged coarse.**
+
+| Task | Title | Coarseness signal |
+|---|---|---|
+${rows}
+
+**Action taken:** ${action}`
+})()
+
 const reportResult = await tracedAgent(`
 You are the finalize/report agent for the spec orchestration. You run from the MAIN repo root.
 
@@ -1325,8 +1355,16 @@ ${escalationBlock}${playwrightEscalation}
    Completed tasks are detected on main and skipped; escalated tasks are retried.
    ${playwrightFailed ? `Playwright failed — fix the regression first, then re-promote to production.` : ''}
 
-2. Append the orchestrator token roll-up to ${blockReport}. Run EXACTLY as written (a literal heredoc
-   append) — do NOT retype, summarize, or omit it; this is machine-generated telemetry:
+2. Append the breakdown assessment, then the orchestrator token roll-up, to ${blockReport}. Run BOTH
+   appends EXACTLY as written (literal heredocs) — do NOT retype, summarize, reorder, or omit them;
+   these are machine-generated. First the breakdown assessment:
+   cat >> ${blockReport} <<'BREAKDOWN_EOF'
+
+## Breakdown Assessment (D10)
+${breakdownSection}
+BREAKDOWN_EOF
+
+   Then the token roll-up:
    cat >> ${blockReport} <<'ROLLUP_EOF'
 
 ## Token Roll-up (orchestrator stages)
@@ -1397,6 +1435,7 @@ return {
   escalated: escalated.map(o => ({ taskNum: o.taskNum, finalVerdict: o.finalVerdict, worktreePath: o.worktreePath, branchName: o.branchName, reviewReport: o.reviewReport, reasons: o.reasons, triage: o.triage })),
   skipped: skipped.map(o => o.taskNum),
   playwright: { verdict: playwrightVerdict, checks: playwrightChecks, fixNotes: playwrightFixNotes },
+  breakdown: breakdownAssessment,
   blockReport: reportResult?.reportFile || blockReport,
   resumeCommand: `/sdlc-block ${blockId}`,
   outcomes

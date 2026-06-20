@@ -5,6 +5,23 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Persist the D10 breakdown assessment to the block report
+
+Found while reviewing the `learn-ai` `interview-prep-learning-paths` block run: D10 ran (engine
+byte-identical to HEAD; the run postdated the D10 commit) and the tasks were unambiguously coarse
+(task 1 owns 17 files vs a threshold of 3), but in the default `recommend` mode the recommendation was
+emitted via `log()` only — it streamed to the live `/workflows` narrator and left **no durable trace**
+in `block-workflow.md`. The recommendation was both invisible after the run and inert.
+
+Fix (`sdlc-block.js`, mechanism-only): capture the assessment outcome at the breakdown gate into a
+`breakdownAssessment` record (`mode`, `threshold`, `flagged[]`, `action`, `committed`), build a
+deterministic `breakdownSection` next to the token-roll-up builder, and have the Report agent append a
+`## Breakdown Assessment (D10)` section to `block-workflow.md` via a literal heredoc (same verbatim
+idiom as the roll-up). Also surfaced on the workflow's return object (`breakdown`). Now every mode is
+observable post-run: `off`/no-flags say so; `recommend` lists the flagged tasks + their coarseness
+signal and the suggested action; `auto` records the committed `breakdown.md`. `node --check` clean.
+Not yet propagated downstream. Within D10's intent — no ADR (the gap was persistence, not policy).
+
 ## 2026-06-20 — Breakdown assessment (D10) + targeted model re-tiering (D11)
 
 Two harness changes at the maintainer's request.
