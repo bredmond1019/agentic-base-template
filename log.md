@@ -5,6 +5,23 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Add `/prepare-next-agent` command + `/prime` handoff detection
+
+New command `prepare-next-agent.md`: writes `planning/handoff.md` (in-flight context, completed
+work, remaining tasks, open questions, first command for next session), then invokes `/log-work`
+and `/commit`. Designed for sessions that grow larger than expected and need a clean hand-off to
+a fresh context. Runs inline (no subagent) so the confirmation gates in `/log-work` and `/commit`
+work normally.
+
+Updated `prime.md` to check for `planning/handoff.md` on startup; if found, surfaces an
+**Active Handoff** section first — title, remaining work, first command — before the standard
+orientation. The handoff file is transient and should be deleted after the new session consumes it.
+
+Also updated `scaffold/planning/index.md` (handoff.md row) and `commands/README.md` (phase table +
+description). No behavior change to any other command or engine.
+
+---
+
 ## 2026-06-20 — Fix: bump harness-config loader from haiku to sonnet (all three engines)
 
 `loadHarnessConfig` in all three engines (`sdlc-block.js`, `sdlc-task.js`, `sdlc-run.js`) was set to
