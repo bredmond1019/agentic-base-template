@@ -5,6 +5,19 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Add WS2-b stub-scan profiles (config companion to WS2-a)
+
+Added ready-to-paste **stub / not-implemented scan** profiles (Rust / Python / TypeScript) to the
+scaffold's `planning/harness.examples.md`, as a `forbidden-pattern-scan` check projects can opt into.
+This is the **policy** half of the stub-completeness lever: WS2-a (D8) is the agnostic implement-stage
+*self-check* shipped in the engine; this is the optional per-project *gating test* that hard-fails on
+left-in `todo!()`/`unimplemented!()` / `raise NotImplementedError` / `throw new Error('not implemented')`.
+Honest false-positive caveats baked into each profile: Rust `unreachable!()` excluded (legit defensive
+assertion); Python `raise NotImplementedError` allowlists `@abstractmethod`/interface paths since a
+line-based grep can't see the decorator above (Python's self-check is the more reliable catch). All
+three JSON blocks parse. Cross-referenced from `docs/harness-json.md`. No engine change — this is config
+mechanism already supported by D6's `forbidden-pattern-scan` kind.
+
 ## 2026-06-20 — Ship WS2-a (implement/fix completeness self-check) — the loop is gone
 
 Implemented and measured **WS2-a**, the retry-loop lever designed earlier this session. Added a

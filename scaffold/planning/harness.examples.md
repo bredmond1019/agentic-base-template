@@ -146,6 +146,78 @@ only carries the interpretation. `kind` defaults to `"command"`, so mix plain an
 
 ---
 
+## Optional: stub / not-implemented scan (gating companion to the implement-stage self-check)
+
+The implement/fix stages already self-check for left-in placeholders before committing (re-read the
+acceptance criteria, confirm no stubs on required paths). That is an *agent instruction* — agnostic,
+no config. If you want the same thing as an **authoritative gating test** the Test stage enforces, add
+a `forbidden-pattern-scan` check below. The two are complementary: the self-check reasons about intent;
+this grep is a hard backstop. Paste the block for your stack into `validation.checks[]`.
+
+Deliberate deferrals (a real Phase-N stub you intend to ship) are carved out with an
+`allowlistPattern` — mark the line with a convention comment (e.g. `// stub: phase3`) and the scan
+skips it. Keep `gates: true` only once the codebase is actually stub-free, or the first run will block.
+
+**Rust:**
+```json
+{
+  "kind": "forbidden-pattern-scan",
+  "name": "no-stubs",
+  "purpose": "No unimplemented placeholders left on shipped code paths",
+  "gates": true,
+  "rules": [
+    { "id": "rust-todo-macro",          "pattern": "\\btodo!\\(",          "paths": "--include='*.rs' src/", "allowlistPattern": "// stub:" },
+    { "id": "rust-unimplemented-macro", "pattern": "\\bunimplemented!\\(",  "paths": "--include='*.rs' src/", "allowlistPattern": "// stub:" }
+  ]
+}
+```
+> `unreachable!()` is intentionally **excluded** — it is a legitimate defensive assertion, not a stub.
+> `#[allow(dead_code)]` Phase-N function stubs (real bodies, deferred wiring) are not matched either —
+> only the placeholder macros are. Add `unreachable!\\(` to the rules only if your project never uses it
+> as a genuine invariant.
+
+**Python / FastAPI:**
+```json
+{
+  "kind": "forbidden-pattern-scan",
+  "name": "no-stubs",
+  "purpose": "No unimplemented placeholders left on shipped code paths",
+  "gates": true,
+  "rules": [
+    { "id": "py-not-implemented", "pattern": "raise NotImplementedError", "paths": "--include='*.py' app/", "allowlistPattern": "@abstractmethod|# stub:|abc\\.|/interfaces/|/base\\.py" },
+    { "id": "py-todo-stub",       "pattern": "# *TODO.*implement",        "paths": "--include='*.py' app/", "allowlistPattern": "# stub:" }
+  ]
+}
+```
+> Caveat (honest): `raise NotImplementedError` is the *correct* body of an abstract method, so a flat
+> grep false-positives on ABCs / `Protocol`s — the allowlist excludes `@abstractmethod`-adjacent lines
+> and common interface paths, but a line-based scan can't see a decorator on the line above. Scope
+> `paths` to your concrete-implementation dirs and exclude interface modules. For Python the
+> implement-stage self-check (which reasons about intent) is the more reliable catch; treat this scan
+> as a coarse backstop, and consider leaving it `gates: false` (advisory) until the allowlist is tuned.
+
+**Next.js / TypeScript:**
+```json
+{
+  "kind": "forbidden-pattern-scan",
+  "name": "no-stubs",
+  "purpose": "No unimplemented placeholders left on shipped code paths",
+  "gates": true,
+  "rules": [
+    { "id": "ts-not-implemented", "pattern": "throw new Error\\(['\"]not implemented", "paths": "--include='*.ts' --include='*.tsx' src/ app/", "allowlistPattern": "// stub:" },
+    { "id": "ts-stub-marker",     "pattern": "// *@stub",                              "paths": "--include='*.ts' --include='*.tsx' src/ app/", "allowlistPattern": "// stub:" }
+  ]
+}
+```
+> The `throw new Error('not implemented')` idiom is a clean signal. The `// @stub` rule is opt-in for
+> teams that mark placeholder functions with a comment convention — drop it if you don't.
+
+All three follow the `forbidden-pattern-scan` mechanics documented above (each rule is a `grep -rnE`
+over `paths` minus `allowlistPattern`; any match fails the check). Quote globs in `paths`
+(`--include='*.rs'`) so they survive zsh.
+
+---
+
 ## Next.js (web) — UI-test stage enabled
 
 The only profile that exercises the `uiTest` fields. `port` is the base port; in parallel task

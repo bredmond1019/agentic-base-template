@@ -157,6 +157,16 @@ runs the engine uses `port + taskNumber` automatically.
 }
 ```
 
+### Optional stub / not-implemented scan
+
+A gating companion to the implement/fix completeness self-check ([D8](../planning/decisions/D8-implement-completeness-self-check.md)):
+a `forbidden-pattern-scan` check that hard-fails if unimplemented placeholders
+(`todo!()`/`unimplemented!()`, `raise NotImplementedError`, `throw new Error('not implemented')`)
+remain on shipped paths. Ready-to-paste Rust / Python / TypeScript blocks — with the false-positive
+caveats (Rust `unreachable!()` excluded; Python ABCs allowlisted) — live in the scaffold's
+`planning/harness.examples.md` so generated projects can opt in per stack. The self-check (engine,
+agnostic) always runs; this scan (config, per-project) is the optional hard backstop.
+
 ## Hardcoded engine behaviors (not config fields)
 
 These behaviors are intentionally hardcoded in the engine — they are universal mechanism, not
