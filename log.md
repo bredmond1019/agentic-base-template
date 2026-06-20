@@ -5,6 +5,41 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Three telemetry-pass follow-ups: stub-grep scoping (#1), decomposition guard (#2), slim reports (B2)
+
+Closed three open items from the SDLC telemetry pass in one session. All three are mechanism-only and
+propagate downstream via the manual update loop; both engines `node --check` clean.
+
+- **#1 — WS2-a stub-grep scoping (resolves D8's known follow-up).** The implement/fix completeness
+  self-checks (`sdlc-task.js`) no longer grep `git diff main..HEAD --name-only | xargs grep` over
+  *every* changed file — they now scope the sanity-grep to the in-scope (implement) / flagged (fix)
+  criteria's **required paths**, with an explicit "a stub in a file no in-scope criterion requires is
+  out of scope — leave it" instruction. Removes the nudge toward out-of-scope edits the bastion run
+  surfaced (6 harmless comment-only scaffold edits) without weakening the gate. D8 updated with a
+  resolution note.
+
+- **#2 — Spec-decomposition guard ([D9](planning/decisions/D9-disjoint-task-file-ownership.md), new
+  ADR).** `generate-tasks` (step 5) and `breakdown` (step 6) gain an explicit disjoint-file-ownership
+  rule: decompose so each task owns a distinct file set; when two tasks must share a file, either make
+  one `dependsOn` the other (serialize) or restrict it to append-only (`additiveFiles`). The
+  `sdlc-block` engine *already* serializes exclusive-file clashes into separate waves — but only on
+  *declared* overlap, so the real gap was the spec drawing overlapping slices. The bastion
+  `phase0-blockA` block escalated on exactly this (7-file merge conflict, tasks 1/2). Fix is at the
+  authoring layer per the plan; no engine change.
+
+- **B2 — slim report templates.** Implement/fix "Validation Output" and the test report's "Full
+  Results (JSON)" now store **command list + PASS/FAIL + failing `tail -20` only** — passing checks
+  store an empty error and no stdout. The Test stage stays the authoritative full-output capture and
+  review re-runs the gating checks fresh, so the full passing transcript is never read downstream.
+  Shrinks what every downstream stage re-ingests (the dominant waste pattern the pass targets).
+
+```diff
+ .claude/workflows/sdlc-task.js   | stub-grep scoping (×2) + slim report templates (×3)
+ .claude/commands/generate-tasks.md | disjoint-ownership rule (step 5)
+ .claude/commands/breakdown.md      | disjoint-ownership flag (step 6)
+ planning/decisions/D9-...md        | new ADR (decomposition guard)
+```
+
 ## 2026-06-20 — Document the harness.json extensibility model
 
 Added an **"Extending the suite"** section to `docs/harness-json.md`, prompted by a session question
