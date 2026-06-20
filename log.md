@@ -5,6 +5,16 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Fix: bump harness-config loader from haiku to sonnet (all three engines)
+
+`loadHarnessConfig` in all three engines (`sdlc-block.js`, `sdlc-task.js`, `sdlc-run.js`) was set to
+`model: 'haiku'`. Haiku fails to call StructuredOutput after 2 nudges when given the nested
+`HARNESS_CONFIG_SCHEMA` (discriminated `checks[].kind` variants). Bumped to `model: 'sonnet'` in all
+three. Propagated to `python-orchestration-system` (committed `dba9248`) and `learn-ai` + `bastion`
+(left uncommitted for review). `markdown-engine-validator` already fixed directly.
+
+---
+
 ## 2026-06-20 — Downstream propagation: D10–D13 + #1 to all four projects (run-review task D)
 
 Run-review task **D** (`planning/plans/sdlc-block-run-review.md`): pulled the rewritten engines into all
