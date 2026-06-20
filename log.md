@@ -5,6 +5,44 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — Breakdown heuristic: file count gated on heterogeneity ([D13](planning/decisions/D13-breakdown-heuristic-homogeneity.md))
+
+Run-review finding #3 (`planning/plans/sdlc-block-run-review.md`): D10's file-count signal over-fires on
+homogeneous many-file tasks. In the learn-ai content run, a learning path (one metadata file + N
+near-identical lesson/module pairs) tripped "> 3 files" by ~5× as a single cohesive task — but
+decomposition there yields little. Raw count is a weak proxy for decomposition *value*; the real
+predictors are separable concerns / layers / independently-testable units (heterogeneity).
+
+Fix (prompt-only, mechanism): in both engines (`sdlc-block` Analyze STEP 3b, `sdlc-task` Plan STEP 3),
+the `generate-tasks` preview, and `docs/harness-json.md`, file count is demoted from a standalone OR
+trigger to a signal that fires **only when the > threshold files are heterogeneous**, plus an explicit
+**homogeneity discount** (same-shape files serving one concern are not a candidate on count alone). The
+three structural signals stay hard ORs; `complexityThreshold` is unchanged and remains the per-project
+knob. No schema/scaffold change (no new field). Both engines `node --check` clean. ADR
+[D13](planning/decisions/D13-breakdown-heuristic-homogeneity.md) (refines D10). Not yet propagated.
+
+## 2026-06-20 — Mark per-task outTok as non-isolated under parallel waves ([D12](planning/decisions/D12-parallel-outtok-contamination.md))
+
+Run-review finding A (`planning/plans/sdlc-block-run-review.md`): per-stage `outTok` is a
+`budget.spent()` delta over a pool **shared across all concurrent agents**, so under `sdlc-block`'s
+parallel waves every per-task `outTok` measures the whole batch's concurrent burn, not the stage's own
+output. Proof: a trivial `worktree-setup` (`git worktree add`, no model output) reported 15–21k outTok
+in parallel waves vs **2,709** solo. The headline metric on the most-used path actively misled — it had
+nearly led to mis-evaluating the D11 re-tier. The runtime exposes no per-agent output count (only the
+shared pool), so a correct per-agent number isn't available; an honest gap beats a wrong number.
+
+Fix (mechanism-only, both engines):
+- `sdlc-block.js` — `runTask` gains a `parallelWave` param and passes `--parallel-wave` to `/sdlc-task`
+  **only** when the parallel batch width is `> 1` (size-1 batches and all sequential waves run solo →
+  clean delta → reported as a number). Orchestrator roll-up legend now points readers at the per-task
+  `— (parallel)` convention (its own sequential stages stay clean).
+- `sdlc-task.js` — parses `--parallel-wave`; renders every stage's `outTok` as `— (parallel)` and
+  appends a one-line caveat to `## Token Metrics` when set. `promptTok`/`filesReadKb` (per-agent) are
+  untouched and remain the trustworthy signals. Solo/standalone runs are unchanged.
+
+New inter-engine arg `--parallel-wave` (parallel to `--under-block`/`--resume`). `node --check` clean
+both engines. ADR [D12](planning/decisions/D12-parallel-outtok-contamination.md). Not yet propagated.
+
 ## 2026-06-20 — Persist the D10 breakdown assessment to the block report
 
 Found while reviewing the `learn-ai` `interview-prep-learning-paths` block run: D10 ran (engine

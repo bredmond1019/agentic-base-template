@@ -103,12 +103,16 @@ engines; this object only sets the **policy** of what to do with the result.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `mode` | string | No | `recommend` (default) · `auto` · `off` |
-| `complexityThreshold` | integer | No | A task touching more than this many distinct files is a candidate (default `3`). Multi-concern / multi-layer tasks are flagged regardless of count |
+| `complexityThreshold` | integer | No | File-count signal: a task touching more than this many distinct files is a candidate **only when those files are heterogeneous** (default `3`). Multi-concern / multi-layer tasks are flagged regardless of count |
 
-A task is a **breakdown candidate** when ANY hold: it creates/modifies more than
-`complexityThreshold` distinct files; OR it bundles multiple separable concerns; OR it spans multiple
-layers (data model + API + UI); OR it carries a large acceptance-criteria set over independently
-testable units.
+A task is a **breakdown candidate** when ANY hold: it bundles multiple separable concerns; OR it spans
+multiple layers (data model + API + UI); OR it carries a large acceptance-criteria set over several
+independently-testable units; OR it touches more than `complexityThreshold` distinct files **and those
+files are heterogeneous** (different shapes/roles or spanning more than one concern/layer). File count
+is a contributing signal, not a trigger on its own — a homogeneous many-file task (e.g. a content
+path's metadata + N near-identical lesson pairs) is **not** flagged on count alone, since
+decomposition yields little there. Raise `complexityThreshold` if a project's tasks routinely run wide
+but cohesive.
 
 | `mode` | What happens when a task is flagged |
 |---|---|

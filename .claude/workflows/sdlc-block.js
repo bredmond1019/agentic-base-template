@@ -634,15 +634,20 @@ STEP 3 — Build the dependency graph. For EACH task determine:
   safe; wrongly marking an in-place-edited source file additive is not.
 
 STEP 3b — Breakdown assessment. For EACH task, decide whether it is too COARSE to implement directly
-  and would benefit from a /breakdown into atomic sub-steps. Set recommendBreakdown=true (with a
-  one-sentence breakdownReason naming the signal) when ANY of these hold:
-    - the task creates or modifies MORE than ${breakdownThreshold} distinct files (use the
-      filesCreated + filesModified you just computed); OR
+  and would benefit from a /breakdown into atomic sub-steps. The real predictor of decomposition value
+  is SEPARABLE STRUCTURE, not raw file count. Set recommendBreakdown=true (with a one-sentence
+  breakdownReason naming the signal) when ANY of these hold:
     - it bundles multiple separable concerns (e.g. "implement X AND refactor Y AND add Z"); OR
     - it spans multiple layers/modules (e.g. data model + API + UI); OR
-    - it carries a large acceptance-criteria set covering independently-testable units.
-  A single focused change over a small file set is NOT a candidate (recommendBreakdown=false). This is
-  ASSESSMENT ONLY — do not write any breakdown file; the orchestrator acts on these flags per policy.
+    - it carries a large acceptance-criteria set covering several INDEPENDENTLY-testable units; OR
+    - it touches MORE than ${breakdownThreshold} distinct files (filesCreated + filesModified) AND
+      those files are HETEROGENEOUS — different shapes/roles, or spanning more than one concern/layer
+      above. File count is a CONTRIBUTING signal here, never a trigger on its own.
+  HOMOGENEITY DISCOUNT — do NOT flag on file count alone when the many files are the SAME shape serving
+    ONE concern (e.g. a content path's metadata file + N near-identical lesson/module pairs, or N
+    parallel fixtures): decomposition yields little there. A single focused change over a small file set
+    is also NOT a candidate (recommendBreakdown=false). This is ASSESSMENT ONLY — do not write any
+    breakdown file; the orchestrator acts on these flags per policy.
 
 STEP 4 — Resume scout: find tasks already completed on MAIN:
   ls ${reportsDir}/task*-workflow.md 2>/dev/null || echo "NONE"
@@ -859,7 +864,7 @@ Return the final worktree list as plain text.
 `, { label: `teardown-${branchName}`, phase: 'Analyze', model: 'haiku' })
 }
 
-async function runTask(taskNum, resume = false) {
+async function runTask(taskNum, resume = false, parallelWave = false) {
   let prevReasons = null
   for (let attempt = 1; attempt <= MAX_TASK_ATTEMPTS; attempt++) {
     // Only the FIRST attempt resumes an existing worktree; a clean-slate retry must start fresh
@@ -867,8 +872,11 @@ async function runTask(taskNum, resume = false) {
     const resumeArg = (resume && attempt === 1) ? ' --resume' : ''
     // --under-block: the block already ran the breakdown assessment once (Analyze) and acted on it
     // above, so the per-task engine must NOT re-assess.
+    // --parallel-wave: this task shares the budget pool with concurrent siblings, so its per-stage
+    // outTok telemetry is contaminated; the per-task engine renders it as non-isolated. See D12.
+    const parallelArg = parallelWave ? ' --parallel-wave' : ''
     log(`Task ${taskNum}: attempt ${attempt}/${MAX_TASK_ATTEMPTS} via /sdlc-task${resumeArg}...`)
-    const r = await workflow('sdlc-task', `${blockId} ${taskNum}${resumeArg} --under-block`)
+    const r = await workflow('sdlc-task', `${blockId} ${taskNum}${resumeArg} --under-block${parallelArg}`)
 
     if (r && r.finalVerdict === 'PASS') {
       return { taskNum, status: 'pass', branchName: r.branchName, worktreePath: r.worktreePath, finalVerdict: 'PASS', attempts: attempt }
@@ -1003,7 +1011,8 @@ for (let wi = 0; wi < waves.length; wi++) {
     for (let k = 0; k < runnable.length; k += MAX_WAVE_WIDTH) {
       const batch = runnable.slice(k, k + MAX_WAVE_WIDTH)
       if (batch.length < runnable.length) log(`${waveLabel}: batch [${batch.join(', ')}]`)
-      const batchResults = await parallel(batch.map(t => () => runTask(t, resumeTasks.has(t))))
+      // batch.length > 1 → concurrent siblings share the budget pool → per-task outTok is contaminated (D12).
+      const batchResults = await parallel(batch.map(t => () => runTask(t, resumeTasks.has(t), batch.length > 1)))
       waveOutcomes.push(...batchResults.filter(Boolean))
     }
   } else {
@@ -1370,7 +1379,9 @@ BREAKDOWN_EOF
 ## Token Roll-up (orchestrator stages)
 Attribution for THIS engine's own agents (preflight / analyze / merge / triage / report). Each task's
 full per-stage detail lives in its own task<N>-workflow.md. promptTok = injected input estimate;
-outTok = output-token delta ("—" when no +Nk budget target was set).
+outTok = output-token delta ("—" when no +Nk budget target was set). These orchestrator stages run
+sequentially, so their outTok is clean. NOTE: per-task outTok for tasks that ran in a PARALLEL wave is
+shared-pool-contaminated and is reported there as "— (parallel)" rather than a misleading number (D12).
 
 **Total orchestrator outTok:** ${totalOut || '—'}
 
