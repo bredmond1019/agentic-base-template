@@ -5,6 +5,36 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-20 — sdlc-task agent consolidation: merge wrap-up, gate scout on resume (D14)
+
+Structural review of `sdlc-task.js` asked whether all its agents earn their keep. The judgment stages
+(implement/fix/test/review/document) are each a real SDLC boundary and stay separate; the overkill was
+in the mechanical micro-agents around them. Two cuts ([D14](planning/decisions/D14-sdlc-task-agent-consolidation.md)):
+
+1. **Merged `task-log` + `finalize` into one `wrap-up` agent.** Both were cheap, sequential, Haiku, and
+   ran back-to-back with no fresh-context boundary. One agent now writes the task log + the workflow
+   report and does the single chore commit. `LOG_SCHEMA` + `FINALIZE_SCHEMA` → one `WRAPUP_SCHEMA`;
+   `MODEL.taskLog`/`MODEL.finalize` → `MODEL.wrapup`.
+2. **Gated `scout` on `--resume`.** A fresh run gets a clean, suffix-incremented worktree where this
+   task's reports can't exist yet, so the start stage is deterministic (`generate-tasks` if the spec is
+   missing, else `implement`). `worktree-setup` (Haiku, already running bash there) now also reports
+   `specFileExists` + `blockStatus` — the two facts the non-resume path needed — so no scout round-trip.
+   On `--resume` the scout still runs its full report-file decision tree.
+
+Net: a standalone happy-path run drops from ~10 agent invocations to ~8, with no judgment stage or
+correctness boundary touched (review still re-runs gating checks fresh; B1 hand-off + D12 outTok
+suppression preserved).
+
+**Deliberately NOT done:** re-tiering the `harness-config` loader. It is on Sonnet because Haiku fails
+StructuredOutput on the nested schema (the 2026-06-20 fix below); `baseline-snapshot` already spawns no
+agent on the common path. No defensible win, so it was left alone.
+
+`node --check` clean. **Scope:** `sdlc-task.js` only. Not yet propagated to `sdlc-run.js` (same
+task-log/finalize pair; no worktree/scout split) or to downstream projects — both tracked in
+`planning/status.md`.
+
+---
+
 ## 2026-06-20 — Add `/prepare-next-agent` command + `/prime` handoff detection
 
 New command `prepare-next-agent.md`: writes `planning/handoff.md` (in-flight context, completed
