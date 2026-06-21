@@ -33,10 +33,26 @@ Shipped this session:
    `python-orchestration-system`, `markdown-engine-validator`) — byte-identical to base HEAD, left
    **uncommitted per-repo for review** per the standing propagation pattern.
 
-All nine engines (`base` + 4×2 downstream) `node --check` clean. **Deferred to a later round:** content
-task-granularity policy — the learn-ai `execution-plan.json` planned 21 module-tasks but the run
-consolidated to ~3 mega-tasks + 3 reruns under `breakdown.mode: "off"`; a 7-module mega-task that fails
-review re-runs all 7, which is the real token volume. Tracked in `status.md` upcoming work.
+All nine engines (`base` + 4×2 downstream) `node --check` clean.
+
+**Deep-dived the learn-ai run (correcting an earlier mis-read).** The "21 vs 3" was NOT runtime
+consolidation — `sdlc-block` never regroups tasks. The spec (`learn-paths-enliven/tasks.md`) is
+**granularity-ambiguous**: written as 3 Phases + module bullets with NO numbered `### N.` tasks, so the
+Analyze agent had to *guess* the grain (`sdlc-block.js:40-41` — agent proposes the task graph, JS computes
+waves) and guessed differently across runs: one-task-per-module (21) once, phase-level mega-tasks (3)
+another. Both report sets sit in the same folder; merge commits literally say "take task4 over task1
+**stub**" (task1's mega-implement stubbed dsa-foundations 04/05/06, redone per-module). Verified current
+state: all 21 EN modules are full on main (174–487 lines); dsa-advanced + system-design + dsa-foundations
+01/02/04/05/06 are done-and-verified, **03/07/08 are done-but-unverified** (task1 mega-run only; 07/08 were
+the queued redos Brandon paused — 2 orphan worktrees `task7`/`task8`, scaffold-only). Key caveat carried
+forward: **`breakdown.mode` is orthogonal to task COUNT** — it refines a task's internal sub-steps, never
+the number of tasks; turning it on only adds agents.
+
+**Next direction (proposed, not started):** push determinism into the harness via authoring skills — a
+numbered-task **authoring contract** (harden `/generate-tasks`) + a **preflight lint in `sdlc-block`'s
+Analyze** that stops when a spec has no numbered tasks instead of silently inferring N pipelines. Both
+mechanism-only. Recorded to project memory (`sdlc-determinism-skills-direction`). Session handed off via
+`planning/handoff.md`; awaiting Brandon's pick between the skills plan and learn-ai cleanup.
 
 ## 2026-06-20 — sdlc-task agent consolidation: merge wrap-up, gate scout on resume (D14)
 
