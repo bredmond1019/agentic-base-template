@@ -5,6 +5,39 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-21 — Tokenomics round: commit + propagate D14, port to sdlc-run, relabel parallel telemetry (D15)
+
+Reviewed two heavy live `sdlc-block` runs (`bastion/phase1-blockA`, `learn-ai/learn-paths-enliven`)
+that read as token-hungry. **Diagnosis: no leak.** The visible symptoms — `scout` on every fresh task,
+a separate `task-log` *and* `finalize` per task — were exactly what D14 fixed, but D14 was uncommitted,
+`sdlc-task.js`-only, and never propagated, so both projects ran the pre-D14 engine. The `— (parallel)`
+telemetry was D12 working as designed. The learn-ai 163.8k implement was genuine content work (7 modules,
+~2,200 MDX lines, `filesReadKb: 240 KB`) — the lever there is repeated context reads, not agent count.
+
+Shipped this session:
+
+1. **Committed D14** (`343cc0e`) — the consolidated `wrap-up` + `--resume`-gated `scout` in `sdlc-task.js`.
+2. **Ported the D14 wrap-up merge to `sdlc-run.js`.** Merged `logWork` (sonnet) + `finalize` (haiku) into
+   one `wrap-up` agent doing status update + log append + workflow report + chore commit. Kept on
+   **Sonnet** (not Haiku): unlike `sdlc-task`'s wrap-up — which only *records* deferred status/log for
+   `/clean-worktree` to apply at merge — this runs on main with no worktree and edits status.md/log.md
+   directly, so the human-facing prose is the judgment-heavy half. Removed `FINALIZE_SCHEMA` +
+   `MODEL.logWork`/`MODEL.finalize`. `sdlc-run.js` carries no telemetry table and never runs under
+   `--parallel-wave`, so D15 does not touch it.
+3. **D15 — parallel telemetry relabel** ([D15](planning/decisions/D15-parallel-telemetry-relabel.md),
+   refines D12's presentation). Under a parallel wave the per-stage cell now shows `~N in`
+   (= promptTok + filesRead at ~256 tok/KB), an accurate per-agent **input** estimate, instead of a blank
+   `— (parallel)`. Column renamed `outTok` → `tok`; solo runs still show the real output delta. The one
+   accurate per-agent number replaces a column of dead markers; `filesReadKb` is also the actionable lever.
+4. **Propagated** both engines to all four downstream projects (`bastion`, `learn-ai`,
+   `python-orchestration-system`, `markdown-engine-validator`) — byte-identical to base HEAD, left
+   **uncommitted per-repo for review** per the standing propagation pattern.
+
+All nine engines (`base` + 4×2 downstream) `node --check` clean. **Deferred to a later round:** content
+task-granularity policy — the learn-ai `execution-plan.json` planned 21 module-tasks but the run
+consolidated to ~3 mega-tasks + 3 reruns under `breakdown.mode: "off"`; a 7-module mega-task that fails
+review re-runs all 7, which is the real token volume. Tracked in `status.md` upcoming work.
+
 ## 2026-06-20 — sdlc-task agent consolidation: merge wrap-up, gate scout on resume (D14)
 
 Structural review of `sdlc-task.js` asked whether all its agents earn their keep. The judgment stages

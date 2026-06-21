@@ -325,8 +325,9 @@ function withModel(base, model) {
 //                  Attributes cleanly only for SEQUENTIAL stages — which is this engine's whole
 //                  pipeline when run solo. BUT when /sdlc-block runs this task in a parallel batch
 //                  (--parallel-wave), the pool is shared with concurrent sibling tasks, so the delta
-//                  is contaminated; we render it as "— (parallel)" at report time rather than report a
-//                  misleading number (the runtime exposes no per-agent output count). See D12.
+//                  is contaminated and the runtime exposes no per-agent output count. Under parallel
+//                  the report's "tok" column therefore flips to an estimated INPUT cost (promptTok +
+//                  filesRead→tokens) instead of a misleading output number. See D12 + D15.
 // ----------------------------------------------------------------
 const metrics = []
 async function tracedAgent(prompt, opts = {}) {
@@ -1814,17 +1815,22 @@ const stageTable = stageResults.map(r => {
 }).join('\n')
 
 const metricsTable = metrics.map(m => {
-  // Under a parallel wave the shared-pool delta is contaminated by concurrent siblings (D12) — mark
-  // it non-isolated instead of reporting a misleading number. promptTok/filesReadKb stay accurate.
-  const out  = parallelWave ? '— (parallel)' : (m.outTok != null ? String(m.outTok) : '—')
+  // outTok is a budget.spent() delta off a SHARED pool. Under a parallel wave (D12) it is contaminated
+  // by concurrent siblings and the runtime exposes no per-agent OUTPUT count, so a per-stage output
+  // number is unrecoverable. Rather than a blank "— (parallel)" cell (D15), show the one accurate
+  // per-agent figure we DO have under parallel: an estimated INPUT cost = promptTok + filesRead→tokens
+  // (~256 tok/KB). Marked "in" so it never reads as output. Solo runs still show the real output delta.
+  const inTokEst = m.promptTokEst + (m.filesReadKb != null ? Math.round(m.filesReadKb * 256) : 0)
+  const tok  = parallelWave ? `~${inTokEst} in` : (m.outTok != null ? String(m.outTok) : '—')
   const read = m.filesReadKb != null ? `${Math.round(m.filesReadKb)} KB` : '—'
-  return `| ${m.label} | ${m.model} | ${m.promptTokEst} | ${out} | ${read} |`
+  return `| ${m.label} | ${m.model} | ${m.promptTokEst} | ${tok} | ${read} |`
 }).join('\n')
-// Legend caveat: only present when outTok was suppressed for parallel contamination.
+// Legend caveat: present under a parallel wave, where the tok column flips from output delta to an
+// estimated input cost (D15, refines D12's presentation).
 const metricsCaveat = parallelWave
-  ? '\n\n> **outTok suppressed ("— (parallel)").** This task ran in a parallel wave under /sdlc-block; outTok is a shared-pool delta contaminated by concurrent sibling tasks, so a per-stage number would mislead. promptTok and filesReadKb are per-agent and accurate. See decisions/D12.'
+  ? '\n\n> **Parallel wave — "tok" column shows estimated INPUT cost, not output.** This task ran in a parallel batch under /sdlc-block; output tokens come off a shared budget pool contaminated by concurrent siblings, so a per-stage output number is unrecoverable. The "~N in" values are an input estimate (promptTok + filesRead at ~256 tok/KB) and ARE per-agent and uncontaminated. promptTok and filesReadKb are also accurate. See decisions/D15 (refines D12).'
   : ''
-log(`Token metrics (stage | model | promptTok | outTok | filesReadKb):\n${metricsTable}`)
+log(`Token metrics (stage | model | promptTok | tok | filesReadKb):\n${metricsTable}`)
 
 log('Writing task log + workflow report and committing (status/log deferred to merge time)...')
 
@@ -1949,10 +1955,11 @@ machine-generated telemetry and must land verbatim:
   cd ${worktreePath} && cat >> ${workflowReport} <<'METRICS_EOF'
 
 ## Token Metrics
-Per-stage attribution (promptTok = injected input estimate; outTok = output-token delta, "—" when no
-+Nk budget target was set; filesReadKb = stage-reported ingestion estimate).${metricsCaveat}
+Per-stage attribution (promptTok = injected input estimate; tok = output-token delta on a solo run,
+"—" when no +Nk budget target was set, OR an estimated input cost "~N in" under a parallel wave where
+output isn't isolatable; filesReadKb = stage-reported ingestion estimate).${metricsCaveat}
 
-| Stage | Model | promptTok | outTok | filesReadKb |
+| Stage | Model | promptTok | tok | filesReadKb |
 |---|---|---|---|---|
 ${metricsTable}
 METRICS_EOF
