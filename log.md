@@ -5,6 +5,35 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-21 — D16 preflight task-structure lint + spec-template/generate-tasks contract; learn-ai orphan worktree cleanup
+
+Shipped the determinism-first unit motivated by the learn-ai `learn-paths-enliven` tokenomics incident
+(ambiguous spec → Analyze inferred 21 vs. 3 tasks across runs → duplicate work + orphan worktrees):
+
+1. **D16 — Preflight task-structure lint** ([D16](planning/decisions/D16-preflight-task-structure-lint.md)).
+   Added STEP 4 to `sdlc-block.js` pre-flight: `grep -c '^### [0-9]' tasks.md` — if the count is 0
+   the pre-flight returns `ready=false, action="aborted"` with a fix message before Analyze runs.
+   Applies to CASE B (pre-existing uncommitted spec) and CASE C (already clean); CASE A (pre-flight
+   generated the spec itself) is exempt. `PREFLIGHT_SCHEMA` unchanged (`action: "aborted"` already
+   covers it). `node --check` clean; not yet propagated downstream.
+
+2. **`spec-template.md` format fix.** Corrected the `## Tasks` section from flat `1. **Title**` format
+   to `## Step-by-Step Tasks` with `### N. Title` headings + explicit note that sdlc-block requires
+   this format. Template was inconsistent with what `/generate-tasks` produces and what Analyze parses.
+
+3. **`generate-tasks.md` contract callout.** Added an explicit note in step 5 that `### N. Title` is
+   the required heading format and explains why (sdlc-block enumerate tasks by this pattern, aborts on
+   none). The output format was already correct; the instructions now name the requirement.
+
+4. **learn-ai orphan worktree cleanup.** Removed `trees/learn-paths-enliven-task7` and
+   `trees/learn-paths-enliven-task8` (scaffold-only, one init commit each, zero implementation).
+   Force-deleted both branches (`-D`; branches had never been merged into main, but contained only
+   the `chore: init worktree` scaffold commit). `git worktree list` clean.
+
+Not yet propagated to downstream projects (standing convention — leave uncommitted per-repo for review).
+
+---
+
 ## 2026-06-21 — Tokenomics round: commit + propagate D14, port to sdlc-run, relabel parallel telemetry (D15)
 
 Reviewed two heavy live `sdlc-block` runs (`bastion/phase1-blockA`, `learn-ai/learn-paths-enliven`)

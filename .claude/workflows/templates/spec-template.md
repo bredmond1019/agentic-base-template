@@ -21,14 +21,26 @@ like?>
 - <path/to/relevant/source — the code this spec touches>
 - <link to any prior decision in planning/decisions/ that constrains this work>
 
-## Tasks
+## Step-by-Step Tasks
 
 Numbered, dependency-ordered. Each task is a unit a single pipeline run can implement, test,
-and review. Note dependencies so parallel waves can be computed.
+and review. **Use `### N. Title` heading format** — sdlc-block enumerates tasks by this
+pattern and aborts pre-flight if no `### N.` headings are found.
 
-1. **<Task 1 — short title>** — <what to build and where>. Depends on: none.
-2. **<Task 2 — short title>** — <what to build and where>. Depends on: 1.
-3. **<Task 3 — short title>** — <what to build and where>. Depends on: 1.
+### 1. <Foundational step>
+- <what to build and where>
+- Depends on: none.
+
+### 2. <Next step>
+- <what to build and where>
+- Depends on: 1.
+
+### 3. <Next step>
+- <what to build and where>
+- Depends on: 1.
+
+### N. Validate
+- Run the Validation Commands listed below and confirm all pass.
 
 ## Acceptance Criteria
 
