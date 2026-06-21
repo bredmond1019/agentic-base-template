@@ -5,6 +5,34 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-21 — Rewrite /update-docs as documentation health sweep; propagate to all four downstream repos
+
+Transformed `/update-docs` from a narrow surgical git-diff patcher into a comprehensive **5-phase documentation audit** that detects stale sections, missing coverage, and confirmed-current docs. The command is read-only by default; `--patch` applies surgical fixes for clear-cut issues. New `--since <ref>` flag scopes the git history window.
+
+**Five-phase audit model:**
+1. **Git history snapshot** — `git log --oneline` and `git diff --stat` to spot recent changes
+2. **Codebase inventory** — sweep `.claude/commands/`, `.claude/workflows/`, `harness.schema.json`, scaffold profiles, and `planning/decisions/` to establish source of truth
+3. **Documentation inventory** — read every `docs/*.md` and `.claude/commands/README.md`; build a coverage matrix (what each doc covers, what each capability is documented in)
+4. **Gap analysis** — classify discrepancies into four buckets: **STALE** (doc ≠ source), **MISSING** (capability has no doc), **NO-DOC** (intentionally undocumented), **CURRENT** (verified in sync)
+5. **Structured report** — output categorized findings with fix suggestions
+6. **Optional patching** — `--patch` applies surgical edits for clear-cut STALE items; skips architecture-level changes and planning-file modifications
+
+Conservative thresholds: MISSING only flags user-facing capabilities (commands, flags, config fields, behaviors) where the confusion is real and not already addressed in existing docs/comments.
+
+Updated `.claude/commands/README.md` to describe the new command as the **ad-hoc maintenance** counterpart to `/document` — use for periodic doc health checks outside the pipeline; use `/document` inside it.
+
+Propagated both changed files (update-docs.md + README.md) to all four downstream repos (`bastion`, `learn-ai`, `python-orchestration-system`, `markdown-engine-validator`) — byte-identical to base HEAD, left **uncommitted per-repo for review**.
+
+All engines `node --check` clean.
+
+```diff
+ .claude/commands/README.md      |  11 ++-
+ .claude/commands/update-docs.md | 164 +++++++++++++++++++++++++++++-----------
+ 2 files changed, 125 insertions(+), 50 deletions(-)
+```
+
+---
+
 ## 2026-06-21 — D17 `--from <stage>` flag + pipeline recommendation to sdlc-run / generate-tasks; propagate to all four downstream repos
 
 Shipped two user-experience improvements reducing friction when restarting mid-spec or choosing which pipeline to use. Both propagated to downstream projects (uncommitted per-repo for review).
