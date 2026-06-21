@@ -61,8 +61,25 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
    (the SDLC engines apply the same heuristic at run time per `breakdown.mode`, so this is the
    authoring-time preview of that decision).
 
-9. Report the path written and suggest the next step:
-   "Spec written and committed to planning/phaseN-blockX/tasks.md. Run `/breakdown planning/phaseN-blockX/tasks.md` to decompose into atomic sub-steps."
+9. **Pipeline recommendation.** After writing the tasks, evaluate which run command fits the block and
+   report a clear recommendation with a one-line reason. Use these signals:
+
+   - **`/sdlc-run`** — ≤3 tasks total, OR all tasks are sequential (every task depends on the previous
+     one), OR the block is a single linear concern where parallel worktree isolation adds no value.
+     One implement→test→review pass is sufficient.
+   - **`/sdlc-block`** — ≥4 tasks AND at least 2 tasks can run in the same parallel wave (disjoint
+     file ownership from step 5, no `dependsOn` between them). The orchestration and per-task worktree
+     overhead pays off only when there is genuine parallelism — count the independent tasks per wave,
+     not just the total task count.
+   - **`/sdlc-task <N>`** — Not a strategy for running all tasks; name it only when the right move is
+     one specific task in an isolated worktree (e.g. a high-risk surgical change, or resuming after a
+     block failure on task N). If naming it, also say which task number and why isolation matters.
+
+   If `breakdown.mode` is `auto` and any tasks were flagged in step 8, note that breakdown must run
+   first and the pipeline recommendation applies to each resulting sub-spec, not this spec directly.
+
+10. Report the path written and suggest the next step:
+    "Spec written and committed to planning/phaseN-blockX/tasks.md. Run `/breakdown planning/phaseN-blockX/tasks.md` to decompose into atomic sub-steps."
 
 ## Context / Files to Read
 
@@ -110,7 +127,7 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
 
 ## Report
 
-Output the path to the file created, the decomposition assessment, and the next-step options:
+Output the path to the file created, the decomposition assessment, the pipeline recommendation, and the next-step options:
 ```
 planning/<spec-slug>/tasks.md
 
@@ -119,9 +136,15 @@ Decomposition assessment:
   - Task 3 — touches 6 files across model + API + UI; recommend /breakdown
   - Task 5 — bundles two separable concerns; recommend /breakdown
 
-Next (optional — decompose into atomic sub-steps):
+Pipeline recommendation:
+  <one of:>
+  /sdlc-run <spec-slug>          — <N> tasks, all sequential; one linear pass is sufficient
+  /sdlc-block <spec-slug>        — <N> tasks, <M> can run in parallel across <W> waves; orchestration overhead worthwhile
+  /sdlc-task <spec-slug> <N>     — run task <N> in isolation; <reason isolation matters here>
+
+Next (optional — decompose first):
   /breakdown planning/<spec-slug>/tasks.md
 
-Next (skip breakdown — implement directly):
-  /implement planning/<spec-slug>/tasks.md
+Next (run directly):
+  /<recommended-command> <spec-slug>
 ```
