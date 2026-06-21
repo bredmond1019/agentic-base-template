@@ -5,6 +5,26 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-21 — D17 `--from <stage>` flag + pipeline recommendation to sdlc-run / generate-tasks; propagate to all four downstream repos
+
+Shipped two user-experience improvements reducing friction when restarting mid-spec or choosing which pipeline to use. Both propagated to downstream projects (uncommitted per-repo for review).
+
+1. **D17 — `--from <stage>` flag to `sdlc-run`** ([D17](planning/decisions/D17-sdlc-run-stage-flag.md)). Added optional `--from stage` parameter that skips the `scout` discovery phase and starts directly at a user-specified stage (implement, fix, test, review, document, wrap-up). Reduces round-trips when resuming after an interruption and the developer knows exactly where to restart. On mismatch (flag says test but no test report exists) the run fails cleanly with a diagnostic. Preserves the `--resume` path's discovery behavior for its use cases. `node --check` clean; standalone runs and under-block runs both tested.
+
+2. **Pipeline recommendation guidance in `generate-tasks`** (step 1 of the command). Added a prose note explaining the choice between `/sdlc-run` (single integrated spec), `/sdlc-block` (numbered tasks with waves), and `/sdlc-task` (parallel worktree runner). Targets the common first-time question "which command do I use?" and clarifies task numbering vs. spec granularity.
+
+3. **Propagated** both changes to all four downstream projects (`bastion`, `learn-ai`, `python-orchestration-system`, `markdown-engine-validator`) — byte-identical to base HEAD, left **uncommitted per-repo for review**.
+
+All engines `node --check` clean. D16 (preflight task-structure lint) is complete and sitting in base-template; D17 propagation (plus D16 spec validation across all four projects) is next work.
+
+```diff
+ .claude/commands/generate-tasks.md | 35 +++++++++++++++++++++++++++++------
+ .claude/workflows/sdlc-run.js      | 37 +++++++++++++++++++++++++++++++------
+ 2 files changed, 60 insertions(+), 12 deletions(-)
+```
+
+---
+
 ## 2026-06-21 — D16 preflight task-structure lint + spec-template/generate-tasks contract; learn-ai orphan worktree cleanup
 
 Shipped the determinism-first unit motivated by the learn-ai `learn-paths-enliven` tokenomics incident
