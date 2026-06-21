@@ -18,7 +18,7 @@ folder is the map.
 | `master-plan.md` | Strategy + phase specifications | You need the sequence of work |
 | `harness.json` | Validation/UI-test config the SDLC engines read | You're adapting the pipeline to this stack |
 | `decisions/` | Atomic, append-only architectural decisions | You want to check a prior choice |
-| `handoff.md` | Active session handoff (transient — created by `/prepare-next-agent`, read by `/prime`, delete after consuming) | A prior session handed off in-flight work |
+| `handoff.md` | Active session handoff (transient — created by `/handoff`, read by `/prime`, delete after consuming) | A prior session handed off in-flight work |
 | `<concept>/` | Per-spec planning folders (task specs + pipeline state) | You're running the SDLC pipeline |
 
 ## The concept-folder model
