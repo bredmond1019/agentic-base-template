@@ -60,6 +60,18 @@
       },
       "required": ["enabled"]
     },
+    "planning": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional planning-phase policy read by the authoring commands (/plan, /feature, /generate-tasks). Absent → all fields default to preserve today's zero-touch behavior.",
+      "properties": {
+        "clarify": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, the authoring commands surface 2-4 targeted clarifying questions for an ambiguous prompt BEFORE writing the spec. Default false preserves the zero-touch flow (write immediately). A user can always force this per-invocation with the --clarify flag regardless of this setting."
+        }
+      }
+    },
     "breakdown": {
       "type": "object",
       "additionalProperties": false,

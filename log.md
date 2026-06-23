@@ -5,6 +5,52 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — Plan F3 step 1: prompt/template layer (D20, D21, D25 complete; D18/D19 authoring halves)
+
+Implemented the low-risk prompt/template slice of Plan F3 (sequencing step 1), Opus driving with one
+Sonnet sub-agent for isolated ADR prose. No engine (`.claude/workflows/*.js`) code touched yet.
+
+- **D20 — clarify-before-generate gate (complete).** Added `planning.clarify: boolean` (default false)
+  to `harness.schema.json` (new top-level `planning` object), the `scaffold/planning/harness.json` stub,
+  and `docs/harness-json.md` (table row + dedicated section + config-absent note). Wired a clarify step
+  into `plan.md` / `feature.md` / `generate-tasks.md`: when `planning.clarify` is true **or** `--clarify`
+  is passed **and** the prompt is genuinely ambiguous, ask 2–4 targeted questions before writing;
+  otherwise behave exactly as today. ADR `D20-clarify-before-generate.md` + index row.
+- **D19 — property-based authoring self-check (authoring half).** Added a pre-report self-check step to
+  all three authoring commands: every `### N.` task names ≥1 file, AC non-empty/observable, Validation
+  Commands present (or harness.json fallback), no leftover template sentinels — with the load-bearing
+  caveat that legitimate `<...>` (generics/prose) and bare `TODO`/`TBD` are **not** flagged. Engine
+  preflight half + ADR land in step 2.
+- **D21 — honest pipeline recommendation (complete, prompt-only).** Rewrote `/generate-tasks` step 11 +
+  the Report examples for the repurposed `sdlc-block` ("a fresh implement agent per task at near-`sdlc-run`
+  cost"): default `/sdlc-run` even past 4 tasks for homogeneous/sequential blocks; recommend the lean
+  block for per-task implement isolation or true parallelism; recommend `--verify-depth consolidated+review`
+  (≈38k tok × N) only when end-only localization would be hard. ADR `D21-honest-pipeline-recommendation.md`
+  + index row (forward-refs D23/D24 for the engine behavior).
+- **D18 — living-artifact specs (template half).** Added an append-only `## Amendment Log` (seeded
+  `_No amendments yet._`) + a one-line `status:` / `last-run:` provenance stub to `spec-template.md` and
+  the `plan.md` / `feature.md` / `generate-tasks.md` output formats. Engine wiring (wrap-up/fix appends +
+  deferred-merge path) + ADR land in step 2.
+- **D25 — considered-and-rejected record (complete).** Sonnet sub-agent authored
+  `D25-considered-and-rejected.md` (XML format deferred; per-phase SVG, mega-skill dispatch table,
+  cross-plan reference graph rejected), reviewed and accepted; index row added.
+
+Renumbered command instruction steps and fixed internal cross-references. JSON (schema + stub) parses;
+all engines still `node --check` clean.
+
+## 2026-06-23 — Revise Plan F3 per the architecture reframe; rewrite handoff for an Opus+Sonnet session
+
+Reviewed the Plan F3 effort with the user before implementation and reframed it based on measured `sdlc-block` telemetry. The decisive input: the user almost never runs `sdlc-block` and its current behavior **is not worth preserving** — they live in `sdlc-run`. So rather than tuning the block, D21–D24 now **repurpose `sdlc-block` in place** into "a more powerful `sdlc-run`": keep the name + orchestration machinery (waves, retry/triage, worktree-for-parallel, ordered merge) but discard the wasteful per-task full pipeline. The one capability `sdlc-run` lacks and the new block adds is a **fresh implement agent per task** (today `sdlc-run` runs one implement agent across all tasks); everything else (shared setup once per block, in-place sequential execution, one consolidated back-half) drives the ≈200k/task waste out. Because the old behavior is deliberately discarded, the byte-identity guardrail no longer binds `sdlc-block` (it still binds `sdlc-run` + the shared `planning.clarify` toggle). Second decision: **per-task review defaults OFF**, with `/generate-tasks` recommending `consolidated+review` when task size/complexity would make end-only localization hard.
+
+Revised `planning/plans/planf3-harness-improvements.md` to match: reframed Steer A + Guardrail #2; D21 recommendation now also decides the per-task-review suggestion (piggybacks the step-8 D10/D13 signal); D22 defines plan validity as parses + schema-match + task-set-match (stale plans fall back to the Opus analyzer, justifying schema formalization as the load-time validator); D23 makes in-place sequential the default substrate and adds the missing failure-rollback requirement (`git reset --hard` to pre-task SHA before retry on the shared branch); D24 collapses the three-way verify matrix to two modes (`consolidated` default / `consolidated+review`); D19 scopes placeholder detection to scaffold sentinels only so a valid spec is never blocked. Also caught a latent contradiction in the original plan — D23's "no knob, derived from wave width" silently broke the byte-identity guardrail; the reframe dissolves it. Rewrote `planning/handoff.md` for a fresh **Opus** instance that drives the engine/judgment work directly and **delegates mechanical isolated pieces to Sonnet sub-agents** (D18 template inserts, D20 doc/schema plumbing, D25 prose, bookkeeping), explicitly NOT running `/sdlc-block` on this effort (self-modification hazard + heavy file overlap trips the D9 disjoint-owner guard). No engine or command code changed yet; branch `planf3-harness-improvements`, ADRs D18–D25 still to be authored as each lands.
+
+```diff
+ planning/handoff.md                           | 189 ++++++++++++--------------
+ planning/plans/planf3-harness-improvements.md | 155 ++++++++++++++-------
+ planning/status.md                            |  10 +-
+ 3 files changed, 203 insertions(+), 151 deletions(-)
+```
+
 ## 2026-06-23
 
 Reviewed the "Plan F3" planning meta-skill article against our SDLC harness and, combined with user-supplied sdlc-block token telemetry, produced an eight-ADR improvement plan (D18–D25) targeting planning quality and a lean sdlc-block redesign. The eight ADRs span planning-quality changes (D18 living-artifact specs, D19 property guard, D20 clarify gate) and telemetry-driven lean sdlc-block work (D21 honest recommendation, D22 relocate execution-plan.json to /generate-tasks, D23 shared setup + isolation only for true parallelism, D24 consolidated verify depth knob, D25 considered-and-rejected); the lean-block redesign is the centerpiece, driven by measured telemetry showing approximately 200k redundant tokens per task on sequential blocks. Formalized the work in a self-contained plan at planning/plans/planf3-harness-improvements.md, indexed it in planning/index.md, pointed status.md Current focus at the plan, and wrote planning/handoff.md carrying the decision rationale and measured telemetry table. No engine or command code has changed; work lives on branch planf3-harness-improvements, ready for a fresh agent to implement starting at sequencing step 1 (D20).

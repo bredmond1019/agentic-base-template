@@ -28,7 +28,16 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
    - `planning/master-plan.md` (the phase/block definition)
    - Do NOT read status.md — the target block is given explicitly.
 
-5. THINK HARD about correct scope:
+5. **Clarify gate (only when enabled).** Read `planning/harness.json` → `planning.clarify`. When it is
+   `true` **or** `$ARGUMENTS` contains `--clarify`, and the block definition is genuinely ambiguous (its
+   scope, deliverables, or task boundaries could be read more than one way), pause and ask the user
+   **2–4 targeted clarifying questions** before writing the spec; fold the answers into the tasks. If the
+   block is already unambiguous, skip the questions and proceed even when the gate is on. When
+   `planning.clarify` is absent/`false` and no `--clarify` flag is present, skip this step entirely and
+   behave exactly as before. (`--clarify` is a control flag only — do not treat it as part of the
+   phase/block slug when parsing `$ARGUMENTS`.)
+
+6. THINK HARD about correct scope:
    - Do not invent work beyond what the block defines.
    - Size tasks to roughly 21 hours spread across Mon/Wed/Fri sessions.
    - Enforce **the project's standing rules** as written in `CLAUDE.md` — do not assume any stack, locale-parity, or content-layout rule unless written there. Every task must leave the project's gated checks (`planning/harness.json` → `validation.checks[]` with `gates: true`) passing.
@@ -38,9 +47,22 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
      this pattern (`### N.`) and will abort pre-flight on a spec that has none. Never use
      flat numbered lists (`1. **Title**`) or any other format for the task headings.
 
-6. Create the directory `planning/phaseN-blockX/` if it does not exist, then write the spec to `planning/phaseN-blockX/tasks.md` using the Output Format below.
+7. Create the directory `planning/phaseN-blockX/` if it does not exist, then write the spec to `planning/phaseN-blockX/tasks.md` using the Output Format below.
 
-7. **Commit the spec.** Leave the working tree clean so a downstream `/sdlc-block` run never trips
+8. **Property self-check (before committing).** A structurally valid spec can still be substantively
+   thin and waste pipeline tokens. Re-read what you just wrote and confirm every required property
+   holds; **revise the spec in place** if any fails, then re-check:
+   - **Every `### N.` task names ≥1 concrete file** it creates or modifies (so the dependency analysis
+     and disjoint-ownership guard can see boundaries). The final Validate step is exempt.
+   - **Acceptance Criteria are non-empty and observable** — each criterion can be judged true/false.
+   - **Validation Commands are present** (or `planning/harness.json` → `validation.checks[]` supplies
+     them as the fallback).
+   - **No leftover template sentinels** — no `{{TOKEN}}`, no literal seed strings the Output Format
+     ships (`<placeholder>`-style angle stubs left unfilled, empty AC/Validation bullets). Do **not**
+     treat legitimate `<...>` in code/prose (e.g. `Vec<T>`, "the `<concept>` folder") or a bare
+     `TODO`/`TBD` inside authored content as a sentinel.
+
+9. **Commit the spec.** Leave the working tree clean so a downstream `/sdlc-block` run never trips
    its clean-tree merge guard (an uncommitted `tasks.md` blocks every merge):
    ```bash
    git add planning/phaseN-blockX/
@@ -48,7 +70,7 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
    ```
    (Use the normalized directory slug, e.g. `chore: add spec for <spec-slug>`.)
 
-8. **Decomposition assessment.** Before reporting, evaluate each task you just wrote against the
+10. **Decomposition assessment.** Before reporting, evaluate each task you just wrote against the
    coarseness heuristic and recommend which (if any) warrant a `/breakdown` first. The real predictor
    is SEPARABLE STRUCTURE, not raw file count. A task is a breakdown candidate when ANY hold: it bundles
    multiple separable concerns ("implement X AND refactor Y AND add Z"), OR it spans multiple layers
@@ -61,24 +83,38 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
    (the SDLC engines apply the same heuristic at run time per `breakdown.mode`, so this is the
    authoring-time preview of that decision).
 
-9. **Pipeline recommendation.** After writing the tasks, evaluate which run command fits the block and
-   report a clear recommendation with a one-line reason. Use these signals:
+11. **Pipeline recommendation.** After writing the tasks, evaluate which run command fits the block and
+   report a clear recommendation with a one-line reason. The two whole-block runners differ only in
+   **how implement is scoped** — `/sdlc-run` runs **one** implement agent across all tasks; the lean
+   `/sdlc-block` runs **a fresh implement agent per task** (deliberate per-task context windows +
+   observability), then does **one** consolidated back-half (test/review/document/wrap-up) just like
+   `/sdlc-run`. The block runs tasks **in-place sequentially** by default and only spins worktrees for
+   genuinely parallel waves, so its cost is close to `/sdlc-run`'s. Use these signals:
 
-   - **`/sdlc-run`** — ≤3 tasks total, OR all tasks are sequential (every task depends on the previous
-     one), OR the block is a single linear concern where parallel worktree isolation adds no value.
-     One implement→test→review pass is sufficient.
-   - **`/sdlc-block`** — ≥4 tasks AND at least 2 tasks can run in the same parallel wave (disjoint
-     file ownership from step 5, no `dependsOn` between them). The orchestration and per-task worktree
-     overhead pays off only when there is genuine parallelism — count the independent tasks per wave,
-     not just the total task count.
+   - **`/sdlc-run`** (default) — small, homogeneous, or sequential blocks, **even past 4 tasks**. When a
+     single shared implement context can hold all the tasks without blurring or overflowing, this is the
+     cheapest correct choice (one agent, one back-half).
+   - **`/sdlc-block`** (lean) — recommend when tasks each benefit from a **fresh implement agent**:
+     large or heterogeneous tasks where one shared context would blur or overflow, **or** when ≥2 tasks
+     genuinely share a wave (disjoint file ownership from step 6, no `dependsOn` between them → true
+     parallelism). Count the independent tasks per wave, not just the total.
    - **`/sdlc-task <N>`** — Not a strategy for running all tasks; name it only when the right move is
      one specific task in an isolated worktree (e.g. a high-risk surgical change, or resuming after a
      block failure on task N). If naming it, also say which task number and why isolation matters.
 
-   If `breakdown.mode` is `auto` and any tasks were flagged in step 8, note that breakdown must run
+   **Per-task review depth (only when recommending `/sdlc-block`).** The lean block defaults to
+   `--verify-depth consolidated` (per-task review **off** — one review at the end over the integrated
+   tree). Reuse the step-10 decomposition signal: when tasks are large / complex / heterogeneous enough
+   that a single end-of-run review would struggle to localize **which task** caused a finding, recommend
+   `--verify-depth consolidated+review` (a per-task review pass that acts as a localization map). State
+   the tradeoff: it adds roughly **38k output tokens × N tasks**, and a per-task review validates a slice
+   **in isolation** — the consolidated review stays authoritative for cross-task integration. For small
+   homogeneous blocks, leave it off.
+
+   If `breakdown.mode` is `auto` and any tasks were flagged in step 10, note that breakdown must run
    first and the pipeline recommendation applies to each resulting sub-spec, not this spec directly.
 
-10. Report the path written and suggest the next step:
+12. Report the path written and suggest the next step:
     "Spec written and committed to planning/phaseN-blockX/tasks.md. Run `/breakdown planning/phaseN-blockX/tasks.md` to decompose into atomic sub-steps."
 
 ## Context / Files to Read
@@ -91,6 +127,8 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
 
 ```md
 # Task Spec — Phase <N>, <Block/Project> <X>
+
+**Status:** Not started · **Last run:** never
 
 ## Goal
 <one sentence, taken directly from the plan>
@@ -123,6 +161,10 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
 
 ## Notes
 <filled in as work happens>
+
+## Amendment Log
+<!-- Append-only. Pipeline stages append one dated line here when they deviate from the spec. -->
+_No amendments yet._
 ```
 
 ## Report
@@ -138,8 +180,10 @@ Decomposition assessment:
 
 Pipeline recommendation:
   <one of:>
-  /sdlc-run <spec-slug>          — <N> tasks, all sequential; one linear pass is sufficient
-  /sdlc-block <spec-slug>        — <N> tasks, <M> can run in parallel across <W> waves; orchestration overhead worthwhile
+  /sdlc-run <spec-slug>          — <N> tasks, small/homogeneous/sequential; one shared implement context is sufficient
+  /sdlc-block <spec-slug>        — <N> tasks; fresh implement agent each (<reason: heterogeneous/large, or <M> parallel across <W> waves>)
+  /sdlc-block <spec-slug> --verify-depth consolidated+review
+                                 — as above, plus per-task review for localization (<reason; +~38k tok × N>)
   /sdlc-task <spec-slug> <N>     — run task <N> in isolation; <reason isolation matters here>
 
 Next (optional — decompose first):

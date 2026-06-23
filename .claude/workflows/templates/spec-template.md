@@ -9,6 +9,8 @@ description: One-line summary of what this spec delivers.
 > Format reference for SDLC task specs. A real spec lives at `planning/<concept>/tasks.md`.
 > Replace every `<...>` placeholder; keep the section headings — the pipeline reads them.
 
+**Status:** Not started · **Last run:** _never_
+
 ## Goal
 
 <What this spec delivers, stated as an outcome. One short paragraph. What does "done" look
@@ -64,3 +66,11 @@ listed here instead.
 ## Notes
 
 <Anything that doesn't fit above: known risks, out-of-scope items, follow-ups, links.>
+
+## Amendment Log
+
+Append-only. When a pipeline stage deviates from this spec (a fix, a scope adjustment, a
+substitution), it records one dated line here so the spec stays a living record of how it actually
+ran. Do not rewrite history — only append.
+
+_No amendments yet._

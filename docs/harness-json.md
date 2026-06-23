@@ -36,6 +36,8 @@ If `planning/harness.json` is **absent**:
 - The UI-test stage is disabled — no dev server is started, verdict is SKIPPED.
 - The breakdown assessment defaults to `recommend` (advisory; threshold 3) — coarse tasks are
   logged but nothing is auto-generated.
+- The clarify-before-generate gate is off — the authoring commands write the spec immediately
+  (unless the user passes `--clarify`).
 
 This is acceptable for a quick start but is less reliable than a `harness.json`.
 
@@ -51,6 +53,7 @@ This is acceptable for a quick start but is less reliable than a `harness.json`.
 | `validation` | object | **Yes** | The always-run validation suite |
 | `uiTest` | object | **Yes** | UI smoke-test stage config |
 | `breakdown` | object | No | Task-decomposition policy (absent → `mode: recommend`, `complexityThreshold: 3`) |
+| `planning` | object | No | Planning-phase policy for the authoring commands (absent → `clarify: false`) |
 
 ### `validation.checks[]`
 
@@ -124,6 +127,21 @@ but cohesive.
 near-zero added cost) and passes `--under-block` to each `/sdlc-task` so the per-task engine does not
 re-assess. `/generate-tasks` previews the same recommendation at authoring time. See
 [D10](../planning/decisions/D10-breakdown-assessment.md).
+
+### `planning` object
+
+Optional. Controls planning-phase behavior of the authoring commands (`/plan`, `/feature`,
+`/generate-tasks`). Absent → all fields default to today's zero-touch behavior.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `clarify` | boolean | No | `false` (default) · `true` |
+
+When `clarify: true`, the authoring commands surface **2–4 targeted clarifying questions** for an
+ambiguous prompt *before* writing the spec — the deliberate counter to the "model guesses intent →
+median results" anti-pattern. Default `false` preserves the zero-touch flow (write immediately). A
+user can always force the behavior for a single invocation by appending **`--clarify`**, regardless
+of this setting. See [D20](../planning/decisions/D20-clarify-before-generate.md).
 
 ## Stack profiles
 
