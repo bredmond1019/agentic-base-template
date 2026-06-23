@@ -5,6 +5,9 @@
 # SDLC worktrees (created by /sdlc-task and /sdlc-block at runtime)
 trees/
 
+# Hook session logs (ephemeral)
+.claude/logs/
+
 # SDLC runtime resume breadcrumbs (regenerated every run — see D27/D28)
 planning/*/sdlc/sdlc-state.json
 planning/*/sdlc/sdlc-block-state.json

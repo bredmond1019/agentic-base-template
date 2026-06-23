@@ -25,6 +25,49 @@ Created `docs/workflows/` as the canonical reference for the SDLC pipelines (aut
 
 ---
 
+## 2026-06-23 — TAC8 Adoptions Task 5 — persistent phase state in sdlc-run.js (D27)
+
+Shipped the last TAC8 adoption: `sdlc-run` now leaves a machine-readable breadcrumb of where a run
+is. After each pipeline phase **resolves**, a new `recordPhaseState()` helper writes (overwriting)
+a small JSON file at `planning/<concept>/sdlc/sdlc-state.json` — alongside D22's
+`execution-plan.json`.
+
+**Schema:** `{spec_slug, started_at, updated_at, current_phase, completed_phases, failed_phase,
+task_number, resume_from}`. `completed_phases` grows monotonically (deduped — a multi-pass fix
+records `"fix"` once but bumps `updated_at` each pass); on a phase abort, `failed_phase` +
+`resume_from` are set to the phase name and `completed_phases` is left untouched.
+
+**Why a writer agent:** the workflow runtime has no filesystem access and cannot call `Date.now()`,
+so `recordPhaseState()` spawns a cheap **Haiku** agent that stamps timestamps via `date`, reads the
+existing file to preserve `started_at`, and writes the JSON. The write is best-effort — a failure
+logs a warning and never aborts the pipeline.
+
+**Call sites (14):** failure + success records at generate-tasks / implement / fix; completion
+records at test / review / ui-test (both the skip branch and the server-run converge point) /
+document / wrap-up. Matches the spec's verify list.
+
+**Not a resume engine, by design.** The state file is gitignored runtime state — crash visibility
+plus a `resume_from` hint. The committed report files (scout) remain the authoritative resumption
+signal; `--from <stage>` (D17) remains the explicit-resume lever. Building a second, state-driven
+resume path would compete with the scout and read uncommitted data — strictly worse.
+[D27](planning/decisions/D27-sdlc-run-phase-state.md) records this and the deferred `sdlc-task`
+(parallel, per-task) variant.
+
+Gitignored `planning/*/sdlc/sdlc-state.json` (mirroring the `.claude/logs/` precedent from Tasks
+1–4). D27 numbered ahead of the F3 branch's D18–D26 to avoid collision; the index notes the gap.
+All three engines `node --check` clean. `sdlc-run.js`-only engine change; **not yet propagated
+downstream.**
+
+```diff
+ .claude/workflows/sdlc-run.js               |  ~90 +++++++++
+ .gitignore                                  |   3 +
+ planning/decisions/D27-sdlc-run-phase-state.md | (new)
+ planning/decisions/index.md                 |   ~10 +++
+ planning/status.md                          |   edits
+```
+
+---
+
 ## 2026-06-23 — P2 block-state persistence (D28)
 
 Implemented the third validation-run bug fix: cross-invocation resume state for `sdlc-block.js`. A new gitignored breadcrumb `planning/<spec>/sdlc/sdlc-block-state.json` records per-task status (`pending`/`merged`/`escalated`/`skipped` + commit/branch/worktree), written by a cheap Haiku helper (`writeBlockState`) after Analyze and once per wave. On re-invocation a Haiku loader reads the file before Analyze; its task map **additively** augments Analyze's git-derived resume sets — `merged` tasks go to `doneTasks` (skip the wave loop), `escalated` tasks are forced to `complete-unmerged-fail` so the wave loop escalates them directly instead of re-deriving limbo worktrees through a ~12k-outTok triage wave (the dominant waste in the expose-api-and-telegram-bot run). Augments, never replaces, the committed-report scout (consistent with D27); the dependency graph still comes from Analyze / D22's execution-plan.json. Wrote [D28](planning/decisions/D28-sdlc-block-task-state.md) (numbered to avoid colliding with D27 on `tac8-adoptions`), updated `decisions/index.md` and `.gitignore` (added both `sdlc-state.json` and `sdlc-block-state.json` runtime breadcrumbs). All three engines `node --check` clean. Not yet validated end-to-end or propagated.
@@ -34,6 +77,42 @@ Implemented the third validation-run bug fix: cross-invocation resume state for 
  .gitignore                                   |   5 +
  planning/decisions/D28-sdlc-block-task-state.md | new
  planning/decisions/index.md                  |   7 +
+```
+
+---
+
+## 2026-06-23 — TAC8 Adoptions Tasks 1–4 — Python hooks, /patch command, E2E test templates, /conditional_docs
+
+Integrated four new harness capabilities from the TAC8 protocol review, all committed on `tac8-adoptions` branch:
+
+**Task 1: Python Security & Logging Hooks.** Added pre/post tool-use instrumentation hooks (`pre_tool_use.py`, `post_tool_use.py`) for security compliance and structured logging. Hooks fire before each tool invocation and after completion, enabling auditability and instrumentation without baking policy into the engines. Registered in `.claude/settings.json` under `settings.hooks`.
+
+**Task 2: `/patch` Lightweight Hotfix Command.** New command for surgical git-diff patching — apply fixes without triggering a full spec workflow. Scoped for small, targeted changes (config updates, doc fixes, simple refactors). Complements the full SDLC pipeline for quick turnarounds.
+
+**Task 3: E2E Test Template Library.** Four reusable test templates (`e2e:test_auth_gate`, `e2e:test_crud_api`, `e2e:test_error_handling`, `e2e:test_ui_form`) with step-by-step guides and example assertions. Scaffolding + README documenting template purpose and invocation. Reduces setup friction for validation gates.
+
+**Task 4: `/conditional_docs` Routing Command.** Task-type documentation router — dispatches to type-specific documentation based on spec characteristics (feature vs. fix vs. chore; content vs. infrastructure). Single entry point for finding the right doc template without guessing.
+
+All harness mechanisms kept project-agnostic. The `/patch` command, hooks config, E2E templates, and `/conditional_docs` router are installed in both root `.claude/` and propagated to `scaffold/` for new-project generation.
+
+```diff
+ .claude/commands/README.md                    |   7 ++
+ .claude/commands/conditional_docs.md          |  85 +++++++++++++++++
+ .claude/commands/e2e/README.md                |  41 +++++++++
+ .claude/commands/e2e/test_auth_gate.md        | 127 ++++++++++++++++++++++++++
+ .claude/commands/e2e/test_crud_api.md         | 117 ++++++++++++++++++++++++
+ .claude/commands/e2e/test_error_handling.md   | 109 ++++++++++++++++++++++
+ .claude/commands/e2e/test_ui_form.md          |  72 +++++++++++++++
+ .claude/commands/patch.md                     |  61 +++++++++++++
+ .claude/hooks/post_tool_use.py                |  30 ++++++
+ .claude/hooks/pre_tool_use.py                 |  30 ++++++
+ .claude/settings.json                         |  26 ++++++
+ .gitignore                                    |   3 +
+ scaffold/.claude/commands/conditional_docs.md |  85 +++++++++++++++++
+ scaffold/.claude/commands/e2e/README.md       |  13 +++
+ scaffold/.claude/commands/patch.md            |  61 +++++++++++++
+ scaffold/.claude/settings.json                |  26 ++++++
+ 16 files changed, 893 insertions(+)
 ```
 
 ---
@@ -214,6 +293,8 @@ Reviewed the "Plan F3" planning meta-skill article against our SDLC harness and,
  planning/status.md | 6 ++++--
  2 files changed, 8 insertions(+), 2 deletions(-)
 ```
+
+---
 
 ## 2026-06-21 — Rewrite /update-docs as documentation health sweep; propagate to all four downstream repos
 
