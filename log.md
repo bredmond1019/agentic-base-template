@@ -5,6 +5,17 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — Handoff written for Plan F3 propagation
+
+Completed D26 parity work; wrote updated `planning/handoff.md` with full guidance for the next session's propagation to python-orchestration-system (which has the expose-api-and-telegram-bot spec ready to validate the lean sdlc-block on a real multi-task effort) and consolidation of lean block validation. Plan F3 steps 1–3 are engine-complete and `node --check` passing; STEP 4 propagation to the four downstream repos remains (uncommitted per-repo for review).
+
+```diff
+ planning/handoff.md | 189 ++++++++++++++++++++++++++++++-------------------------
+ 1 file changed, 99 insertions(+), 90 deletions(-)
+```
+
+---
+
 ## 2026-06-23 — Plan F3: sdlc-run D6 richer-check parity (D26)
 
 Ported the D6 richer-check dispatch + `snapshotBaselines()` from `sdlc-task.js` into `sdlc-run.js`,
