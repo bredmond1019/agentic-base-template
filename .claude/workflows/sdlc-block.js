@@ -478,6 +478,11 @@ are kept (resume-safe).
 
 ${steps}
 
+After capturing all baselines, commit any newly written files so the integration tree stays clean
+for the downstream merge step (an untracked baseline file blocks every worktree merge):
+  git add ${reportsDir}/
+  git commit -m "chore: sdlc baseline snapshot for ${blockId}" 2>/dev/null || echo "nothing to commit"
+
 Return using StructuredOutput: done=true, and note which baselines were written vs already present.
 `, { label: 'baseline-snapshot', schema: { type: 'object', required: ['done'], properties: { done: { type: 'boolean' }, notes: { type: 'string' } } }, phase: 'Analyze', model: 'haiku' })
 }

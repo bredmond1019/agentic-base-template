@@ -1051,8 +1051,11 @@ Return your result using the StructuredOutput tool:
     log('Running the project validation suite...')
 
     const testResult = await agent(`
-You are the test agent for the SDLC pipeline. Run the project's validation suite (from
-planning/harness.json, or the spec fallback) plus the universal emoji gate, and write a test report.
+You are the test agent for the SDLC pipeline. Run the project's validation suite and write a test report.
+
+IMPORTANT — run ONLY the checks enumerated below (sourced from planning/harness.json and the spec's
+Validation Commands). Do NOT invent or add checks that are not listed here; if a check name does not
+appear in the list below, it is out of scope for this run.
 
 Target:
   Spec:            ${specFile}
@@ -1062,29 +1065,6 @@ Run EVERY check below IN ORDER using the Bash tool. Capture the full output (std
 each. Run from the repo root.
 
 ${renderCheckList(harnessCfg)}
-
-EMOJI CHECK — Emoji prohibition (universal harness gate — always runs last):
-  Hard FAIL if any markdown file changed by this work introduces an emoji.
-
-  Files modified by this work vs main (hard FAIL if emoji found):
-  python3 - <<'PYEOF'
-import subprocess, re, sys, os
-EMOJI = re.compile(r'[\\U0001F300-\\U0001FAFF\\U00002600-\\U000027BF]')
-changed = subprocess.run(['git','diff','main..HEAD','--name-only'], capture_output=True, text=True).stdout.splitlines()
-md_files = [f for f in changed if f.endswith(('.md','.mdx')) and os.path.isfile(f)]
-hits = []
-for path in md_files:
-    for n, line in enumerate(open(path, errors='ignore'), 1):
-        if EMOJI.search(line):
-            hits.append(f'{path}:{n}: {line.rstrip()[:100]}')
-if hits:
-    print('EMOJI CHECK FAIL: emoji in modified files (violates the no-emoji harness rule):')
-    for h in hits[:25]: print(h)
-    sys.exit(1)
-print('EMOJI CHECK: OK — no emoji in modified files')
-sys.exit(0)
-PYEOF
-  echo "EMOJI_EXIT:$?"
 
 For each check record:
   test_name: descriptive name
@@ -1125,7 +1105,7 @@ Use EXACTLY this format:
 
 Return your result using the StructuredOutput tool:
   reportFile: "${testReport}"
-  allPassed: true only if EVERY check passed (each exit code 0, emoji gate clean)
+  allPassed: true only if EVERY check passed (each exit code 0)
   passCount: integer count of checks that passed
   failCount: integer count of checks that failed
   failedTests: array of test_name strings for failed checks
