@@ -5,6 +5,19 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — P2 block-state persistence (D28)
+
+Implemented the third validation-run bug fix: cross-invocation resume state for `sdlc-block.js`. A new gitignored breadcrumb `planning/<spec>/sdlc/sdlc-block-state.json` records per-task status (`pending`/`merged`/`escalated`/`skipped` + commit/branch/worktree), written by a cheap Haiku helper (`writeBlockState`) after Analyze and once per wave. On re-invocation a Haiku loader reads the file before Analyze; its task map **additively** augments Analyze's git-derived resume sets — `merged` tasks go to `doneTasks` (skip the wave loop), `escalated` tasks are forced to `complete-unmerged-fail` so the wave loop escalates them directly instead of re-deriving limbo worktrees through a ~12k-outTok triage wave (the dominant waste in the expose-api-and-telegram-bot run). Augments, never replaces, the committed-report scout (consistent with D27); the dependency graph still comes from Analyze / D22's execution-plan.json. Wrote [D28](planning/decisions/D28-sdlc-block-task-state.md) (numbered to avoid colliding with D27 on `tac8-adoptions`), updated `decisions/index.md` and `.gitignore` (added both `sdlc-state.json` and `sdlc-block-state.json` runtime breadcrumbs). All three engines `node --check` clean. Not yet validated end-to-end or propagated.
+
+```diff
+ .claude/workflows/sdlc-block.js              | ~90 +++++++
+ .gitignore                                   |   5 +
+ planning/decisions/D28-sdlc-block-task-state.md | new
+ planning/decisions/index.md                  |   7 +
+```
+
+---
+
 ## 2026-06-23 — P0 + P1 harness bug fixes from validation run review
 
 Reviewed the `harness-update-review.md` from the expose-api-and-telegram-bot validation run on the lean sdlc-block (D23/D24). Found three bugs: **P0** baseline snapshot files written but untracked blocks merge (fixed `snapshotBlockBaselines()` in sdlc-block.js to run `git add` + commit after writing baselines); **P1** sdlc-run test stage invents emoji-prohibition gate not present in harness.json, failing specs that never declared the pattern (fixed by removing hardcoded EMOJI CHECK section and adding explicit guard against inventing out-of-config checks); **P2** no cross-invocation block-state persistence + emoji gate no-ops when integration branch is `main` (deferred to next session — known follow-up D23/D24 "Reconsider if"). P0 and P1 committed at 5d11d41.

@@ -149,6 +149,13 @@ const breakdownFile = `${blockDir}/breakdown.md`
 const reportsDir  = `${blockDir}/sdlc/reports`
 const planFile    = `${blockDir}/sdlc/execution-plan.json`
 const blockReport = `${reportsDir}/block-workflow.md`
+const stateFile   = `${blockDir}/sdlc/sdlc-block-state.json`  // D28 cross-invocation resume breadcrumb (gitignored)
+
+// D28 — in-engine per-task resume state, persisted to ${stateFile} after each task lands/escalates.
+// Keyed by task number; values { status, commit, branch, worktreePath }. status ∈
+// pending | merged | escalated | skipped. Seeded from a prior run's breadcrumb (if any) so a
+// re-invoked block skips re-running landed tasks and re-triaging escalated limbo worktrees.
+const taskState = {}
 
 log(`Spec: ${blockId} | plan: ${planFile}`)
 log(`Max attempts/task: ${MAX_TASK_ATTEMPTS} | max wave width: ${MAX_WAVE_WIDTH}`)
@@ -265,6 +272,18 @@ const REPORT_SCHEMA = {
     notes:          { type: 'string' }
   }
 }
+
+// D28 — block-state breadcrumb I/O schemas.
+const STATE_LOAD_SCHEMA = {
+  type: 'object',
+  required: ['exists'],
+  properties: {
+    exists:    { type: 'boolean', description: 'true if a valid sdlc-block-state.json was read' },
+    startedAt: { type: 'string',  description: 'the file\'s started_at value, or "" when absent' },
+    tasks:     { type: 'object',  description: 'the per-task status map (taskNum -> {status,...}), or {} when absent', additionalProperties: true },
+  },
+}
+const STATE_WRITE_SCHEMA = { type: 'object', required: ['written'], properties: { written: { type: 'boolean' } } }
 
 // ================================================================
 // TOKEN TELEMETRY (Phase A — additive, no behavior change)
@@ -487,6 +506,40 @@ Return using StructuredOutput: done=true, and note which baselines were written 
 `, { label: 'baseline-snapshot', schema: { type: 'object', required: ['done'], properties: { done: { type: 'boolean' }, notes: { type: 'string' } } }, phase: 'Analyze', model: 'haiku' })
 }
 
+// D28 — persist the per-task resume breadcrumb. Writes the WHOLE taskState map each time (preserving
+// started_at), via a cheap Haiku agent since the workflow runtime has no filesystem access or
+// Date.now(). Best-effort: a failed write logs a warning and NEVER aborts the run. The file is
+// gitignored (runtime state, regenerated every run) so it does not churn commits or conflict under a
+// parallel wave's merges. Mirrors D27's recordPhaseState pattern (sdlc-run), task-level instead of phase.
+async function writeBlockState(phaseLabel = 'Analyze') {
+  const tasksJson = JSON.stringify(taskState, null, 2)
+  const r = await tracedAgent(`
+You maintain the SDLC block's persistent task-state breadcrumb. Overwrite a single JSON file — do NOT
+run any checks, edit code, or commit anything.
+
+STEP 1 — current UTC timestamp + preserved start time:
+  NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  cat ${stateFile} 2>/dev/null || echo "__NO_STATE__"
+  If that file already exists and contains a "started_at" value, REUSE it verbatim for started_at
+  below. Otherwise set started_at = the NOW value.
+
+STEP 2 — ensure the directory exists:
+  mkdir -p ${blockDir}/sdlc
+
+STEP 3 — write ${stateFile} with EXACTLY this JSON (valid JSON only: double quotes, no trailing
+commas, no markdown fences). Substitute <STARTED_AT> (preserved or NOW) and <NOW> from STEP 1:
+{
+  "spec_slug": ${JSON.stringify(blockId)},
+  "started_at": "<STARTED_AT>",
+  "updated_at": "<NOW>",
+  "tasks": ${tasksJson}
+}
+
+Use the Write tool to write ${stateFile}. Then return via StructuredOutput (written=true on success).
+`, { label: 'state-write', schema: STATE_WRITE_SCHEMA, phase: phaseLabel, model: 'haiku' })
+  if (!r || !r.written) log('(state) could not persist block task-state — continuing')
+}
+
 // ================================================================
 // PRE-FLIGHT: guarantee a clean main tree with the spec committed.
 //
@@ -606,6 +659,40 @@ if (!preflight || !preflight.ready) {
   return { error: 'Pre-flight failed', reason: why, dirtyFiles: preflight?.dirtyFiles || [], blockId }
 }
 log(`Pre-flight OK — spec ${preflight.action}${preflight.commitHash ? ` (${preflight.commitHash})` : ''}.`)
+
+// ----------------------------------------------------------------
+// BLOCK STATE (D28): load the cross-invocation resume breadcrumb, if any. A prior run writes
+// sdlc-block-state.json after each task lands/escalates; reading it here lets a re-invoked block skip
+// re-running landed tasks and re-triaging escalated limbo worktrees. Absent/invalid file → first-run
+// behavior (full Analyze from scratch). Best-effort: a load failure just means no resume hint.
+// The state file AUGMENTS, never replaces, Analyze's committed-report resume scout (see D28 / D27): the
+// dependency graph still comes from Analyze (or D22's execution-plan.json), this only short-circuits the
+// merged/escalated classification that otherwise costs a triage wave.
+// ----------------------------------------------------------------
+const loadedState = await tracedAgent(`
+You run from the MAIN repo root. Read the SDLC block resume breadcrumb if it exists — do NOT run any
+checks, edit code, or commit anything.
+
+  cat ${stateFile} 2>/dev/null || echo "__NO_STATE__"
+
+If the output is "__NO_STATE__", or the file is empty or not valid JSON: return exists=false,
+startedAt="", tasks={}.
+Otherwise parse it as JSON and return exists=true, startedAt = its "started_at" value (verbatim),
+tasks = its "tasks" object verbatim (the per-task status map, keyed by task number).
+
+Return using StructuredOutput: exists, startedAt, tasks.
+`, { label: 'load-state', schema: STATE_LOAD_SCHEMA, phase: 'Pre-flight', model: 'haiku' })
+
+if (loadedState?.exists && loadedState.tasks && typeof loadedState.tasks === 'object') {
+  for (const [num, st] of Object.entries(loadedState.tasks)) {
+    if (st && typeof st === 'object' && st.status) taskState[num] = st
+  }
+  const pMerged = Object.entries(taskState).filter(([, v]) => v.status === 'merged').map(([k]) => k)
+  const pEsc    = Object.entries(taskState).filter(([, v]) => v.status === 'escalated').map(([k]) => k)
+  log(`Block state breadcrumb loaded: ${Object.keys(taskState).length} task(s) recorded${pMerged.length ? ` — merged: ${pMerged.join(', ')}` : ''}${pEsc.length ? ` | escalated: ${pEsc.join(', ')}` : ''}. Re-run will skip these.`)
+} else {
+  log('No block state breadcrumb (sdlc-block-state.json) — treating as a first run.')
+}
 
 // Load the project's policy once, up front (mechanism/policy split — see planning/harness.json).
 // Reused by: the Analyze breakdown assessment (threshold), the breakdown gate below, and the
@@ -775,6 +862,22 @@ const doneTasks = new Set(analysis.doneTasks || [])
 const resumeByTask = {}
 for (const rs of (analysis.resumeStates || [])) resumeByTask[rs.num] = rs
 function resumeStateFor(n) { return resumeByTask[n] || { num: n, state: 'fresh' } }
+
+// D28 — augment Analyze's git-derived resume sets with the persisted block state (authoritative,
+// ADDITIVE-only — it never removes a task Analyze found). A task a prior run recorded 'merged' is added
+// to doneTasks (skip it); one recorded 'escalated' is forced to complete-unmerged-fail so the wave loop
+// escalates it directly instead of re-deriving its limbo worktree through a triage wave (the dominant
+// re-run cost in the F3 validation run). Committed reports remain the primary signal; this only fills
+// the gap for limbo worktrees whose state is not yet on the integration branch.
+for (const [num, st] of Object.entries(taskState)) {
+  const n = Number(num)
+  if (st.status === 'merged') {
+    doneTasks.add(n)
+  } else if (st.status === 'escalated' && !doneTasks.has(n)) {
+    const prev = resumeByTask[n] || {}
+    resumeByTask[n] = { num: n, state: 'complete-unmerged-fail', branchName: st.branch || prev.branchName || null, worktreePath: st.worktreePath || prev.worktreePath || null, verdict: st.verdict || prev.verdict || 'FAIL' }
+  }
+}
 
 if (Object.keys(taskMap).length === 0) {
   log('Analysis produced no tasks — aborting.')
@@ -1231,6 +1334,18 @@ async function runTaskWorktree(taskNum, resume = false, parallelWave = false) {
   return { taskNum, status: 'escalate', finalVerdict: 'NOT_REACHED', reasons: [], attempts: MAX_TASK_ATTEMPTS }
 }
 
+// D28 — seed the task-state map so the breadcrumb reflects the full plan, then persist the initial
+// snapshot. Tasks Analyze found already done (committed reports) but the breadcrumb didn't record are
+// marked merged; everything else not yet recorded is pending. An early crash now still leaves a
+// readable, accurate state file.
+for (const t of doneTasks) {
+  if (!taskState[t] || taskState[t].status === 'pending') taskState[t] = { status: 'merged', commit: taskState[t]?.commit || null, branch: null, worktreePath: null }
+}
+for (const t of Object.keys(taskMap)) {
+  if (!taskState[t]) taskState[t] = { status: 'pending', commit: null, branch: null, worktreePath: null }
+}
+await writeBlockState('Analyze')
+
 // ================================================================
 // WAVE LOOP
 // ================================================================
@@ -1262,6 +1377,7 @@ for (let wi = 0; wi < waves.length; wi++) {
     if (isPoisoned(t, taskMap, badSet)) {
       log(`Task ${t}: SKIPPED — depends on an escalated/failed task (${(taskMap[t].dependsOn || []).filter(d => badSet.has(d)).join(', ')}).`)
       badSet.add(t)
+      taskState[t] = { status: 'skipped', commit: null, branch: null, worktreePath: null }  // D28
       outcomes.push({ taskNum: t, status: 'skipped', reasons: ['blocked by upstream escalation'] })
       continue
     }
@@ -1279,6 +1395,7 @@ for (let wi = 0; wi < waves.length; wi++) {
     if (rs.state === 'complete-unmerged-fail') {
       log(`Task ${t}: complete-unmerged (${rs.verdict || 'FAIL'}) — escalating; worktree preserved for inspection.`)
       badSet.add(t)
+      taskState[t] = { status: 'escalated', commit: null, branch: rs.branchName || null, worktreePath: rs.worktreePath || null, verdict: rs.verdict || 'FAIL' }  // D28
       outcomes.push({ taskNum: t, status: 'escalate', branchName: rs.branchName, worktreePath: rs.worktreePath, finalVerdict: rs.verdict || 'FAIL', reasons: ['prior run completed with a non-PASS verdict — needs your analysis'], reviewReport: `${reportsDir}/task${t}-review.md`, attempts: 0 })
       continue
     }
@@ -1325,11 +1442,14 @@ for (let wi = 0; wi < waves.length; wi++) {
   for (const o of waveOutcomes) {
     if (o.status === 'pass') {
       // In-place tasks are already committed on the integration branch — nothing to merge. Worktree
-      // tasks queue their branch for the ordered merge below.
-      if (o.inPlace) { o.merged = true }
-      else passedBranches.push({ taskNum: o.taskNum, branchName: o.branchName, worktreePath: o.worktreePath })
+      // tasks queue their branch for the ordered merge below (recorded after a successful merge).
+      if (o.inPlace) {
+        o.merged = true
+        taskState[o.taskNum] = { status: 'merged', commit: o.commitHash || null, branch: null, worktreePath: null }  // D28: in-place lands directly on the integration branch
+      } else passedBranches.push({ taskNum: o.taskNum, branchName: o.branchName, worktreePath: o.worktreePath })
     } else if (o.status === 'escalate') {
       badSet.add(o.taskNum)
+      taskState[o.taskNum] = { status: 'escalated', commit: null, branch: o.branchName || null, worktreePath: o.worktreePath || null, verdict: o.finalVerdict || 'FAIL' }  // D28
     }
   }
 
@@ -1405,16 +1525,23 @@ conflictedFiles, escalated, commitHash, notes.
         const note = m?.notes || 'merge agent returned null'
         log(`Task ${p.taskNum}: MERGE ESCALATED — ${note}. Branch preserved.`)
         badSet.add(p.taskNum)
+        taskState[p.taskNum] = { status: 'escalated', commit: null, branch: p.branchName || null, worktreePath: p.worktreePath || null, verdict: 'FAIL' }  // D28
         // reflect the merge failure in the outcome
         const o = outcomes.find(x => x.taskNum === p.taskNum)
         if (o) { o.status = 'escalate'; o.reasons = [...(o.reasons || []), `merge conflict: ${(m?.conflictedFiles || []).join(', ') || note}`] }
       } else {
         log(`Task ${p.taskNum}: merged (${m.strategy}) ${m.commitHash || ''}`)
+        taskState[p.taskNum] = { status: 'merged', commit: m.commitHash || null, branch: null, worktreePath: null }  // D28
         const o = outcomes.find(x => x.taskNum === p.taskNum)
         if (o) { o.merged = true; o.commitHash = m.commitHash; o.mergeStrategy = m.strategy }
       }
     }
   }
+
+  // D28 — persist the breadcrumb once per wave, after this wave's tasks have landed/escalated. Width-1
+  // (in-place) waves run one task, so this is per-task there; width-≥2 waves record every landing after
+  // their ordered merge. An interrupted re-run reads this and skips straight to the pending tasks.
+  await writeBlockState(waveLabel)
 
   if (budget.total) log(`Budget: ~${Math.round(budget.remaining() / 1000)}k tokens remaining.`)
 }
