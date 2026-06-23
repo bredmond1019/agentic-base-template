@@ -35,6 +35,7 @@ predictably-named output file.
 | **1 — Plan (ad-hoc)** | `/chore` · `/feature` · `/plan <desc>` | Plan ad-hoc work from a free-text description (not a master-plan block) | `planning/<prefix>-<slug>/{tasks,plan}.md` |
 | **1 — Plan (opt.)** | `/breakdown <spec>` | Decompose spec into atomic, agent-executable sub-steps | `planning/<name>/breakdown.md` |
 | **2 — Implement** | `/implement <spec> [N]` | Execute every task (or task N) in the spec | `planning/<name>/sdlc/reports/[taskN-]implement.md` |
+| **2 — Hotfix** | `/patch` | Implement → validate → commit for low-risk single-file fixes; skips test/review/document | git history |
 | **2 — Fix** | `/fix <spec> [N]` | Targeted fixes for FAIL/PARTIAL verdict; reads review report; overwrites implement report | `planning/<name>/sdlc/reports/[taskN-]implement.md` |
 | **2 — Track** | `/update-task [name] <step> [note]` | Mark a step done and/or append a dated note mid-implementation | spec file (in-place) |
 | **2 — Commit** | `/commit [hint]` | Stage + commit with a conventional message | git history |
@@ -186,6 +187,12 @@ Delete `planning/handoff.md` once the new session has consumed it.
 Start-of-session briefing: reads the three most recent Log entries, status.md, the current
 spec's `tasks.md`, and the `reports/` directory listing; outputs a concise briefing (under 300
 words) and the exact next command. Read-only.
+
+### `/conditional_docs [task-type]`
+Routes the agent to the documentation most relevant to the current task type (feature, bug/fix,
+api/endpoint, test/testing, docs/documentation). Reduces CLAUDE.md overload by surfacing only
+the files needed for the task at hand. Takes an optional argument; defaults to reading
+`planning/context.md` + `planning/status.md` + `planning/harness.json`.
 
 ### `/prime`
 Orient to this repo at session start: reads `README.md`, `CLAUDE.md`, `planning/context.md`,

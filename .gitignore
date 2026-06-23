@@ -4,3 +4,6 @@
 
 # SDLC worktrees (created by /sdlc-task and /sdlc-block at runtime)
 trees/
+
+# Hook session logs (ephemeral)
+.claude/logs/
