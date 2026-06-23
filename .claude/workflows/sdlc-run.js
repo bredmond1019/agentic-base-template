@@ -389,6 +389,75 @@ function renderUiTestPrompt(cfg, port) {
 // ----------------------------------------------------------------
 const stageResults = []
 
+// ----------------------------------------------------------------
+// PERSISTENT PHASE STATE (D27) — after each phase resolves, write a small JSON
+// breadcrumb to planning/<concept>/sdlc/sdlc-state.json (alongside D22's
+// execution-plan.json). Two uses: (1) crash visibility — `cat` it to see which phase a run
+// last finished without reading agent output; (2) a resume_from hint for a restarted run.
+//
+// This is AUDIT/CRASH state, NOT a replacement for the scout's report-file resume — report
+// files are committed and remain the authoritative resumption signal (see the RESUMPTION header
+// and D27). The state file is gitignored runtime state, so it never pollutes commits or causes
+// parallel-merge conflicts.
+//
+// The workflow runtime has no filesystem access and cannot call Date.now(), so a cheap Haiku
+// writer agent stamps the timestamps (via `date`) and writes the file, preserving started_at
+// across writes. Best-effort: a failed write logs a warning but never aborts the pipeline.
+// ----------------------------------------------------------------
+const stateFile = `planning/${blockId}/sdlc/sdlc-state.json`
+const completedPhases = []
+
+const STATE_WRITE_SCHEMA = {
+  type: 'object',
+  required: ['written'],
+  properties: {
+    written: { type: 'boolean', description: 'true if the state file was written successfully' },
+    stateFile: { type: 'string' },
+    notes: { type: 'string' }
+  }
+}
+
+// Persist the phase breadcrumb after a phase resolves. On success the phase is appended to
+// completed_phases (monotonic, deduped). On failure, failed_phase + resume_from are set to the
+// phase name and completed_phases is left untouched (the phase did not complete).
+async function recordPhaseState(phaseName, { failed = false } = {}) {
+  if (!failed && phaseName && !completedPhases.includes(phaseName)) {
+    completedPhases.push(phaseName)
+  }
+  const failedPhase = failed ? phaseName : null
+  const result = await agent(`
+You maintain the SDLC pipeline's persistent phase-state breadcrumb. Overwrite a single JSON file —
+do not run any checks, edit code, or commit anything.
+
+STEP 1 — current UTC timestamp + preserved start time:
+  NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  cat ${stateFile} 2>/dev/null || echo "__NO_STATE__"
+  If that file already exists and contains a "started_at" value, REUSE it verbatim for started_at
+  below. Otherwise set started_at = the NOW value.
+
+STEP 2 — ensure the directory exists:
+  mkdir -p planning/${blockId}/sdlc
+
+STEP 3 — write ${stateFile} with EXACTLY this JSON (valid JSON only: double quotes, no trailing
+commas, no markdown fences). Substitute <STARTED_AT> (preserved or NOW) and <NOW> from STEP 1:
+{
+  "spec_slug": ${JSON.stringify(blockId)},
+  "started_at": "<STARTED_AT>",
+  "updated_at": "<NOW>",
+  "current_phase": ${JSON.stringify(phaseName)},
+  "completed_phases": ${JSON.stringify(completedPhases)},
+  "failed_phase": ${failedPhase === null ? 'null' : JSON.stringify(failedPhase)},
+  "task_number": ${taskNumber === null ? 'null' : taskNumber},
+  "resume_from": ${failedPhase === null ? 'null' : JSON.stringify(failedPhase)}
+}
+
+Use the Write tool to write ${stateFile}. Then return via StructuredOutput (written=true on success).
+`, withModel({ label: `state:${phaseName}${failed ? ':failed' : ''}`, schema: STATE_WRITE_SCHEMA }, MODEL.scout))
+  if (!result || !result.written) {
+    log(`(state) could not persist phase state for "${phaseName}"${failed ? ' (failure record)' : ''} — continuing`)
+  }
+}
+
 // ================================================================
 // PHASE 1: SCOUT — determine current pipeline stage
 //   Skipped when --from <stage> is supplied (caller already knows the state).
@@ -569,10 +638,12 @@ Return your result using the StructuredOutput tool with fields:
   if (!genResult || !genResult.success) {
     log('generate-tasks failed — aborting pipeline')
     stageResults.push({ stage: 'generate-tasks', success: false })
+    await recordPhaseState('generate-tasks', { failed: true })
     return { error: 'generate-tasks failed', blockId, stem, stageResults }
   }
   stageResults.push({ stage: 'generate-tasks', ...genResult })
   log(`Task spec written: ${genResult.reportFile}`)
+  await recordPhaseState('generate-tasks')
   currentStage = 'implement'
 }
 
@@ -714,13 +785,16 @@ Return your result using the StructuredOutput tool:
     if (!implResult) {
       log('Implement agent returned null — aborting pipeline')
       stageResults.push({ stage: 'implement', success: false, notes: 'Agent returned null' })
+      await recordPhaseState('implement', { failed: true })
       break
     }
     stageResults.push({ stage: 'implement', ...implResult })
     if (!implResult.success) {
       log('Implement reported failure — aborting pipeline')
+      await recordPhaseState('implement', { failed: true })
       break
     }
+    await recordPhaseState('implement')
     currentStage = 'test'
   }
 
@@ -859,13 +933,16 @@ Return your result using the StructuredOutput tool:
     if (!fixResult) {
       log('Fix agent returned null — aborting pipeline')
       stageResults.push({ stage: 'fix', attempt: fixPass, success: false, notes: 'Agent returned null' })
+      await recordPhaseState('fix', { failed: true })
       break
     }
     stageResults.push({ stage: 'fix', attempt: fixPass, ...fixResult })
     if (!fixResult.success) {
       log(`Fix pass ${fixPass} reported failure — aborting pipeline`)
+      await recordPhaseState('fix', { failed: true })
       break
     }
+    await recordPhaseState('fix')
     currentStage = 'test'
   }
 
@@ -969,6 +1046,7 @@ Return your result using the StructuredOutput tool:
         log(`All ${testResult.passCount} checks passed`)
       }
     }
+    await recordPhaseState('test')
     currentStage = 'review'
   }
 
@@ -1091,6 +1169,7 @@ Return your result using the StructuredOutput tool:
       stageResults.push({ stage: 'review', attempt: reviewAttempts, ...reviewResult, success: reviewResult.verdict === 'PASS' })
       log(`Review verdict: ${reviewResult.verdict} (attempt ${reviewAttempts}/${MAX_REVIEW_ATTEMPTS})`)
     }
+    await recordPhaseState('review')
 
     if (lastReviewResult.verdict === 'PASS') {
       currentStage = 'ui-test'
@@ -1112,6 +1191,7 @@ Return your result using the StructuredOutput tool:
     if (!harnessCfg?.uiTest?.enabled) {
       log('UI test stage disabled (harness.json uiTest.enabled is false or config absent) — SKIPPED.')
       stageResults.push({ stage: 'ui-test', verdict: 'SKIPPED', success: true, notes: 'uiTest disabled in harness.json' })
+      await recordPhaseState('ui-test')
       currentStage = 'document'
     } else {
       log('Running UI test stage...')
@@ -1223,6 +1303,7 @@ Return the result using StructuredOutput.
           currentStage = 'document'
         }
       }
+      await recordPhaseState('ui-test')
     }
   }
 } // end implement→fix→test→review→ui-test retry loop
@@ -1331,6 +1412,7 @@ Return your result using the StructuredOutput tool:
       log(`Docs updated: ${(docResult.filesModified || []).join(', ') || 'none needed changes'}`)
     }
   }
+  await recordPhaseState('document')
   currentStage = 'wrap-up'
 }
 
@@ -1480,6 +1562,8 @@ if (wrapupResult) {
   stageResults.push({ stage: 'wrap-up', success: false, notes: 'Agent returned null' })
   log('Wrap-up agent returned null — manual status/log update, commit, and workflow report may be needed')
 }
+
+await recordPhaseState('wrap-up')
 
 log(`Pipeline complete. Verdict: ${finalVerdict} | Attempts: ${reviewAttempts} | Report: ${workflowReport}`)
 

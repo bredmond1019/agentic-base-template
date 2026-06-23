@@ -5,6 +5,49 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — TAC8 Adoptions Task 5 — persistent phase state in sdlc-run.js (D27)
+
+Shipped the last TAC8 adoption: `sdlc-run` now leaves a machine-readable breadcrumb of where a run
+is. After each pipeline phase **resolves**, a new `recordPhaseState()` helper writes (overwriting)
+a small JSON file at `planning/<concept>/sdlc/sdlc-state.json` — alongside D22's
+`execution-plan.json`.
+
+**Schema:** `{spec_slug, started_at, updated_at, current_phase, completed_phases, failed_phase,
+task_number, resume_from}`. `completed_phases` grows monotonically (deduped — a multi-pass fix
+records `"fix"` once but bumps `updated_at` each pass); on a phase abort, `failed_phase` +
+`resume_from` are set to the phase name and `completed_phases` is left untouched.
+
+**Why a writer agent:** the workflow runtime has no filesystem access and cannot call `Date.now()`,
+so `recordPhaseState()` spawns a cheap **Haiku** agent that stamps timestamps via `date`, reads the
+existing file to preserve `started_at`, and writes the JSON. The write is best-effort — a failure
+logs a warning and never aborts the pipeline.
+
+**Call sites (14):** failure + success records at generate-tasks / implement / fix; completion
+records at test / review / ui-test (both the skip branch and the server-run converge point) /
+document / wrap-up. Matches the spec's verify list.
+
+**Not a resume engine, by design.** The state file is gitignored runtime state — crash visibility
+plus a `resume_from` hint. The committed report files (scout) remain the authoritative resumption
+signal; `--from <stage>` (D17) remains the explicit-resume lever. Building a second, state-driven
+resume path would compete with the scout and read uncommitted data — strictly worse.
+[D27](planning/decisions/D27-sdlc-run-phase-state.md) records this and the deferred `sdlc-task`
+(parallel, per-task) variant.
+
+Gitignored `planning/*/sdlc/sdlc-state.json` (mirroring the `.claude/logs/` precedent from Tasks
+1–4). D27 numbered ahead of the F3 branch's D18–D26 to avoid collision; the index notes the gap.
+All three engines `node --check` clean. `sdlc-run.js`-only engine change; **not yet propagated
+downstream.**
+
+```diff
+ .claude/workflows/sdlc-run.js               |  ~90 +++++++++
+ .gitignore                                  |   3 +
+ planning/decisions/D27-sdlc-run-phase-state.md | (new)
+ planning/decisions/index.md                 |   ~10 +++
+ planning/status.md                          |   edits
+```
+
+---
+
 ## 2026-06-23 — TAC8 Adoptions Tasks 1–4 — Python hooks, /patch command, E2E test templates, /conditional_docs
 
 Integrated four new harness capabilities from the TAC8 protocol review, all committed on `tac8-adoptions` branch:

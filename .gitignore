@@ -7,3 +7,6 @@ trees/
 
 # Hook session logs (ephemeral)
 .claude/logs/
+
+# SDLC runtime phase-state breadcrumb (D27 — regenerated each run; crash/audit state, not a deliverable)
+planning/*/sdlc/sdlc-state.json
