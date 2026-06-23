@@ -833,7 +833,7 @@ Instructions:
    ## Files Created or Modified
    | File | Action |
    |---|---|
-   | path/to/file.tsx | created / modified |
+   | path/to/file | created / modified |
 
    ## Validation Output
    **Commands run:**
@@ -860,10 +860,10 @@ Instructions:
 7. Commit your changes now. Never use git add -A or git add . — stage files explicitly by name.
 
    Run: git status
-   Identify all changed/new files under app/, components/, lib/, content/, scripts/, __tests__/, and the implement report.
+   Identify all changed/new source/content files (from git status) plus the implement report.
 
    Stage code/content files first, then the report:
-     git add components/Widget.tsx __tests__/widget.test.ts ${implementReport}  (list each file explicitly)
+     git add <each changed source/test file> ${implementReport}  (list each file explicitly)
 
    Commit using HEREDOC:
      git commit -m "$(cat <<'EOF'
@@ -981,7 +981,7 @@ Instructions:
    ## Files Created or Modified
    | File | Action |
    |---|---|
-   | path/to/file.tsx | created / modified |
+   | path/to/file | created / modified |
    [IMPORTANT: include ALL files from the prior implement report PLUS any newly touched files]
 
    ## Validation Output
@@ -1006,10 +1006,10 @@ Instructions:
 9. Commit your changes now. Never use git add -A or git add . — stage files explicitly by name.
 
    Run: git status
-   Identify all changed/new files under app/, components/, lib/, content/, scripts/, __tests__/, and the updated implement report.
+   Identify all changed/new source/content files (from git status) plus the updated implement report.
 
    Stage targeted changes and the updated report:
-     git add components/Widget.tsx __tests__/widget.test.ts ${implementReport}  (list each file explicitly)
+     git add <each changed source/test file> ${implementReport}  (list each file explicitly)
 
    Commit using HEREDOC:
      git commit -m "$(cat <<'EOF'

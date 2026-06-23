@@ -5,6 +5,26 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — Canonical SDLC workflow docs + agnostic engine fix (D29)
+
+Created `docs/workflows/` as the canonical reference for the SDLC pipelines (authored here, copied verbatim into every project): `index.md` (hub — three engines compared, shared concepts, model tiering, token overview), `sdlc-run.md`, `sdlc-task.md`, `sdlc-block.md` (the lean F3 design — D22–D28), and `commands.md` (the manual Phase 1–7 lifecycle). Each page has mermaid flow diagrams, parameter/flag tables, per-stage detail, when/why, and a token-usage section with `_TBD_` placeholders + the few measured figures we have (`expose-api-and-telegram-bot`). Derived from the **current engine source**, not the stale learn-ai docs (whose `/sdlc-block` page predated the entire lean redesign). Wired into `docs/index.md`. Also rewrote the stale `/sdlc-block` section in `.claude/commands/README.md` (it still described the pre-D23/D24 "full sdlc-task per task per wave" model) + added `--verify-depth`.
+
+**Moved the docs out of learn-ai** (they shouldn't live in a product repo): `git rm`'d the three `docs/agentic-workflows/*.md`, repointed `learn-ai/docs/index.md` + the `CLAUDE.md` "keep pipeline docs in sync" rule at `base-template/docs/workflows/`. (Committed separately in the learn-ai repo.)
+
+**Closed a D5 agnostic leak the doc pass surfaced ([D29](planning/decisions/D29-engine-agnostic-paths.md)):** `sdlc-task.js` worktree-setup coned a hardcoded stack-specific include list (`app components hooks lib ...`) and the `implement`/`fix` commit prompts in `sdlc-run.js`/`sdlc-task.js` named `app/, components/, __tests__/` + `.tsx` examples. Generalized to cone all tracked top-level dirs (`git ls-tree HEAD --name-only -d`, matching `/init-worktree`) and to "changed source/content files (from git status)". All three engines `node --check` clean; prompt/recipe-only.
+
+```diff
+ .claude/commands/README.md                   |  ~25 +-
+ .claude/workflows/sdlc-run.js                |   8 +-
+ .claude/workflows/sdlc-task.js               |  ~12 +-
+ docs/index.md                                |  ~14 +
+ docs/workflows/{index,sdlc-run,sdlc-task,sdlc-block,commands}.md | new (5 files)
+ planning/decisions/D29-engine-agnostic-paths.md | new
+ planning/decisions/index.md                  |   8 +
+```
+
+---
+
 ## 2026-06-23 — P2 block-state persistence (D28)
 
 Implemented the third validation-run bug fix: cross-invocation resume state for `sdlc-block.js`. A new gitignored breadcrumb `planning/<spec>/sdlc/sdlc-block-state.json` records per-task status (`pending`/`merged`/`escalated`/`skipped` + commit/branch/worktree), written by a cheap Haiku helper (`writeBlockState`) after Analyze and once per wave. On re-invocation a Haiku loader reads the file before Analyze; its task map **additively** augments Analyze's git-derived resume sets — `merged` tasks go to `doneTasks` (skip the wave loop), `escalated` tasks are forced to `complete-unmerged-fail` so the wave loop escalates them directly instead of re-deriving limbo worktrees through a ~12k-outTok triage wave (the dominant waste in the expose-api-and-telegram-bot run). Augments, never replaces, the committed-report scout (consistent with D27); the dependency graph still comes from Analyze / D22's execution-plan.json. Wrote [D28](planning/decisions/D28-sdlc-block-task-state.md) (numbered to avoid colliding with D27 on `tac8-adoptions`), updated `decisions/index.md` and `.gitignore` (added both `sdlc-state.json` and `sdlc-block-state.json` runtime breadcrumbs). All three engines `node --check` clean. Not yet validated end-to-end or propagated.

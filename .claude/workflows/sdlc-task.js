@@ -678,7 +678,8 @@ RESUME MODE IS ON — reuse the existing worktree for this task instead of creat
        mkdir -p trees
        git worktree add --no-checkout trees/${baseBranchName} ${baseBranchName}
        git -C trees/${baseBranchName} sparse-checkout init --cone
-       git -C trees/${baseBranchName} sparse-checkout set app components hooks lib content scripts docs planning .claude __tests__ __mocks__ types
+       # Cone ALL tracked top-level directories — stack-agnostic, no project-layout assumptions (D5/P5).
+       git -C trees/${baseBranchName} sparse-checkout set $(git ls-tree HEAD --name-only -d | tr '\\n' ' ')
        git -C trees/${baseBranchName} checkout
        if [ -f .env ]; then cp .env trees/${baseBranchName}/.env; fi
        if [ -f .env.local ]; then cp .env.local trees/${baseBranchName}/.env.local; fi
@@ -712,7 +713,8 @@ STEP 3 — Create the worktree:
   a. mkdir -p trees
   b. git worktree add --no-checkout trees/[branchName] -b [branchName]
   c. git -C trees/[branchName] sparse-checkout init --cone
-  d. git -C trees/[branchName] sparse-checkout set app components hooks lib content scripts docs planning .claude __tests__ __mocks__ types
+  d. # Cone ALL tracked top-level directories — stack-agnostic, no project-layout assumptions (D5/P5).
+     git -C trees/[branchName] sparse-checkout set $(git ls-tree HEAD --name-only -d | tr '\\n' ' ')
   e. git -C trees/[branchName] checkout
   f. if [ -f .env ]; then cp .env trees/[branchName]/.env; fi
   g. if [ -f .env.local ]; then cp .env.local trees/[branchName]/.env.local; fi
@@ -721,7 +723,8 @@ STEP 3 — Create the worktree:
 STEP 4 — Verify:
   Run: git worktree list
   Run: ls trees/[branchName]/
-  Confirm the worktree exists and contains app/, components/, content/, planning/, .claude/ directories.
+  Confirm the worktree exists and contains the tracked top-level directories — at minimum planning/
+  and .claude/ (the scout/spec/report machinery), plus whatever source/content trees the project has.
 
 STEP 5 — Compute the absolute worktree path:
   worktreePath = repoRoot + "/trees/" + branchName
@@ -1148,7 +1151,7 @@ Instructions:
    ## Files Created or Modified
    | File | Action |
    |---|---|
-   | path/to/file.tsx | created / modified |
+   | path/to/file | created / modified |
 
    ## Validation Output
    **Commands run:**
@@ -1177,7 +1180,7 @@ Instructions:
 7. Commit your changes. Run from the worktree:
    cd ${worktreePath} && git status
    Stage files explicitly by name (never git add -A or git add .):
-     cd ${worktreePath} && git add components/Foo.tsx __tests__/foo.test.ts ${implementReport}
+     cd ${worktreePath} && git add <each changed source/test file> ${implementReport}
    Commit using HEREDOC:
      cd ${worktreePath} && git commit -m "$(cat <<'EOF'
      feat: implement ${stem}

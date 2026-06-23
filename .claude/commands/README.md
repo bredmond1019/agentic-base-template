@@ -146,26 +146,32 @@ unattended.
 |---|---|---|
 | `/sdlc-run <name> [N]` | one task or a **full spec**, sequential | none — runs on the current branch, updates STATUS/Log directly |
 | `/sdlc-task <name> N` | **one** task, parallel-safe | own git worktree; defers STATUS/Log to merge time |
-| `/sdlc-block <name> [range]` | a **whole spec** as dependency-ordered waves of parallel `/sdlc-task` runs | one worktree per task; **merges for you** |
+| `/sdlc-block <name> [range]` | a **whole spec** as dependency-ordered waves | shared integration branch; worktrees only for genuinely parallel waves; **merges for you** |
+
+> **Full reference with mermaid diagrams, per-stage detail, and token usage:**
+> [`docs/workflows/`](../../docs/workflows/index.md) — one page per engine plus the manual lifecycle.
 
 ### `/sdlc-block` — spec-level orchestration
 
-**Drive an entire spec to completion across many parallel tasks.** A **pre-flight** first
-guarantees a clean tree with the spec committed — it auto-generates a missing `tasks.md` from
-the master plan, commits an uncommitted one, and aborts fast if any *unrelated* file is dirty.
-Then it reads (or generates) a dependency-ordered execution plan, runs each wave of
-independent tasks through `/sdlc-task`, and merges the wave before the next begins. Adds
-bounded per-task **retries** with failure **triage**, **selective-union merges** (additive
-shared files only; real conflicts escalate), and a single authoritative STATUS/Log update
-at the end. **Resumable without duplicating work** — git is the source of truth for which
-tasks are done.
+**Drive an entire spec to completion in one invocation** — "a more powerful `/sdlc-run`". A **pre-flight**
+first guarantees a clean tree with the spec committed (auto-generates a missing `tasks.md`, commits an
+uncommitted one, aborts fast if any *unrelated* file is dirty). **Analyze** then loads or derives the
+dependency-ordered execution plan and snapshots baselines **once**. Each wave runs a **fresh implement
+agent per task**: a width-1 wave runs **in place** on the integration branch (no worktree/merge, with
+`git reset --hard` rollback on failure); a width-≥2 wave isolates each task in a worktree
+(`/sdlc-task --implement-only`) and **selective-union-merges** in order. Once every task has landed, **one
+consolidated back-half** (`/sdlc-run --from test`) tests → reviews → fixes → documents → wraps up the
+integrated tree. Adds bounded per-task **retries** with failure **triage**, subtree-scoped escalation, and
+**resume** (git + a `sdlc-block-state.json` breadcrumb) without duplicating work. See
+[D23](../../planning/decisions/D23-lean-block-shared-setup.md)/[D24](../../planning/decisions/D24-consolidated-back-half.md)/[D28](../../planning/decisions/D28-sdlc-block-task-state.md).
 
 | Arg | Meaning | Default |
 |---|---|---|
 | `<name>` | Required — drives every `planning/<name>/…` path. | — |
 | `[range]` | Optional task selection (2nd positional **or** `--tasks`): `1-7`, `1,3,5`, `1-3,7`. | all tasks |
-| `--max-retries N` | Total `/sdlc-task` attempts per task before escalation. | `2` |
-| `--max-wave-width W` | Max full pipelines run concurrently per batch. | `3` |
+| `--max-retries N` | Total attempts per task before escalation. | `2` |
+| `--max-wave-width W` | Max tasks run concurrently per batch (worktree waves). | `3` |
+| `--verify-depth <d>` | Per-task verification: `consolidated` (per-task review off) or `consolidated+review` (one non-gating localization review per task). Overrides `harness.json` `block.verify`. | `consolidated` |
 
 ---
 
