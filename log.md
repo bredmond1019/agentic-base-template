@@ -5,6 +5,12 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — Merged planf3-harness-improvements + tac8-adoptions to main
+
+Both long-running harness branches landed on `main` (merge commit `38fd5ac`). `planf3-harness-improvements` fast-forwarded; `tac8-adoptions` was a 3-way merge. The four conflicts (`.gitignore`, `log.md`, `planning/decisions/index.md`, `planning/status.md`) were all additive doc/index conflicts — no engine-code conflict (`sdlc-run.js` + `commands/README.md` auto-merged) — resolved keep-both, with D27/D28/D29 reconciled into the decisions index. All engines `node --check` clean post-merge. `main` now carries the full Plan F3 lean `sdlc-block` (D18–D29) + the TAC8 adoptions (D27 phase state, Python hooks parked in `need-python-hooks/`, `/patch`, E2E templates, `/conditional_docs`). **Nothing propagated downstream yet** — wrote `planning/handoff.md` for the next agent: validate the lean `/sdlc-block` on a real downstream spec, then propagate engines + new commands to the four repos, then decide the Python-hook wiring. Branches merged but not deleted.
+
+---
+
 ## 2026-06-23 — Canonical SDLC workflow docs + agnostic engine fix (D29)
 
 Created `docs/workflows/` as the canonical reference for the SDLC pipelines (authored here, copied verbatim into every project): `index.md` (hub — three engines compared, shared concepts, model tiering, token overview), `sdlc-run.md`, `sdlc-task.md`, `sdlc-block.md` (the lean F3 design — D22–D28), and `commands.md` (the manual Phase 1–7 lifecycle). Each page has mermaid flow diagrams, parameter/flag tables, per-stage detail, when/why, and a token-usage section with `_TBD_` placeholders + the few measured figures we have (`expose-api-and-telegram-bot`). Derived from the **current engine source**, not the stale learn-ai docs (whose `/sdlc-block` page predated the entire lean redesign). Wired into `docs/index.md`. Also rewrote the stale `/sdlc-block` section in `.claude/commands/README.md` (it still described the pre-D23/D24 "full sdlc-task per task per wave" model) + added `--verify-depth`.
