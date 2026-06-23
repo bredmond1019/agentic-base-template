@@ -5,6 +5,16 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23
+
+Reviewed the "Plan F3" planning meta-skill article against our SDLC harness and, combined with user-supplied sdlc-block token telemetry, produced an eight-ADR improvement plan (D18–D25) targeting planning quality and a lean sdlc-block redesign. The eight ADRs span planning-quality changes (D18 living-artifact specs, D19 property guard, D20 clarify gate) and telemetry-driven lean sdlc-block work (D21 honest recommendation, D22 relocate execution-plan.json to /generate-tasks, D23 shared setup + isolation only for true parallelism, D24 consolidated verify depth knob, D25 considered-and-rejected); the lean-block redesign is the centerpiece, driven by measured telemetry showing approximately 200k redundant tokens per task on sequential blocks. Formalized the work in a self-contained plan at planning/plans/planf3-harness-improvements.md, indexed it in planning/index.md, pointed status.md Current focus at the plan, and wrote planning/handoff.md carrying the decision rationale and measured telemetry table. No engine or command code has changed; work lives on branch planf3-harness-improvements, ready for a fresh agent to implement starting at sequencing step 1 (D20).
+
+```diff
+ planning/index.md  | 4 ++++
+ planning/status.md | 6 ++++--
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+```
+
 ## 2026-06-21 — Rewrite /update-docs as documentation health sweep; propagate to all four downstream repos
 
 Transformed `/update-docs` from a narrow surgical git-diff patcher into a comprehensive **5-phase documentation audit** that detects stale sections, missing coverage, and confirmed-current docs. The command is read-only by default; `--patch` applies surgical fixes for clear-cut issues. New `--since <ref>` flag scopes the git history window.
