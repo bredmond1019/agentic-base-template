@@ -5,6 +5,17 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — Plan F3: sdlc-run D6 richer-check parity (D26)
+
+Ported the D6 richer-check dispatch + `snapshotBaselines()` from `sdlc-task.js` into `sdlc-run.js`,
+completing the D24 consolidated back-half. The lean block's `workflow('sdlc-run', '--from test')` now
+handles all four check kinds (baseline-diff, count-delta, warning-scan, forbidden-pattern-scan).
+`count-delta` skips cleanly when `taskNumber === null` (full-spec mode has no previous-task report).
+All engines `node --check` clean. Additive + default-preserving (command-kind behavior unchanged).
+ADR D26 written. See [D26](planning/decisions/D26-sdlc-run-d6-parity.md).
+
+---
+
 ## 2026-06-23 — Plan F3 step 3: lean sdlc-block engine (D23 + D24)
 
 Built the centerpiece — `sdlc-block` repurposed in place into "a more powerful `/sdlc-run`" (a fresh
