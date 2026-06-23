@@ -5,6 +5,42 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — TAC8 Adoptions Tasks 1–4 — Python hooks, /patch command, E2E test templates, /conditional_docs
+
+Integrated four new harness capabilities from the TAC8 protocol review, all committed on `tac8-adoptions` branch:
+
+**Task 1: Python Security & Logging Hooks.** Added pre/post tool-use instrumentation hooks (`pre_tool_use.py`, `post_tool_use.py`) for security compliance and structured logging. Hooks fire before each tool invocation and after completion, enabling auditability and instrumentation without baking policy into the engines. Registered in `.claude/settings.json` under `settings.hooks`.
+
+**Task 2: `/patch` Lightweight Hotfix Command.** New command for surgical git-diff patching — apply fixes without triggering a full spec workflow. Scoped for small, targeted changes (config updates, doc fixes, simple refactors). Complements the full SDLC pipeline for quick turnarounds.
+
+**Task 3: E2E Test Template Library.** Four reusable test templates (`e2e:test_auth_gate`, `e2e:test_crud_api`, `e2e:test_error_handling`, `e2e:test_ui_form`) with step-by-step guides and example assertions. Scaffolding + README documenting template purpose and invocation. Reduces setup friction for validation gates.
+
+**Task 4: `/conditional_docs` Routing Command.** Task-type documentation router — dispatches to type-specific documentation based on spec characteristics (feature vs. fix vs. chore; content vs. infrastructure). Single entry point for finding the right doc template without guessing.
+
+All harness mechanisms kept project-agnostic. The `/patch` command, hooks config, E2E templates, and `/conditional_docs` router are installed in both root `.claude/` and propagated to `scaffold/` for new-project generation.
+
+```diff
+ .claude/commands/README.md                    |   7 ++
+ .claude/commands/conditional_docs.md          |  85 +++++++++++++++++
+ .claude/commands/e2e/README.md                |  41 +++++++++
+ .claude/commands/e2e/test_auth_gate.md        | 127 ++++++++++++++++++++++++++
+ .claude/commands/e2e/test_crud_api.md         | 117 ++++++++++++++++++++++++
+ .claude/commands/e2e/test_error_handling.md   | 109 ++++++++++++++++++++++
+ .claude/commands/e2e/test_ui_form.md          |  72 +++++++++++++++
+ .claude/commands/patch.md                     |  61 +++++++++++++
+ .claude/hooks/post_tool_use.py                |  30 ++++++
+ .claude/hooks/pre_tool_use.py                 |  30 ++++++
+ .claude/settings.json                         |  26 ++++++
+ .gitignore                                    |   3 +
+ scaffold/.claude/commands/conditional_docs.md |  85 +++++++++++++++++
+ scaffold/.claude/commands/e2e/README.md       |  13 +++
+ scaffold/.claude/commands/patch.md            |  61 +++++++++++++
+ scaffold/.claude/settings.json                |  26 ++++++
+ 16 files changed, 893 insertions(+)
+```
+
+---
+
 ## 2026-06-21 — Rewrite /update-docs as documentation health sweep; propagate to all four downstream repos
 
 Transformed `/update-docs` from a narrow surgical git-diff patcher into a comprehensive **5-phase documentation audit** that detects stale sections, missing coverage, and confirmed-current docs. The command is read-only by default; `--patch` applies surgical fixes for clear-cut issues. New `--since <ref>` flag scopes the git history window.
