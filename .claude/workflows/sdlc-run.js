@@ -155,7 +155,9 @@ const SCOUT_SCHEMA = {
     currentFocus: { type: 'string', description: 'The Current focus line from status.md' },
     lastDevlogEntry: { type: 'string', description: 'Summary of the most recent log entry (first 6 lines)' },
     statusSummary: { type: 'string', description: 'Human-readable summary of what the scout found and why it chose startStage' },
-    discrepancies: { type: 'string', description: 'Any discrepancies between log entries and report files, or empty string if none' }
+    discrepancies: { type: 'string', description: 'Any discrepancies between log entries and report files, or empty string if none' },
+    specThin: { type: 'boolean', description: 'D19: true ONLY when startStage is "implement" (a fresh run) AND the spec is structurally present but substantively thin per the scout STEP 9 signals. false in every other case (resume, missing spec, or a healthy spec).' },
+    thinReason: { type: 'string', description: 'D19: when specThin is true, the specific thin-spec failures named; empty string otherwise.' }
   }
 }
 
@@ -211,6 +213,7 @@ const WRAPUP_SCHEMA = {
     workflowReportFile: { type: 'string' },
     commitMessage:      { type: 'string' },
     commitHash:         { type: 'string' },
+    amendments:         { type: 'array', items: { type: 'string' }, description: 'D18: the dated amendment-log lines appended to the spec for genuine deviations this run (empty array if none).' },
     notes:              { type: 'string' }
   }
 }
@@ -453,6 +456,20 @@ STEP 7 — Find the spec's status in status.md progress table. Look for a row co
 
 STEP 8 — Note any discrepancy: if log says a stage is done but the matching report file is missing, record that.
 
+STEP 9 — Thin-spec content check (D19). Set specThin and thinReason. Evaluate this ONLY when
+  startStage from STEP 6 is "implement" (a fresh run about to spend implement tokens). In EVERY
+  other case (resume at test/review/fix/etc., or spec missing → generate-tasks) set specThin=false,
+  thinReason="". When startStage is "implement", read the spec and flag it thin ONLY on these
+  high-confidence signals — a blocked valid spec is far costlier than a missed thin one, so when in
+  doubt do NOT flag:
+    a) grep -n '{{' ${specFile}  → any unfilled {{TOKEN}} scaffold token is thin.
+    b) The '## Acceptance Criteria' section has no real '- ' bullet (empty, or only a verbatim
+       template seed like '- <Observable, checkable condition') → thin.
+  Do NOT flag a bare 'TODO'/'TBD' in prose, and do NOT treat any '<...>' as a token (it is legitimate
+  in generics like 'Vec<T>', prose like 'the <concept> folder', and globs). The Amendment Log seed
+  '_No amendments yet._' is the correct resting state — never flag it. If neither (a) nor (b) holds,
+  specThin=false. If either holds, specThin=true and thinReason names the specific failures.
+
 Collect the list of existing report files from the ls output in STEP 2 and STEP 6.
 
 Return your findings using the StructuredOutput tool.
@@ -466,6 +483,14 @@ if (!scout) {
 log(`Scout: start from "${scout.startStage}" | spec status: "${scout.blockStatus}"`)
 if (scout.discrepancies) log(`Discrepancies: ${scout.discrepancies}`)
 if (scout.statusSummary) log(scout.statusSummary)
+
+// D19 — thin-spec guard. Abort before spending implement tokens on a structurally-valid but
+// substantively-empty spec. Scout only sets specThin on a fresh implement-stage run (never on resume).
+if (scout.specThin) {
+  log(`ABORTED (D19) — spec is structurally valid but substantively thin: ${scout.thinReason || '(no reason given)'}`)
+  log(`Fix: flesh out ${specFile} (run /generate-tasks --force to regenerate, or edit + commit), then re-run /sdlc-run ${blockId}.`)
+  return { error: 'Thin spec (D19)', reason: scout.thinReason || '', blockId, stem }
+}
 
 // Auto-flip spec to "In progress" if it is "Not started"
 if (scout.blockStatus === 'Not started') {
@@ -1402,6 +1427,20 @@ PART A — Update status.md + log (code/doc changes are already committed by the
 
 7. If the implement report's "Decisions and Trade-offs" section contains any settled choices, mention them in your notes — but do NOT edit planning/decisions/ yourself (that is a manual step).
 
+PART A.5 — Living-artifact amendment log (D18). Make the spec record how it actually ran:
+   a. Review the implement/fix reports and the review verdict for genuine DEVIATIONS from the spec as
+      written — a task implemented materially differently than specified, a scope adjustment, a
+      substitution, a deferral. Routine successful implementation is NOT a deviation.
+   b. For EACH genuine deviation, append ONE dated line to the "## Amendment Log" section of
+      ${specFile} using the Edit tool (append-only — never rewrite existing lines):
+        - YYYY-MM-DD [<stage>] <what changed vs the spec, and why>
+      If the section still shows only "_No amendments yet._" and you are adding the first line, replace
+      that placeholder text with your line(s). If there were NO genuine deviations, leave the section
+      unchanged.
+   c. If ${specFile} has a provenance stub near the top (a line with "**Status:**" / "**Last run:**"),
+      update "**Last run:**" to today's date (date +%Y-%m-%d) and "**Status:**" to the spec's new status.
+   d. Return every appended line in the amendments[] field (empty array if none).
+
 PART B — Write the workflow report to: ${workflowReport}
 
   Use EXACTLY this format:
@@ -1439,12 +1478,14 @@ PART C — Commit the remaining planning files as a single chore commit.
   Never use git add -A or git add . — stage files explicitly by name.
 
   Run: git status
-  Look for any uncommitted files in: planning/status.md, log.md,
+  Look for any uncommitted files in: planning/status.md, log.md, ${specFile}
+  (modified iff you appended an amendment line or updated its provenance stub in PART A.5),
   ${testReport}, ${reviewReport},
   and ${workflowReport} (which you just wrote).
 
   Stage them:
     git add planning/status.md log.md ${workflowReport}
+    git add ${specFile} 2>/dev/null || true
     git add ${testReport} 2>/dev/null || true
     git add ${reviewReport} 2>/dev/null || true
     git add ${uitestReport} 2>/dev/null || true
@@ -1468,12 +1509,14 @@ Return your result using the StructuredOutput tool:
   workflowReportFile: "${workflowReport}"
   commitMessage: "chore: wrap up ${stem}"
   commitHash: the 7-character short hash from git log --oneline -1
+  amendments: the dated amendment-log lines you appended to the spec in PART A.5 (empty array if none)
   notes: any follow-up items (settled decisions to add to planning/decisions/, NEEDS_REVIEW doc flags)
 `, withModel({ label: 'wrap-up', schema: WRAPUP_SCHEMA, phase: 'Wrap-up' }, MODEL.wrapup))
 
 if (wrapupResult) {
   stageResults.push({ stage: 'wrap-up', ...wrapupResult, success: wrapupResult.statusUpdated && wrapupResult.devlogUpdated })
   if (wrapupResult.notes) log(`Decisions to log: ${wrapupResult.notes}`)
+  if (wrapupResult.amendments?.length) log(`Spec amendments (D18): ${wrapupResult.amendments.length} line(s) appended to ${specFile}`)
   log(`Committed: ${wrapupResult.commitMessage}`)
   log(`Workflow report: ${wrapupResult.workflowReportFile}`)
 } else {

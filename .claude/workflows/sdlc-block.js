@@ -566,6 +566,32 @@ STEP 4 — Validate task structure (CASE B and CASE C only — skip when you jus
     regenerate it, or add '### 1. Title', '### 2. Title', ... headings manually, commit,
     then re-run /sdlc-block."
 
+STEP 4b — Validate spec CONTENT properties (CASE B and CASE C only; D19). A spec can be
+  structurally valid (has '### N.' headings) yet substantively empty and waste pipeline tokens.
+  Abort ONLY on the high-confidence thin-spec signals below. CRITICAL — avoid false-positive
+  aborts: a blocked valid spec is far costlier than a missed thin one. Match ONLY the scaffold
+  sentinels named here. Do NOT abort on a bare 'TODO'/'TBD' in authored prose, and do NOT treat
+  any '<...>' as a placeholder (legitimate in generics like 'Vec<T>', prose like 'the <concept>
+  folder', and globs). The Amendment Log's '_No amendments yet._' is the CORRECT resting state —
+  never flag it.
+  Run these greps and read the spec to judge:
+    a) Unfilled scaffold tokens — grep -n '{{' ${tasksFile}  (the {{TOKEN}} form). Any hit → thin.
+    b) Acceptance Criteria empty — the '## Acceptance Criteria' section has no '- ' bullet with
+       real content (only blank, or only a literal seed like '- <Observable, checkable condition'
+       copied verbatim from the template). → thin.
+    c) Validation absent — the '## Validation Commands' block is empty/only template comments AND
+       ${tasksFile%/*}/../harness.json (the project's planning/harness.json) does not exist. If
+       harness.json exists, validation is satisfied regardless of this section. → thin only when both missing.
+    d) A '### N.' task (other than the final Validate step) whose body names NO file, path, or
+       concrete artifact to create/modify — i.e. you cannot tell what it touches. Judge by reading;
+       flag only when genuinely contentless, not when a path is implied.
+  If ANY of (a)-(d) holds, override ready:
+    ready=false, action="aborted",
+    reason="tasks.md is structurally valid but substantively thin: <name the specific failures,
+    e.g. 'unfilled {{TOKEN}} on line N', 'Acceptance Criteria empty', 'task 3 names no files'>.
+    Fix: flesh out the spec (run /generate-tasks --force to regenerate, or edit + commit), then
+    re-run /sdlc-block."
+
 Return using StructuredOutput: ready, action, reason, dirtyFiles, commitHash.
 `, { label: 'pre-flight', schema: PREFLIGHT_SCHEMA, phase: 'Pre-flight', model: 'sonnet' })  // dominant path is trivial scripted git (commit/clean); the rare SPEC_MISSING generate path is a fallback-of-a-fallback, so opus is not worth paying on every run. Re-tiered opus->sonnet (D11).
 
@@ -606,10 +632,22 @@ Reports dir:  ${reportsDir}
 GOAL: produce a dependency graph for every task, list which tasks are already done, and report
 whether a hand-written execution plan already exists.
 
-STEP 1 — Check for an existing plan:
-  cat ${planFile} 2>/dev/null && echo "PLAN_EXISTS" || echo "NO_PLAN"
-  If it exists and is valid JSON with a "waves" array, set planExists=true and return its
-  "tasks" graph and "waves" and "additiveFiles" VERBATIM (do not re-derive). Skip to STEP 4.
+STEP 1 — Check for an existing execution plan and VALIDATE it (D22). /generate-tasks may have already
+  authored planning/${blockId}/sdlc/execution-plan.json (the dependency graph), so the common case can
+  skip the expensive graph derivation in STEP 3. But a prompt authored it, so do NOT trust it — validate:
+    cat ${planFile} 2>/dev/null && echo "PLAN_EXISTS" || echo "NO_PLAN"
+    grep -n '^### [0-9]' ${tasksFile}   (the current task headings)
+  Treat the plan as VALID only if ALL hold:
+    (i)   it parses as JSON;
+    (ii)  it has a "tasks" object (keyed by task number) and an "additiveFiles" array
+          (the execution-plan.schema.json shape; a "waves" array is optional);
+    (iii) its task set EXACTLY matches the current tasks.md '### N.' headings — same COUNT and same
+          numbering. If tasks.md was edited after the plan was authored (a task added/removed/renumbered),
+          the plan is STALE.
+  If VALID: set planExists=true and return its "tasks" graph and "additiveFiles" (and "waves" if present)
+    VERBATIM — do NOT re-derive the graph. Skip STEP 3 and STEP 3b; still do STEP 4 and STEP 5.
+  If ABSENT, malformed, or STALE: set planExists=false and derive the graph yourself (STEP 2, 3, 3b). A
+    stale plan loaded blindly would fan out the wrong waves — rejecting it is cheaper than the error.
 
 STEP 2 — Read the spec and (if present) the breakdown:
   cat ${tasksFile}
@@ -696,7 +734,8 @@ Return using StructuredOutput:
   resumeStates: one entry per task (STEP 5)
   additiveFiles: shared files safe to union-merge
   tasks:        the dependency graph (one entry per task, with evidence)
-  waves:        ONLY if planExists — the loaded wave structure
+  waves:        ONLY if the loaded plan contained a "waves" array — return it verbatim. Omit it when the
+                plan had none or you derived the graph fresh (the engine computes waves deterministically).
   notes:        anything notable (ambiguous deps, suspected cycles)
 `, { label: 'analyze', schema: ANALYZE_SCHEMA, phase: 'Analyze', model: 'opus' })  // dependency analysis is PLANNING — keep on Opus
 
@@ -1406,6 +1445,11 @@ ROLLUP_EOF
      - cat ${reportsDir}/task${'${N}'}-log.md
      - Append everything under its "## Log Entry" heading (from the "## YYYY-MM-DD" line onward,
        NOT the "## Log Entry" header itself) to the TOP of log.md (most-recent-first), once.
+     - D18 amendment log: if the task log has a "## Amendment Log Entry (D18)" section whose body is
+       NOT exactly "_none_", append each "- YYYY-MM-DD [<stage>] ..." line from it to the
+       "## Amendment Log" section of ${tasksFile} (append-only, below existing lines; if that section
+       still reads only "_No amendments yet._", replace that placeholder with the line(s)). Ascending
+       task order keeps the amendment lines chronological.
      - Flip that log's "**Applied:** false" -> "**Applied:** true".
    Then update planning/status.md ONCE:
      - If ALL tasks in the spec are now merged: mark the spec "Done" in the progress table and set
@@ -1415,8 +1459,9 @@ ROLLUP_EOF
    Apply each merged task's "## status.md — *" sections from its log where present. Do NOT apply
    status/log for escalated or skipped tasks.
 
-4. Commit:
+4. Commit (include the spec only if step 3 appended amendment lines to it):
    git add ${blockReport} log.md planning/status.md ${reportsDir}/task*-log.md
+   git add ${tasksFile} 2>/dev/null || true
    git commit -m "chore: spec orchestration report + status for ${blockId}"
    git log --oneline -1
 

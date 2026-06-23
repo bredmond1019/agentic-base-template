@@ -158,6 +158,8 @@ const SETUP_SCHEMA = {
     // stage is then deterministic). Only consulted when NOT resuming; on resume the scout decides.
     specFileExists: { type: 'boolean', description: 'true if the task spec file exists in the worktree' },
     blockStatus:    { type: 'string', description: "This spec's Status in status.md (title-case), or 'Unknown'" },
+    specThin:       { type: 'boolean', description: 'D19: true ONLY on a fresh run (wasCreated && specFileExists) with a structurally-valid but substantively-thin spec per STEP 6c. false on resume or a healthy spec.' },
+    thinReason:     { type: 'string', description: 'D19: the specific thin-spec failures when specThin; empty string otherwise.' },
     notes:         { type: 'string' }
   }
 }
@@ -719,6 +721,16 @@ STEP 6 — Report the pipeline-start inputs (so a fresh run can skip the separat
        cd trees/[branchName] && grep -iE "${blockId}" planning/status.md | head -5
      Set blockStatus to the title-case Status value (Not started / In progress / Done / Blocked /
      Skipped). If no row is found, set blockStatus = "Unknown".
+  c. Thin-spec content check (D19) — evaluate ONLY when wasCreated is true AND specFileExists is true
+     (a fresh run about to spend implement tokens; skip entirely on a resumed/existing worktree). Read
+     the spec and set specThin=true ONLY on these high-confidence signals (a blocked valid spec is far
+     costlier than a missed thin one — when in doubt, do NOT flag):
+       - cd trees/[branchName] && grep -n '{{' ${specFile}  → any unfilled {{TOKEN}} is thin.
+       - The '## Acceptance Criteria' section has no real '- ' bullet (empty, or only a verbatim
+         template seed) → thin.
+     Do NOT flag a bare 'TODO'/'TBD' in prose, do NOT treat any '<...>' as a token (legitimate in
+     'Vec<T>', 'the <concept> folder', globs), and never flag the Amendment Log seed
+     '_No amendments yet._'. Set specThin=false otherwise, and thinReason="" unless thin.
 
 Return your result using the StructuredOutput tool:
   branchName:     the final chosen branch name (e.g. "${baseBranchName}" or "${baseBranchName}-2")
@@ -726,6 +738,8 @@ Return your result using the StructuredOutput tool:
   wasCreated:     true if a NEW worktree was created; false if an existing one was reused (resume mode)
   specFileExists: from STEP 6a
   blockStatus:    from STEP 6b
+  specThin:       from STEP 6c (false unless a fresh run with a structurally-valid but thin spec)
+  thinReason:     from STEP 6c (the specific failures when specThin; empty string otherwise)
   notes:          any issues encountered
 `, withModel({ label: 'worktree-setup', schema: SETUP_SCHEMA, phase: 'Worktree' }, MODEL.worktreeSetup))
 
@@ -737,6 +751,14 @@ if (!setupResult) {
 const { branchName, worktreePath } = setupResult
 log(`Worktree ready: ${worktreePath} (branch: ${branchName})`)
 stageResults.push({ stage: 'worktree-setup', ...setupResult, success: true })
+
+// D19 — thin-spec guard for a standalone fresh run. Skipped under a block (the block's pre-flight
+// already validated content once on main) and on resume (specThin is only set on a fresh worktree).
+if (setupResult.specThin && !underBlock) {
+  log(`ABORTED (D19) — spec is structurally valid but substantively thin: ${setupResult.thinReason || '(no reason given)'}`)
+  log(`Fix: flesh out ${specFile} (run /generate-tasks --force to regenerate, or edit + commit), then re-run.`)
+  return { error: 'Thin spec (D19)', reason: setupResult.thinReason || '', blockId, taskNumber, stem }
+}
 
 // ----------------------------------------------------------------
 // Build the worktree path injection header — prepended to EVERY agent prompt
@@ -1908,6 +1930,17 @@ STEP 2 — Write the TASK LOG file: ${worktreePath}/${logFile}
    \`\`\`
    [paste the git log --oneline output from STEP 1c]
    \`\`\`
+
+   ---
+
+   ## Amendment Log Entry (D18)
+   [Genuine DEVIATIONS this task introduced relative to the spec as written — a task implemented
+    materially differently than specified, a scope adjustment, a substitution, or a deferral. Routine
+    successful implementation is NOT a deviation. The spec is a SHARED file across parallel tasks, so do
+    NOT edit it from this worktree — record the lines here and the merge applier (/clean-worktree)
+    appends them to the spec's "## Amendment Log" on main, in task order. Write ONE line per deviation:
+      - YYYY-MM-DD [<stage>] <what changed vs the spec, and why>
+    If there were no genuine deviations, write exactly: _none_]
 
 STEP 3 — Write the WORKFLOW REPORT: ${worktreePath}/${workflowReport}
 

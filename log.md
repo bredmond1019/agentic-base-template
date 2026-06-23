@@ -5,6 +5,39 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — Plan F3 step 2: engine guards (D19 preflight, D18 wiring, D22 plan relocation)
+
+Implemented the small-engine-guards slice of Plan F3 (sequencing step 2), Opus driving directly. All
+three engines `node --check` clean; the new `execution-plan.schema.json` parses.
+
+- **D19 — property-based authoring guard (engine half complete; ADR written).** Because the engines have
+  no filesystem access (they orchestrate agents), the thin-spec check rides the **existing** early agent
+  in each engine — no new agents. `sdlc-block.js`: STEP 4b in the Sonnet pre-flight (full signal set,
+  aborts `ready=false`). `sdlc-run.js`: `specThin`/`thinReason` on the scout schema + a STEP 9, evaluated
+  ONLY on a fresh implement-stage run (never on resume), with a JS abort. `sdlc-task.js`: `specThin` on
+  worktree-setup (STEP 6c), evaluated only on a fresh worktree, aborted only when not `--under-block`
+  (the block already validated on main). Placeholder detection scoped to scaffold sentinels (`{{`, empty
+  AC); never flags bare `TODO`/`<...>` or the Amendment Log seed. See [D19](decisions/D19-property-based-authoring-guard.md).
+- **D18 — living-artifact specs (engine wiring complete; ADR written).** `sdlc-run.js`: wrap-up is the
+  single amendment writer on main (chosen over the fix loop, which can run 3×) — appends one dated line
+  per genuine deviation to the spec's `## Amendment Log`, updates the provenance stub, stages the spec;
+  `WRAPUP_SCHEMA` gains `amendments[]`. Worktree path: `sdlc-task.js` wrap-up records lines in a new
+  `## Amendment Log Entry (D18)` section of the deferred `task<N>-log.md` (body `_none_` when clean), and
+  the merge-time appliers (`clean-worktree.md` step 6.5g.5 + `sdlc-block.js` report step) append them to
+  the spec on main in task order — single sequential writer, no `additiveFiles` needed. See
+  [D18](decisions/D18-living-artifact-specs.md).
+- **D22 — execution-plan.json authored at /generate-tasks (complete; ADR written).** New
+  `.claude/workflows/execution-plan.schema.json` contract. `/generate-tasks` step 12 writes + commits the
+  dependency graph (from its step-6 file-ownership analysis) when recommending a block; `waves` omitted
+  (engine computes). `sdlc-block.js` Analyze STEP 1 now validates parses + schema-shape + **task-set
+  matches current `### N.` headings** before loading verbatim and skipping the Opus graph derivation;
+  absent/malformed/stale → falls back to deriving. The agent stays on Opus (one agent, both branches);
+  the saving is the skipped derivation reasoning. See [D22](decisions/D22-execution-plan-authored-at-generate-tasks.md).
+
+Remaining: step 3 (the lean block engine — D23 shared setup + in-place sequential + rollback, D24
+consolidated back-half + `block.verify`) — the largest/highest-risk change; build last and validate on a
+real multi-task spec before propagating. Then step 4 (downstream propagation).
+
 ## 2026-06-23 — Plan F3 step 1: prompt/template layer (D20, D21, D25 complete; D18/D19 authoring halves)
 
 Implemented the low-risk prompt/template slice of Plan F3 (sequencing step 1), Opus driving with one
