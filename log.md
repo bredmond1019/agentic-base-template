@@ -5,6 +5,18 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — TAC8 adoptions plan written
+
+Reviewed the TAC8/ADW agentic repo (`~/agentic-portfolio`) — specifically its `.claude/` commands + hooks and the `adws/` Python autonomous workflow engine (ADW = AI Developer Workflow). Produced a full comparison report: TAC8 is ahead on explicit persistent phase state, autonomous GitHub issue processing (webhook + cron), E2E test scaffolding, and Python hook security guards; our harness is ahead on triple-tier model selection, ADR-driven decision log, dependency-ordered orchestration, and stack-specific validation policy. The autonomous webhook trigger (TAC8's ZTE) was explicitly excluded from adoption — the python-orchestration-system's Telegram bot + expose-api spec already covers the same architectural pattern. Wrote `planning/plans/tac8-adoptions.md` with five ordered tasks (Python hooks → /patch → E2E templates → /conditional_docs → persistent phase state D27); updated `planning/index.md` to register the new plan.
+
+```diff
+ planning/handoff.md | 146 ++++++++++++++++++++++++----------------------------
+ planning/index.md   |   4 ++
+ 2 files changed, 70 insertions(+), 80 deletions(-)
+```
+
+---
+
 ## 2026-06-23 — Handoff written for Plan F3 propagation
 
 Completed D26 parity work; wrote updated `planning/handoff.md` with full guidance for the next session's propagation to python-orchestration-system (which has the expose-api-and-telegram-bot spec ready to validate the lean sdlc-block on a real multi-task effort) and consolidation of lean block validation. Plan F3 steps 1–3 are engine-complete and `node --check` passing; STEP 4 propagation to the four downstream repos remains (uncommitted per-repo for review).
