@@ -89,6 +89,19 @@
           "description": "A task that creates/modifies MORE than this many distinct files is a breakdown candidate (the file-count signal). Multi-concern / multi-layer tasks are flagged regardless of count."
         }
       }
+    },
+    "block": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional policy for the lean /sdlc-block runner (the 'more powerful sdlc-run': a fresh implement agent per task, shared setup once, one consolidated back-half). Absent → verify 'consolidated' (per-task review off). Only read by /sdlc-block; /sdlc-run and /sdlc-task ignore it.",
+      "properties": {
+        "verify": {
+          "type": "string",
+          "enum": ["consolidated", "consolidated+review"],
+          "default": "consolidated",
+          "description": "How much per-task verification the lean block does before its single consolidated back-half (test → review → fix → document → wrap-up over the integrated tree). 'consolidated' (default, cheapest): each task runs implement + the D8 completeness self-check only; localization happens once at the end. 'consolidated+review': each task additionally gets one review pass (a localization map for the consolidated fix) — recommended by /generate-tasks when tasks are large/heterogeneous enough that end-only localization is hard (≈38k tokens × N). The consolidated review stays authoritative in both modes; per-task review never substitutes for it. CLI override: --verify-depth <value>."
+        }
+      }
     }
   },
   "required": ["validation", "uiTest"],

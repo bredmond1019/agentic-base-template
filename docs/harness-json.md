@@ -54,6 +54,7 @@ This is acceptable for a quick start but is less reliable than a `harness.json`.
 | `uiTest` | object | **Yes** | UI smoke-test stage config |
 | `breakdown` | object | No | Task-decomposition policy (absent → `mode: recommend`, `complexityThreshold: 3`) |
 | `planning` | object | No | Planning-phase policy for the authoring commands (absent → `clarify: false`) |
+| `block` | object | No | Lean `/sdlc-block` runner policy (absent → `verify: consolidated`) |
 
 ### `validation.checks[]`
 
@@ -142,6 +143,32 @@ ambiguous prompt *before* writing the spec — the deliberate counter to the "mo
 median results" anti-pattern. Default `false` preserves the zero-touch flow (write immediately). A
 user can always force the behavior for a single invocation by appending **`--clarify`**, regardless
 of this setting. See [D20](../planning/decisions/D20-clarify-before-generate.md).
+
+### `block` object
+
+Optional. Policy for the lean `/sdlc-block` runner — the "more powerful `/sdlc-run`": a **fresh
+implement agent per task** sharing one setup, then a **single consolidated back-half** over the
+integrated tree. Only `/sdlc-block` reads it; `/sdlc-run` and `/sdlc-task` ignore it. Absent →
+`verify: consolidated`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `verify` | string | No | `consolidated` (default) · `consolidated+review` |
+
+The lean block always runs **one** consolidated back-half after all tasks land
+(`test → review → fix → document → wrap-up` over the integrated tree). `verify` only decides how much
+each task is verified *first*:
+
+| `verify` | Per task | When to use |
+|---|---|---|
+| `consolidated` (default) | implement + the D8 completeness self-check only — cheapest | Small / homogeneous / sequential tasks where the end-of-run consolidated review can easily localize any finding |
+| `consolidated+review` | implement → **one review pass** (a localization map; fix/document/wrap-up still deferred to the back-half) | Large or heterogeneous tasks where end-only localization is hard. Costs ≈38k tokens × N; `/generate-tasks` recommends it in that case |
+
+The consolidated review stays **authoritative** in both modes — a per-task review validates its slice
+in isolation (it cannot catch cross-task integration breakage) and never substitutes for the
+consolidated pass. Override per-run with **`--verify-depth <consolidated|consolidated+review>`**. See
+[D23](../planning/decisions/D23-lean-block-shared-setup.md) and
+[D24](../planning/decisions/D24-consolidated-back-half.md).
 
 ## Stack profiles
 

@@ -13,7 +13,10 @@
 // for sequential use.
 //
 // USAGE
-//   /sdlc-task <spec-slug> 2   runs task 2 in an isolated worktree
+//   /sdlc-task <spec-slug> 2                  runs task 2 in an isolated worktree (full pipeline)
+//   /sdlc-task <spec-slug> 2 --implement-only  worktree implement only, then STOP (lean /sdlc-block
+//                                              width-≥2 path; add --review for one localization-map
+//                                              review pass). No test/document/wrap-up/merge.
 //
 //   Task number is REQUIRED. For full-spec runs use /sdlc-run instead.
 //
@@ -115,6 +118,16 @@ const underBlock = parts.includes('--under-block')
 // measures the whole batch's burn, not this task's, so we mark it non-isolated rather than reporting a
 // misleading number. promptTok and filesReadKb stay per-agent and accurate. See decisions/D12.
 const parallelWave = parts.includes('--parallel-wave')
+// --implement-only (set by the lean /sdlc-block for a width-≥2 parallel wave): run
+// worktree-setup → implement → (one review pass ONLY when --review is also set) and STOP. Skip
+// test/fix/ui-test/document/wrap-up and the merge hand-off. /sdlc-block merges the branch and runs
+// ONE consolidated back-half (test → review → fix → document → wrap-up) over the integrated tree, so
+// per-task verification beyond the optional localization-map review is wasteful here (D23/D24). The
+// block owns status/log; this mode writes no deferred task-log.
+const implementOnly = parts.includes('--implement-only')
+// --review: under --implement-only, add a single per-task review pass (no fix loop) as a localization
+// map for the consolidated fix. Set by /sdlc-block only when block.verify is "consolidated+review".
+const withReview = parts.includes('--review')
 
 if (taskNumber === null || isNaN(taskNumber)) {
   log(`ERROR: Task number is required but not provided (got: "${rawArgs}").`)
@@ -1195,7 +1208,11 @@ Return using StructuredOutput:
       log('Implement reported failure — aborting pipeline')
       break
     }
-    currentStage = 'test'
+    // --implement-only (lean block, D23): stop after implement. With --review, run ONE review pass
+    // first (implement → review, skipping the test stage — review re-runs the gating checks itself);
+    // otherwise exit straight to the implement-only return below. Either way the consolidated back-half
+    // does the authoritative test/fix/document/wrap-up over the integrated tree.
+    currentStage = implementOnly ? (withReview ? 'review' : 'implement-only-done') : 'test'
   }
 
   // ----------------------------------------------------------
@@ -1574,7 +1591,12 @@ Return using StructuredOutput:
       log(`Review verdict: ${reviewResult.verdict} (attempt ${reviewAttempts}/${MAX_REVIEW_ATTEMPTS})`)
     }
 
-    if (lastReviewResult.verdict === 'PASS') {
+    if (implementOnly) {
+      // Lean block: the single review pass is a localization map only — no fix loop, no ui-test.
+      // The consolidated back-half owns fix/document/wrap-up over the integrated tree.
+      log(`Implement-only review: ${lastReviewResult.verdict} (localization map for the consolidated back-half).`)
+      currentStage = 'implement-only-done'
+    } else if (lastReviewResult.verdict === 'PASS') {
       currentStage = 'ui-test'
     } else if (reviewAttempts < MAX_REVIEW_ATTEMPTS) {
       log(`Review ${lastReviewResult.verdict} — running fix pass ${reviewAttempts + 1}/${MAX_REVIEW_ATTEMPTS}...`)
@@ -1711,6 +1733,39 @@ Return the result using StructuredOutput.
     }
   }
 } // end implement→fix→test→review→ui-test retry loop
+
+// ================================================================
+// IMPLEMENT-ONLY EARLY RETURN (lean /sdlc-block, D23/D24)
+//
+// Stop here: no document, no wrap-up, no task-log, no merge hand-off. The implement agent already
+// committed the code + implement report in the worktree (and the optional review committed its report);
+// /sdlc-block merges this branch into the integration branch and runs ONE consolidated back-half over
+// the integrated tree. finalVerdict tells the block whether the branch is mergeable:
+//   FAIL        — implement failed; the block escalates instead of merging.
+//   <review>    — when --review ran: the per-task review verdict (a localization signal, not a gate).
+//   IMPLEMENTED — implement succeeded, no per-task review (consolidated back-half will verify).
+// ================================================================
+if (implementOnly) {
+  const implOk = lastImplReport && lastImplReport.success !== false
+  const verdict = !implOk ? 'FAIL' : (withReview ? (lastReviewResult?.verdict || 'FAIL') : 'IMPLEMENTED')
+  log(`Implement-only complete: ${stem} → ${verdict} | branch ${branchName}`)
+  log(`(No per-task back-half — /sdlc-block merges this branch and runs one consolidated back-half.)`)
+  return {
+    blockId,
+    taskNumber,
+    stem,
+    branchName,
+    worktreePath,
+    finalVerdict: verdict,
+    implementOnly: true,
+    reviewRan: withReview,
+    reviewVerdict: lastReviewResult?.verdict || null,
+    implementReport,
+    reviewReport: withReview ? reviewReport : null,
+    startStage: scout.startStage,
+    stageResults
+  }
+}
 
 // ================================================================
 // PHASE 6: DOCUMENT (gates on PASS verdict)

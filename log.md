@@ -5,6 +5,48 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — Plan F3 step 3: lean sdlc-block engine (D23 + D24)
+
+Built the centerpiece — `sdlc-block` repurposed in place into "a more powerful `/sdlc-run`" (a fresh
+implement agent per task + one consolidated back-half). Opus driving; `sdlc-task --implement-only` was
+the only delegatable building block. All engines `node --check` clean; `harness.schema.json` +
+`execution-plan.schema.json` parse. **Not yet validated on a real multi-task spec, not propagated.**
+
+- **D24 config surface.** `block.verify` enum (`consolidated` default / `consolidated+review`) added to
+  `harness.schema.json` (top-level `block`, `additionalProperties:false`), `scaffold/planning/harness.json`,
+  and `docs/harness-json.md` (new section + top-level row). CLI override `--verify-depth`.
+- **`sdlc-task.js` — `--implement-only` mode.** New flag: worktree-setup → implement → (one review pass
+  only with `--review`) and STOP — skips test/fix/ui-test/document/wrap-up and the merge hand-off.
+  Returns `finalVerdict` (FAIL / IMPLEMENTED / the review verdict). The width-≥2 building block the lean
+  block fans out for genuine parallel waves; the worktree full-pipeline path is untouched.
+- **D23 — `sdlc-block.js` shared setup + in-place execution + rollback.** `harness-config` already once;
+  `baseline-snapshot` hoisted to once-per-block `snapshotBlockBaselines` (no-op without a D6 baseline-diff
+  check). Wave loop rewritten: a width-1 wave runs the task **in place on the integration branch** via an
+  **inlined** implement (+ optional localization review) agent that shares the block's config (no
+  worktree, no merge); a width-≥2 wave isolates each task in a worktree via `/sdlc-task --implement-only`
+  then merges in order. Pre-task HEAD captured; a failed in-place implement is `git reset --hard`'d back
+  before retry/escalation. Resume keys on landed `task<N>-implement.md`. The inline-implement duplication
+  is the deliberate resolution of D23-shared-setup vs D24-don't-duplicate (user-approved): `workflow()`
+  can't share JS state, so reusing a sub-engine per task would re-pay the ×N setup D23 kills. See
+  [D23](decisions/D23-lean-block-shared-setup.md).
+- **D24 — `sdlc-block.js` consolidated back-half + verify knob.** After all tasks land (and only when no
+  escalations/skips), the block seeds one spec-level `implement.md` from the per-task reports, then runs
+  ONE `test → review → fix → (ui-test) → document → wrap-up` over the integrated tree via
+  `workflow('sdlc-run', '<slug> --from test')` — the back-half reuse (`/sdlc-run --from test` = D17). Its
+  wrap-up owns status.md/log.md/the spec Amendment Log (D18); the block's slim Report writes only
+  `block-workflow.md` (no status/log). The block's own Playwright sweep was **removed** (the back-half's
+  ui-test stage covers it); its dead Playwright schemas + `renderUiTestPrompt` were deleted. `block.verify`
+  / `--verify-depth` resolved (CLI > harness.json > `consolidated`); per-task review is non-gating. See
+  [D24](decisions/D24-consolidated-back-half.md).
+- **Known follow-ups (before propagation).** (1) `/sdlc-run` D6 richer-check parity so the reused
+  back-half handles baseline-diff/warning-scan/forbidden-pattern (currently command-kind only). (2) The
+  emoji gate (`git diff main..HEAD`) no-ops when the integration branch is `main`; a dedicated
+  integration branch is the documented fix. (3) End-to-end validation on a real multi-task spec (token
+  drop + that the consolidated back-half catches what per-task verification would have). Both recorded in
+  the D23/D24 "Reconsider if" sections.
+
+---
+
 ## 2026-06-23 — Plan F3 step 2: engine guards (D19 preflight, D18 wiring, D22 plan relocation)
 
 Implemented the small-engine-guards slice of Plan F3 (sequencing step 2), Opus driving directly. All
