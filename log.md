@@ -5,6 +5,18 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — P0 + P1 harness bug fixes from validation run review
+
+Reviewed the `harness-update-review.md` from the expose-api-and-telegram-bot validation run on the lean sdlc-block (D23/D24). Found three bugs: **P0** baseline snapshot files written but untracked blocks merge (fixed `snapshotBlockBaselines()` in sdlc-block.js to run `git add` + commit after writing baselines); **P1** sdlc-run test stage invents emoji-prohibition gate not present in harness.json, failing specs that never declared the pattern (fixed by removing hardcoded EMOJI CHECK section and adding explicit guard against inventing out-of-config checks); **P2** no cross-invocation block-state persistence + emoji gate no-ops when integration branch is `main` (deferred to next session — known follow-up D23/D24 "Reconsider if"). P0 and P1 committed at 5d11d41.
+
+```diff
+ planning/handoff.md | 179 ++++++++++++++++++++++++++++++++--------------------
+ planning/status.md  |   2 +-
+ 2 files changed, 112 insertions(+), 69 deletions(-)
+```
+
+---
+
 ## 2026-06-23 — TAC8 adoptions plan written
 
 Reviewed the TAC8/ADW agentic repo (`~/agentic-portfolio`) — specifically its `.claude/` commands + hooks and the `adws/` Python autonomous workflow engine (ADW = AI Developer Workflow). Produced a full comparison report: TAC8 is ahead on explicit persistent phase state, autonomous GitHub issue processing (webhook + cron), E2E test scaffolding, and Python hook security guards; our harness is ahead on triple-tier model selection, ADR-driven decision log, dependency-ordered orchestration, and stack-specific validation policy. The autonomous webhook trigger (TAC8's ZTE) was explicitly excluded from adoption — the python-orchestration-system's Telegram bot + expose-api spec already covers the same architectural pattern. Wrote `planning/plans/tac8-adoptions.md` with five ordered tasks (Python hooks → /patch → E2E templates → /conditional_docs → persistent phase state D27); updated `planning/index.md` to register the new plan.
