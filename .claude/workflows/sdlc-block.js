@@ -575,7 +575,7 @@ STEP 4b — Validate spec CONTENT properties (CASE B and CASE C only; D19). A sp
        real content (only blank, or only a literal seed like '- <Observable, checkable condition'
        copied verbatim from the template). → thin.
     c) Validation absent — the '## Validation Commands' block is empty/only template comments AND
-       ${tasksFile%/*}/../harness.json (the project's planning/harness.json) does not exist. If
+       planning/harness.json does not exist. If
        harness.json exists, validation is satisfied regardless of this section. → thin only when both missing.
     d) A '### N.' task (other than the final Validate step) whose body names NO file, path, or
        concrete artifact to create/modify — i.e. you cannot tell what it touches. Judge by reading;
