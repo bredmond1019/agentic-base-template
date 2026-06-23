@@ -5,6 +5,32 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-23 — Fixed brain-sync step in the harness `/log-work`
+
+The harness `log-work.md` brain-sync step was carrying three bugs cloned from the original
+learn-ai command and never re-tokenized: it referenced learn-ai's "13-spec table", told the
+agent to update the README's Quick Status section **"for learn-ai"** regardless of which
+project it ran in, and ended with "skip this step silently" (which masked failures). Net
+effect downstream: a generated project's `/log-work` either edited the wrong brain section or
+silently no-op'd, so subrepo status rarely reached the company brain.
+
+Fix: made the step slug-agnostic — it now locates *this* project's `###` subsection in the
+brain `README.md` (the same project as the `docs/projects/*.md` it just read), updates "this
+project's progress table", and **fails loudly** (STOP + report) when it can't find the
+section instead of skipping or editing another project's. The `{{SLUG}}` token for the
+brain-doc path is unchanged (still substituted by `/new-project`).
+
+Already-generated projects were patched directly in the same session (all 9 downstream repos
++ this template), so no manual pull is needed for this change — D18 propagation applies to
+future clones only.
+
+```diff
+ .claude/commands/log-work.md   | ~10 +-
+ log.md                         |  + (this entry)
+```
+
+---
+
 ## 2026-06-23 — Merged planf3-harness-improvements + tac8-adoptions to main
 
 Both long-running harness branches landed on `main` (merge commit `38fd5ac`). `planf3-harness-improvements` fast-forwarded; `tac8-adoptions` was a 3-way merge. The four conflicts (`.gitignore`, `log.md`, `planning/decisions/index.md`, `planning/status.md`) were all additive doc/index conflicts — no engine-code conflict (`sdlc-run.js` + `commands/README.md` auto-merged) — resolved keep-both, with D27/D28/D29 reconciled into the decisions index. All engines `node --check` clean post-merge. `main` now carries the full Plan F3 lean `sdlc-block` (D18–D29) + the TAC8 adoptions (D27 phase state, Python hooks parked in `need-python-hooks/`, `/patch`, E2E templates, `/conditional_docs`). **Nothing propagated downstream yet** — wrote `planning/handoff.md` for the next agent: validate the lean `/sdlc-block` on a real downstream spec, then propagate engines + new commands to the four repos, then decide the Python-hook wiring. Branches merged but not deleted.
