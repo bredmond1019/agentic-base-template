@@ -5,6 +5,20 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-24 — Planned the /sdlc-flow engine
+
+Designed the `/sdlc-flow` single-spec orchestration engine as the inner complement to `sdlc-block`'s multi-task waves — motivated by the D22–D28 refactor's merge-conflict surface area (shared state.json + worklog.md in every task's worktree branch, leading to collisions when reordering or re-running tasks). The design resolved four forks with the user: name the command `/sdlc-flow` (not `/sdlc-run-v2`); build the inner single-spec engine first and reposition `/sdlc-block` as a documented follow-on orchestrator; commit authoritative `state.json` + one `worklog.md` (replacing per-stage report files) to avoid shared-file merge collisions; add `create-PR-and-stop` with `--auto-merge` opt-in for external integration. Authored `planning/sdlc-flow/plan.md` (design surface, dependencies, load-bearing decisions), `planning/sdlc-flow/orchestration.md` (four-phase build order with actor assignments), and `planning/sdlc-flow/index.md` (directory layout). No engine code written; this is a clean planning handoff for a fresh Opus implementation session.
+
+```diff
+ planning/handoff.md                      | 137 +++++-------
+ planning/plans/sdlc-block-run-review.md  | 142 ------------
+ planning/plans/sdlc-telemetry-updates.md | 363 -------------------------------
+ planning/status.md                       |   5 +-
+ 4 files changed, 58 insertions(+), 589 deletions(-)
+```
+
+---
+
 ## 2026-06-23 — Fixed brain-sync step in the harness `/log-work`
 
 The harness `log-work.md` brain-sync step was carrying three bugs cloned from the original
