@@ -5,6 +5,67 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-24 — Ad-hoc planning seam: /generate-master-plan + /plan-as-block + /generate-tasks --from (D34)
+
+Closed two gaps in the Phase-1 planning surface, both rooted in the same insight: the real contract
+between planning and `/generate-tasks` is a **block definition** (What / Why / Build notes /
+Acceptance criteria + a parseable slug), and `/generate-tasks` is just "block definition → decomposed
+`tasks.md`".
+
+- **`/generate-master-plan` (new command).** Authors/revises `planning/master-plan.md` as canonical
+  `## Phase N` → `### Block X` definitions whose headers `/generate-tasks <phaseN-blockX>` parses
+  directly — so a free-form planning session produces the structure the pipeline expects instead of
+  something `/generate-tasks` has to guess at. Reuses the D20 clarify gate; ships mechanism-only.
+  **Block skeleton hardened against a hand-built reference** (`bella/planning/master-plan.md`, authored
+  backwards from `/generate-tasks`): each block now carries **Files (New vs Modified, by path)**,
+  **Out of scope**, an optional **Interfaces / shared surface**, plus a self-documenting **"The Block
+  Contract"** section — pushing disjoint-ownership thinking up to authoring time. `/generate-tasks`
+  now **carries the block's named Files + Out-of-scope through** (treats Out-of-scope as a hard bound)
+  instead of re-deriving when present. See D34 → "The canonical block skeleton".
+- **`/generate-tasks --from <path>` (additive input mode).** Decomposes a single standalone block file
+  (e.g. a `/plan` output) instead of a master-plan block: derives the slug from the file's parent
+  directory, writes `tasks.md` beside the source, runs the identical self-check / decomposition
+  assessment / pipeline recommendation / `execution-plan.json` authoring. Default slug mode unchanged.
+- **`/plan` (clarified role).** Now framed as a single standalone block definition for an
+  ad-hoc/experimental feature — kept **out** of `master-plan.md` until it proves out on a branch.
+  Gains a "rigorous route" next-step (`/generate-tasks --from … → /sdlc-flow`). Direct `/implement`
+  path retained.
+
+Rationale for the standalone-file route over appending to `master-plan.md`: experimental work runs on
+a feature branch via `/sdlc-flow` *because* it might not pan out — forcing it into the roadmap first
+records speculation as roadmap. See **D34**. `/feature` and `/chore` (fast one-shot `tasks.md`) are
+unchanged.
+
+**Brain-repo follow-up (not done here):** wire `/new-project` (in `agentic-portfolio/`, outside the
+harness) to call `/generate-master-plan` as its post-scaffold roadmap step. Captured as an Upcoming
+work row in `status.md`.
+
+```diff
+ .claude/commands/generate-master-plan.md          | new
+ planning/decisions/D34-adhoc-planning-seam.md     | new
+ .claude/commands/generate-tasks.md                | --from mode (additive)
+ .claude/commands/plan.md                          | role note + rigorous next-step
+ .claude/commands/README.md                        | phase table + Phase-1 prose
+ planning/decisions/index.md                       | D34 row
+ docs/using-the-template.md                        | master-plan + experimental flow
+```
+
+**Plan-quality floor (D35).** Same session, prompted by "is Build Notes important?" → no (a soft
+catch-all invites imprecision; fold approach hints into a concrete `What`), and "maintain Plan F3's
+clarify-don't-assume as we evolve." Added a **plan-quality floor** to all three planning commands that
+holds **even when the D20 clarify gate is off**: if filling a load-bearing element (concrete files,
+observable acceptance criterion, scope boundary, dependency) would require *inventing* a fact
+ungroundable in the prompt / CLAUDE.md / context / repo / master-plan, the command **asks** (interactive)
+or **aborts naming exactly what's missing** (unattended preflight, e.g. inside `/sdlc-block`/`/sdlc-flow`)
+rather than emit a confident guess. Chosen over flipping D20's default-on (would reverse a settled
+decision + hang unattended preflight). Extends D19 (post-hoc → proactive) and complements D20. See
+**D35**. Files: `generate-master-plan.md`, `plan.md`, `generate-tasks.md` (one floor paragraph each),
+`planning/decisions/D35-plan-quality-floor.md`, `planning/decisions/index.md`.
+
+Mechanism-only, prompt/command-layer (no engine JS touched). Not yet propagated downstream.
+
+---
+
 ## 2026-06-24 — Implemented the /sdlc-flow engine (D30–D33)
 
 Built the fourth SDLC engine: `/sdlc-flow` — shared-worktree, single-review, PR-terminating. Key

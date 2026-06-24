@@ -66,7 +66,10 @@ The scaffold ships tokenized stubs. Replace the tokens with real project content
 - `planning/context.md` — fill in the "What This Is", "Who Maintains It", and "Fast Facts"
   sections.
 - `planning/master-plan.md` — define your phases and blocks. The SDLC pipeline reads this to
-  generate task specs via `/generate-tasks`.
+  generate task specs via `/generate-tasks`. Rather than hand-writing it, run
+  **`/generate-master-plan`** with your planning notes — it authors the roadmap as canonical
+  `## Phase N` → `### Block X` definitions whose headers `/generate-tasks <phaseN-blockX>` parses
+  directly, so the structure is right the first time.
 
 ## 4. Start your first session
 
@@ -103,6 +106,20 @@ Or run it all unattended:
 /sdlc-run my-feature           # single sequential run
 /sdlc-block my-feature         # parallel waves with retries and auto-merge
 ```
+
+### Experimental features (kept out of the roadmap)
+
+For a small feature you want to try on a branch *before* committing it to `master-plan.md`:
+
+```
+/plan add-rate-limiter                              # writes planning/plan-add-rate-limiter/plan.md
+/generate-tasks --from planning/plan-add-rate-limiter/plan.md   # → planning/plan-add-rate-limiter/tasks.md
+/sdlc-flow plan-add-rate-limiter                    # run it on a feature branch, terminates in a PR
+```
+
+This gets the experimental work the same decomposition rigor as a roadmap block (disjoint-ownership
+analysis, `execution-plan.json`, pipeline recommendation) without polluting the roadmap. See
+`planning/decisions/D34-adhoc-planning-seam.md`.
 
 See `.claude/commands/README.md` for the full pipeline reference, argument conventions, and
 `sdlc-block` options.

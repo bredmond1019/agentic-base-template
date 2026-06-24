@@ -1,5 +1,17 @@
 # Plan — Create a plan for a task, scaled to its complexity.
 
+## Purpose
+
+Plan one ad-hoc / experimental task or feature from a free-text description. The resulting `plan.md`
+serves two downstream routes:
+- **Direct:** `/breakdown` or `/implement` it as-is (the quick path).
+- **Rigorous:** treat it as a **standalone block definition** and run `/generate-tasks --from
+  planning/plan-<slug>/plan.md` to decompose it into a `tasks.md` with full disjoint-ownership
+  analysis, an `execution-plan.json`, and a pipeline recommendation — then run it (e.g. via
+  `/sdlc-flow`) on a feature branch. This is how you try an experimental feature **without** putting
+  it in `master-plan.md` first. See `planning/decisions/D34-adhoc-planning-seam.md`. (For the roadmap
+  itself, use `/generate-master-plan`.)
+
 ## Variables
 
 $ARGUMENTS — description of the task to plan.
@@ -15,6 +27,12 @@ $ARGUMENTS — description of the task to plan.
    `planning.clarify` is absent/`false` and no `--clarify` flag is present, skip this step entirely and
    behave exactly as before (write immediately). Strip a `--clarify` token from the prompt before using
    it as the `prompt:` metadata value.
+   - **Plan-quality floor — clarify, don't fabricate (holds even when the gate is off).** If filling a
+     load-bearing element (the Relevant Files / New Files, a `### N.` task's concrete files, Acceptance
+     Criteria, or a dependency) would require *inventing* a fact you cannot ground in `$ARGUMENTS`,
+     `CLAUDE.md`, `planning/context.md`, or the repo — **stop and ask the user** rather than write a
+     plausible-looking guess. The gate governs proactive question rounds; this floor governs never
+     fabricating. An honest "I need X" beats a confident invention.
 3. THINK HARD about task type and complexity before writing anything:
    - `task_type`: `chore` | `feature` | `refactor` | `fix` | `enhancement` | `content`
    - `complexity`: `simple` | `medium` | `complex`
@@ -143,4 +161,8 @@ Next (optional — decompose into atomic sub-steps):
 
 Next (skip breakdown — implement directly):
   /implement planning/plan-{name}/plan.md
+
+Next (rigorous — decompose into a runnable spec, then run on a branch):
+  /generate-tasks --from planning/plan-{name}/plan.md
+  /sdlc-flow plan-{name}
 ```

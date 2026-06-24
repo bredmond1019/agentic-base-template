@@ -2,31 +2,55 @@
 
 ## Variables
 
-$ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
-             e.g. `<spec-slug>` or `2.1-learn-paths-structural-fixes`.
-             New master-plan specs follow the `P.N-slug` convention (see
-             `planning/index.md` → *Task directory naming convention*); ad-hoc work uses
-             `/chore`, `/feature`, or `/plan` instead.
-             Required. If omitted, stop and say: "Usage: /generate-tasks <P.N-slug>  (e.g. <spec-slug>)"
+$ARGUMENTS — one of two input modes:
+             - **Master-plan slug mode (default):** the spec's `planning/` directory name (its
+               phase-dotted slug), e.g. `<spec-slug>` or `2.1-learn-paths-structural-fixes`. New
+               master-plan specs follow the `P.N-slug` convention (see `planning/index.md` → *Task
+               directory naming convention*). The block definition is read from `master-plan.md`.
+             - **Standalone-block mode (`--from <path>`):** decompose a single standalone block
+               definition file (e.g. a `/plan` output, `--from planning/plan-<slug>/plan.md`) instead
+               of a master-plan block. Used for ad-hoc / experimental features kept out of the
+               roadmap (see `planning/decisions/D34-adhoc-planning-seam.md`).
+             Required. If omitted, stop and say: "Usage: /generate-tasks <P.N-slug>  (e.g.
+             <spec-slug>), or /generate-tasks --from planning/plan-<slug>/plan.md"
 
 ## Instructions
 
 1. Run `/prime` to orient to the repo (standing rules, architecture).
 
-2. Parse `$ARGUMENTS` to extract the phase number and block/project identifier
-   (e.g. `phase0-blockC` → phase 0, block C).
-   - Accept any of these forms: `phase0-blockC`, `phase0blockC`, `0-C`, `Phase 0 Block C`.
-   - If the argument cannot be parsed into a phase + block, stop and explain the expected format.
+2. **Resolve the input mode and the spec slug.**
+   - **If `$ARGUMENTS` contains `--from <path>` (standalone-block mode):** the source is the block
+     definition file at `<path>`; skip phase/block parsing entirely. Derive the spec slug from the
+     **parent directory name** of `<path>` (e.g. `planning/plan-add-rate-limiter/plan.md` →
+     slug `plan-add-rate-limiter`). The decomposed `tasks.md` is written **into that same directory**
+     (`planning/plan-add-rate-limiter/tasks.md`). If `<path>` does not exist, stop and say so.
+   - **Otherwise (master-plan slug mode):** parse `$ARGUMENTS` to extract the phase number and
+     block/project identifier (e.g. `phase0-blockC` → phase 0, block C). Accept any of these forms:
+     `phase0-blockC`, `phase0blockC`, `0-C`, `Phase 0 Block C`. The spec slug is the normalized
+     directory form (e.g. `<spec-slug>`). If the argument cannot be parsed into a phase + block, stop
+     and explain the expected format.
 
-3. Check whether a spec already exists at `planning/phaseN-blockX/tasks.md` (using the
-   normalized directory form, e.g. `planning/<spec-slug>/tasks.md`).
+3. Check whether a spec already exists at `planning/<spec-slug>/tasks.md` (using the slug resolved in
+   step 2; in `--from` mode the slug is the source file's parent directory).
    - If it exists, read it and report: "Spec already exists at <path>. Overwrite? (re-run with
      `--force` appended to overwrite, or run `/breakdown <path>` to decompose it instead.)"
    - If `$ARGUMENTS` contains `--force`, proceed and overwrite.
 
-4. Read ONLY the relevant section for the requested block in:
-   - `planning/master-plan.md` (the phase/block definition)
-   - Do NOT read status.md — the target block is given explicitly.
+4. **Read the source block definition.**
+   - **Standalone-block mode (`--from <path>`):** read the block definition file at `<path>`. Treat
+     its substance — the goal/description, problem/solution, relevant files, and acceptance criteria —
+     as the block definition. **Author fresh decomposed `### N.` tasks from it; do not merely copy a
+     pre-existing step list verbatim** (apply the same scoping and disjoint-ownership rigor below).
+     Do NOT read `master-plan.md` in this mode.
+   - **Master-plan slug mode:** read ONLY the relevant section for the requested block in
+     `planning/master-plan.md` (the phase/block definition).
+   - In both modes: do NOT read status.md — the target is given explicitly.
+   - **Use what the block already gives you.** A well-authored block (see `/generate-master-plan`)
+     names its **Files** (New vs Modified, by path), an **Out of scope** boundary, and an optional
+     **Interfaces / shared surface**. When present, **carry these through** rather than re-deriving:
+     the named files seed each task's ownership + the `execution-plan.json` (steps 6 + 12), and **Out
+     of scope is a hard boundary** — do not generate tasks beyond it. Only fall back to deriving file
+     ownership yourself when the block doesn't name files.
 
 5. **Clarify gate (only when enabled).** Read `planning/harness.json` → `planning.clarify`. When it is
    `true` **or** `$ARGUMENTS` contains `--clarify`, and the block definition is genuinely ambiguous (its
@@ -36,6 +60,15 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
    `planning.clarify` is absent/`false` and no `--clarify` flag is present, skip this step entirely and
    behave exactly as before. (`--clarify` is a control flag only — do not treat it as part of the
    phase/block slug when parsing `$ARGUMENTS`.)
+   - **Plan-quality floor — clarify-or-abort, never fabricate (holds even when the gate is off).** If
+     decomposing the block would require *inventing* a load-bearing fact you cannot ground in the
+     block definition, `CLAUDE.md`, `planning/context.md`, or the repo (e.g. which files a task owns,
+     an observable acceptance criterion, a real dependency edge) — do not emit a fabricated `tasks.md`.
+     Instead: in an **interactive session**, STOP and ask the user a targeted question; in a
+     **non-interactive / preflight context** (invoked by `/sdlc-block` / `/sdlc-flow` to auto-generate
+     a missing spec), **ABORT with a specific message naming exactly what's missing** so the human can
+     fix the block. This is the proactive complement to the D19 thin-spec abort: D19 catches a thin
+     spec after the fact; this prevents writing a confidently-wrong one in the first place.
 
 6. THINK HARD about correct scope:
    - Do not invent work beyond what the block defines.
@@ -47,7 +80,7 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
      this pattern (`### N.`) and will abort pre-flight on a spec that has none. Never use
      flat numbered lists (`1. **Title**`) or any other format for the task headings.
 
-7. Create the directory `planning/phaseN-blockX/` if it does not exist, then write the spec to `planning/phaseN-blockX/tasks.md` using the Output Format below.
+7. Create the directory `planning/<spec-slug>/` if it does not exist, then write the spec to `planning/<spec-slug>/tasks.md` using the Output Format below. (In `--from` mode the directory already exists — it holds the source block file — so the new `tasks.md` lands beside it.)
 
 8. **Property self-check (before committing).** A structurally valid spec can still be substantively
    thin and waste pipeline tokens. Re-read what you just wrote and confirm every required property
@@ -65,10 +98,11 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
 9. **Commit the spec.** Leave the working tree clean so a downstream `/sdlc-block` run never trips
    its clean-tree merge guard (an uncommitted `tasks.md` blocks every merge):
    ```bash
-   git add planning/phaseN-blockX/
-   git commit -m "chore: add spec for phaseN-blockX"
+   git add planning/<spec-slug>/
+   git commit -m "chore: add spec for <spec-slug>"
    ```
-   (Use the normalized directory slug, e.g. `chore: add spec for <spec-slug>`.)
+   (Use the slug resolved in step 2 — the master-plan directory slug, or in `--from` mode the source
+   file's parent directory. The `git add` stages the source block file too, which is fine.)
 
 10. **Decomposition assessment.** Before reporting, evaluate each task you just wrote against the
    coarseness heuristic and recommend which (if any) warrant a `/breakdown` first. The real predictor
@@ -141,11 +175,12 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
     absent, malformed, or stale (tasks.md edited afterward), so a skipped plan is always safe.
 
 13. Report the path written and suggest the next step:
-    "Spec written and committed to planning/phaseN-blockX/tasks.md. Run `/breakdown planning/phaseN-blockX/tasks.md` to decompose into atomic sub-steps."
+    "Spec written and committed to planning/<spec-slug>/tasks.md. Run `/breakdown planning/<spec-slug>/tasks.md` to decompose into atomic sub-steps."
 
 ## Context / Files to Read
 
-- `planning/master-plan.md` (target block section only)
+- `planning/master-plan.md` (target block section only) — **or**, in `--from <path>` mode, the
+  standalone block file at `<path>` instead
 - `CLAUDE.md` (the project's standing rules)
 - `planning/harness.json` (the project's validation checks)
 
