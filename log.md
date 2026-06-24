@@ -5,6 +5,49 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-24 — Implemented the /sdlc-flow engine (D30–D33)
+
+Built the fourth SDLC engine: `/sdlc-flow` — shared-worktree, single-review, PR-terminating. Key
+design calls (D30): one dedicated worktree for the whole spec eliminates the inter-task merge
+conflicts that make `/sdlc-block` unreliable; tasks run sequentially as commits on that one branch;
+a per-task `fast` test→fix loop (≤3 attempts, Opus escalation on the final pass); one consolidated
+end review over the integrated tree; docs patch gated on PASS; `gh pr create` as the terminal step.
+Registered via `export const meta` — the Workflow runtime surfaces `.claude/workflows/*.js` directly;
+no `.claude/commands/` entry needed.
+
+Four ADRs: **D30** (engine design + assembly rationale — ~80% proven harness parts); **D31** (committed
+authoritative state — `sdlc-flow-state.json` + `worklog.md` at `planning/<spec>/sdlc/` are committed,
+inverting the usual "state is gitignored" harness rule; replaces 5×N per-stage report files with a
+structured index for resume/review/wrap-up); **D32** (triage-gated immediate-bail set — MAJOR findings
+break straight to a draft-PR wrap-up without burning all three attempts, distinguishing structural blockers
+from retryable glitches); **D33** (PR-based wrap-up — `gh pr create` with auto-generated title/body from
+state.json; `--auto-merge` for clean PASS; `--no-pr` to stop after wrap-up).
+
+Wave 3 satellites: engine file `.claude/workflows/sdlc-flow.js`; ADR files D30–D33; canonical workflow
+doc `docs/workflows/sdlc-flow.md` + `docs/workflows/index.md` row/mermaid (other agent); `harness.schema.json`
+`flow` block + `scaffold/planning/harness.json` stub + `docs/harness-json.md` updates (other agent);
+`generate-tasks.md` routing extended — `/sdlc-flow` added as the new default for non-trivial feature work
+(extends D21, which covered only `/sdlc-run` vs `/sdlc-block`); `.gitignore` comment confirming
+`sdlc-flow-state.json`/`worklog.md` are intentionally tracked (D31). All engines `node --check` clean.
+
+Not yet validated on a downstream spec (Wave 4: python-orchestration-system expose-api-and-telegram-bot,
+fresh branch). Not yet propagated (Wave 5).
+
+```diff
+ .claude/workflows/sdlc-flow.js                    | new
+ planning/decisions/D30-sdlc-flow-engine.md        | new
+ planning/decisions/D31-committed-authoritative-state.md | new
+ planning/decisions/D32-triage-gated-bail.md       | new
+ planning/decisions/D33-pr-based-wrap-up.md        | new
+ .claude/commands/generate-tasks.md                | step 11 + Report extended
+ .gitignore                                        | D31 comment added
+ planning/status.md                                | current focus + completed effort row
+ log.md                                            | + (this entry)
+ docs/index.md                                     | sdlc-flow.md reference added
+```
+
+---
+
 ## 2026-06-24 — Planned the /sdlc-flow engine
 
 Designed the `/sdlc-flow` single-spec orchestration engine as the inner complement to `sdlc-block`'s multi-task waves — motivated by the D22–D28 refactor's merge-conflict surface area (shared state.json + worklog.md in every task's worktree branch, leading to collisions when reordering or re-running tasks). The design resolved four forks with the user: name the command `/sdlc-flow` (not `/sdlc-run-v2`); build the inner single-spec engine first and reposition `/sdlc-block` as a documented follow-on orchestrator; commit authoritative `state.json` + one `worklog.md` (replacing per-stage report files) to avoid shared-file merge collisions; add `create-PR-and-stop` with `--auto-merge` opt-in for external integration. Authored `planning/sdlc-flow/plan.md` (design surface, dependencies, load-bearing decisions), `planning/sdlc-flow/orchestration.md` (four-phase build order with actor assignments), and `planning/sdlc-flow/index.md` (directory layout). No engine code written; this is a clean planning handoff for a fresh Opus implementation session.

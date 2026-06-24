@@ -84,20 +84,25 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
    authoring-time preview of that decision).
 
 11. **Pipeline recommendation.** After writing the tasks, evaluate which run command fits the block and
-   report a clear recommendation with a one-line reason. The two whole-block runners differ only in
-   **how implement is scoped** — `/sdlc-run` runs **one** implement agent across all tasks; the lean
-   `/sdlc-block` runs **a fresh implement agent per task** (deliberate per-task context windows +
-   observability), then does **one** consolidated back-half (test/review/document/wrap-up) just like
-   `/sdlc-run`. The block runs tasks **in-place sequentially** by default and only spins worktrees for
-   genuinely parallel waves, so its cost is close to `/sdlc-run`'s. Use these signals:
+   report a clear recommendation with a one-line reason. Three whole-block runners are available:
+   `/sdlc-run` (one shared implement context, runs on the current branch), `/sdlc-flow` (sequential
+   tasks in one dedicated worktree, per-task test→fix loop, one end review, terminates in a PR — the
+   default for non-trivial feature work), and the lean `/sdlc-block` (fresh implement agent per task,
+   in-place sequential by default, worktrees only for genuinely parallel waves, one consolidated
+   back-half). Use these signals:
 
-   - **`/sdlc-run`** (default) — small, homogeneous, or sequential blocks, **even past 4 tasks**. When a
-     single shared implement context can hold all the tasks without blurring or overflowing, this is the
-     cheapest correct choice (one agent, one back-half).
-   - **`/sdlc-block`** (lean) — recommend when tasks each benefit from a **fresh implement agent**:
-     large or heterogeneous tasks where one shared context would blur or overflow, **or** when ≥2 tasks
-     genuinely share a wave (disjoint file ownership from step 6, no `dependsOn` between them → true
-     parallelism). Count the independent tasks per wave, not just the total.
+   - **`/sdlc-run`** — small, homogeneous, chore-style, or localized-complex blocks where a single
+     shared implement context holds all tasks without blurring or overflowing. No worktree, no PR. Also
+     the right choice for single-concern follow-ups and back-half-only restarts (`--from test`).
+   - **`/sdlc-flow`** (default for non-trivial feature work) — non-trivial or new-feature blocks with
+     many moving parts: sequential tasks in one dedicated worktree (no inter-task merge conflicts),
+     per-task test→fix loop (≤3 attempts, Opus escalation), one consolidated end review over the
+     integrated tree, and a PR as the terminal step. Use `--auto-merge` to merge + clean the worktree on
+     success; `--no-pr` to stop after wrap-up; `--resume` to re-attach after an interruption.
+   - **`/sdlc-block`** (lean) — speed-critical runs where ≥2 tasks genuinely share a wave (disjoint
+     file ownership from step 6, no `dependsOn` → true parallelism), or when tasks are large or
+     heterogeneous enough that fresh per-task implement isolation is the priority over a shared worktree.
+     Count the independent tasks per wave, not just the total.
    - **`/sdlc-task <N>`** — Not a strategy for running all tasks; name it only when the right move is
      one specific task in an isolated worktree (e.g. a high-risk surgical change, or resuming after a
      block failure on task N). If naming it, also say which task number and why isolation matters.
@@ -201,8 +206,11 @@ Decomposition assessment:
 
 Pipeline recommendation:
   <one of:>
-  /sdlc-run <spec-slug>          — <N> tasks, small/homogeneous/sequential; one shared implement context is sufficient
-  /sdlc-block <spec-slug>        — <N> tasks; fresh implement agent each (<reason: heterogeneous/large, or <M> parallel across <W> waves>)
+  /sdlc-run <spec-slug>          — <N> tasks, small/homogeneous/chore; one shared implement context is sufficient
+  /sdlc-flow <spec-slug>         — <N> tasks, non-trivial feature work; dedicated worktree, per-task test→fix, one end review, PR (<reason: many moving parts / needs isolation>)
+  /sdlc-flow <spec-slug> --auto-merge
+                                 — as above; merge PR + clean worktree on clean PASS
+  /sdlc-block <spec-slug>        — <N> tasks; speed-critical with <M> parallel tasks across <W> waves, or fresh per-task isolaton required (<reason>)
   /sdlc-block <spec-slug> --verify-depth consolidated+review
                                  — as above, plus per-task review for localization (<reason; +~38k tok × N>)
   /sdlc-task <spec-slug> <N>     — run task <N> in isolation; <reason isolation matters here>

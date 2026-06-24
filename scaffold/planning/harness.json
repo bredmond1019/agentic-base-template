@@ -1,7 +1,7 @@
 {
   "$schema": "../.claude/workflows/harness.schema.json",
   "stack": "REPLACE-ME",
-  "_comment": "SDLC pipeline config. Fill validation.checks[] with this project's real format/lint/test/build commands (run top-to-bottom; gates:true blocks the review verdict). Set uiTest.enabled:true only for web projects, then fill devServerCommand/readySignal/port/routes. breakdown.mode controls task-decomposition assessment (recommend = advisory log, auto = generate breakdown.md for coarse tasks, off = skip). planning.clarify:true makes /plan, /feature, /generate-tasks ask clarifying questions on ambiguous prompts before writing (default false; --clarify forces it per-invocation). block.verify controls the lean /sdlc-block runner's per-task verification depth (consolidated = implement + self-check per task then one consolidated back-half; consolidated+review = add a per-task review pass; override per-run with --verify-depth). Copy a ready-made profile (Rust / Python / Next.js) from harness.examples.md. If this file is absent, the engines fall back to the spec's `## Validation Commands` section, skip the UI-test stage, and default breakdown to recommend.",
+  "_comment": "SDLC pipeline config. Fill validation.checks[] with this project's real format/lint/test/build commands (run top-to-bottom; gates:true blocks the review verdict). Set uiTest.enabled:true only for web projects, then fill devServerCommand/readySignal/port/routes. breakdown.mode controls task-decomposition assessment (recommend = advisory log, auto = generate breakdown.md for coarse tasks, off = skip). planning.clarify:true makes /plan, /feature, /generate-tasks ask clarifying questions on ambiguous prompts before writing (default false; --clarify forces it per-invocation). block.verify controls the lean /sdlc-block runner's per-task verification depth (consolidated = implement + self-check per task then one consolidated back-half; consolidated+review = add a per-task review pass; override per-run with --verify-depth). flow.* controls /sdlc-flow (the default engine for non-trivial specs): autoMerge (merge PR on PASS), testDepth (fast=gating-only tripwire per task, full=whole suite per task), prBase (PR base branch), bailReasons (extra bail triggers). Copy a ready-made profile (Rust / Python / Next.js) from harness.examples.md. If this file is absent, the engines fall back to the spec's `## Validation Commands` section, skip the UI-test stage, and default breakdown to recommend.",
   "validation": {
     "checks": [
       { "name": "REPLACE-ME", "command": "echo 'fill me in'", "purpose": "Replace with this project's real checks — see harness.examples.md", "gates": true }
@@ -19,5 +19,11 @@
   },
   "block": {
     "verify": "consolidated"
+  },
+  "flow": {
+    "autoMerge": false,
+    "testDepth": "fast",
+    "prBase": "main",
+    "bailReasons": []
   }
 }

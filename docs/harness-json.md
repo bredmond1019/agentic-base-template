@@ -55,6 +55,7 @@ This is acceptable for a quick start but is less reliable than a `harness.json`.
 | `breakdown` | object | No | Task-decomposition policy (absent → `mode: recommend`, `complexityThreshold: 3`) |
 | `planning` | object | No | Planning-phase policy for the authoring commands (absent → `clarify: false`) |
 | `block` | object | No | Lean `/sdlc-block` runner policy (absent → `verify: consolidated`) |
+| `flow` | object | No | `/sdlc-flow` engine policy (absent → CLI flag defaults apply) |
 
 ### `validation.checks[]`
 
@@ -169,6 +170,43 @@ in isolation (it cannot catch cross-task integration breakage) and never substit
 consolidated pass. Override per-run with **`--verify-depth <consolidated|consolidated+review>`**. See
 [D23](../planning/decisions/D23-lean-block-shared-setup.md) and
 [D24](../planning/decisions/D24-consolidated-back-half.md).
+
+### `flow` object
+
+Optional. Policy for the **`/sdlc-flow`** engine — the default for non-trivial feature work. It
+runs one spec sequentially in a single shared worktree, with a per-task test-fix loop, one
+consolidated end-review, a docs patch, and a PR as the terminal step. Only `/sdlc-flow` reads this
+block; `/sdlc-run`, `/sdlc-task`, and `/sdlc-block` ignore it. Absent → CLI flag defaults apply.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `autoMerge` | boolean | No | Default for `--auto-merge`. `false` (default): stop after opening the PR and let a human merge. `true`: merge the PR and tear down the worktree on a clean PASS (non-draft PR only — never merges on bail). CLI `--auto-merge` overrides per run. |
+| `testDepth` | string | No | `"fast"` (default) or `"full"`. Per-task validation depth. `fast` runs only `gates:true` checks as a cheap tripwire; `full` runs the whole suite per task. The end-review always runs the full suite regardless of this setting. CLI `--test-depth` overrides per run. |
+| `prBase` | string | No | Base branch for `gh pr create --base` (default: `"main"`). Set to `"develop"` or another branch if the project uses a non-main integration target. |
+| `bailReasons` | string[] | No | Extra project-specific immediate-bail reasons appended to the five universal ones (missing dependency, spec contradiction, env failure, out-of-scope action, stuck/structural). Triage checks the full combined list. Format: plain-English sentences. |
+
+**The five universal bail reasons** are hardcoded in the engine (mechanism, not policy) and always
+active regardless of this config. `bailReasons[]` only **adds** project-specific reasons on top of
+them.
+
+**CLI flag resolution order:** `--flag` (per run) > `flow.*` key (per project) > engine fallback.
+
+```jsonc
+// example flow block — adjust to project needs
+"flow": {
+  "autoMerge": false,          // keep false; require human to merge the PR
+  "testDepth": "fast",         // "full" if per-task integration breaks are common
+  "prBase": "main",            // or "develop" for gitflow projects
+  "bailReasons": []            // add project-specific triggers here
+}
+```
+
+See [D30](../planning/decisions/D30-sdlc-flow-engine.md) (engine design),
+[D32](../planning/decisions/D32-triage-gated-bail.md) (bail set), and
+[D33](../planning/decisions/D33-pr-based-wrap-up.md) (PR wrap-up) for the rationale behind each
+key.
+
+---
 
 ## Stack profiles
 

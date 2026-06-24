@@ -248,5 +248,36 @@ runs the engine uses `port + taskNumber` automatically. `routes[]` are smoke-che
 
 ---
 
+## Optional: `/sdlc-flow` policy (`flow` block)
+
+All the profiles above omit the `flow` block — the stub `harness.json` ships a neutral default
+(see below). Adjust these keys when the project's defaults should differ from the engine's
+built-in fallbacks.
+
+```json
+{
+  "flow": {
+    "autoMerge": false,
+    "testDepth": "fast",
+    "prBase": "main",
+    "bailReasons": []
+  }
+}
+```
+
+**Key-by-key:**
+
+| Key | Type | Default | When to change |
+|---|---|---|---|
+| `autoMerge` | boolean | `false` | Set `true` to merge the PR and tear down the worktree automatically on a clean PASS. Leave `false` (recommended) to require a human to merge — the PR is the review checkpoint. CLI `--auto-merge` overrides per run. |
+| `testDepth` | `"fast"` or `"full"` | `"fast"` | `"fast"` runs only `gates:true` checks per task (cheap tripwire). Switch to `"full"` if per-task integration breaks are common and the end-review is catching too much. CLI `--test-depth` overrides per run. |
+| `prBase` | string | `"main"` | Change to `"develop"` or another branch if the project uses a non-main integration target. |
+| `bailReasons` | string[] | `[]` | Append project-specific immediate-bail triggers (plain English). The engine already carries five universal ones; add extras only for patterns unique to this project (e.g. `"Any migration file must be manually reviewed before merging."`). |
+
+Only `/sdlc-flow` reads the `flow` block; `/sdlc-run`, `/sdlc-task`, and `/sdlc-block` ignore it.
+Add this block to any of the stack profiles above by merging it alongside the other top-level keys.
+
+---
+
 *The harness carries the mechanism; this file carries the policy. Keep stack facts here, never
 in `.claude/workflows/*.js`.*
