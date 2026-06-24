@@ -5,6 +5,18 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-24 — Downstream propagation: full harness (D14–D35 + /sdlc-flow) to bella/amistad/python-orchestration-system + handoff
+
+Propagated the complete harness to three downstream projects via rsync (no --delete, preserving project-specific files: health-check.js in python-orchestration, app work in amistad, harness.json + settings.json per-repo). D34 (ad-hoc planning seam) and D35 (plan-quality floor) shipped moments prior (b8ebbf7); all six planning commands and full /sdlc-flow engine (D30–D33) + Wave 3 satellites now in all three destinations. All engines `node --check` clean; shared files bit-identical to base. Per-repo commits reflect the propagation: bella received D34+D35 planning seam work (5069200) plus its `planning/master-plan.md` roadmap (10feb3b); amistad committed harness-only (57ad697, app implementation work left for separate session); python-orchestration-system preserved the health-check.js during the copy and committed (697c15b). `.template-version` stamped to b8ebbf7 in all three repos. Wrote `planning/handoff.md` for the next session's Wave 4 validation work: `/sdlc-flow` tested end-to-end in **bella** — the Rust terminal markdown viewer, now the designated testing ground with its own hand-built master-plan (phases 0–3, blocks A–J) — then Wave 5 propagation to the remaining downstream repos (learn-ai, bastion, markdown-engine-validator).
+
+```diff
+Substantive changes already committed in b8ebbf7. This session's work was rsync + per-repo commit + handoff write.
+Changed files in base-template this session: planning/handoff.md (rewritten for Wave 4 validation).
+New in b8ebbf7 harness: .claude/commands/generate-master-plan.md, generate-tasks.md (--from mode), plan.md (role note), README.md (phase table); planning/decisions/D34, D35, index.md; docs/using-the-template.md.
+```
+
+---
+
 ## 2026-06-24 — Ad-hoc planning seam: /generate-master-plan + /plan-as-block + /generate-tasks --from (D34)
 
 Closed two gaps in the Phase-1 planning surface, both rooted in the same insight: the real contract
