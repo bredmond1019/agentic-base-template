@@ -344,6 +344,29 @@ async function tracedAgent(prompt, opts = {}) {
   return r
 }
 
+// Build the canonical `tokens` block from the accumulated per-agent metrics (Block A — the shared
+// committed-state token contract, identical across all four engines; engines are self-contained, so
+// this is lifted, not imported). Per-stage output tokens + the D15 input-cost estimate (promptTok +
+// filesReadKb→tokens at ~256 tok/KB) + a cumulative total. filesReadKb is null here (flow stages do
+// not self-report it yet); inTokEst then reduces to promptTokEst. writeFlowState folds the latest
+// block into the COMMITTED state.json on every write, so token usage is persisted and rolled up
+// rather than vanishing when the run ends.
+function buildTokensBlock() {
+  const stages = metrics.map(m => {
+    const filesReadKb = m.filesReadKb != null ? m.filesReadKb : null
+    const inTokEst = m.promptTokEst + (filesReadKb != null ? Math.round(filesReadKb * 256) : 0)
+    return { label: m.label, model: m.model, promptTokEst: m.promptTokEst, filesReadKb, inTokEst, outTok: m.outTok }
+  })
+  const total = stages.reduce((acc, s) => {
+    acc.promptTokEst += s.promptTokEst
+    acc.filesReadKb  += s.filesReadKb || 0
+    acc.inTokEst     += s.inTokEst
+    acc.outTok       += s.outTok || 0
+    return acc
+  }, { promptTokEst: 0, filesReadKb: 0, inTokEst: 0, outTok: 0 })
+  return { stages, total }
+}
+
 // ----------------------------------------------------------------
 // HARNESS CONFIG — mechanism/policy split (see planning/harness.json)
 //
@@ -571,12 +594,14 @@ const state = {
   docs: { changed: [], created: [] },
   bail_reason: null,
   pr: { url: null, number: null },
+  tokens: { stages: [], total: { promptTokEst: 0, filesReadKb: 0, inTokEst: 0, outTok: 0 } },  // Block A — refreshed by writeFlowState on every write
 }
 
 // Persist `state` to the committed state.json + append `worklogEntry` (markdown) to worklog.md, then
 // commit both on the branch. `label` names the commit. `extraAdd` lists any other paths to stage
 // (e.g. the tasks.md checkbox edit was made by an upstream agent on the branch already).
 async function writeFlowState(label, worklogEntry, { cwd, extraAdd = [] } = {}) {
+  state.tokens = buildTokensBlock()   // Block A — refresh the committed token roll-up before persisting
   const stateJson = JSON.stringify(state, null, 2)
   const addList = ['planning/' + blockId + '/sdlc/sdlc-flow-state.json', 'planning/' + blockId + '/sdlc/worklog.md', ...extraAdd]
   const result = await agent(`
@@ -1344,6 +1369,8 @@ Return via StructuredOutput: merged, worktreeRemoved, branchDeleted, notes.
 }
 
 // ----------------------------------------------------------------
+const tokensBlock = buildTokensBlock()
+log(`Token roll-up: ${tokensBlock.total.inTokEst} inTokEst${tokensBlock.total.outTok ? ` | ${tokensBlock.total.outTok} outTok` : ''} across ${tokensBlock.stages.length} stage(s) — persisted in ${stateFile}.`)
 log(`/sdlc-flow complete. Verdict: ${finalVerdict} | tasks passed: ${passedTasks.length}/${taskList.length}${bailed ? ` | BAILED: ${bailReason}` : ''}${prInfo?.created ? ` | PR: ${prInfo.url || prInfo.number}` : ''}`)
 
 return {
@@ -1361,4 +1388,5 @@ return {
   merged: mergeInfo?.merged || false,
   stateFile,
   worklogFile,
+  tokens: tokensBlock,
 }
