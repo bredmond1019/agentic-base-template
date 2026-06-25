@@ -5,6 +5,30 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-25 — Phase 1 C complete: `/close-out` integration into sdlc-block + recommendations in sdlc-flow/sdlc-run
+
+Phase 1 C delivered the per-block gap-check integration before PR-open and final close-out on the train branch. Refactored `.claude/commands/close-out.md` and `.agents/skills/close-out/SKILL.md` to expose a `--gap-check-only` flag (Steps 1–3 only; skips Step 4 handoff). Existing behavior unchanged when flag is absent. Modified `.claude/workflows/sdlc-block.js`: changed `runBlockFlow` to always pass `--no-pr` to child sdlc-flow (so orchestrator can run per-block gap-check before opening PR); added `gapCheckBlock()` function running close-out gap-check in each block's worktree after PASS; added `openBlockPr()` function opening the GitHub PR from sdlc-block.js after gap-check (PR mode only); updated wave loop batch processing to run gap-check + PR-open in parallel for all passed blocks after each batch (PR mode only); added final close-out phase after REPORT invoking `/close-out --gap-check-only` on the train branch; added `GAP_CHECK_SCHEMA` and `BLOCK_PR_SCHEMA` schemas. Modified `.claude/workflows/sdlc-flow.js` and `.claude/workflows/sdlc-run.js`: added `/close-out` recommendation line after final log. Deleted `planning/handoff.md` (consumed). All four engines `node --check` clean.
+
+```diff
+ .agents/skills/merge-train/SKILL.md          |  223 +++
+ .agents/skills/review-PR/SKILL.md            |  221 +++
+ .claude/commands/merge-train.md              |  217 +++
+ .claude/commands/patch.md                    |   35 +-
+ .claude/commands/review-PR.md                |  215 +++
+ .claude/workflows/execution-plan.schema.json |   54 -
+ .claude/workflows/sdlc-block.js              | 2160 +++++++---------------
+ .claude/workflows/sdlc-flow.js               |   34 +
+ .claude/workflows/sdlc-run.js                |  149 +-
+ .claude/workflows/sdlc-task.js               | 2501 +++++++-------------------
+ .gitignore                                   |    8 +-
+ log.md                                       |   69 +
+ planning/handoff.md                          |  136 +-
+ planning/sdlc-block-and-task-updates/plan.md |    4 +
+ 15 files changed, 2568 insertions(+), 3465 deletions(-)
+```
+
+---
+
 ## 2026-06-25 — Phase 1 Block B complete: `/review-PR` and `/merge-train` commands authored
 
 Phase 1 B delivered two new prompt-only commands plus their `.agents/skills/` mirrors — no engine JS was changed. `/review-PR <PR#> [plan-slug]`: locates `block-orchestration-state.json` via `find planning`, resolves the block spec from the PR's head branch name, checks out the PR with `gh pr checkout`, runs the full `harness.json` gating suite plus an emoji gate (merge-base scoped so only the PR's own markdown changes are scanned), reviews `git diff baseRefName...HEAD` against the block's acceptance criteria, then posts a `gh pr review` verdict (APPROVE/REQUEST_CHANGES/COMMENT with a structured body: AC table + gating table + verdict paragraph) and restores the original branch. `/merge-train [plan-slug]`: reads `merge_order` and `mode` from state (exits early for `auto-merge`/`no-pr` modes), pre-flight cleans the tree and syncs base, classifies each block as ready/already-merged/needs-approval/has-conflicts/escalated, stops before any merge if any block has `CONFLICTING` mergeability, warns non-blocking on missing approval, confirms with the user, merges each PR via `gh pr merge --merge --delete-branch` in dependency order, pulls base after each success, and halts on failure with a resume-safe report (already-merged blocks are auto-detected on re-run). All four engines remain `node --check` clean. Next: Phase 1 C — `/close-out` integration.
