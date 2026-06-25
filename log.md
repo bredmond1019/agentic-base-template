@@ -5,6 +5,29 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-24 — Fleet-wide propagation complete (remaining 7 repos)
+
+Propagated the full current harness (D14–D35 + `/sdlc-flow`) to the remaining downstream repos, so all
+ten harness-carrying repos are now current. **Committed:** `bastion`, `markdown-engine-validator`,
+`price-scout` (full pull), and `learn-ai` (engines overwritten byte-identical + new `sdlc-flow.js` +
+**additive** commands only — its customized `generate-tasks`/`plan`/`breakdown` preserved, so D34
+`--from` + D35 floor still need surgical insertion there). **In place but untracked:** `claude-sdk-rs`,
+`rag-engine-rs`, `workflow-engine-rs` — their `.claude/` is gitignored, so the harness landed but there
+is nothing to commit (and they carry no `harness.json` yet). Each tracked repo got a `log.md` entry +
+`.template-version` stamp (base `b8ebbf7`). All engines `node --check` clean; shared files
+byte-identical to base. **Process note:** an initial `for d in $CLEAN` loop hit a zsh non-word-splitting
+gotcha (created a garbage concatenated-name dir, propagated nothing); caught via per-repo verification,
+removed the garbage dir, redid with a literal loop. Lesson: verify propagation per-repo, never trust a
+loop's success message.
+
+```diff
+ (downstream repos — see each repo's own log.md + commit)
+ bastion e1ff756 | markdown-engine-validator eef44cc | price-scout 17e317f | learn-ai 7a44776
+ claude-sdk-rs / rag-engine-rs / workflow-engine-rs — .claude gitignored, harness in place untracked
+```
+
+---
+
 ## 2026-06-24 — Downstream propagation: full harness (D14–D35 + /sdlc-flow) to bella/amistad/python-orchestration-system + handoff
 
 Propagated the complete harness to three downstream projects via rsync (no --delete, preserving project-specific files: health-check.js in python-orchestration, app work in amistad, harness.json + settings.json per-repo). D34 (ad-hoc planning seam) and D35 (plan-quality floor) shipped moments prior (b8ebbf7); all six planning commands and full /sdlc-flow engine (D30–D33) + Wave 3 satellites now in all three destinations. All engines `node --check` clean; shared files bit-identical to base. Per-repo commits reflect the propagation: bella received D34+D35 planning seam work (5069200) plus its `planning/master-plan.md` roadmap (10feb3b); amistad committed harness-only (57ad697, app implementation work left for separate session); python-orchestration-system preserved the health-check.js during the copy and committed (697c15b). `.template-version` stamped to b8ebbf7 in all three repos. Wrote `planning/handoff.md` for the next session's Wave 4 validation work: `/sdlc-flow` tested end-to-end in **bella** — the Rust terminal markdown viewer, now the designated testing ground with its own hand-built master-plan (phases 0–3, blocks A–J) — then Wave 5 propagation to the remaining downstream repos (learn-ai, bastion, markdown-engine-validator).
