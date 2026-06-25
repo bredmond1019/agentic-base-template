@@ -5,6 +5,18 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-25 — Authored SDLC engines & planner-surface redesign master-plan (4 phases, 12 blocks)
+
+Authored the comprehensive redesign master-plan (`planning/sdlc-block-and-task-updates/plan.md`, output of `/generate-master-plan` command) capturing all four SDLC engines and planner surface restructuring. Four phases, twelve blocks, model-tiered: Opus drives P0-A (unified committed state + token telemetry across all four engines), P0-B (lean `/sdlc-task`), and P1-A (`/sdlc-block` rewrite); Sonnet handles the rest. Key work streams: reposition `/sdlc-block` as a block-level orchestrator driving `/sdlc-flow` per block over a branch train of PRs (task-level waves dropped); lean out `/sdlc-task` per-core mechanics; committed authoritative state + persisted/rolled-up token telemetry architecture across all four engines; planner surface restructure (consolidate `/plan` into mini-roadmap, remove `/feature`, add `/ticket`); new `/review-PR` and `/merge-train` commands; `/close-out` gated per-block-before-PR. Added plan row to `planning/index.md`. Notable: D36 already taken by bella Wave 4 validation fix (sdlc-flow.js recordFilesRead removal), so effort ADRs start at D37. bella `/sdlc-flow` Wave-4 validation confirmed DONE (c64d272: 7/7 tasks PASS, review PASS, PR opened). Implementation deferred to fresh agent via handoff; validation happens downstream only, never against base-template.
+
+```diff
+planning/sdlc-block-and-task-updates/plan.md  (new, untracked)
+planning/index.md  (updated with plan row)
+planning/handoff.md  (updated with implementation handoff)
+```
+
+---
+
 ## 2026-06-25 — D36: fix stale recordFilesRead() crash in sdlc-flow.js + propagate
 
 First real `/sdlc-flow` validation run (bella block 0.C — keyboard navigation) surfaced a
