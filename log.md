@@ -5,6 +5,28 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-25 — Phase 1 A/B/C /code-review: workflow-backed high-effort audit (43 agents) surfaced 8 CONFIRMED + 2 PLAUSIBLE findings; all 10 fixed across sdlc-block.js, /review-PR, /generate-tasks, command + skill docs
+
+Ran a workflow-backed `/code-review` at high effort over the full Phase 1 diff (commit range 80638e9..HEAD), spanning Phase 1 A (block-orchestrator rewrite of sdlc-block.js), Phase 1 B (/review-PR + /merge-train commands), and Phase 1 C (/close-out integration + per-block gap-check). The review (43 agents, run wf_d56efc19-0a0) surfaced 8 verified CONFIRMED findings plus 2 PLAUSIBLE findings. Fixed all 10 findings across the codebase: #1 `gapCheckBlock()` now diffs the whole block (`<train>...HEAD`) for the emoji gate + coverage scan, not `HEAD^` which saw only the last commit and was neutering Phase 1 C's gap-check gate; #2 budget guards now use `typeof budget !== 'undefined' && budget.total` to avoid ReferenceError on startup; #3 state key renamed `base` → `base_branch` to match what `/merge-train` + `/review-PR` read (was a producer/consumer mismatch); #4 removed the dangling `execution-plan.json` / deleted-schema authoring step from `generate-tasks.md` step 12 + skill mirror, and cleaned every now-false reference (README ×2, plan.md, generate-tasks.md cross-ref, sdlc-run.js comment, docs/architecture.md, docs/using-the-template.md, scaffold/planning/index.md); #5 rewrote `.agents/skills/sdlc-block/SKILL.md` to match the branch-train orchestrator model (was the legacy task-wave model); corrected the matching stale `/sdlc-block` section in `commands/README.md`; #6 report child-token table + count now derived from committed `state.blocks[].tokensTotal` so resumed blocks are counted (was undercounting on `--resume`); #7 `/review-PR` now falls back to the spec's `## Validation Commands` when `harness.json` absent, and downgrades to COMMENT (never APPROVE) if no gating suite found; #8 `loadBlockConfig()` reads only `maxParallelBlocks`; dropped the dead `block.autoMerge` extraction; #9 `dependsOn` slugs lowercased before `slugToIndex` lookup (case-sensitivity bug); #10 per-block gap-check now runs for every passed block in ALL modes (was PR-mode-only); PR-open stays PR-mode-only. Bonus: added `/review-PR` + `/merge-train` to the `commands/README.md` catalog per CLAUDE.md rule 7. All four engines `node --check` clean. Deliberately deferred: harness.schema.json block.* finalization → Phase 3 C; docs/workflows/sdlc-block.md page rewrite → Phase 3 B.
+
+```diff
+ .agents/skills/generate-tasks/SKILL.md |  23 +-----
+ .agents/skills/review-PR/SKILL.md      |  10 ++-
+ .agents/skills/sdlc-block/SKILL.md     | 130 +++++++++++++++++----------------
+ .claude/commands/README.md             |  61 ++++++++++------
+ .claude/commands/generate-tasks.md     |  25 +------
+ .claude/commands/plan.md               |   2 +-
+ .claude/commands/review-PR.md          |  12 ++-
+ .claude/workflows/sdlc-block.js        | 100 +++++++++++++++----------
+ .claude/workflows/sdlc-run.js          |   2 +-
+ docs/architecture.md                   |   2 +-
+ docs/using-the-template.md             |   2 +-
+ scaffold/planning/index.md             |   2 +-
+ 12 files changed, 196 insertions(+), 175 deletions(-)
+```
+
+---
+
 ## 2026-06-25 — Phase 1 C complete: `/close-out` integration into sdlc-block + recommendations in sdlc-flow/sdlc-run
 
 Phase 1 C delivered the per-block gap-check integration before PR-open and final close-out on the train branch. Refactored `.claude/commands/close-out.md` and `.agents/skills/close-out/SKILL.md` to expose a `--gap-check-only` flag (Steps 1–3 only; skips Step 4 handoff). Existing behavior unchanged when flag is absent. Modified `.claude/workflows/sdlc-block.js`: changed `runBlockFlow` to always pass `--no-pr` to child sdlc-flow (so orchestrator can run per-block gap-check before opening PR); added `gapCheckBlock()` function running close-out gap-check in each block's worktree after PASS; added `openBlockPr()` function opening the GitHub PR from sdlc-block.js after gap-check (PR mode only); updated wave loop batch processing to run gap-check + PR-open in parallel for all passed blocks after each batch (PR mode only); added final close-out phase after REPORT invoking `/close-out --gap-check-only` on the train branch; added `GAP_CHECK_SCHEMA` and `BLOCK_PR_SCHEMA` schemas. Modified `.claude/workflows/sdlc-flow.js` and `.claude/workflows/sdlc-run.js`: added `/close-out` recommendation line after final log. Deleted `planning/handoff.md` (consumed). All four engines `node --check` clean.
