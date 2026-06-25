@@ -34,7 +34,7 @@ predictably-named output file.
 | Block Setup | `/start-block [name]` | Flip a spec to `In progress` in status.md | status.md |
 | **1 — Roadmap** | `/generate-master-plan [desc]` | Author the full roadmap as canonical block definitions | `planning/master-plan.md` |
 | **1 — Plan** | `/generate-tasks <name>` ·  `/generate-tasks --from <path>` | Write the full task spec from a master-plan block, **or** from a standalone block file (`--from`) | `planning/<name>/tasks.md` |
-| **1 — Plan (ad-hoc)** | `/chore` · `/plan <desc>` | Plan ad-hoc work from a free-text description (not a master-plan block) | `planning/<prefix>-<slug>/{tasks,plan}.md` |
+| **1 — Plan (ad-hoc)** | `/chore` · `/ticket` · `/plan <desc>` | Plan ad-hoc work from a free-text description (not a master-plan block) | `planning/<prefix>-<slug>/{tasks,plan}.md` |
 | **1 — Plan (opt.)** | `/breakdown <spec>` | Decompose spec into atomic, agent-executable sub-steps | `planning/<name>/breakdown.md` |
 | **2 — Implement** | `/implement <spec> [N]` | Execute every task (or task N) in the spec | `planning/<name>/sdlc/reports/[taskN-]implement.md` |
 | **2 — Hotfix** | `/patch` | Implement → validate → commit for low-risk single-file fixes; skips test/review/document | git history |
@@ -280,14 +280,15 @@ Output feeds the rest of the pipeline unchanged.
 
 | Command | Use for | Writes to |
 |---|---|---|
-| `/chore <description>` | Maintenance / housekeeping | `planning/chore-<slug>/tasks.md` |
+| `/chore <description>` | Maintenance / housekeeping (no behavior change) | `planning/chore-<slug>/tasks.md` |
+| `/ticket <description>` | Bug fix or targeted enhancement that requires tests + observable AC | `planning/ticket-<slug>/tasks.md` |
 | `/plan <description>` | Any ad-hoc or experimental feature — mini-roadmap format | `planning/plan-<slug>/plan.md` |
 
-`/chore` writes a runnable `tasks.md` **directly** (the fast path). `/plan` writes a `plan.md` in
-the **master-plan format** (phases/blocks/Quick Reference table), so `/sdlc-block` can orchestrate
-it as a branch train or `/generate-tasks --from planning/plan-<slug>/plan.md` can decompose a single
-block into a `tasks.md` → `/sdlc-flow`, all **without** touching `master-plan.md`. See
-`planning/decisions/D34-adhoc-planning-seam.md`.
+`/chore` and `/ticket` write a runnable `tasks.md` **directly** and route to lean `/sdlc-task`
+(the fast path). `/plan` writes a `plan.md` in the **master-plan format** (phases/blocks/Quick
+Reference table), so `/sdlc-block` can orchestrate it as a branch train or `/generate-tasks --from
+planning/plan-<slug>/plan.md` can decompose a single block into a `tasks.md` → `/sdlc-flow`, all
+**without** touching `master-plan.md`. See `planning/decisions/D34-adhoc-planning-seam.md`.
 
 ---
 
