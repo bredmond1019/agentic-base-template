@@ -5,6 +5,19 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-25 — SDLC redesign Phase 0 Block A: unified committed state + token telemetry
+
+Implemented the first block of the redesign master-plan — the shared committed-state + token-telemetry spine every later block adopts. Established the canonical `tokens` block contract: `{ stages: [{label, model, promptTokEst, filesReadKb, inTokEst, outTok}], total: {…} }` where `inTokEst = promptTokEst + filesReadKb→tokens` (D15, ~256 tok/KB), null-safe on `filesReadKb`/`outTok` — realized as an identical `buildTokensBlock()` lifted (not imported) into each engine, since engines are self-contained by design. In `sdlc-run.js`: lifted `tracedAgent`/`metrics`/`recordFilesRead` from `sdlc-task.js`, routed the 9 substantive stages through `tracedAgent`, and replaced D27's gitignored `sdlc-state.json` breadcrumb with a committed `sdlc-run-state.json` carrying the phase trail + tokens block — so token usage, previously render-only and lost when a run ended, is now persisted and reviewable. In `sdlc-flow.js`: added the same `buildTokensBlock()` and made `writeFlowState` refresh `state.tokens` on every write, persisting per-task/cumulative tokens into the already-committed `sdlc-flow-state.json`. Dropped the D27 line from `.gitignore`. Notable decision (user call): because `sdlc-run` runs in-place on `main` (no worktree), its state is written uncommitted each phase (still `cat`-visible for crash inspection) and swept into the single wrap-up `chore:` commit — avoiding ~8 per-phase state-churn commits on main; `sdlc-flow` keeps its per-write commit since it runs in a throwaway worktree. All four engines `node --check` clean; `buildTokensBlock` math unit-tested (null paths). Block A's ADR (D37, supersedes D27 / extends D12+D15) and the formal `## Completed efforts` row are deferred to Phase 3 A per the plan's phase structure. Two stale `sdlc-state.json` mentions in `docs/workflows/` left for the Phase 3 B doc rewrite. Validation downstream only — never against base-template. Next: Phase 0 Block B (lean `/sdlc-task` + `/patch` ladder).
+
+```diff
+ .claude/workflows/sdlc-flow.js |  28 ++++++++
+ .claude/workflows/sdlc-run.js  | 143 ++++++++++++++++++++++++++++++++---------
+ .gitignore                     |   8 +--
+ 3 files changed, 143 insertions(+), 36 deletions(-)
+```
+
+---
+
 ## 2026-06-25 — Authored SDLC engines & planner-surface redesign master-plan (4 phases, 12 blocks)
 
 Authored the comprehensive redesign master-plan (`planning/sdlc-block-and-task-updates/plan.md`, output of `/generate-master-plan` command) capturing all four SDLC engines and planner surface restructuring. Four phases, twelve blocks, model-tiered: Opus drives P0-A (unified committed state + token telemetry across all four engines), P0-B (lean `/sdlc-task`), and P1-A (`/sdlc-block` rewrite); Sonnet handles the rest. Key work streams: reposition `/sdlc-block` as a block-level orchestrator driving `/sdlc-flow` per block over a branch train of PRs (task-level waves dropped); lean out `/sdlc-task` per-core mechanics; committed authoritative state + persisted/rolled-up token telemetry architecture across all four engines; planner surface restructure (consolidate `/plan` into mini-roadmap, remove `/feature`, add `/ticket`); new `/review-PR` and `/merge-train` commands; `/close-out` gated per-block-before-PR. Added plan row to `planning/index.md`. Notable: D36 already taken by bella Wave 4 validation fix (sdlc-flow.js recordFilesRead removal), so effort ADRs start at D37. bella `/sdlc-flow` Wave-4 validation confirmed DONE (c64d272: 7/7 tasks PASS, review PASS, PR opened). Implementation deferred to fresh agent via handoff; validation happens downstream only, never against base-template.
