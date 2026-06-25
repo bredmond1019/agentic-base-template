@@ -245,6 +245,28 @@ const REPORT_SCHEMA = {
   }
 }
 
+const GAP_CHECK_SCHEMA = {
+  type: 'object',
+  required: ['passed'],
+  properties: {
+    passed:     { type: 'boolean', description: 'true if all gating checks passed and no blocking coverage gaps remain' },
+    fixesMade:  { type: 'boolean', description: 'true if the gap-check wrote or fixed any files' },
+    commitHash: { type: 'string',  description: 'short commit hash if fixesMade and changes were committed, else ""' },
+    notes:      { type: 'string' }
+  }
+}
+
+const BLOCK_PR_SCHEMA = {
+  type: 'object',
+  required: ['created'],
+  properties: {
+    created: { type: 'boolean', description: 'true if a PR was created (or gh reported one already exists)' },
+    url:     { type: 'string',  description: 'the PR URL, or "" if not created' },
+    number:  { type: 'integer', description: 'the PR number, or 0 if not created' },
+    notes:   { type: 'string' }
+  }
+}
+
 const STATE_LOAD_SCHEMA = {
   type: 'object',
   required: ['exists'],
@@ -698,13 +720,116 @@ tasksFile="${blockTasks}", taskCount, commitHash, notes.
 }
 
 // Run ONE block through /sdlc-flow as the inner engine. Returns the child flow's result (or null).
-// --no-pr is passed to the child in no-pr AND auto-merge mode (the orchestrator owns merging in
-// auto-merge; in default mode the child opens its own PR).
+// Always passes --no-pr so the orchestrator can run the per-block gap-check before opening the PR
+// (PR mode) or skip PR creation entirely (no-pr / auto-merge modes where the orchestrator owns merging).
 async function runBlockFlow(slug) {
-  const childNoPr = (mode === 'no-pr' || mode === 'auto-merge') ? ' --no-pr' : ''
-  log(`Block ${slug}: running /sdlc-flow${childNoPr}...`)
-  const r = await workflow('sdlc-flow', `${slug}${childNoPr}`)
+  log(`Block ${slug}: running /sdlc-flow --no-pr...`)
+  const r = await workflow('sdlc-flow', `${slug} --no-pr`)
   return r
+}
+
+// Run the close-out gap-check (Steps 1-3: validation suite + coverage scan + docs patch) in a
+// block's worktree. Non-blocking — if the gap-check fails gating the block is still passed but
+// the failure is recorded so the PR body reflects it.
+async function gapCheckBlock(slug, worktreePath, branchName) {
+  if (!worktreePath) {
+    log(`Block ${slug}: skipping gap-check (no worktreePath returned by sdlc-flow).`)
+    return null
+  }
+  log(`Block ${slug}: running gap-check in ${worktreePath}...`)
+  return tracedAgent(`
+You are the gap-check agent for block "${slug}". All Bash commands run from the WORKTREE root: ${worktreePath}
+
+Your job: run the close-out gap-check (equivalent to /close-out --gap-check-only) against the block's
+changes. Do NOT trigger a handoff.
+
+STEP 1 — Validation suite
+Read: cd ${worktreePath} && cat planning/harness.json
+Run every check in validation.checks[] in order. Then run the emoji gate:
+  python3 - <<'PYEOF'
+import subprocess, re, sys, os
+EMOJI = re.compile(r'[\\U0001F300-\\U0001FAFF\\U00002600-\\U000027BF]')
+changed = subprocess.run(['git','diff','HEAD^','--name-only'], capture_output=True, text=True).stdout.splitlines()
+md_files = [f for f in changed if f.endswith(('.md','.mdx')) and os.path.isfile(f)]
+hits = []
+for path in md_files:
+    for n, line in enumerate(open(path, errors='ignore'), 1):
+        if EMOJI.search(line): hits.append(f'{path}:{n}: {line.rstrip()[:100]}')
+if hits:
+    print('EMOJI CHECK FAIL:'); [print(h) for h in hits[:25]]; sys.exit(1)
+print('EMOJI CHECK: OK'); sys.exit(0)
+PYEOF
+If any gating check fails → set passed=false and stop; report what failed in notes. Do NOT
+attempt to fix failures — that is out of scope for a gap-check.
+If all gating checks pass (non-gating surfaced but don't block) → continue.
+
+STEP 2 — Coverage scan
+Run: cd ${worktreePath} && git diff HEAD^ --name-only
+Filter to source files (exclude *.md, *.json, *.toml, *.yaml, *.yml, planning/, docs/, scaffold/).
+If no source files changed → skip STEP 2 silently.
+For each changed source file check for test coverage (sibling test files, inline test blocks).
+Classify: Adequate / Non-blocking gap / Blocking gap.
+Fill blocking gaps: write a minimal targeted test. After writing tests, re-run the gating checks.
+Record non-blocking gaps in notes.
+
+STEP 3 — Patch docs
+Invoke the /update-docs --patch skill. Wait for completion.
+
+If any files were written or edited in STEPs 2-3, commit them:
+  cd ${worktreePath} && git add -A && git commit -m "chore: gap-check fixes for ${slug}" || echo "nothing to commit"
+  git log --oneline -1   (capture commitHash)
+
+Return via StructuredOutput: passed, fixesMade, commitHash, notes.
+`, { label: `gap-check-${slug}`, schema: GAP_CHECK_SCHEMA, phase: 'Gap-check' })
+}
+
+// Open a GitHub PR for a completed block (PR mode only). Called after the per-block gap-check.
+async function openBlockPr(slug, worktreePath, branchName, stateFile, blockId, finalVerdict, passedCount, totalCount) {
+  if (!worktreePath || !branchName) {
+    log(`Block ${slug}: skipping PR open (missing worktreePath or branchName).`)
+    return null
+  }
+  log(`Block ${slug}: opening PR for branch ${branchName}...`)
+  return tracedAgent(`
+You open a pull request for a completed /sdlc-flow block. All Bash from the WORKTREE root: ${worktreePath}
+
+Branch: ${branchName}   BlockId: ${blockId}   Verdict: ${finalVerdict}   Tasks passed: ${passedCount}/${totalCount}
+
+1. Check gh CLI and remote:
+   cd ${worktreePath} && command -v gh >/dev/null 2>&1 && echo "GH_PRESENT" || echo "GH_ABSENT"
+   cd ${worktreePath} && git remote -v | head -1 || echo "NO_REMOTE"
+   If GH_ABSENT or NO_REMOTE → return created=false, notes="Branch ${branchName} is ready. Push it and open a PR manually."
+
+2. Read the run-state for the PR body:
+   cd ${worktreePath} && cat ${stateFile} 2>/dev/null || echo "(no state file)"
+
+3. Push the branch:
+   cd ${worktreePath} && git push -u origin ${branchName}
+
+4. Build the PR body from the run-state:
+   ## What & why
+   [one paragraph from the spec goal + what each task delivered]
+   ## Tasks
+   [per task: number — status — one-line summary, from state.tasks]
+   ## Validation
+   [review verdict (${finalVerdict}) and what the consolidated review covered]
+   ## Remaining / follow-ups
+   [anything deferred, from state + spec Notes]
+   ## How it was validated
+   [gating checks the end-review ran]
+   End the body with this exact footer line (the ONLY place an emoji is allowed):
+   🤖 Generated with Claude Code
+
+5. Create the PR:
+   cd ${worktreePath} && gh pr create --base ${baseBranch} --head ${branchName} --title "${blockId}: ${passedCount} task(s), review ${finalVerdict}" --body "$(cat <<'EOF'
+<the body you built>
+EOF
+)"
+   Run: cd ${worktreePath} && gh pr view --json number,url 2>/dev/null || true
+   If gh reports a PR already exists for this branch, treat created=true and capture its url/number.
+
+Return via StructuredOutput: created, url, number, notes.
+`, { label: `pr-open-${slug}`, schema: BLOCK_PR_SCHEMA, phase: 'Gap-check' })
 }
 
 // ================================================================
@@ -776,7 +901,7 @@ for (let wi = 0; wi < waves.length; wi++) {
       if (r) {
         b.branch = r.branch || null
         b.verdict = r.finalVerdict || null
-        b.pr = r.pr ? { url: r.pr.url || null, number: r.pr.number || null, draft: !!r.pr.draft } : null
+        // pr is null here because runBlockFlow always passes --no-pr; PR mode fills b.pr below.
         if (r.tokens?.total) { b.tokensTotal = r.tokens.total; childTokenRecords.push({ slug, total: r.tokens.total }) }
       }
       // A clean PASS (not bailed) is mergeable into the train; anything else escalates and poisons deps.
@@ -787,6 +912,32 @@ for (let wi = 0; wi < waves.length; wi++) {
         b.status = 'escalated'
         b.reasons = [r ? `child flow ${r.finalVerdict || 'no verdict'}${r.bailed ? ` (BAILED: ${r.bailReason || '?'})` : ''}` : 'child flow returned null']
         log(`Block ${slug}: ESCALATED — ${b.reasons[0]}. Branch ${b.branch || '(none)'} preserved.`)
+      }
+    }
+
+    // PR mode: gap-check + open PR for each passed block (in parallel; each is in its own worktree).
+    if (mode === 'pr') {
+      const passedItems = batchResults.filter(Boolean).filter(({ n }) => state.blocks[indexToBlock[n].slug].status === 'passed')
+      if (passedItems.length) {
+        phase(`Gap-check`)
+        const gapAndPrResults = await parallel(passedItems.map(({ n, r }) => async () => {
+          const slug = indexToBlock[n].slug
+          const gapResult = await gapCheckBlock(slug, r.worktreePath, r.branch)
+          const prResult  = await openBlockPr(slug, r.worktreePath, r.branch, r.stateFile, r.blockId, r.finalVerdict, r.tasksPassed?.length || 0, r.tasksRun?.length || 0)
+          return { n, gapResult, prResult }
+        }))
+        for (const item of gapAndPrResults) {
+          if (!item) continue
+          const { n, gapResult, prResult } = item
+          const slug = indexToBlock[n].slug
+          const b = state.blocks[slug]
+          if (prResult?.created) {
+            b.pr = { url: prResult.url || null, number: prResult.number || null, draft: false }
+            log(`Block ${slug}: PR opened ${prResult.url || '#' + (prResult.number || '?')} | gap-check: ${gapResult?.passed !== false ? 'PASS' : 'FAIL (non-blocking)'}`)
+          } else {
+            log(`Block ${slug}: PR not created — ${prResult?.notes || 'gh unavailable; open manually'}`)
+          }
+        }
       }
     }
   }
@@ -952,6 +1103,23 @@ Return using StructuredOutput: reportFile="${reportFile}", overallVerdict="${ove
 `, { label: 'report', schema: REPORT_SCHEMA, phase: 'Report', model: 'sonnet' })
 
 await writeBlockState('report')
+
+// ----------------------------------------------------------------
+// Final close-out (gap-check-only: no handoff) — quality gate over the full train branch.
+// ----------------------------------------------------------------
+phase('Close-out')
+log('Running final close-out gap-check over the train branch...')
+await agent(`
+You run the final close-out gap-check after a block-level roadmap orchestration. You are on the MAIN
+repo root, checked out on the train branch "${trainBranch}".
+
+Invoke the /close-out skill with args "--gap-check-only". Wait for it to complete.
+
+This is the post-orchestration quality gate: it validates the full integrated train branch (not a single
+block), fills any remaining coverage gaps, and patches docs — without triggering a handoff.
+
+Report the result in plain text: "Final close-out: <PASS|FAIL> — <one-line summary>".
+`, { label: 'final-close-out', phase: 'Close-out', model: 'sonnet' })
 
 // ----------------------------------------------------------------
 // Final console summary

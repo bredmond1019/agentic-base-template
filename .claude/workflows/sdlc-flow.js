@@ -1378,6 +1378,7 @@ Return via StructuredOutput: merged, worktreeRemoved, branchDeleted, notes.
 const tokensBlock = buildTokensBlock()
 log(`Token roll-up: ${tokensBlock.total.inTokEst} inTokEst${tokensBlock.total.outTok ? ` | ${tokensBlock.total.outTok} outTok` : ''} across ${tokensBlock.stages.length} stage(s) — persisted in ${stateFile}.`)
 log(`/sdlc-flow complete. Verdict: ${finalVerdict} | tasks passed: ${passedTasks.length}/${taskList.length}${bailed ? ` | BAILED: ${bailReason}` : ''}${prInfo?.created ? ` | PR: ${prInfo.url || prInfo.number}` : ''}`)
+if (!noPr && !autoMerge) log('Next: run /close-out to verify coverage + patch docs before handing off.')
 
 return {
   blockId,
