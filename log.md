@@ -5,6 +5,30 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-25 — D36: fix stale recordFilesRead() crash in sdlc-flow.js + propagate
+
+First real `/sdlc-flow` validation run (bella block 0.C — keyboard navigation) surfaced a
+`ReferenceError: recordFilesRead is not defined` crash on task 1. The call at line 944 of
+`sdlc-flow.js` was copy-paste residue from `sdlc-task.js`, which has a full per-stage
+telemetry infrastructure (`metrics` array + `recordFilesRead()` helper + `filesReadKb`
+schema field). `sdlc-flow.js` has none of that — its `tracedAgent()` tracks only
+`label`/`model`/`promptTokEst`/`outTok`, and `STAGE_SCHEMA` has no `filesReadKb`.
+
+Fix: remove the orphaned one-liner. `node --check` clean. Propagated to all six downstream
+repos (bella, amistad, bastion, markdown-engine-validator, price-scout,
+python-orchestration-system). ADR D36 written.
+
+Run result: 7/7 tasks passed on first attempt (no fix loops), review PASS zero findings,
+PR opened. ~47 min / 38 agents / ~939k sub-tokens. `/sdlc-flow` validated end-to-end.
+
+```diff
+.claude/workflows/sdlc-flow.js  — remove recordFilesRead(stageResult) call (line 944)
+planning/decisions/D36-sdlc-flow-recordfilesread-fix.md  — new ADR
+planning/decisions/index.md  — D36 entry
+```
+
+---
+
 ## 2026-06-24 — Fleet-wide propagation complete (remaining 7 repos)
 
 Propagated the full current harness (D14–D35 + `/sdlc-flow`) to the remaining downstream repos, so all
