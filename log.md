@@ -5,6 +5,31 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-25 — Phase 2 A/B complete: /plan rewritten to mini-roadmap format, /feature removed, /ticket added, /chore wired to lean /sdlc-task
+
+Phase 2 A delivered a complete rewrite of the `/plan` command to produce master-plan format (phases/blocks/Quick Reference table) into `planning/plan-<slug>/plan.md`. The new `/plan` routes multi-block efforts via `/sdlc-block <path>` or single standalone blocks via `/generate-tasks --from <path>` + `/sdlc-flow`, while retaining D20 clarify gate, D35 plan-quality floor, and D19 property self-check. Removed `/feature` command entirely; cleaned all cross-references. Phase 2 B added a new `/ticket` command for single-block behavior-change planning with observable Acceptance Criteria + Testing Strategy, routed to lean `/sdlc-task ticket-{name}`. Updated `/chore` command + mirror to recommend `/sdlc-task chore-{name}` in the Report instead of `/patch`, solidifying the distinction: `/chore` for work that doesn't *change observable behavior* (refactoring, docs, cleanup), `/ticket` for work that does. Updated `README.md` with `/ticket` row in the ad-hoc planning table and clarified the `/chore` vs `/ticket` distinction. All four engines `node --check` clean.
+
+```diff
+ .agents/skills/chore/SKILL.md              |    9 +-
+ .agents/skills/feature/SKILL.md            |  149 -
+ .agents/skills/generate-tasks/SKILL.md     |    2 +-
+ .agents/skills/plan/SKILL.md               |  230 +++++++++++++---------
+ .agents/skills/ticket/SKILL.md             |  127 ++++++++++++
+ .claude/commands/README.md                 |   39 ++-
+ .claude/commands/chore.md                  |    9 +-
+ .claude/commands/conditional_docs.md       |    2 +-
+ .claude/commands/feature.md                |  143 -
+ .claude/commands/plan.md                   |  243 ++++++++++++----------
+ .claude/commands/ticket.md                 |  120 +++++++++++
+ .claude/workflows/harness.schema.json      |    2 +-
+ planning/handoff.md                        |   64 -
+ scaffold/.claude/commands/conditional_docs.md |    2 +-
+ scaffold/planning/harness.json             |    2 +-
+ 16 files changed, 526 insertions(+), 617 deletions(-)
+```
+
+---
+
 ## 2026-06-25 — Phase 1 A/B/C /code-review: workflow-backed high-effort audit (43 agents) surfaced 8 CONFIRMED + 2 PLAUSIBLE findings; all 10 fixed across sdlc-block.js, /review-PR, /generate-tasks, command + skill docs
 
 Ran a workflow-backed `/code-review` at high effort over the full Phase 1 diff (commit range 80638e9..HEAD), spanning Phase 1 A (block-orchestrator rewrite of sdlc-block.js), Phase 1 B (/review-PR + /merge-train commands), and Phase 1 C (/close-out integration + per-block gap-check). The review (43 agents, run wf_d56efc19-0a0) surfaced 8 verified CONFIRMED findings plus 2 PLAUSIBLE findings. Fixed all 10 findings across the codebase: #1 `gapCheckBlock()` now diffs the whole block (`<train>...HEAD`) for the emoji gate + coverage scan, not `HEAD^` which saw only the last commit and was neutering Phase 1 C's gap-check gate; #2 budget guards now use `typeof budget !== 'undefined' && budget.total` to avoid ReferenceError on startup; #3 state key renamed `base` → `base_branch` to match what `/merge-train` + `/review-PR` read (was a producer/consumer mismatch); #4 removed the dangling `execution-plan.json` / deleted-schema authoring step from `generate-tasks.md` step 12 + skill mirror, and cleaned every now-false reference (README ×2, plan.md, generate-tasks.md cross-ref, sdlc-run.js comment, docs/architecture.md, docs/using-the-template.md, scaffold/planning/index.md); #5 rewrote `.agents/skills/sdlc-block/SKILL.md` to match the branch-train orchestrator model (was the legacy task-wave model); corrected the matching stale `/sdlc-block` section in `commands/README.md`; #6 report child-token table + count now derived from committed `state.blocks[].tokensTotal` so resumed blocks are counted (was undercounting on `--resume`); #7 `/review-PR` now falls back to the spec's `## Validation Commands` when `harness.json` absent, and downgrades to COMMENT (never APPROVE) if no gating suite found; #8 `loadBlockConfig()` reads only `maxParallelBlocks`; dropped the dead `block.autoMerge` extraction; #9 `dependsOn` slugs lowercased before `slugToIndex` lookup (case-sensitivity bug); #10 per-block gap-check now runs for every passed block in ALL modes (was PR-mode-only); PR-open stays PR-mode-only. Bonus: added `/review-PR` + `/merge-train` to the `commands/README.md` catalog per CLAUDE.md rule 7. All four engines `node --check` clean. Deliberately deferred: harness.schema.json block.* finalization → Phase 3 C; docs/workflows/sdlc-block.md page rewrite → Phase 3 B.
