@@ -34,7 +34,7 @@ predictably-named output file.
 | Block Setup | `/start-block [name]` | Flip a spec to `In progress` in status.md | status.md |
 | **1 — Roadmap** | `/generate-master-plan [desc]` | Author the full roadmap as canonical block definitions | `planning/master-plan.md` |
 | **1 — Plan** | `/generate-tasks <name>` ·  `/generate-tasks --from <path>` | Write the full task spec from a master-plan block, **or** from a standalone block file (`--from`) | `planning/<name>/tasks.md` |
-| **1 — Plan (ad-hoc)** | `/chore` · `/feature` · `/plan <desc>` | Plan ad-hoc work from a free-text description (not a master-plan block) | `planning/<prefix>-<slug>/{tasks,plan}.md` |
+| **1 — Plan (ad-hoc)** | `/chore` · `/plan <desc>` | Plan ad-hoc work from a free-text description (not a master-plan block) | `planning/<prefix>-<slug>/{tasks,plan}.md` |
 | **1 — Plan (opt.)** | `/breakdown <spec>` | Decompose spec into atomic, agent-executable sub-steps | `planning/<name>/breakdown.md` |
 | **2 — Implement** | `/implement <spec> [N]` | Execute every task (or task N) in the spec | `planning/<name>/sdlc/reports/[taskN-]implement.md` |
 | **2 — Hotfix** | `/patch` | Implement → validate → commit for low-risk single-file fixes; skips test/review/document | git history |
@@ -272,27 +272,21 @@ Reads a task spec and the source files each step touches, then writes a granular
 and `/fix` auto-detect this file and use the matching `### Step N:` section as the primary
 execution guide (HOW); `tasks.md` stays authoritative for scope (WHAT).
 
-### Ad-hoc planners — `/chore`, `/feature`, `/plan`
+### Ad-hoc planners — `/chore`, `/plan`
 
 Entry points into Phase 1 for work that **isn't** a master-plan block. Each takes a free-text
-description, researches the codebase, and writes a spec into its own `planning/<dir>/`
-directory carrying the same Validation Commands block. Output feeds the rest of the pipeline
-unchanged.
+description, researches the codebase, and writes a spec into its own `planning/<dir>/` directory.
+Output feeds the rest of the pipeline unchanged.
 
 | Command | Use for | Writes to |
 |---|---|---|
 | `/chore <description>` | Maintenance / housekeeping | `planning/chore-<slug>/tasks.md` |
-| `/feature <description>` | A new capability — full design, user story, phased plan | `planning/feature-<slug>/tasks.md` |
-| `/plan <description>` | Anything else, scaled to complexity | `planning/plan-<slug>/plan.md` |
+| `/plan <description>` | Any ad-hoc or experimental feature — mini-roadmap format | `planning/plan-<slug>/plan.md` |
 
-> Downstream commands derive report paths from the spec's **parent directory**, so a `plan.md`
-> spec flows through identically to a `tasks.md` one.
-
-`/chore` and `/feature` write a runnable `tasks.md` **directly** (the fast path). `/plan` writes a
-`plan.md` that doubles as a **standalone block definition**: run it directly via `/implement`, or take
-the rigorous route — `/generate-tasks --from planning/plan-<slug>/plan.md` decomposes it into a
-`tasks.md` (with a pipeline recommendation) to run on a feature branch via
-`/sdlc-flow`, all **without** touching `master-plan.md`. See
+`/chore` writes a runnable `tasks.md` **directly** (the fast path). `/plan` writes a `plan.md` in
+the **master-plan format** (phases/blocks/Quick Reference table), so `/sdlc-block` can orchestrate
+it as a branch train or `/generate-tasks --from planning/plan-<slug>/plan.md` can decompose a single
+block into a `tasks.md` → `/sdlc-flow`, all **without** touching `master-plan.md`. See
 `planning/decisions/D34-adhoc-planning-seam.md`.
 
 ---

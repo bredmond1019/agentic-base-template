@@ -12,7 +12,7 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
              e.g. `<spec-slug>` or `2.1-learn-paths-structural-fixes`.
              New master-plan specs follow the `P.N-slug` convention (see
              `planning/index.md` → *Task directory naming convention*); ad-hoc work uses
-             `/chore`, `/feature`, or `/plan` instead.
+             `/chore` or `/plan` instead.
              Required. If omitted, stop and say: "Usage: /generate-tasks <P.N-slug>  (e.g. <spec-slug>)"
 
 ## Instructions

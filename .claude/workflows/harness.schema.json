@@ -63,7 +63,7 @@
     "planning": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Optional planning-phase policy read by the authoring commands (/plan, /feature, /generate-tasks). Absent → all fields default to preserve today's zero-touch behavior.",
+      "description": "Optional planning-phase policy read by the authoring commands (/plan, /generate-tasks). Absent → all fields default to preserve today's zero-touch behavior.",
       "properties": {
         "clarify": {
           "type": "boolean",
