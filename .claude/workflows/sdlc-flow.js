@@ -351,6 +351,12 @@ async function tracedAgent(prompt, opts = {}) {
 // not self-report it yet); inTokEst then reduces to promptTokEst. writeFlowState folds the latest
 // block into the COMMITTED state.json on every write, so token usage is persisted and rolled up
 // rather than vanishing when the run ends.
+//
+// CONTRACT SCOPE (Phase 0 /code-review carry-in): `metrics` — and therefore `tokens.total` — cover the
+// SUBSTANTIVE stages only. Cheap helper / state-writer agents (the Haiku state-writer, config + baseline
+// loaders) deliberately use bare agent() and are EXCLUDED; this bounded, Haiku-cheap exclusion is the
+// same boundary in all four engines, named here so it is explicit rather than silent — it keeps the
+// two-level /sdlc-block roll-up summing comparable substantive-stage totals at both levels.
 function buildTokensBlock() {
   const stages = metrics.map(m => {
     const filesReadKb = m.filesReadKb != null ? m.filesReadKb : null

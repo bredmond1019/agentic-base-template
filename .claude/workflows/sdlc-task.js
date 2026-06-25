@@ -286,6 +286,12 @@ function recordFilesRead(result) {
 // Build the canonical `tokens` block from the accumulated per-agent metrics (Block A — the shared
 // committed-state token contract, identical across all four engines): per-stage output tokens + the
 // D15 input-cost estimate (promptTok + filesReadKb→tokens at ~256 tok/KB) + a cumulative total.
+//
+// CONTRACT SCOPE (Phase 0 /code-review carry-in): `metrics` — and therefore `tokens.total` — cover the
+// SUBSTANTIVE stages only. Cheap helper / state-writer agents (the Haiku state-writer, config + baseline
+// loaders) deliberately use bare agent() and are EXCLUDED; this bounded, Haiku-cheap exclusion is the
+// same boundary in all four engines, named here so it is explicit rather than silent — it keeps the
+// two-level /sdlc-block roll-up summing comparable substantive-stage totals at both levels.
 function buildTokensBlock() {
   const stages = metrics.map(m => {
     const filesReadKb = m.filesReadKb != null ? m.filesReadKb : null
@@ -946,7 +952,7 @@ state.status = bailed ? 'blocked' : 'done'
 // already committed each write, so a final commit is a cheap no-op (NOTHING_TO_COMMIT).
 await writeTaskState(`run ${state.status} (${passedTasks.length}/${taskList.length})`, { cwd: runDir, commit: true })
 
-const tokensBlock = buildTokensBlock()
+const tokensBlock = state.tokens   // already rebuilt by the writeTaskState call just above (no traced agent ran since); reuse it rather than rebuilding (carry-in #3)
 log(`Token roll-up: ${tokensBlock.total.inTokEst} inTokEst${tokensBlock.total.outTok ? ` | ${tokensBlock.total.outTok} outTok` : ''} across ${tokensBlock.stages.length} stage(s) — persisted in ${stateFile}.`)
 log(`/sdlc-task complete. ${bailed ? `BAILED: ${bailReason}` : 'all selected tasks passed'} | passed ${passedTasks.length}/${taskList.length}.`)
 if (useWorktree) {
