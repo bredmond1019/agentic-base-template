@@ -7,7 +7,7 @@ serves two downstream routes:
 - **Direct:** `/breakdown` or `/implement` it as-is (the quick path).
 - **Rigorous:** treat it as a **standalone block definition** and run `/generate-tasks --from
   planning/plan-<slug>/plan.md` to decompose it into a `tasks.md` with full disjoint-ownership
-  analysis, an `execution-plan.json`, and a pipeline recommendation — then run it (e.g. via
+  analysis and a pipeline recommendation — then run it (e.g. via
   `/sdlc-flow`) on a feature branch. This is how you try an experimental feature **without** putting
   it in `master-plan.md` first. See `planning/decisions/D34-adhoc-planning-seam.md`. (For the roadmap
   itself, use `/generate-master-plan`.)

@@ -395,10 +395,12 @@ function isPoisoned(num, taskMap, badSet) {
 
 // ----------------------------------------------------------------
 // HARNESS CONFIG — mechanism/policy split (see planning/harness.json). The orchestrator reads only the
-// `block.*` policy block (autoMerge / maxParallelBlocks) as a default for the CLI flags. The engine
-// ships NO stack defaults. The runtime has no filesystem access, so a micro-loader agent reads + parses
-// the file. Returns the parsed `block` object, or null when absent/invalid. (The block.* schema keys are
-// finalized in Phase 3 C; this loader reads them provisionally and tolerates their absence.)
+// `block.maxParallelBlocks` policy value as a default for the --max-parallel-blocks CLI flag. (The mode is
+// driven solely by the --auto-merge / --no-pr flags, which are needed before the config can load — they
+// shape pre-flight — so no autoMerge config default is read here.) The engine ships NO stack defaults.
+// The runtime has no filesystem access, so a micro-loader agent reads + parses the file. Returns the
+// parsed `block` object, or null when absent/invalid. (The block.* schema keys are finalized in Phase 3 C;
+// this loader reads maxParallelBlocks provisionally and tolerates its absence.)
 // ----------------------------------------------------------------
 async function loadBlockConfig() {
   const result = await agent(`
@@ -411,10 +413,10 @@ STEP 1 — Read the config file:
 STEP 2 — Decide:
   - "__HARNESS_ABSENT__" or not valid JSON → present=false, omit block.
   - Valid JSON → present=true, and copy its top-level "block" object (if any) into "block", keeping ONLY
-    these fields when present: autoMerge (boolean), maxParallelBlocks (integer). Ignore every other field.
+    the maxParallelBlocks (integer) field when present. Ignore every other field.
 
 Return using StructuredOutput: present, block, notes.
-`, { label: 'block-config', schema: { type: 'object', required: ['present'], properties: { present: { type: 'boolean' }, block: { type: 'object', properties: { autoMerge: { type: 'boolean' }, maxParallelBlocks: { type: 'integer' } } }, notes: { type: 'string' } } }, model: 'sonnet' })
+`, { label: 'block-config', schema: { type: 'object', required: ['present'], properties: { present: { type: 'boolean' }, block: { type: 'object', properties: { maxParallelBlocks: { type: 'integer' } } }, notes: { type: 'string' } } }, model: 'sonnet' })
   if (!result || !result.present || !result.block) return null
   return result.block
 }
@@ -425,7 +427,7 @@ Return using StructuredOutput: present, block, notes.
 const state = {
   plan_slug: planSlug,
   plan_file: planFile,
-  base: baseBranch,
+  base_branch: baseBranch,
   train_branch: trainBranch,
   mode,
   status: 'running',
@@ -608,7 +610,10 @@ for (const b of blocks) {
   const idx = slugToIndex[b.slug]
   const deps = new Set()
   for (const depSlug of (b.dependsOn || [])) {
-    if (slugToIndex[depSlug] && slugToIndex[depSlug] !== idx) deps.add(slugToIndex[depSlug])
+    // slugToIndex keys are the lowercased phaseN-blockX slugs the enumerate agent emits; normalize the
+    // dependency ref the same way so a mixed-case "Depends on:" entry (e.g. phase0-blockB) still resolves.
+    const depIdx = slugToIndex[String(depSlug).toLowerCase()]
+    if (depIdx && depIdx !== idx) deps.add(depIdx)
   }
   if (prevPhaseOf[b.phase] != null) {
     for (const other of blocks) {
@@ -731,17 +736,22 @@ async function runBlockFlow(slug) {
 // Run the close-out gap-check (Steps 1-3: validation suite + coverage scan + docs patch) in a
 // block's worktree. Non-blocking — if the gap-check fails gating the block is still passed but
 // the failure is recorded so the PR body reflects it.
-async function gapCheckBlock(slug, worktreePath, branchName) {
+// `baseRef` is the train branch the block forked off; the gate scopes its diffs to the WHOLE block
+// (`<baseRef>...HEAD`, the merge-base range), not just the last commit — a block is many commits
+// (one per task + state + docs + wrap-up), so a HEAD^ diff would miss everything but the final one.
+async function gapCheckBlock(slug, worktreePath, baseRef) {
   if (!worktreePath) {
     log(`Block ${slug}: skipping gap-check (no worktreePath returned by sdlc-flow).`)
     return null
   }
-  log(`Block ${slug}: running gap-check in ${worktreePath}...`)
+  log(`Block ${slug}: running gap-check in ${worktreePath} (diff base ${baseRef})...`)
   return tracedAgent(`
 You are the gap-check agent for block "${slug}". All Bash commands run from the WORKTREE root: ${worktreePath}
 
 Your job: run the close-out gap-check (equivalent to /close-out --gap-check-only) against the block's
-changes. Do NOT trigger a handoff.
+changes. Do NOT trigger a handoff. The block branch forked off "${baseRef}", so its full set of changes
+is the merge-base range "${baseRef}...HEAD" — scope every diff to that range (NOT HEAD^, which would see
+only the last of the block's many commits).
 
 STEP 1 — Validation suite
 Read: cd ${worktreePath} && cat planning/harness.json
@@ -749,7 +759,7 @@ Run every check in validation.checks[] in order. Then run the emoji gate:
   python3 - <<'PYEOF'
 import subprocess, re, sys, os
 EMOJI = re.compile(r'[\\U0001F300-\\U0001FAFF\\U00002600-\\U000027BF]')
-changed = subprocess.run(['git','diff','HEAD^','--name-only'], capture_output=True, text=True).stdout.splitlines()
+changed = subprocess.run(['git','diff','${baseRef}...HEAD','--name-only'], capture_output=True, text=True).stdout.splitlines()
 md_files = [f for f in changed if f.endswith(('.md','.mdx')) and os.path.isfile(f)]
 hits = []
 for path in md_files:
@@ -764,7 +774,7 @@ attempt to fix failures — that is out of scope for a gap-check.
 If all gating checks pass (non-gating surfaced but don't block) → continue.
 
 STEP 2 — Coverage scan
-Run: cd ${worktreePath} && git diff HEAD^ --name-only
+Run: cd ${worktreePath} && git diff ${baseRef}...HEAD --name-only
 Filter to source files (exclude *.md, *.json, *.toml, *.yaml, *.yml, planning/, docs/, scaffold/).
 If no source files changed → skip STEP 2 silently.
 For each changed source file check for test coverage (sibling test files, inline test blocks).
@@ -835,16 +845,15 @@ Return via StructuredOutput: created, url, number, notes.
 // ================================================================
 // WAVE LOOP
 // ================================================================
-const childTokenRecords = []   // [{slug, total}] for the two-level roll-up
-
 for (let wi = 0; wi < waves.length; wi++) {
   const wave = waves[wi]
   const waveLabel = `Wave ${wi + 1}`
   phase(waveLabel)
 
   // Budget guard — each block is a full /sdlc-flow run; stop between waves if the remaining budget
-  // can't cover the wave's parallel batch.
-  if (budget.total) {
+  // can't cover the wave's parallel batch. `budget` may be absent (the engine is run in contexts that
+  // don't inject it — same reason tracedAgent guards with typeof), so guard before touching it.
+  if (typeof budget !== 'undefined' && budget.total) {
     const estPerBlock = 180_000
     const waveCost = Math.min(wave.tasks.length, effectiveMaxParallel) * estPerBlock
     if (budget.remaining() < waveCost) {
@@ -902,7 +911,9 @@ for (let wi = 0; wi < waves.length; wi++) {
         b.branch = r.branch || null
         b.verdict = r.finalVerdict || null
         // pr is null here because runBlockFlow always passes --no-pr; PR mode fills b.pr below.
-        if (r.tokens?.total) { b.tokensTotal = r.tokens.total; childTokenRecords.push({ slug, total: r.tokens.total }) }
+        // tokensTotal is persisted on the block so the report can derive child totals from state
+        // (covers resumed blocks too — see the report's childTokenRecords derivation).
+        if (r.tokens?.total) b.tokensTotal = r.tokens.total
       }
       // A clean PASS (not bailed) is mergeable into the train; anything else escalates and poisons deps.
       if (r && !r.bailed && r.finalVerdict === 'PASS') {
@@ -915,28 +926,36 @@ for (let wi = 0; wi < waves.length; wi++) {
       }
     }
 
-    // PR mode: gap-check + open PR for each passed block (in parallel; each is in its own worktree).
-    if (mode === 'pr') {
-      const passedItems = batchResults.filter(Boolean).filter(({ n }) => state.blocks[indexToBlock[n].slug].status === 'passed')
-      if (passedItems.length) {
-        phase(`Gap-check`)
-        const gapAndPrResults = await parallel(passedItems.map(({ n, r }) => async () => {
-          const slug = indexToBlock[n].slug
-          const gapResult = await gapCheckBlock(slug, r.worktreePath, r.branch)
-          const prResult  = await openBlockPr(slug, r.worktreePath, r.branch, r.stateFile, r.blockId, r.finalVerdict, r.tasksPassed?.length || 0, r.tasksRun?.length || 0)
-          return { n, gapResult, prResult }
-        }))
-        for (const item of gapAndPrResults) {
-          if (!item) continue
-          const { n, gapResult, prResult } = item
-          const slug = indexToBlock[n].slug
-          const b = state.blocks[slug]
+    // Quality gate: run the per-block gap-check for EVERY passed block (all modes — its fixes land on the
+    // block branch before that branch merges into the train/base), and additionally open a PR in PR mode.
+    // Each passed block is in its own worktree, so process them in parallel. The gap-check diffs the whole
+    // block against the train branch it forked off.
+    const passedItems = batchResults.filter(Boolean).filter(({ n }) => state.blocks[indexToBlock[n].slug].status === 'passed')
+    if (passedItems.length) {
+      phase(`Gap-check`)
+      const gapAndPrResults = await parallel(passedItems.map(({ n, r }) => async () => {
+        const slug = indexToBlock[n].slug
+        const gapResult = await gapCheckBlock(slug, r.worktreePath, trainBranch)
+        const prResult  = mode === 'pr'
+          ? await openBlockPr(slug, r.worktreePath, r.branch, r.stateFile, r.blockId, r.finalVerdict, r.tasksPassed?.length || 0, r.tasksRun?.length || 0)
+          : null
+        return { n, gapResult, prResult }
+      }))
+      for (const item of gapAndPrResults) {
+        if (!item) continue
+        const { n, gapResult, prResult } = item
+        const slug = indexToBlock[n].slug
+        const b = state.blocks[slug]
+        const gapLabel = gapResult?.passed !== false ? 'PASS' : 'FAIL (non-blocking)'
+        if (mode === 'pr') {
           if (prResult?.created) {
             b.pr = { url: prResult.url || null, number: prResult.number || null, draft: false }
-            log(`Block ${slug}: PR opened ${prResult.url || '#' + (prResult.number || '?')} | gap-check: ${gapResult?.passed !== false ? 'PASS' : 'FAIL (non-blocking)'}`)
+            log(`Block ${slug}: PR opened ${prResult.url || '#' + (prResult.number || '?')} | gap-check: ${gapLabel}`)
           } else {
-            log(`Block ${slug}: PR not created — ${prResult?.notes || 'gh unavailable; open manually'}`)
+            log(`Block ${slug}: PR not created — ${prResult?.notes || 'gh unavailable; open manually'} | gap-check: ${gapLabel}`)
           }
+        } else {
+          log(`Block ${slug}: gap-check ${gapLabel}`)
         }
       }
     }
@@ -996,7 +1015,7 @@ Return using StructuredOutput: merged, escalated, conflictedFiles, commitHash, n
   }
 
   await writeBlockState(waveLabel)
-  if (budget.total) log(`Budget: ~${Math.round(budget.remaining() / 1000)}k tokens remaining.`)
+  if (typeof budget !== 'undefined' && budget.total) log(`Budget: ~${Math.round(budget.remaining() / 1000)}k tokens remaining.`)
 }
 
 // ================================================================
@@ -1013,6 +1032,13 @@ state.status = allClean ? 'done' : 'blocked'
 
 refreshStateTokens()
 const grand = state.tokens.grandTotal
+
+// Child token records for the Level-2 table + summary count — derived from committed state so RESUMED
+// blocks (completed in a prior invocation, never appended during this run) are still counted. This is
+// the same source refreshStateTokens() rolls up from, so the per-block table sums to the grand total.
+const childTokenRecords = Object.entries(state.blocks)
+  .filter(([, b]) => b.tokensTotal)
+  .map(([slug, b]) => ({ slug, total: b.tokensTotal }))
 
 const blockRows = blocks.map(b => {
   const s = state.blocks[b.slug]

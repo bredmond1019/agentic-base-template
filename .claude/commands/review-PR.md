@@ -84,6 +84,13 @@ restore it in Step 8.
 
 Read `planning/harness.json`. Run every check listed in `validation.checks[]` in order.
 
+**If `harness.json` is absent or has no `validation.checks[]`** (the config-absent convention every
+engine follows), fall back to the spec's `## Validation Commands` block: read
+`planning/<blockSlug>/tasks.md` (the `specFile` from Step 2) and run each command listed there in
+order, treating each as a gating check. If neither a harness config nor a spec Validation Commands
+block can be found, do **not** silently APPROVE — run no gating checks, record "gating suite: not
+found", and downgrade the verdict to COMMENT (never APPROVE) so a human runs the checks.
+
 Then always run the emoji gate last, diffing from the merge-base so only the PR's own
 changes are scanned:
 
@@ -145,8 +152,9 @@ on gating results only." and continue.
 - **APPROVE** — all gating checks pass, emoji gate passes, all located AC are MET.
 - **REQUEST_CHANGES** — any gating check with `gates: true` fails, emoji gate fails,
   or any AC is NOT MET or PARTIAL.
-- **COMMENT** — use only when informational (no spec found + all gating checks pass);
-  note what could not be verified so the human reviewer can fill the gap.
+- **COMMENT** — use only when informational (no spec found + all gating checks pass, **or** no gating
+  suite could be located at all per Step 4); note what could not be verified so the human reviewer can
+  fill the gap. Never APPROVE when the gating suite could not be located.
 
 ### Step 7 — Compose and post the review
 

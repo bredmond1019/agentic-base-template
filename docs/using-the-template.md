@@ -118,7 +118,7 @@ For a small feature you want to try on a branch *before* committing it to `maste
 ```
 
 This gets the experimental work the same decomposition rigor as a roadmap block (disjoint-ownership
-analysis, `execution-plan.json`, pipeline recommendation) without polluting the roadmap. See
+analysis, pipeline recommendation) without polluting the roadmap. See
 `planning/decisions/D34-adhoc-planning-seam.md`.
 
 See `.claude/commands/README.md` for the full pipeline reference, argument conventions, and

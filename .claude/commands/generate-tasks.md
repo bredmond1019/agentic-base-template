@@ -48,7 +48,7 @@ $ARGUMENTS — one of two input modes:
    - **Use what the block already gives you.** A well-authored block (see `/generate-master-plan`)
      names its **Files** (New vs Modified, by path), an **Out of scope** boundary, and an optional
      **Interfaces / shared surface**. When present, **carry these through** rather than re-deriving:
-     the named files seed each task's ownership + the `execution-plan.json` (steps 6 + 12), and **Out
+     the named files seed each task's disjoint ownership (step 6), and **Out
      of scope is a hard boundary** — do not generate tasks beyond it. Only fall back to deriving file
      ownership yourself when the block doesn't name files.
 
@@ -153,28 +153,7 @@ $ARGUMENTS — one of two input modes:
    If `breakdown.mode` is `auto` and any tasks were flagged in step 10, note that breakdown must run
    first and the pipeline recommendation applies to each resulting sub-spec, not this spec directly.
 
-12. **Author the execution plan (only when recommending a block runner; D22).** If step 11 recommends
-    `/sdlc-block` (or it is a plausible choice), write the dependency graph you already derived in step 6
-    (each task's files + disjoint-ownership boundaries) to `planning/<spec-slug>/sdlc/execution-plan.json`
-    so the block's Analyze stage can LOAD it instead of re-deriving it on an Opus agent. Follow
-    `.claude/workflows/execution-plan.schema.json`:
-    - `blockId` = the spec slug; `tasks` = an object keyed by task number ("1", "2", …), one entry per
-      `### N.` heading, each with `num`, `title`, `dependsOn` (task numbers whose output it consumes),
-      `filesCreated`, `filesModified` (existing shared files), and an `evidence` quote for each
-      dependency edge. Carry over each task's `recommendBreakdown`/`breakdownReason` from step 10.
-    - `additiveFiles` = shared files every touching task only APPENDS to (barrels/index re-exports,
-      registries/manifests, auto-generated reference docs) — safe to union-merge.
-    - **Omit `waves`** — the engine computes them deterministically from the graph.
-    Then commit it with the spec (or in a follow-up commit if the spec was already committed in step 9):
-    ```bash
-    git add planning/<spec-slug>/sdlc/execution-plan.json
-    git commit -m "chore: add execution plan for <spec-slug>"
-    ```
-    Skip this step entirely when the recommendation is `/sdlc-run` or `/sdlc-task` (no block, no plan
-    needed). The block validates the plan on load and falls back to its own Opus analyzer if the plan is
-    absent, malformed, or stale (tasks.md edited afterward), so a skipped plan is always safe.
-
-13. Report the path written and suggest the next step:
+12. Report the path written and suggest the next step:
     "Spec written and committed to planning/<spec-slug>/tasks.md. Run `/breakdown planning/<spec-slug>/tasks.md` to decompose into atomic sub-steps."
 
 ## Context / Files to Read

@@ -64,7 +64,7 @@ in lockstep with the workflow code in `.claude/workflows/`.
 | Convention | Rule |
 |---|---|
 | **Lowercase docs** | `status.md`, `master-plan.md`, `context.md`, `log.md`, `index.md` — no uppercase names |
-| **Concept-folder model** | Spec work lives at `planning/<concept>/tasks.md`; pipeline machine-state at `planning/<concept>/sdlc/` (`execution-plan.json`, `reports/`) |
+| **Concept-folder model** | Spec work lives at `planning/<concept>/tasks.md`; pipeline machine-state at `planning/<concept>/sdlc/` (run-state JSON, `reports/`) |
 | **`index.md` for directories** | Every directory that needs a listing file uses `index.md`, not `README.md` |
 | **`sdlc/` reserved** | `planning/<concept>/sdlc/` is exclusively for pipeline-generated state — never author files there manually |
 

@@ -149,32 +149,51 @@ unattended.
 |---|---|---|
 | `/sdlc-run <name> [N]` | one task or a **full spec**, sequential | none — runs on the current branch, updates STATUS/Log directly |
 | `/sdlc-task <name> N` | **one** task, parallel-safe | own git worktree; defers STATUS/Log to merge time |
-| `/sdlc-block <name> [range]` | a **whole spec** as dependency-ordered waves | shared integration branch; worktrees only for genuinely parallel waves; **merges for you** |
+| `/sdlc-flow <name> [range]` | a **full spec** as one shared worktree, per-task test→fix loop, one end review, a PR | own worktree; terminates in a PR |
+| `/sdlc-block [plan-file]` | a **whole roadmap** (master-plan) as a branch train — one `/sdlc-flow` per independent block, in dependency-ordered waves | each block its own worktree + PR; orchestrator owns the train branch and merges in dependency order |
 
 > **Full reference with mermaid diagrams, per-stage detail, and token usage:**
 > [`docs/workflows/`](../../docs/workflows/index.md) — one page per engine plus the manual lifecycle.
 
-### `/sdlc-block` — spec-level orchestration
+### `/sdlc-block` — roadmap orchestration (branch train)
 
-**Drive an entire spec to completion in one invocation** — "a more powerful `/sdlc-run`". A **pre-flight**
-first guarantees a clean tree with the spec committed (auto-generates a missing `tasks.md`, commits an
-uncommitted one, aborts fast if any *unrelated* file is dirty). **Analyze** then loads or derives the
-dependency-ordered execution plan and snapshots baselines **once**. Each wave runs a **fresh implement
-agent per task**: a width-1 wave runs **in place** on the integration branch (no worktree/merge, with
-`git reset --hard` rollback on failure); a width-≥2 wave isolates each task in a worktree
-(`/sdlc-task --implement-only`) and **selective-union-merges** in order. Once every task has landed, **one
-consolidated back-half** (`/sdlc-run --from test`) tests → reviews → fixes → documents → wraps up the
-integrated tree. Adds bounded per-task **retries** with failure **triage**, subtree-scoped escalation, and
-**resume** (git + a `sdlc-block-state.json` breadcrumb) without duplicating work. See
-[D23](../../planning/decisions/D23-lean-block-shared-setup.md)/[D24](../../planning/decisions/D24-consolidated-back-half.md)/[D28](../../planning/decisions/D28-sdlc-block-task-state.md).
+**Drive a whole master-plan roadmap to completion in one invocation.** Fans out **one `/sdlc-flow` per
+independent block** over dependency-ordered waves, producing a **branch train of reviewable PRs**.
+Blocks in a wave are independent *by construction* (the master-plan's per-block **Files** + **Out of
+scope** contract). A **pre-flight** guarantees a clean tree with the plan committed and sets up the train
+branch off the base; **enumerate** parses the `## Phase N` / `### Block X` sections into blocks + a
+dependency graph. Per wave it ensures each block's `tasks.md`, fans out the child flows (each `--no-pr`),
+runs a **per-block close-out gap-check** (scoped to the whole block, `<train>...HEAD`), then opens the PR
+(default) or merges into the base (`--auto-merge`), advancing the train in dependency order. A final
+`/close-out --gap-check-only` runs over the full train. See
+[D34](../../planning/decisions/D34-adhoc-planning-seam.md).
 
 | Arg | Meaning | Default |
 |---|---|---|
-| `<name>` | Required — drives every `planning/<name>/…` path. | — |
-| `[range]` | Optional task selection (2nd positional **or** `--tasks`): `1-7`, `1,3,5`, `1-3,7`. | all tasks |
-| `--max-retries N` | Total attempts per task before escalation. | `2` |
-| `--max-wave-width W` | Max tasks run concurrently per batch (worktree waves). | `3` |
-| `--verify-depth <d>` | Per-task verification: `consolidated` (per-task review off) or `consolidated+review` (one non-gating localization review per task). Overrides `harness.json` `block.verify`. | `consolidated` |
+| `[plan-file]` | Optional 1st positional — a master-plan-format path, or a slug → `planning/<slug>/plan.md`. | `planning/master-plan.md` |
+| `--base <branch>` | Base branch the train forks from / merges into. | `main` |
+| `--auto-merge` | Merge each block into `<base>` in dependency order (no PRs). | off |
+| `--no-pr` | Branch train only — no PRs anywhere. | off |
+| `--max-parallel-blocks N` | Max `/sdlc-flow` runs in flight per wave (default from `harness.json` `block.maxParallelBlocks`). | `3` |
+| `--blocks <sel>` | Phase selection: `0`, `0-1`, `0,2` — only those phases' blocks run. | all phases |
+| `--resume` | Re-read `block-orchestration-state.json`, skip done blocks, continue. | — |
+
+After the train is built, review each PR with **`/review-PR <PR#>`** and land them bottom-up with
+**`/merge-train`** (below).
+
+### `/review-PR <PR#> [plan-slug]`
+Spec-aware review for a branch-train PR. Locates the block's `block-orchestration-state.json`, checks
+out the PR, runs the project's gating suite (from `harness.json`, falling back to the spec's
+`## Validation Commands`) + the emoji gate (merge-base scoped), reviews the diff against the block's
+Acceptance Criteria, and posts an APPROVE / REQUEST_CHANGES / COMMENT verdict via `gh pr review`. Restores
+the original branch when done.
+
+### `/merge-train [plan-slug]`
+Merges the block-train PRs into the base in the recorded `merge_order` (dependency order), halting on the
+first unresolved conflict. Pre-flights a clean tree + synced base, classifies each block
+(ready / already-merged / needs-approval / has-conflicts / escalated), stops before any merge if any PR
+is `CONFLICTING`, confirms with you, then merges each via `gh pr merge --merge --delete-branch`. Exits
+early for `--auto-merge` / `--no-pr` runs. Resume-safe — already-merged blocks are auto-detected on re-run.
 
 ---
 
@@ -244,8 +263,8 @@ Each spec carries a **Validation Commands** block and ends with a Validate task.
 **`--from <path>` mode** decomposes a single **standalone block file** (e.g. a `/plan` output)
 instead of a master-plan block — for ad-hoc / experimental features kept out of the roadmap. It
 derives the slug from the file's parent directory and writes `tasks.md` beside the source, then runs
-the identical decomposition / pipeline-recommendation / `execution-plan.json` logic. The default
-master-plan slug mode is unchanged.
+the identical decomposition / pipeline-recommendation logic. The default master-plan slug mode is
+unchanged.
 
 ### `/breakdown`
 Reads a task spec and the source files each step touches, then writes a granular
@@ -272,7 +291,7 @@ unchanged.
 `/chore` and `/feature` write a runnable `tasks.md` **directly** (the fast path). `/plan` writes a
 `plan.md` that doubles as a **standalone block definition**: run it directly via `/implement`, or take
 the rigorous route — `/generate-tasks --from planning/plan-<slug>/plan.md` decomposes it into a
-`tasks.md` (with `execution-plan.json` + pipeline recommendation) to run on a feature branch via
+`tasks.md` (with a pipeline recommendation) to run on a feature branch via
 `/sdlc-flow`, all **without** touching `master-plan.md`. See
 `planning/decisions/D34-adhoc-planning-seam.md`.
 

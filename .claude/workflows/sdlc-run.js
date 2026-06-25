@@ -332,7 +332,7 @@ function buildTokensBlock() {
 //
 // The engine ships NO stack defaults. A project declares its validation policy in
 // planning/harness.json. The workflow runtime has no filesystem access, so a dedicated
-// micro-loader agent reads + parses the file (the same way sdlc-block loads execution-plan.json).
+// micro-loader agent reads + parses the file (the same pattern every engine uses for harness.json).
 // Returns the parsed config object, or null when the file is absent or invalid — callers then
 // degrade to the spec's `## Validation Commands` section and disable the UI-test stage.
 // ----------------------------------------------------------------

@@ -32,7 +32,7 @@ planning/<concept>/
 ├── tasks.md          ← the spec (Goal / Context / Tasks / Acceptance / Validation Commands)
 ├── breakdown.md      ← optional human decomposition notes
 └── sdlc/             ← pipeline state (machine-managed — don't hand-edit)
-    ├── execution-plan.json
+    ├── *-state.json   ← committed run-state breadcrumb (engine-specific)
     └── reports/      ← task{N}-implement|test|review|document|ui-test|log.md, block-workflow.md
 ```
 
