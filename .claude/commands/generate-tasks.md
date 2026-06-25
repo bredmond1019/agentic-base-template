@@ -7,23 +7,35 @@ $ARGUMENTS — one of two input modes:
                phase-dotted slug), e.g. `<spec-slug>` or `2.1-learn-paths-structural-fixes`. New
                master-plan specs follow the `P.N-slug` convention (see `planning/index.md` → *Task
                directory naming convention*). The block definition is read from `master-plan.md`.
-             - **Standalone-block mode (`--from <path>`):** decompose a single standalone block
-               definition file (e.g. a `/plan` output, `--from planning/plan-<slug>/plan.md`) instead
-               of a master-plan block. Used for ad-hoc / experimental features kept out of the
-               roadmap (see `planning/decisions/D34-adhoc-planning-seam.md`).
+             - **Plan-file mode (`--from <path> [phaseN-blockX]`):** decompose a block from a
+               standalone plan file instead of `master-plan.md`. The file may be either a single
+               standalone block definition (legacy D34) or a master-plan-format `/plan` output with
+               `## Phase N` / `### Block X` headings. For a master-plan-format file, append the
+               `phaseN-blockX` selector to pick which block to decompose (required when the file has
+               more than one block). Used for ad-hoc / experimental features kept out of the roadmap
+               (see `planning/decisions/D34-adhoc-planning-seam.md`).
              Required. If omitted, stop and say: "Usage: /generate-tasks <P.N-slug>  (e.g.
-             <spec-slug>), or /generate-tasks --from planning/plan-<slug>/plan.md"
+             <spec-slug>), or /generate-tasks --from planning/plan-<slug>/plan.md [phaseN-blockX]"
 
 ## Instructions
 
 1. Run `/prime` to orient to the repo (standing rules, architecture).
 
 2. **Resolve the input mode and the spec slug.**
-   - **If `$ARGUMENTS` contains `--from <path>` (standalone-block mode):** the source is the block
-     definition file at `<path>`; skip phase/block parsing entirely. Derive the spec slug from the
-     **parent directory name** of `<path>` (e.g. `planning/plan-add-rate-limiter/plan.md` →
-     slug `plan-add-rate-limiter`). The decomposed `tasks.md` is written **into that same directory**
-     (`planning/plan-add-rate-limiter/tasks.md`). If `<path>` does not exist, stop and say so.
+   - **If `$ARGUMENTS` contains `--from <path>` (plan-file mode):** the source is the plan file at
+     `<path>`. Derive the spec slug from the **parent directory name** of `<path>` (e.g.
+     `planning/plan-add-rate-limiter/plan.md` → slug `plan-add-rate-limiter`); the decomposed
+     `tasks.md` is written **into that same directory** (`planning/plan-add-rate-limiter/tasks.md`),
+     so `/sdlc-flow <slug>` / `/sdlc-run <slug>` can run it. If `<path>` does not exist, stop and say
+     so. Then resolve which block to read:
+     - If a `phaseN-blockX` selector follows `--from <path>` (accept any of `phase0-blockA`,
+       `phase0blockA`, `0-A`, `Phase 0 Block A`), that names the block to decompose.
+     - If no selector is given, inspect `<path>`: a **single standalone block file** (no `## Phase` /
+       `### Block` headings — legacy D34) is decomposed whole; a **master-plan-format file** with
+       exactly one block defaults to that block; a master-plan-format file with **more than one
+       block** has no safe default — STOP, list the blocks, and ask which one (plan-quality floor:
+       never guess a load-bearing target). To run the whole multi-block plan instead, point the user
+       at `/sdlc-block <path>`.
    - **Otherwise (master-plan slug mode):** parse `$ARGUMENTS` to extract the phase number and
      block/project identifier (e.g. `phase0-blockC` → phase 0, block C). Accept any of these forms:
      `phase0-blockC`, `phase0blockC`, `0-C`, `Phase 0 Block C`. The spec slug is the normalized
@@ -37,11 +49,13 @@ $ARGUMENTS — one of two input modes:
    - If `$ARGUMENTS` contains `--force`, proceed and overwrite.
 
 4. **Read the source block definition.**
-   - **Standalone-block mode (`--from <path>`):** read the block definition file at `<path>`. Treat
-     its substance — the goal/description, problem/solution, relevant files, and acceptance criteria —
-     as the block definition. **Author fresh decomposed `### N.` tasks from it; do not merely copy a
-     pre-existing step list verbatim** (apply the same scoping and disjoint-ownership rigor below).
-     Do NOT read `master-plan.md` in this mode.
+   - **Plan-file mode (`--from <path>`):** read the plan file at `<path>`. When it is master-plan
+     format, read ONLY the section for the block resolved in step 2 (its `## Phase N` → `### Block X`
+     subsection) — not the overview, not sibling blocks; when it is a single standalone block file,
+     read the whole file. Treat its substance — the goal/description, problem/solution, relevant
+     files, and acceptance criteria — as the block definition. **Author fresh decomposed `### N.`
+     tasks from it; do not merely copy a pre-existing step list verbatim** (apply the same scoping
+     and disjoint-ownership rigor below). Do NOT read `master-plan.md` in this mode.
    - **Master-plan slug mode:** read ONLY the relevant section for the requested block in
      `planning/master-plan.md` (the phase/block definition).
    - In both modes: do NOT read status.md — the target is given explicitly.
@@ -117,41 +131,41 @@ $ARGUMENTS — one of two input modes:
    (the SDLC engines apply the same heuristic at run time per `breakdown.mode`, so this is the
    authoring-time preview of that decision).
 
-11. **Pipeline recommendation.** After writing the tasks, evaluate which run command fits the block and
-   report a clear recommendation with a one-line reason. Three whole-block runners are available:
-   `/sdlc-run` (one shared implement context, runs on the current branch), `/sdlc-flow` (sequential
-   tasks in one dedicated worktree, per-task test→fix loop, one end review, terminates in a PR — the
-   default for non-trivial feature work), and the lean `/sdlc-block` (fresh implement agent per task,
-   in-place sequential by default, worktrees only for genuinely parallel waves, one consolidated
-   back-half). Use these signals:
+11. **Pipeline recommendation.** After writing the tasks, recommend the run command that fits this
+   spec, with a one-line reason. The harness is a ladder of escalating ceremony — match the spec to
+   the lowest rung that fits. This command decomposes **one** block, so the recommendation is normally
+   one of the single-spec engines; `/sdlc-block` is named only to redirect when the block belongs to a
+   multi-block roadmap.
 
-   - **`/sdlc-run`** — small, homogeneous, chore-style, or localized-complex blocks where a single
-     shared implement context holds all tasks without blurring or overflowing. No worktree, no PR. Also
-     the right choice for single-concern follow-ups and back-half-only restarts (`--from test`).
-   - **`/sdlc-flow`** (default for non-trivial feature work) — non-trivial or new-feature blocks with
-     many moving parts: sequential tasks in one dedicated worktree (no inter-task merge conflicts),
-     per-task test→fix loop (≤3 attempts, Opus escalation), one consolidated end review over the
-     integrated tree, and a PR as the terminal step. Use `--auto-merge` to merge + clean the worktree on
-     success; `--no-pr` to stop after wrap-up; `--resume` to re-attach after an interruption.
-   - **`/sdlc-block`** (lean) — speed-critical runs where ≥2 tasks genuinely share a wave (disjoint
-     file ownership from step 6, no `dependsOn` → true parallelism), or when tasks are large or
-     heterogeneous enough that fresh per-task implement isolation is the priority over a shared worktree.
-     Count the independent tasks per wave, not just the total.
-   - **`/sdlc-task <N>`** — Not a strategy for running all tasks; name it only when the right move is
-     one specific task in an isolated worktree (e.g. a high-risk surgical change, or resuming after a
-     block failure on task N). If naming it, also say which task number and why isolation matters.
+   - **`/patch`** — trivial, single-file hotfix with no new tests. Not produced by this command (a
+     spec implies enough scope to decompose), so name it only to redirect when the "spec" turns out to
+     be a one-line fix.
+   - **lean `/sdlc-task <spec-slug> [range]`** — one small unit of behavior change: a handful of
+     tightly-coupled tasks that want a fast test→fix loop but no review / docs / PR ceremony. The
+     cheapest real engine and the natural runner for `/ticket` and `/chore` outputs. In-place by
+     default; `--worktree` to isolate.
+   - **`/sdlc-run <spec-slug>`** — one whole spec, full lifecycle (implement→test→review→document→
+     wrap-up) in a single shared implement context, in place on the current branch, no PR. Best for
+     small / homogeneous / sequential specs where one context holds all the tasks without blurring or
+     overflowing.
+   - **`/sdlc-flow <spec-slug>`** (default for non-trivial feature work) — one whole spec in a
+     dedicated worktree terminating in a PR: sequential tasks (no inter-task merge conflicts), per-task
+     test→fix loop (≤3 attempts, Opus escalation), one consolidated end review over the integrated
+     tree. Use when the work has many moving parts or a reviewable PR is wanted. `--auto-merge` to
+     merge + clean the worktree on a clean PASS; `--no-pr` to stop after wrap-up; `--resume` to
+     re-attach after an interruption.
+   - **`/sdlc-block <plan-file>`** — the rung *above* a single spec: a multi-block roadmap. If this
+     block is one of several in `planning/master-plan.md` or a `/plan` output, drive the whole roadmap
+     with `/sdlc-block <plan-file>` — it ensures each block's `tasks.md` and fans out one `/sdlc-flow`
+     per independent block as a branch train of reviewable PRs (reviewed with `/review-PR`, merged with
+     `/merge-train`) — instead of running this one block alone.
+   - **`/sdlc-task <spec-slug> <N>`** — not a strategy for the whole spec; name it only when the right
+     move is one specific task in isolation (a high-risk surgical change, or resuming after a failure on
+     task N). Say which task number and why isolation matters.
 
-   **Per-task review depth (only when recommending `/sdlc-block`).** The lean block defaults to
-   `--verify-depth consolidated` (per-task review **off** — one review at the end over the integrated
-   tree). Reuse the step-10 decomposition signal: when tasks are large / complex / heterogeneous enough
-   that a single end-of-run review would struggle to localize **which task** caused a finding, recommend
-   `--verify-depth consolidated+review` (a per-task review pass that acts as a localization map). State
-   the tradeoff: it adds roughly **38k output tokens × N tasks**, and a per-task review validates a slice
-   **in isolation** — the consolidated review stays authoritative for cross-task integration. For small
-   homogeneous blocks, leave it off.
-
-   If `breakdown.mode` is `auto` and any tasks were flagged in step 10, note that breakdown must run
-   first and the pipeline recommendation applies to each resulting sub-spec, not this spec directly.
+   Recommend exactly one primary command (optionally plus `/sdlc-task <N>` when a single task warrants
+   isolation). If `breakdown.mode` is `auto` and any tasks were flagged in step 10, note that breakdown
+   must run first and the recommendation applies to each resulting sub-spec, not this spec directly.
 
 12. Report the path written and suggest the next step:
     "Spec written and committed to planning/<spec-slug>/tasks.md. Run `/breakdown planning/<spec-slug>/tasks.md` to decompose into atomic sub-steps."
@@ -220,13 +234,12 @@ Decomposition assessment:
 
 Pipeline recommendation:
   <one of:>
-  /sdlc-run <spec-slug>          — <N> tasks, small/homogeneous/chore; one shared implement context is sufficient
-  /sdlc-flow <spec-slug>         — <N> tasks, non-trivial feature work; dedicated worktree, per-task test→fix, one end review, PR (<reason: many moving parts / needs isolation>)
+  /sdlc-task <spec-slug>         — <N> tasks, one small tested unit; fast test→fix loop, no review/docs/PR
+  /sdlc-run <spec-slug>          — <N> tasks, small/homogeneous/sequential; one shared implement context, in place, no PR
+  /sdlc-flow <spec-slug>         — <N> tasks, non-trivial feature work; dedicated worktree, per-task test→fix, one end review, PR (<reason: many moving parts / reviewable PR wanted>)
   /sdlc-flow <spec-slug> --auto-merge
                                  — as above; merge PR + clean worktree on clean PASS
-  /sdlc-block <spec-slug>        — <N> tasks; speed-critical with <M> parallel tasks across <W> waves, or fresh per-task isolaton required (<reason>)
-  /sdlc-block <spec-slug> --verify-depth consolidated+review
-                                 — as above, plus per-task review for localization (<reason; +~38k tok × N>)
+  /sdlc-block <plan-file>        — this block is one of several; drive the whole roadmap as a branch train of PRs
   /sdlc-task <spec-slug> <N>     — run task <N> in isolation; <reason isolation matters here>
 
 Next (optional — decompose first):

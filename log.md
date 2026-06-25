@@ -5,6 +5,27 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-25 — Phase 2 C complete: /generate-tasks four-engine ladder + plan-file block addressing, /generate-master-plan `Depends on` + default-order note
+
+Phase 2 C — the last Phase-2 block (planner + routing surface) — is done, prompt-only (no engine JS). Three changes plus mirror sync:
+
+- **`/generate-tasks` step 11 rewrite to the four-engine ladder.** The stale step 11 described `/sdlc-block` as a *lean per-task* runner (the Plan-F3 repurposing that Phase 1 A replaced) and referenced the deleted `--verify-depth`/`block.verify` flags. Rewrote it as an escalating-ceremony ladder — `/patch` → lean `/sdlc-task <slug> [range]` → `/sdlc-run` / `/sdlc-flow` → `/sdlc-block <plan-file>` — with `/sdlc-block` correctly framed as the rung *above* a single spec (a multi-block roadmap orchestrator that fans out one `/sdlc-flow` per block as a branch train of PRs, reviewed with `/review-PR` + `/merge-train`). Removed the `--verify-depth consolidated+review` subsection entirely. Updated the Report's Pipeline-recommendation example to match.
+- **Plan-file block addressing in `--from` mode.** `/plan` (Phase 2 A) now emits master-plan format (multiple `### Block X`), but `--from` treated the whole file as one standalone block. Extended `--from <path> [phaseN-blockX]`: a single standalone block file (legacy D34) is decomposed whole; a master-plan-format file reads ONLY the selected block's section; multi-block with no selector STOPs and asks (plan-quality floor), pointing at `/sdlc-block <path>` for the whole roadmap. Output stays in the plan file's parent dir so `/sdlc-flow <slug>` resolves it — matching `/plan`'s Report.
+- **`/generate-master-plan` `Depends on` + default ordering.** Added the optional `- **Depends on:** Block <id>` line to the block skeleton (Block Contract + concrete example) and a "phases sequential, blocks within a phase parallel" default-order paragraph, matching what `sdlc-block.js`'s `enumerate-blocks` actually reads (bare `Block A` = same phase; `phaseN-blockA` accepted).
+- **Mirror sync.** Re-synced the badly-stale `.agents/skills/generate-tasks/SKILL.md` (it predated both D34's `--from` mode and all of Phase 2) to a faithful copy of the command. Created `.agents/skills/generate-master-plan/SKILL.md`, which never existed (a D34 oversight) — built for parity with the active mirror set. Both mirror bodies are byte-identical to their commands. (The broader `.agents/` keep-or-freeze question is deferred to Phase 3 B.)
+
+Step 12 (the orphaned `execution-plan.json` authoring) was already removed in `f6e800f` during the Phase 1 code-review remediation — confirmed grep-clean, nothing to re-remove. Validation: all four engines `node --check` clean (unchanged — prompt-only); `execution-plan` and `verify-depth` grep-clean in `generate-tasks.md` + mirror. **Phase 2 complete (A/B/C). Next: Phase 3 A (ADRs start at D37) / B (docs) / C (schema + scaffold).**
+
+```diff
+ .agents/skills/generate-master-plan/SKILL.md |  +new (mirror)
+ .agents/skills/generate-tasks/SKILL.md       |  re-synced to command
+ .claude/commands/generate-master-plan.md     |  +Depends on line + default-order note
+ .claude/commands/generate-tasks.md           |  step 11 ladder rewrite + --from block addressing
+ planning/handoff.md                          |  -consumed
+```
+
+---
+
 ## 2026-06-25 — Phase 2 A/B complete: /plan rewritten to mini-roadmap format, /feature removed, /ticket added, /chore wired to lean /sdlc-task
 
 Phase 2 A delivered a complete rewrite of the `/plan` command to produce master-plan format (phases/blocks/Quick Reference table) into `planning/plan-<slug>/plan.md`. The new `/plan` routes multi-block efforts via `/sdlc-block <path>` or single standalone blocks via `/generate-tasks --from <path>` + `/sdlc-flow`, while retaining D20 clarify gate, D35 plan-quality floor, and D19 property self-check. Removed `/feature` command entirely; cleaned all cross-references. Phase 2 B added a new `/ticket` command for single-block behavior-change planning with observable Acceptance Criteria + Testing Strategy, routed to lean `/sdlc-task ticket-{name}`. Updated `/chore` command + mirror to recommend `/sdlc-task chore-{name}` in the Report instead of `/patch`, solidifying the distinction: `/chore` for work that doesn't *change observable behavior* (refactoring, docs, cleanup), `/ticket` for work that does. Updated `README.md` with `/ticket` row in the ad-hoc planning table and clarified the `/chore` vs `/ticket` distinction. All four engines `node --check` clean.

@@ -1,3 +1,10 @@
+---
+name: generate-master-plan
+description: >
+  Trigger on '/generate-master-plan' or when running the Generate Master Plan command (Author the
+  project roadmap as canonical block definitions in planning/master-plan.md).
+---
+
 # Generate Master Plan — Author the project roadmap as canonical block definitions.
 
 ## Variables

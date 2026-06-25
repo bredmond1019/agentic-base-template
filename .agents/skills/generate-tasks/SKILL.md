@@ -1,38 +1,77 @@
 ---
 name: generate-tasks
 description: >
-  Trigger on '/generate-tasks' or when running the Generate Tasks command (Generate a task spec for a specified phase and block.)
+  Trigger on '/generate-tasks' or when running the Generate Tasks command (Generate a task spec
+  for a specified phase and block, from master-plan.md or a --from plan file).
 ---
 
 # Generate Tasks — Generate a task spec for a specified phase and block.
 
 ## Variables
 
-$ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
-             e.g. `<spec-slug>` or `2.1-learn-paths-structural-fixes`.
-             New master-plan specs follow the `P.N-slug` convention (see
-             `planning/index.md` → *Task directory naming convention*); ad-hoc work uses
-             `/chore` or `/plan` instead.
-             Required. If omitted, stop and say: "Usage: /generate-tasks <P.N-slug>  (e.g. <spec-slug>)"
+$ARGUMENTS — one of two input modes:
+             - **Master-plan slug mode (default):** the spec's `planning/` directory name (its
+               phase-dotted slug), e.g. `<spec-slug>` or `2.1-learn-paths-structural-fixes`. New
+               master-plan specs follow the `P.N-slug` convention (see `planning/index.md` → *Task
+               directory naming convention*). The block definition is read from `master-plan.md`.
+             - **Plan-file mode (`--from <path> [phaseN-blockX]`):** decompose a block from a
+               standalone plan file instead of `master-plan.md`. The file may be either a single
+               standalone block definition (legacy D34) or a master-plan-format `/plan` output with
+               `## Phase N` / `### Block X` headings. For a master-plan-format file, append the
+               `phaseN-blockX` selector to pick which block to decompose (required when the file has
+               more than one block). Used for ad-hoc / experimental features kept out of the roadmap
+               (see `planning/decisions/D34-adhoc-planning-seam.md`).
+             Required. If omitted, stop and say: "Usage: /generate-tasks <P.N-slug>  (e.g.
+             <spec-slug>), or /generate-tasks --from planning/plan-<slug>/plan.md [phaseN-blockX]"
 
 ## Instructions
 
 1. Run `/prime` to orient to the repo (standing rules, architecture).
 
-2. Parse `$ARGUMENTS` to extract the phase number and block/project identifier
-   (e.g. `phase0-blockC` → phase 0, block C).
-   - Accept any of these forms: `phase0-blockC`, `phase0blockC`, `0-C`, `Phase 0 Block C`.
-   - If the argument cannot be parsed into a phase + block, stop and explain the expected format.
+2. **Resolve the input mode and the spec slug.**
+   - **If `$ARGUMENTS` contains `--from <path>` (plan-file mode):** the source is the plan file at
+     `<path>`. Derive the spec slug from the **parent directory name** of `<path>` (e.g.
+     `planning/plan-add-rate-limiter/plan.md` → slug `plan-add-rate-limiter`); the decomposed
+     `tasks.md` is written **into that same directory** (`planning/plan-add-rate-limiter/tasks.md`),
+     so `/sdlc-flow <slug>` / `/sdlc-run <slug>` can run it. If `<path>` does not exist, stop and say
+     so. Then resolve which block to read:
+     - If a `phaseN-blockX` selector follows `--from <path>` (accept any of `phase0-blockA`,
+       `phase0blockA`, `0-A`, `Phase 0 Block A`), that names the block to decompose.
+     - If no selector is given, inspect `<path>`: a **single standalone block file** (no `## Phase` /
+       `### Block` headings — legacy D34) is decomposed whole; a **master-plan-format file** with
+       exactly one block defaults to that block; a master-plan-format file with **more than one
+       block** has no safe default — STOP, list the blocks, and ask which one (plan-quality floor:
+       never guess a load-bearing target). To run the whole multi-block plan instead, point the user
+       at `/sdlc-block <path>`.
+   - **Otherwise (master-plan slug mode):** parse `$ARGUMENTS` to extract the phase number and
+     block/project identifier (e.g. `phase0-blockC` → phase 0, block C). Accept any of these forms:
+     `phase0-blockC`, `phase0blockC`, `0-C`, `Phase 0 Block C`. The spec slug is the normalized
+     directory form (e.g. `<spec-slug>`). If the argument cannot be parsed into a phase + block, stop
+     and explain the expected format.
 
-3. Check whether a spec already exists at `planning/phaseN-blockX/tasks.md` (using the
-   normalized directory form, e.g. `planning/<spec-slug>/tasks.md`).
+3. Check whether a spec already exists at `planning/<spec-slug>/tasks.md` (using the slug resolved in
+   step 2; in `--from` mode the slug is the source file's parent directory).
    - If it exists, read it and report: "Spec already exists at <path>. Overwrite? (re-run with
      `--force` appended to overwrite, or run `/breakdown <path>` to decompose it instead.)"
    - If `$ARGUMENTS` contains `--force`, proceed and overwrite.
 
-4. Read ONLY the relevant section for the requested block in:
-   - `planning/master-plan.md` (the phase/block definition)
-   - Do NOT read status.md — the target block is given explicitly.
+4. **Read the source block definition.**
+   - **Plan-file mode (`--from <path>`):** read the plan file at `<path>`. When it is master-plan
+     format, read ONLY the section for the block resolved in step 2 (its `## Phase N` → `### Block X`
+     subsection) — not the overview, not sibling blocks; when it is a single standalone block file,
+     read the whole file. Treat its substance — the goal/description, problem/solution, relevant
+     files, and acceptance criteria — as the block definition. **Author fresh decomposed `### N.`
+     tasks from it; do not merely copy a pre-existing step list verbatim** (apply the same scoping
+     and disjoint-ownership rigor below). Do NOT read `master-plan.md` in this mode.
+   - **Master-plan slug mode:** read ONLY the relevant section for the requested block in
+     `planning/master-plan.md` (the phase/block definition).
+   - In both modes: do NOT read status.md — the target is given explicitly.
+   - **Use what the block already gives you.** A well-authored block (see `/generate-master-plan`)
+     names its **Files** (New vs Modified, by path), an **Out of scope** boundary, and an optional
+     **Interfaces / shared surface**. When present, **carry these through** rather than re-deriving:
+     the named files seed each task's disjoint ownership (step 6), and **Out
+     of scope is a hard boundary** — do not generate tasks beyond it. Only fall back to deriving file
+     ownership yourself when the block doesn't name files.
 
 5. **Clarify gate (only when enabled).** Read `planning/harness.json` → `planning.clarify`. When it is
    `true` **or** `$ARGUMENTS` contains `--clarify`, and the block definition is genuinely ambiguous (its
@@ -42,6 +81,15 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
    `planning.clarify` is absent/`false` and no `--clarify` flag is present, skip this step entirely and
    behave exactly as before. (`--clarify` is a control flag only — do not treat it as part of the
    phase/block slug when parsing `$ARGUMENTS`.)
+   - **Plan-quality floor — clarify-or-abort, never fabricate (holds even when the gate is off).** If
+     decomposing the block would require *inventing* a load-bearing fact you cannot ground in the
+     block definition, `CLAUDE.md`, `planning/context.md`, or the repo (e.g. which files a task owns,
+     an observable acceptance criterion, a real dependency edge) — do not emit a fabricated `tasks.md`.
+     Instead: in an **interactive session**, STOP and ask the user a targeted question; in a
+     **non-interactive / preflight context** (invoked by `/sdlc-block` / `/sdlc-flow` to auto-generate
+     a missing spec), **ABORT with a specific message naming exactly what's missing** so the human can
+     fix the block. This is the proactive complement to the D19 thin-spec abort: D19 catches a thin
+     spec after the fact; this prevents writing a confidently-wrong one in the first place.
 
 6. THINK HARD about correct scope:
    - Do not invent work beyond what the block defines.
@@ -53,7 +101,7 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
      this pattern (`### N.`) and will abort pre-flight on a spec that has none. Never use
      flat numbered lists (`1. **Title**`) or any other format for the task headings.
 
-7. Create the directory `planning/phaseN-blockX/` if it does not exist, then write the spec to `planning/phaseN-blockX/tasks.md` using the Output Format below.
+7. Create the directory `planning/<spec-slug>/` if it does not exist, then write the spec to `planning/<spec-slug>/tasks.md` using the Output Format below. (In `--from` mode the directory already exists — it holds the source block file — so the new `tasks.md` lands beside it.)
 
 8. **Property self-check (before committing).** A structurally valid spec can still be substantively
    thin and waste pipeline tokens. Re-read what you just wrote and confirm every required property
@@ -71,10 +119,11 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
 9. **Commit the spec.** Leave the working tree clean so a downstream `/sdlc-block` run never trips
    its clean-tree merge guard (an uncommitted `tasks.md` blocks every merge):
    ```bash
-   git add planning/phaseN-blockX/
-   git commit -m "chore: add spec for phaseN-blockX"
+   git add planning/<spec-slug>/
+   git commit -m "chore: add spec for <spec-slug>"
    ```
-   (Use the normalized directory slug, e.g. `chore: add spec for <spec-slug>`.)
+   (Use the slug resolved in step 2 — the master-plan directory slug, or in `--from` mode the source
+   file's parent directory. The `git add` stages the source block file too, which is fine.)
 
 10. **Decomposition assessment.** Before reporting, evaluate each task you just wrote against the
    coarseness heuristic and recommend which (if any) warrant a `/breakdown` first. The real predictor
@@ -89,43 +138,49 @@ $ARGUMENTS — the spec's `planning/` directory name (its phase-dotted slug),
    (the SDLC engines apply the same heuristic at run time per `breakdown.mode`, so this is the
    authoring-time preview of that decision).
 
-11. **Pipeline recommendation.** After writing the tasks, evaluate which run command fits the block and
-   report a clear recommendation with a one-line reason. The two whole-block runners differ only in
-   **how implement is scoped** — `/sdlc-run` runs **one** implement agent across all tasks; the lean
-   `/sdlc-block` runs **a fresh implement agent per task** (deliberate per-task context windows +
-   observability), then does **one** consolidated back-half (test/review/document/wrap-up) just like
-   `/sdlc-run`. The block runs tasks **in-place sequentially** by default and only spins worktrees for
-   genuinely parallel waves, so its cost is close to `/sdlc-run`'s. Use these signals:
+11. **Pipeline recommendation.** After writing the tasks, recommend the run command that fits this
+   spec, with a one-line reason. The harness is a ladder of escalating ceremony — match the spec to
+   the lowest rung that fits. This command decomposes **one** block, so the recommendation is normally
+   one of the single-spec engines; `/sdlc-block` is named only to redirect when the block belongs to a
+   multi-block roadmap.
 
-   - **`/sdlc-run`** (default) — small, homogeneous, or sequential blocks, **even past 4 tasks**. When a
-     single shared implement context can hold all the tasks without blurring or overflowing, this is the
-     cheapest correct choice (one agent, one back-half).
-   - **`/sdlc-block`** (lean) — recommend when tasks each benefit from a **fresh implement agent**:
-     large or heterogeneous tasks where one shared context would blur or overflow, **or** when ≥2 tasks
-     genuinely share a wave (disjoint file ownership from step 6, no `dependsOn` between them → true
-     parallelism). Count the independent tasks per wave, not just the total.
-   - **`/sdlc-task <N>`** — Not a strategy for running all tasks; name it only when the right move is
-     one specific task in an isolated worktree (e.g. a high-risk surgical change, or resuming after a
-     block failure on task N). If naming it, also say which task number and why isolation matters.
+   - **`/patch`** — trivial, single-file hotfix with no new tests. Not produced by this command (a
+     spec implies enough scope to decompose), so name it only to redirect when the "spec" turns out to
+     be a one-line fix.
+   - **lean `/sdlc-task <spec-slug> [range]`** — one small unit of behavior change: a handful of
+     tightly-coupled tasks that want a fast test→fix loop but no review / docs / PR ceremony. The
+     cheapest real engine and the natural runner for `/ticket` and `/chore` outputs. In-place by
+     default; `--worktree` to isolate.
+   - **`/sdlc-run <spec-slug>`** — one whole spec, full lifecycle (implement→test→review→document→
+     wrap-up) in a single shared implement context, in place on the current branch, no PR. Best for
+     small / homogeneous / sequential specs where one context holds all the tasks without blurring or
+     overflowing.
+   - **`/sdlc-flow <spec-slug>`** (default for non-trivial feature work) — one whole spec in a
+     dedicated worktree terminating in a PR: sequential tasks (no inter-task merge conflicts), per-task
+     test→fix loop (≤3 attempts, Opus escalation), one consolidated end review over the integrated
+     tree. Use when the work has many moving parts or a reviewable PR is wanted. `--auto-merge` to
+     merge + clean the worktree on a clean PASS; `--no-pr` to stop after wrap-up; `--resume` to
+     re-attach after an interruption.
+   - **`/sdlc-block <plan-file>`** — the rung *above* a single spec: a multi-block roadmap. If this
+     block is one of several in `planning/master-plan.md` or a `/plan` output, drive the whole roadmap
+     with `/sdlc-block <plan-file>` — it ensures each block's `tasks.md` and fans out one `/sdlc-flow`
+     per independent block as a branch train of reviewable PRs (reviewed with `/review-PR`, merged with
+     `/merge-train`) — instead of running this one block alone.
+   - **`/sdlc-task <spec-slug> <N>`** — not a strategy for the whole spec; name it only when the right
+     move is one specific task in isolation (a high-risk surgical change, or resuming after a failure on
+     task N). Say which task number and why isolation matters.
 
-   **Per-task review depth (only when recommending `/sdlc-block`).** The lean block defaults to
-   `--verify-depth consolidated` (per-task review **off** — one review at the end over the integrated
-   tree). Reuse the step-10 decomposition signal: when tasks are large / complex / heterogeneous enough
-   that a single end-of-run review would struggle to localize **which task** caused a finding, recommend
-   `--verify-depth consolidated+review` (a per-task review pass that acts as a localization map). State
-   the tradeoff: it adds roughly **38k output tokens × N tasks**, and a per-task review validates a slice
-   **in isolation** — the consolidated review stays authoritative for cross-task integration. For small
-   homogeneous blocks, leave it off.
-
-   If `breakdown.mode` is `auto` and any tasks were flagged in step 10, note that breakdown must run
-   first and the pipeline recommendation applies to each resulting sub-spec, not this spec directly.
+   Recommend exactly one primary command (optionally plus `/sdlc-task <N>` when a single task warrants
+   isolation). If `breakdown.mode` is `auto` and any tasks were flagged in step 10, note that breakdown
+   must run first and the recommendation applies to each resulting sub-spec, not this spec directly.
 
 12. Report the path written and suggest the next step:
-    "Spec written and committed to planning/phaseN-blockX/tasks.md. Run `/breakdown planning/phaseN-blockX/tasks.md` to decompose into atomic sub-steps."
+    "Spec written and committed to planning/<spec-slug>/tasks.md. Run `/breakdown planning/<spec-slug>/tasks.md` to decompose into atomic sub-steps."
 
 ## Context / Files to Read
 
-- `planning/master-plan.md` (target block section only)
+- `planning/master-plan.md` (target block section only) — **or**, in `--from <path>` mode, the
+  standalone block file at `<path>` instead
 - `CLAUDE.md` (the project's standing rules)
 - `planning/harness.json` (the project's validation checks)
 
@@ -186,10 +241,12 @@ Decomposition assessment:
 
 Pipeline recommendation:
   <one of:>
-  /sdlc-run <spec-slug>          — <N> tasks, small/homogeneous/sequential; one shared implement context is sufficient
-  /sdlc-block <spec-slug>        — <N> tasks; fresh implement agent each (<reason: heterogeneous/large, or <M> parallel across <W> waves>)
-  /sdlc-block <spec-slug> --verify-depth consolidated+review
-                                 — as above, plus per-task review for localization (<reason; +~38k tok × N>)
+  /sdlc-task <spec-slug>         — <N> tasks, one small tested unit; fast test→fix loop, no review/docs/PR
+  /sdlc-run <spec-slug>          — <N> tasks, small/homogeneous/sequential; one shared implement context, in place, no PR
+  /sdlc-flow <spec-slug>         — <N> tasks, non-trivial feature work; dedicated worktree, per-task test→fix, one end review, PR (<reason: many moving parts / reviewable PR wanted>)
+  /sdlc-flow <spec-slug> --auto-merge
+                                 — as above; merge PR + clean worktree on clean PASS
+  /sdlc-block <plan-file>        — this block is one of several; drive the whole roadmap as a branch train of PRs
   /sdlc-task <spec-slug> <N>     — run task <N> in isolation; <reason isolation matters here>
 
 Next (optional — decompose first):
