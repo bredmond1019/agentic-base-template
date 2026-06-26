@@ -183,8 +183,7 @@ those blocks).
   - *Modified* <path> (what changes), …
 - **Interfaces / shared surface:** <optional — shared exports/APIs this block consumes or must add>
 - **Out of scope:** <explicit boundaries; what is a later block's job; any cross-repo prerequisite>
-- **Depends on:** <optional — Block <id> of a sibling that must merge first; omit when the default
-  phase-sequential / block-parallel order suffices>
+- **Depends on:** Block <id>   *(include only when a sibling in the same phase must merge first; omit this line entirely when the default phase-sequential / block-parallel order suffices)*
 - **Acceptance criteria:** <observable, true/false conditions checkable against the diff; end with the
   project's gating checks passing>
 

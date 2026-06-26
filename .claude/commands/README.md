@@ -272,7 +272,7 @@ Reads a task spec and the source files each step touches, then writes a granular
 and `/fix` auto-detect this file and use the matching `### Step N:` section as the primary
 execution guide (HOW); `tasks.md` stays authoritative for scope (WHAT).
 
-### Ad-hoc planners — `/chore`, `/plan`
+### Ad-hoc planners — `/chore`, `/ticket`, `/plan`
 
 Entry points into Phase 1 for work that **isn't** a master-plan block. Each takes a free-text
 description, researches the codebase, and writes a spec into its own `planning/<dir>/` directory.

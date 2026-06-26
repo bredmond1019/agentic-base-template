@@ -1,7 +1,8 @@
 ---
 name: chore
 description: >
-  Trigger on '/chore' or when running the Chore command (Plan a maintenance or housekeeping task.)
+  Trigger on '/chore' or when running the Chore command (Plan a maintenance or
+  housekeeping task.)
 ---
 
 # Chore — Plan a maintenance or housekeeping task.

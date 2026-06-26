@@ -165,7 +165,8 @@ $ARGUMENTS — one of two input modes:
      block is one of several in `planning/master-plan.md` or a `/plan` output, drive the whole roadmap
      with `/sdlc-block <plan-file>` — it ensures each block's `tasks.md` and fans out one `/sdlc-flow`
      per independent block as a branch train of reviewable PRs (reviewed with `/review-PR`, merged with
-     `/merge-train`) — instead of running this one block alone.
+     `/merge-train`) — instead of running this one block alone. In slug mode `<plan-file>` is
+     `planning/master-plan.md`; in `--from` mode it is the path you passed to `--from`.
    - **`/sdlc-task <spec-slug> <N>`** — not a strategy for the whole spec; name it only when the right
      move is one specific task in isolation (a high-risk surgical change, or resuming after a failure on
      task N). Say which task number and why isolation matters.

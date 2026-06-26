@@ -113,8 +113,8 @@ _No amendments yet._
 
 Output the path and next step:
 ```
-planning/ticket-{name}/tasks.md
+planning/ticket-{slug}/tasks.md
 
 Next (implement + test loop):
-  /sdlc-task ticket-{name}
+  /sdlc-task ticket-{slug}
 ```
