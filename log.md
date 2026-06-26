@@ -5,6 +5,26 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-26 — Phase 2 code-review fixes: 6 findings patched
+
+Medium-effort `/code-review` over the Phase 2 diff (prompt-only planner changes spanning `.claude/commands/` + `.agents/skills/` mirrors) surfaced 4 CONFIRMED + 2 PLAUSIBLE findings; all six fixed. (1) **scaffold/planning/harness.json** — removed the dead `block.verify` stanza (legacy `"block": {"verify": "consolidated"}` from D24, removed in Phase 1 rewrite; was dangling in scaffold). Removed matching `_comment` + updated to reference `block.maxParallelBlocks` instead. (2) **ticket.md + ticket SKILL.md Report** — unified `{name}` variable to `{slug}` (steps 5–6 emit the same placeholder twice for consistency; `{name}` was wrong). (3) **chore SKILL.md frontmatter** — wrapped to standard 6 lines so `tail -n +8` mirror-sync extraction works correctly (was breaking the body on output; the command's 6-line header must be byte-identical). (4) **commands/README.md** — `/ticket` added to the "Ad-hoc planners" section heading (was missing despite the full `/ticket` command being shipped in Phase 2 B). (5) **generate-tasks.md + generate-tasks SKILL.md step 11** — clarified that in slug mode (calling `/generate-tasks --from <plan-file>` with a selected block), the `<plan-file>` default is `planning/master-plan.md` (was ambiguous). (6) **generate-master-plan.md + generate-master-plan SKILL.md Depends-on skeleton** — reworded the placeholder line to "omit this line entirely" instruction format (prevents LLM from emitting the placeholder `- **Depends on:** Block <id>` literally when no dependency exists). All four engines `node --check` clean. Phase 3 (ADRs D37+, docs rewrite, schema/scaffold finalization) is next.
+
+```diff
+ .agents/skills/chore/SKILL.md                |   3 +-
+ .agents/skills/generate-master-plan/SKILL.md |   3 +-
+ .agents/skills/generate-tasks/SKILL.md       |   3 +-
+ .agents/skills/ticket/SKILL.md               |   4 +-
+ .claude/commands/README.md                   |   2 +-
+ .claude/commands/generate-master-plan.md     |   3 +-
+ .claude/commands/generate-tasks.md           |   3 +-
+ .claude/commands/ticket.md                   |   4 +-
+ planning/handoff.md                          | 159 +++++++++++++--------------
+ scaffold/planning/harness.json               |   5 +-
+ 10 files changed, 89 insertions(+), 100 deletions(-)
+```
+
+---
+
 ## 2026-06-25 — Phase 2 C complete: /generate-tasks four-engine ladder + plan-file block addressing, /generate-master-plan `Depends on` + default-order note
 
 Phase 2 C — the last Phase-2 block (planner + routing surface) — is done, prompt-only (no engine JS). Three changes plus mirror sync:
