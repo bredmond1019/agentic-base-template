@@ -2,6 +2,11 @@
 type: Plan
 title: {{PROJECT_NAME}} Master Plan
 description: Strategic roadmap and phase specifications for {{PROJECT_NAME}}.
+doc_id: master-plan
+layer: [factory]
+status: active
+keywords: [master plan, roadmap, phases, blocks, strategy, specifications]
+related: [context, status, planning-index]
 ---
 
 # {{PROJECT_NAME}} — Master Plan

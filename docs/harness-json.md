@@ -2,6 +2,12 @@
 type: Reference
 title: harness.json — configuration reference
 description: Complete reference for planning/harness.json — the policy file the SDLC engines read for validation commands and UI-test configuration.
+doc_id: harness-json
+layer: [factory]
+project: base-template
+status: active
+keywords: [harness.json, validation, pipeline config, checks, UI-test, stack profiles]
+related: [base-template-architecture, D5-okf-phase-2-adopted, D6-harness-richer-checks]
 ---
 
 # harness.json — configuration reference

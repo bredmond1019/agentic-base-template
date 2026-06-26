@@ -2,6 +2,11 @@
 type: LocalContext
 title: {{PROJECT_NAME}} Project Context
 description: Core context, governing principles, and documentation router for {{PROJECT_NAME}}.
+doc_id: context
+layer: [factory]
+status: active
+keywords: [project context, governing principles, orientation, planning router]
+related: [status, master-plan, planning-index]
 ---
 
 # CONTEXT — {{PROJECT_NAME}}

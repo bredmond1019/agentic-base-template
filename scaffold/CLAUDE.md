@@ -14,7 +14,18 @@
 ## Standing rules
 
 1. **Every block/task ships with tests** covering its core functionality. No exceptions.
-2. **Maintain OKF frontmatter** on every markdown file.
+2. **Every new `.md` under `docs/` or `planning/` must open with OKF YAML frontmatter.**
+   Required fields: `type` (e.g. Decision, Index, Reference, Plan, Log, ProjectStatus, LocalContext,
+   Guide); `title` (human-readable); `description` (one-line summary for embedding).
+   Optional but strongly encouraged: `doc_id` (kebab-case stable id, defaults to filename stem);
+   `layer` (list from closed vocab: `factory` · `brain` · `engine` · `console` · `surface` ·
+   `infra` · `business` · `content` · `meta`); `project` (the project's own slug — see
+   `docs/okf-frontmatter.md` in the company brain for the controlled vocabulary); `status`
+   (`active` · `draft` · `deprecated` · `superseded` · `archived`); `keywords` (3–7 topic
+   terms); `related` (list of doc_ids). Canonical guide: `agentic-portfolio/docs/okf-frontmatter.md`
+   (governed by brain decision D27).
+   Adding a file to a directory requires updating that directory's `index.md` — propagate up
+   the chain as needed.
 3. **Sequence, not calendar** — work the order in `master-plan.md`; pick up where you left off.
 4. **Decisions are append-only** — never edit a settled decision; supersede it with a new
    atomic file in `planning/decisions/` and link back.

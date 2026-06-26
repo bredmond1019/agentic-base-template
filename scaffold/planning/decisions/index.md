@@ -2,6 +2,11 @@
 type: Index
 title: {{PROJECT_NAME}} Decisions Registry
 description: Index of atomic, append-only architectural decision records for {{PROJECT_NAME}}.
+doc_id: decisions-index
+layer: [factory]
+status: active
+keywords: [decisions, ADR, architecture, append-only, decision registry]
+related: [planning-index, context]
 ---
 
 # Decisions Registry

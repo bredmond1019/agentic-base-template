@@ -58,3 +58,15 @@ design — so keep changes here additive and well-documented.
    lockstep-with-the-workflows change, not piecemeal. (The template's *own* root `README.md`
    keeps its name by design.)
 4. **Never edit a settled decision** — supersede it with a new atomic ADR and link back.
+5. **Every new `.md` under `docs/` or `planning/` must open with OKF YAML frontmatter.**
+   Required fields: `type` (e.g. Decision, Index, Reference, Plan, Log, ProjectStatus, LocalContext,
+   Guide, Handoff); `title` (human-readable); `description` (one-line summary for embedding).
+   Optional but strongly encouraged: `doc_id` (kebab-case stable id, defaults to filename stem);
+   `layer` (list from closed vocab: `factory` · `brain` · `engine` · `console` · `surface` ·
+   `infra` · `business` · `content` · `meta`); `project` (`base-template` for this repo's own
+   docs; omit for scaffold/ files); `status` (`active` · `draft` · `deprecated` · `superseded` ·
+   `archived`); `keywords` (3–7 topic terms); `related` (list of doc_ids). Canonical guide:
+   `agentic-portfolio/docs/okf-frontmatter.md` (governed by brain decision D27).
+   Adding a file to a directory requires updating that directory's `index.md` — propagate up
+   the chain as needed (e.g. a new `docs/workflows/` file → update `docs/workflows/index.md`
+   and `docs/index.md` if the scope changes).

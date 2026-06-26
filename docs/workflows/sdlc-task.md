@@ -2,6 +2,12 @@
 type: Reference
 title: /sdlc-task — lean single-unit SDLC engine
 description: The fast path for small units of behavior-changing work. Runs implement → fast-test → triage → fix loop → commit, in place or in an isolated worktree. Pairs with /chore and /ticket (D38).
+doc_id: sdlc-task
+layer: [factory]
+project: base-template
+status: active
+keywords: [sdlc-task, lean engine, implement test commit, worktree, patch ladder, D38]
+related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch-ladder]
 ---
 
 # `/sdlc-task` — lean single-unit SDLC engine

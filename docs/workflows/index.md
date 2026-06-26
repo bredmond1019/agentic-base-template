@@ -2,6 +2,12 @@
 type: Index
 title: SDLC Workflows — reference hub
 description: Navigation + shared concepts for the four SDLC orchestration engines (sdlc-flow, sdlc-run, sdlc-task, sdlc-block) and the manual command lifecycle.
+doc_id: base-template-workflows-index
+layer: [factory]
+project: base-template
+status: active
+keywords: [SDLC workflows, engines, orchestration, harness, pipeline reference]
+related: [base-template-docs-index, sdlc-run, sdlc-task, sdlc-flow, sdlc-block, sdlc-commands]
 ---
 
 # SDLC Workflows

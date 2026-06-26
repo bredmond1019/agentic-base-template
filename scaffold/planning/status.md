@@ -2,6 +2,12 @@
 type: ProjectStatus
 title: {{PROJECT_NAME}} Status
 description: Current state and progress tracker for {{PROJECT_NAME}}.
+doc_id: status
+layer: [factory]
+status: active
+timestamp: "{{DATE}}"
+keywords: [status, progress tracker, current focus, blocks]
+related: [context, master-plan, planning-index]
 ---
 
 # STATUS — Current State & Progress

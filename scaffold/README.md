@@ -2,6 +2,11 @@
 type: Index
 title: {{PROJECT_NAME}}
 description: {{DESCRIPTION}}
+doc_id: readme
+layer: [factory]
+status: active
+keywords: [project readme, prerequisites, setup, getting started]
+related: [context, master-plan, planning-index]
 ---
 
 # {{PROJECT_NAME}}

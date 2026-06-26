@@ -2,6 +2,12 @@
 type: Index
 title: docs/ — base-template documentation
 description: Navigation guide for the base-template documentation folder.
+doc_id: base-template-docs-index
+layer: [factory]
+project: base-template
+status: active
+keywords: [docs, documentation, navigation, architecture, workflows, harness]
+related: [base-template-architecture, using-the-template, harness-json, base-template-workflows-index]
 ---
 
 # docs/ — base-template documentation

@@ -2,6 +2,12 @@
 type: Guide
 title: Using the template — generate, configure, run
 description: Step-by-step guide for generating a new project from base-template and running the first pipeline.
+doc_id: using-the-template
+layer: [factory]
+project: base-template
+status: active
+keywords: [new-project, scaffold, configure, harness.json, pipeline run, getting started]
+related: [base-template-architecture, base-template-docs-index, harness-json]
 ---
 
 # Using the template — generate, configure, run

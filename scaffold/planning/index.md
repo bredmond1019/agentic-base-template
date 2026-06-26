@@ -2,6 +2,11 @@
 type: Index
 title: {{PROJECT_NAME}} — Planning Docs
 description: Navigation index for the {{PROJECT_NAME}} planning folder.
+doc_id: planning-index
+layer: [factory]
+status: active
+keywords: [planning, navigation, index, context, status, master-plan, decisions]
+related: [context, status, master-plan, decisions-index]
 ---
 
 # {{PROJECT_NAME}} — Planning Docs

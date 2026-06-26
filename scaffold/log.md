@@ -2,6 +2,12 @@
 type: Log
 title: {{PROJECT_NAME}} Development Log
 description: Chronological log of work completed for {{PROJECT_NAME}}.
+doc_id: log
+layer: [factory]
+status: active
+timestamp: "{{DATE}}"
+keywords: [work log, session history, development log]
+related: [status, context]
 ---
 
 # Log — {{PROJECT_NAME}}

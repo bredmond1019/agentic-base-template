@@ -2,6 +2,12 @@
 type: Reference
 title: /sdlc-flow — shared-worktree, PR-terminating SDLC engine
 description: The default engine for non-trivial feature work. Runs one spec sequentially in a single shared worktree with a per-task test-fix loop, one consolidated end-review, a docs patch, and a PR as the terminal step.
+doc_id: sdlc-flow
+layer: [factory]
+project: base-template
+status: active
+keywords: [sdlc-flow, shared worktree, PR, test-fix loop, end-review, SDLC engine]
+related: [base-template-workflows-index, sdlc-block, D30-sdlc-flow-engine, D31-committed-authoritative-state, D33-pr-based-wrap-up]
 ---
 
 # `/sdlc-flow` — shared-worktree, PR-terminating SDLC engine

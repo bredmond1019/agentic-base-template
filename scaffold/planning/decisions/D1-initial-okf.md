@@ -2,6 +2,11 @@
 type: Decision
 title: "D1: Initial OKF Scaffold"
 description: Project initialized on the standard OKF documentation structure.
+doc_id: D1-initial-okf
+layer: [factory]
+status: active
+keywords: [OKF scaffold, initialization, planning structure, harness, SDLC]
+related: [decisions-index, planning-index]
 ---
 
 # D1 — Initial OKF Scaffold

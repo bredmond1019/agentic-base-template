@@ -2,6 +2,12 @@
 type: Reference
 title: /sdlc-block — block-level roadmap orchestrator
 description: Reads a master-plan-format file, fans out one /sdlc-flow per independent block across dependency-ordered waves, and produces a branch train of reviewable PRs (D39/D40/D43).
+doc_id: sdlc-block
+layer: [factory]
+project: base-template
+status: active
+keywords: [sdlc-block, block orchestrator, roadmap, master-plan, branch train, parallel waves]
+related: [base-template-workflows-index, sdlc-flow, D39-sdlc-block-block-level-orchestrator, D40-branch-train-pr-model, D43-close-out-integration]
 ---
 
 # `/sdlc-block` — block-level roadmap orchestrator

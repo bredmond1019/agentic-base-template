@@ -1,3 +1,15 @@
+---
+type: Index
+title: base-template — software factory source
+description: Entry point for the base-template factory repo — canonical document names, harness structure, scaffold layout, and how /new-project uses this template.
+doc_id: base-template-readme
+layer: [factory]
+project: base-template
+status: active
+keywords: [software factory, new-project, scaffold, harness, OKF conventions, base-template]
+related: [base-template-architecture, base-template-docs-index, base-template-planning-index]
+---
+
 # base-template — the software-factory source
 
 This repo is the **single curated source** that `/new-project` clones to scaffold a new
