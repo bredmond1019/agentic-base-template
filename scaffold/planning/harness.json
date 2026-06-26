@@ -17,6 +17,9 @@
   "planning": {
     "clarify": false
   },
+  "block": {
+    "maxParallelBlocks": 3
+  },
   "flow": {
     "autoMerge": false,
     "testDepth": "fast",

@@ -8,8 +8,6 @@ trees/
 # Hook session logs (ephemeral)
 .claude/logs/
 
-# SDLC runtime resume breadcrumbs (regenerated every run — see D28)
-planning/*/sdlc/sdlc-block-state.json
-# NOTE: sdlc-run-state.json + sdlc-task-state.json (Block A — supersede D27's gitignored breadcrumb),
-# sdlc-flow-state.json, and worklog.md are intentionally COMMITTED authoritative state. They are NOT
-# listed here and must remain tracked.
+# NOTE: All SDLC state files (sdlc-run-state.json, sdlc-task-state.json, sdlc-flow-state.json,
+# block-orchestration-state.json, worklog.md) are intentionally COMMITTED authoritative state — D37.
+# No runtime breadcrumbs are gitignored under planning/*/sdlc/.

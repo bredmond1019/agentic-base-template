@@ -248,6 +248,32 @@ runs the engine uses `port + taskNumber` automatically. `routes[]` are smoke-che
 
 ---
 
+## Optional: `/sdlc-block` policy (`block` block)
+
+`/sdlc-block` reads the `block` section when orchestrating a roadmap as a branch train of PRs.
+All profiles above omit it — the defaults are sensible for most projects.
+
+```json
+{
+  "block": {
+    "maxParallelBlocks": 3,
+    "autoMerge": false
+  }
+}
+```
+
+**Key-by-key:**
+
+| Key | Type | Default | When to change |
+|---|---|---|---|
+| `maxParallelBlocks` | integer | `3` | Limits concurrent worktree creation and `/sdlc-flow` runs within a wave. Lower (e.g. `1`) on machines with tight disk/memory. Raise on CI with ample resources. |
+| `autoMerge` | boolean | `false` | Set `true` to merge each block's branch into the train automatically on PASS (no PRs, no human review). Leave `false` (recommended) to open one PR per block and use `/merge-train` after `/review-PR`. CLI `--auto-merge` overrides per run. |
+
+Only `/sdlc-block` reads the `block` section; `/sdlc-run`, `/sdlc-task`, and `/sdlc-flow` ignore it.
+Merge this block alongside the other top-level keys in any stack profile above.
+
+---
+
 ## Optional: `/sdlc-flow` policy (`flow` block)
 
 All the profiles above omit the `flow` block — the stub `harness.json` ships a neutral default

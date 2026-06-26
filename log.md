@@ -5,6 +5,27 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-26 — Phase 3 C: Schema + scaffold + harness config finalized
+
+Phase 3 Block C of the SDLC engines + planner surface redesign master-plan.
+
+- **`harness.schema.json` `block.*` rewrite:** dropped `verify` (lean-block era, superseded by D39);
+  added `autoMerge` (boolean, default false — whether to skip PRs and merge into train automatically)
+  and `maxParallelBlocks` (integer, default 3 — concurrent block cap per wave). Description updated to
+  describe the block-level orchestrator model (D39/D40).
+- **`scaffold/planning/harness.json`:** added `"block": { "maxParallelBlocks": 3 }` stanza; `_comment`
+  already referenced this key from Phase 2 code-review fixes — now the JSON matches the comment.
+- **`scaffold/planning/harness.examples.md`:** added "Optional: `/sdlc-block` policy (`block` block)"
+  section with the `maxParallelBlocks`/`autoMerge` key-by-key table, placed before the existing `flow`
+  section.
+- **`.gitignore`:** removed the D28 `planning/*/sdlc/sdlc-block-state.json` gitignore line (D28
+  superseded by D39); replaced the stale D28 + D27 NOTE with a clean note that all four SDLC state
+  files are now intentionally committed authoritative state (D37).
+- **`planning/harness.json`:** added `sdlc-flow.js` to the `engines-parse` gating command —
+  all four engines now validated, not three. All four engines `node --check` clean.
+
+---
+
 ## 2026-06-26 — Phase 3 A: ADRs D37–D43 authored
 
 Phase 3 Block A of the SDLC engines + planner surface redesign master-plan
