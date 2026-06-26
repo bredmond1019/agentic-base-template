@@ -5,6 +5,17 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-26 — Wave 5 downstream propagation complete
+
+Completed Wave 5 downstream propagation of the SDLC engines + planner surface redesign to all five downstream projects (bastion, bella, markdown-engine-validator, price-scout, amistad). Each repo now carries the full harness through Phase 3 C: committed state + token telemetry (D37), lean `/sdlc-task` + `/patch` ladder (D38), block-level `/sdlc-block` orchestrator (D39), branch-train + PR model (D40), restructured planner (D41–D42), and `/close-out` integration (D43). Cross-repo coordination tracked in `planning/handoff.md`. All four engines `node --check` clean across all repos. Brain-level `/new-project` rewrite to call `/generate-master-plan` (D34 follow-up) also complete.
+
+```diff
+ planning/handoff.md | 63 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 63 insertions(+), 60 deletions(-)
+```
+
+---
+
 ## 2026-06-26 — Phase 3 B: Workflow + command docs rewrite — redesign master-plan complete
 
 Phase 3 Block B of the SDLC engines + planner surface redesign master-plan. Final block.
