@@ -5,6 +5,35 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-26 — Phase 3 A: ADRs D37–D43 authored
+
+Phase 3 Block A of the SDLC engines + planner surface redesign master-plan
+(`planning/sdlc-block-and-task-updates/plan.md`). Authored 7 atomic ADRs recording every
+keep/drop/behavioral decision from Phases 0–2:
+
+- **D37** — Unified committed state + token telemetry across all four engines (supersedes D27;
+  extends D12/D15). "Substantive-stages-only" token contract documented.
+- **D38** — Lean `/sdlc-task` rewrite (2 126 → ~740 lines; deleted heavy stages + coupling flags)
+  + `/patch` 3-rung scope-gate ladder.
+- **D39** — `/sdlc-block` rewritten as a block-level roadmap orchestrator (supersedes D22/D23/D24/D28;
+  realizes D30). `enumerate-blocks`, `computeWaves` at block granularity, per-block `/sdlc-flow`,
+  branch-train merge. `execution-plan.schema.json` deleted.
+- **D40** — Branch-train + PR model; `/review-PR` (spec-aware `gh pr review`) and `/merge-train`
+  (dependency-ordered bottom-up merge with CONFLICTING-halt).
+- **D41** — Planner restructure (extends D34): `/plan` → master-plan format, `/feature` removed,
+  `/ticket` added (behavior-change + AC + Testing Strategy → lean `/sdlc-task`), `/chore` routed
+  to lean `/sdlc-task`.
+- **D42** — Four-engine recommendation ladder + plan-file block addressing in `/generate-tasks`
+  (supersedes D21; extends D34). Step 11 rewritten as five-rung ladder; step 12 deleted;
+  `--from <plan-file> phaseN-blockX` added. `/generate-master-plan` gains `Depends on` + ordering note.
+- **D43** — `/close-out` integration: `--gap-check-only` flag, per-block gap-check in `sdlc-block`,
+  final close-out on train branch, `/close-out` recommendation in `sdlc-flow` + `sdlc-run` end reports.
+
+`planning/decisions/index.md` updated with D37–D43 entries. `planning/status.md` updated.
+Next: Phase 3 B (docs rewrite) and Phase 3 C (schema + scaffold finalization).
+
+---
+
 ## 2026-06-26 — Phase 2 code-review fixes: 6 findings patched
 
 Medium-effort `/code-review` over the Phase 2 diff (prompt-only planner changes spanning `.claude/commands/` + `.agents/skills/` mirrors) surfaced 4 CONFIRMED + 2 PLAUSIBLE findings; all six fixed. (1) **scaffold/planning/harness.json** — removed the dead `block.verify` stanza (legacy `"block": {"verify": "consolidated"}` from D24, removed in Phase 1 rewrite; was dangling in scaffold). Removed matching `_comment` + updated to reference `block.maxParallelBlocks` instead. (2) **ticket.md + ticket SKILL.md Report** — unified `{name}` variable to `{slug}` (steps 5–6 emit the same placeholder twice for consistency; `{name}` was wrong). (3) **chore SKILL.md frontmatter** — wrapped to standard 6 lines so `tail -n +8` mirror-sync extraction works correctly (was breaking the body on output; the command's 6-line header must be byte-identical). (4) **commands/README.md** — `/ticket` added to the "Ad-hoc planners" section heading (was missing despite the full `/ticket` command being shipped in Phase 2 B). (5) **generate-tasks.md + generate-tasks SKILL.md step 11** — clarified that in slug mode (calling `/generate-tasks --from <plan-file>` with a selected block), the `<plan-file>` default is `planning/master-plan.md` (was ambiguous). (6) **generate-master-plan.md + generate-master-plan SKILL.md Depends-on skeleton** — reworded the placeholder line to "omit this line entirely" instruction format (prevents LLM from emitting the placeholder `- **Depends on:** Block <id>` literally when no dependency exists). All four engines `node --check` clean. Phase 3 (ADRs D37+, docs rewrite, schema/scaffold finalization) is next.
