@@ -86,6 +86,12 @@ file (the engine only carries the interpretation). ¹`command` is required for e
 | `warning-scan` | `warningPatterns[]` | Runs `command` (its **exit code gates**), then records matches of the patterns in its output — advisory WARN when `gates:false`, also-failing when `gates:true`. |
 | `forbidden-pattern-scan` | `rules[]` of `{id, pattern, paths?, allowlistPattern?}` | Source greps that must find nothing; any match is a violation. |
 
+> **`count-delta` caveat:** this check degrades to a plain exit-code gate in both `/sdlc-task`
+> and `/sdlc-flow`. The cross-task regression comparison (`failOn: decrease`/`zero-or-decrease`)
+> no longer fires under either engine — only the command's exit code is evaluated. If your project
+> relies on the regression comparison, use `/sdlc-run` (where the full `count-delta` logic runs
+> with a per-task prior-task report to compare against).
+
 See `planning/harness.examples.md` (the Python "rich checks" profile) for a worked example of all
 four, and [D6](../planning/decisions/D6-harness-richer-checks.md) for the rationale.
 
@@ -125,15 +131,14 @@ but cohesive.
 | `auto` | Generate `breakdown.md` sub-steps for the flagged tasks first. `/sdlc-block` writes + commits them on **main before the waves** (so every parallel worktree inherits the same file — no merge conflict); a standalone `/sdlc-task` writes them in its own worktree. Implement then follows the sub-steps. |
 | `off` | Skip the assessment entirely. |
 
-`/sdlc-block` assesses **once** in its Analyze stage (folded into the existing dependency-graph pass,
-near-zero added cost) and passes `--under-block` to each `/sdlc-task` so the per-task engine does not
-re-assess. `/generate-tasks` previews the same recommendation at authoring time. See
-[D10](../planning/decisions/D10-breakdown-assessment.md).
+The per-task engine (`/sdlc-flow` or `/sdlc-task`) assesses coarseness when it starts and
+logs/applies per `mode`. `/generate-tasks` previews the same recommendation at authoring time.
+See [D10](../planning/decisions/D10-breakdown-assessment.md).
 
 ### `planning` object
 
-Optional. Controls planning-phase behavior of the authoring commands (`/plan`, `/feature`,
-`/generate-tasks`). Absent → all fields default to today's zero-touch behavior.
+Optional. Controls planning-phase behavior of the authoring commands (`/plan`, `/generate-tasks`).
+Absent → all fields default to today's zero-touch behavior.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -147,29 +152,19 @@ of this setting. See [D20](../planning/decisions/D20-clarify-before-generate.md)
 
 ### `block` object
 
-Optional. Policy for the lean `/sdlc-block` runner — the "more powerful `/sdlc-run`": a **fresh
-implement agent per task** sharing one setup, then a **single consolidated back-half** over the
-integrated tree. Only `/sdlc-block` reads it; `/sdlc-run` and `/sdlc-task` ignore it. Absent →
-`verify: consolidated`.
+Optional. Policy for `/sdlc-block` — the **block-level roadmap orchestrator** that fans out one
+`/sdlc-flow` per independent block in its own worktree, runs blocks in dependency-ordered waves
+derived from a master-plan-format file, and opens a PR per block by default. Only `/sdlc-block`
+reads it; `/sdlc-run`, `/sdlc-task`, and `/sdlc-flow` ignore it. Absent → `maxParallelBlocks 3`,
+`autoMerge false`.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `verify` | string | No | `consolidated` (default) · `consolidated+review` |
+| `maxParallelBlocks` | integer | No | Maximum number of blocks `/sdlc-block` fans out concurrently within a wave (default `3`). Blocks in a wave share no dependency; this cap limits concurrent worktree creation and `/sdlc-flow` runs. Lower for machines with tight disk/memory; raise for CI with ample resources. CLI `--max-parallel-blocks` overrides per run. |
+| `autoMerge` | boolean | No | `false` (default): open one PR per block; human reviews via `/review-PR`, then `/merge-train` lands them in dependency order. `true`: merge each block's branch into the train branch automatically as it completes (no PRs). CLI `--auto-merge` overrides per run. |
 
-The lean block always runs **one** consolidated back-half after all tasks land
-(`test → review → fix → document → wrap-up` over the integrated tree). `verify` only decides how much
-each task is verified *first*:
-
-| `verify` | Per task | When to use |
-|---|---|---|
-| `consolidated` (default) | implement + the D8 completeness self-check only — cheapest | Small / homogeneous / sequential tasks where the end-of-run consolidated review can easily localize any finding |
-| `consolidated+review` | implement → **one review pass** (a localization map; fix/document/wrap-up still deferred to the back-half) | Large or heterogeneous tasks where end-only localization is hard. Costs ≈38k tokens × N; `/generate-tasks` recommends it in that case |
-
-The consolidated review stays **authoritative** in both modes — a per-task review validates its slice
-in isolation (it cannot catch cross-task integration breakage) and never substitutes for the
-consolidated pass. Override per-run with **`--verify-depth <consolidated|consolidated+review>`**. See
-[D23](../planning/decisions/D23-lean-block-shared-setup.md) and
-[D24](../planning/decisions/D24-consolidated-back-half.md).
+See [D39](../planning/decisions/D39-sdlc-block-block-level-orchestrator.md) and
+[D40](../planning/decisions/D40-branch-train-pr-model.md).
 
 ### `flow` object
 

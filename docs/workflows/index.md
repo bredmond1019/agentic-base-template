@@ -17,39 +17,42 @@ slash-command lifecycle they automate.
 
 ---
 
+## The pipeline ladder
+
+```
+/patch          trivial hotfix · no tests · in-place
+/sdlc-task      small tested change · implement→test→fix→commit · in-place or --worktree
+/sdlc-run       full spec · sequential · in-place · no PR
+/sdlc-flow      full spec · sequential · shared worktree · terminates in PR   ← default for non-trivial work
+/sdlc-block     roadmap · one /sdlc-flow per block · branch train of PRs
+```
+
 ## The four engines at a glance
 
-| Engine | Scope | Isolation | Merges for you? | You reach for it when… |
+| Engine | Scope | Isolation | Pairs with | You reach for it when… |
 |---|---|---|---|---|
-| [`/sdlc-flow`](sdlc-flow.md) | a **whole spec**, **sequential** | its own git worktree (one shared for the whole spec) | opt-in via `--auto-merge`; default stops at an open PR | **the default for non-trivial feature work** — sequential, conflict-free, terminates in a PR |
-| [`/sdlc-run`](sdlc-run.md) | one task **or** a full spec, **sequential** | none — runs on the current branch | n/a (no branches) | running one spec/task start-to-finish on the current branch; resuming an interrupted pipeline |
-| [`/sdlc-task`](sdlc-task.md) | **one** task | its own git worktree | no — you run `/clean-worktree` | running tasks in parallel across sessions, or keeping `main` clean for risky work |
-| [`/sdlc-block`](sdlc-block.md) | a **whole spec** as dependency-ordered waves | shared integration branch; worktrees only for genuinely parallel waves | **yes** — merges every wave + runs one consolidated back-half | the rare speed case — task-level parallelism for genuinely independent tasks |
-
-> **`/sdlc-block` repositioning (documented follow-on):** `/sdlc-block` is slated to become a
-> block-level orchestrator that drives independent blocks or phases in parallel, each block run by
-> `/sdlc-flow` in its own worktree. The current task-level wave behavior becomes the rare speed-only
-> mode. This is near-trivial once `/sdlc-flow` exists; see
-> [D30](../../planning/decisions/D30-sdlc-flow-engine.md) for the rationale.
+| [`/sdlc-task`](sdlc-task.md) | **one small unit** | in-place / `--worktree` | `/chore`, `/ticket` | small tested change — fast implement→test→commit |
+| [`/sdlc-run`](sdlc-run.md) | one task **or** a full spec, **sequential** | none — runs on the current branch | `/generate-tasks` | sequential full pipeline on the current branch; resuming a spec |
+| [`/sdlc-flow`](sdlc-flow.md) | **a whole spec**, **sequential** | its own git worktree (one shared for the whole spec) | `/generate-tasks` | **the default for non-trivial feature work** — sequential, conflict-free, terminates in a PR |
+| [`/sdlc-block`](sdlc-block.md) | **a roadmap** (master-plan-format file) | per-block worktrees driving `/sdlc-flow` | `/generate-master-plan`, `/plan` | a whole roadmap fanned out as a branch train of reviewable PRs |
 
 For step-by-step **manual** control (run `/implement`, then inspect, then `/test`, …), see the
 [manual command lifecycle](commands.md). The engines automate exactly those commands.
 
 ```mermaid
 flowchart TD
-    spec["planning/&lt;spec&gt;/tasks.md<br/>(written by /generate-tasks)"]
-    spec --> flow["/sdlc-flow<br/>whole spec, shared worktree, PR"]
-    spec --> run["/sdlc-run<br/>sequential, on current branch"]
-    spec --> task["/sdlc-task N<br/>one task, isolated worktree"]
-    spec --> block["/sdlc-block<br/>whole spec, dependency waves"]
+    plan["planning/&lt;spec&gt;/tasks.md<br/>(written by /generate-tasks)"]
+    roadmap["planning/master-plan.md<br/>(written by /generate-master-plan or /plan)"]
 
-    flow -. "open PR (default)" .-> pr["PR — human review"]
-    flow -. "--auto-merge" .-> clean["/clean-worktree teardown"]
-    block -. "width-1 wave (in place)" .-> inplace["implement on integration branch"]
-    block -. "width-≥2 wave" .-> task
-    block -. "once, at the end" .-> backhalf["consolidated back-half<br/>= /sdlc-run --from test"]
-    backhalf --> run
-    task -. "you merge" .-> clean
+    plan --> flow["/sdlc-flow<br/>whole spec, shared worktree, PR"]
+    plan --> run["/sdlc-run<br/>sequential, on current branch"]
+    plan --> task["/sdlc-task<br/>small unit, in-place or --worktree"]
+
+    roadmap --> block["/sdlc-block<br/>roadmap → one /sdlc-flow per block"]
+    block --> flow
+
+    flow -. "open PR (default)" .-> pr["PR — /review-PR → /merge-train"]
+    block -. "PR per block" .-> pr
 
     classDef engine fill:#1f2937,stroke:#60a5fa,color:#e5e7eb;
     class flow,run,task,block engine;
@@ -57,34 +60,41 @@ flowchart TD
 
 - `/sdlc-flow` is the **default for non-trivial feature work**: one shared worktree eliminates
   inter-task merge conflicts; a single end-review over the integrated tree replaces per-task reviews;
-  the terminal step is a PR (not an in-place commit).
-- `/sdlc-block` is **"a more powerful `/sdlc-run`"**: it runs a fresh implement agent per task, then
-  hands the integrated tree to one consolidated back-half that is literally `/sdlc-run --from test`.
-- `/sdlc-task` is the **building block** `/sdlc-block` uses only for genuinely parallel (width-≥2)
-  waves, via its `--implement-only` mode.
-- `/sdlc-run` and `/sdlc-task` share the same stage agents, the same report-file contract, and the
-  same model tiering. `/sdlc-flow` shares the model tiering and stage agents but uses a different
-  state model — see the note below.
+  the terminal step is a PR.
+- `/sdlc-block` is the **roadmap orchestrator**: it fans out one `/sdlc-flow` per independent block
+  across dependency-ordered waves, producing a branch train of reviewable PRs.
+- `/sdlc-task` is the **fast path** for small work: a real implement→test→fix loop but no
+  review/document/wrap-up agents. Pairs with `/chore` and `/ticket`.
+- `/sdlc-run` is the **sequential workhorse** when you don't need isolation or a PR.
 
 ---
 
-## Shared concepts (true for all three)
+## Shared concepts (true for all engines)
 
 ### Each stage is its own agent
 Every pipeline stage runs as a **separate single-context agent**. Stages never share memory — they
 communicate through committed files under `planning/<spec>/sdlc/`. That is what makes the pipeline
 crash-recoverable and resumable: the committed files *are* the state.
 
-For `/sdlc-run`, `/sdlc-task`, and `/sdlc-block`, those committed files are per-stage report files
-under `reports/` — verbose prose the scout reads to resume. `/sdlc-flow` inverts this (see
-[D31](../../planning/decisions/D31-committed-authoritative-state.md)): it uses a compact committed
-`sdlc-flow-state.json` + one `worklog.md` as the authoritative index, replacing the 5 × N report
-files. The D27/D28 gitignored breadcrumbs are not used by `/sdlc-flow`.
+### Committed state model
 
-### Report-file contract (sdlc-run / sdlc-task / sdlc-block)
-Reports are named `[taskN-]<stage>.md` (the `taskN-` prefix is present for task-scoped runs, absent for
-full-spec runs). `/sdlc-flow` does not use this contract — it uses `sdlc-flow-state.json` + `worklog.md`
-instead (see above and [D31](../../planning/decisions/D31-committed-authoritative-state.md)).
+Each engine writes a committed JSON state file under `planning/<spec>/sdlc/`:
+
+| Engine | State file | Status |
+|---|---|---|
+| `/sdlc-run` | `sdlc-run-state.json` | committed — phases + token roll-up (D37) |
+| `/sdlc-task` | `sdlc-task-state.json` | committed — per-task status + token roll-up (D38) |
+| `/sdlc-flow` | `sdlc-flow-state.json` | committed — authoritative run index; drives `--resume` (D31) |
+| `/sdlc-block` | `block-orchestration-state.json` | committed — per-block status + child token roll-up (D39) |
+
+`/sdlc-flow` also writes a human-readable `worklog.md` alongside its state file. The other engines
+use per-stage report files (see below) as the primary resume signal; their state files are the
+at-a-glance index and token accounting artifact.
+
+### Report-file contract (sdlc-run / sdlc-task)
+Reports are named `[taskN-]<stage>.md` under `sdlc/reports/`. `/sdlc-flow` does not use this
+contract — it uses `sdlc-flow-state.json` + `worklog.md` instead (see
+[D31](../../planning/decisions/D31-committed-authoritative-state.md)).
 
 | Report | Written by | Read by |
 |---|---|---|
@@ -92,11 +102,7 @@ instead (see above and [D31](../../planning/decisions/D31-committed-authoritativ
 | `[taskN-]test.md` | test | review |
 | `[taskN-]review.md` | review | fix, document |
 | `[taskN-]document.md` | document | — |
-| `[taskN-]workflow.md` | wrap-up (sdlc-run / sdlc-task) | humans, `/review-workflow` |
-| `task<N>-log.md` | wrap-up (sdlc-task only) | `/clean-worktree` |
-| `block-workflow.md` | block Report | humans |
-| `execution-plan.json` | `/generate-tasks` or block Analyze ([D22](../../planning/decisions/D22-execution-plan-authored-at-generate-tasks.md)) | block Analyze |
-| `sdlc-state.json` / `sdlc-block-state.json` | per-phase / per-task state writer (D27 on `tac8-adoptions` / [D28](../../planning/decisions/D28-sdlc-block-task-state.md)) | resume / watchers — **gitignored** |
+| `[taskN-]workflow.md` | wrap-up (sdlc-run) | humans, `/review-workflow` |
 | `sdlc-flow-state.json` | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | `--resume`, end-review localization, PR body — **committed** |
 | `worklog.md` | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | human-readable run trail — **committed** |
 
@@ -123,41 +129,41 @@ Opus and the purely-procedural stages drop to Haiku.
 
 | Tier | Stages | Why |
 |---|---|---|
-| **Opus** | `generate-tasks` (fallback), `breakdown-gen`, block `Analyze` | planning / dependency-graph derivation — the leverage point |
-| **Sonnet** | `implement`, `fix`, `review`, `ui-test`, `document`, `breakdown-assess`; block `triage`/`merge`/`report` | judgment work |
-| **Haiku** | `scout`, `start-block`, `test`, `worktree-setup`, `wrap-up`, block `baseline-snapshot`/`teardown`/`write-plan`/state writers | fixed procedures, no judgment |
+| **Opus** | `generate-tasks` (fallback), `enumerate-blocks` | planning / dependency-graph derivation — the leverage point |
+| **Sonnet** | `implement`, `fix`, `triage`, `review`, `ui-test`, `document`, `wrap-up`, `pre-flight`, `PR` | judgment work |
+| **Haiku** | `scout`, `worktree-setup`, `test`, `update-task`, `state-writers` | fixed procedures, no judgment |
 
-**Staged escalation:** inside `/sdlc-run` and `/sdlc-task`, the *final* fix pass and *final* review
-attempt before the retry loop gives up run on `ESCALATION_MODEL` (`opus`). A hard task that has already
-failed twice gets one strong shot before it wraps up `FAIL` (or, under a block, escalates). Set
-`ESCALATION_MODEL = null` to disable.
+**Staged escalation:** inside `/sdlc-run`, `/sdlc-task`, and `/sdlc-flow`, the *final* fix pass and
+*final* review attempt run on `ESCALATION_MODEL` (`opus`). A hard task that has already failed gets one
+strong shot before the pipeline wraps up `FAIL`. Set `ESCALATION_MODEL = null` to disable.
 
 The real planning leverage is **upstream**: `/generate-tasks` and `/breakdown` run on your *session*
 model, so author specs on an Opus session, then let the pipeline grind on Sonnet.
 
-### The retry loop (max 3 review attempts)
+### The retry loop (max 3 attempts)
 `implement → test → review →` `PASS: document` **or** `FAIL/PARTIAL: fix → test → review` (up to 3
-review attempts). Each fix pass is its own commit, so the diff from each pass is auditable. After 3
-failed attempts the pipeline skips Document and wraps up `FAIL`.
+review attempts — `/sdlc-run`). `/sdlc-flow` and `/sdlc-task` use a triage-gated bail instead of a
+simple counter: triage classifies each failure as `RETRYABLE` or stuck, and stops early on stuck. Each
+fix pass is its own commit, so the diff from each pass is auditable. After max failures the pipeline
+wraps up `FAIL`.
 
 ---
 
 ## Token usage
 
-Costs are dominated by stage count × model tier × spec size. The tables on each engine page break this
-down per stage; measured per-run figures are filled in as telemetry accrues (`tracedAgent` emits
-per-stage token deltas into each run's workflow report).
+Costs are dominated by stage count × model tier × spec size. Per-run token totals are recorded in
+each engine's committed state file — check the state JSON for real figures from past runs.
 
-| Workflow | Agents per run (typical) | Measured tokens | Notes |
-|---|---|---|---|
-| `/sdlc-flow` (5-task spec, PASS first try) | ~30–40 | _TBD_ | one worktree setup + per-task update/implement/test + one end-review + docs + wrap-up + PR |
-| `/sdlc-run` (one task, PASS first try) | ~6–8 | _TBD_ | scout → (plan) → implement → test → review → document → wrap-up |
-| `/sdlc-task` (one task, PASS first try) | ~7–9 | _TBD_ | adds worktree-setup; otherwise same |
-| `/sdlc-block` (5-task spec) | ~20–50 | ~0.5M–1.3M (measured, `expose-api-and-telegram-bot`) | shared setup once + per-task implement + one back-half |
+| Workflow | Typical agents per run | Notes |
+|---|---|---|
+| `/sdlc-task` (one task, PASS first try) | ~4–6 | scout + implement + test + commit |
+| `/sdlc-run` (one task, PASS first try) | ~6–8 | scout → implement → test → review → document → wrap-up |
+| `/sdlc-flow` (5-task spec, PASS first try) | ~30–40 | worktree-setup + per-task update/implement/test + end-review + docs + wrap-up + PR |
+| `/sdlc-block` (5-block roadmap) | N × `/sdlc-flow` + orchestration | dominated by child flow costs; roll-up in `block-orchestration-state.json` |
 
-> The `/sdlc-block` figure is the only end-to-end measurement we have so far (see
-> [its token-usage section](sdlc-block.md#token-usage)). Treat all `_TBD_` cells as placeholders to fill
-> from real runs.
+> **Token roll-up note:** all engines record **substantive-stages-only** totals — cheap Haiku helper
+> agents (state writers, enumerate, update-task) are excluded. See
+> [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md).
 
 ---
 
@@ -166,14 +172,12 @@ per-stage token deltas into each run's workflow report).
 - **[sdlc-flow.md](sdlc-flow.md)** — the default for non-trivial feature work (D30). Shared worktree,
   per-task test-fix loop, triage-gated bail (D32), committed state model (D31), PR wrap-up (D33).
 - **[sdlc-run.md](sdlc-run.md)** — the sequential engine. Parameters, `--from`, stages, resumption, gates.
-- **[sdlc-task.md](sdlc-task.md)** — the parallel-safe single-task engine. Worktrees, `--resume`,
-  `--implement-only`, the task log, `/clean-worktree` merge.
-- **[sdlc-block.md](sdlc-block.md)** — the lean spec orchestrator (D23/D24/D28). Pre-flight, Analyze,
-  in-place vs worktree waves, the consolidated back-half, resume state, failure triage.
+- **[sdlc-task.md](sdlc-task.md)** — lean single-unit engine (D38). In-place or `--worktree`, implement→test→fix→commit, pairs with `/chore`/`/ticket`.
+- **[sdlc-block.md](sdlc-block.md)** — roadmap orchestrator (D39/D40/D43). Pre-flight, enumerate-blocks, per-block `/sdlc-flow`, branch train, `/review-PR`, `/merge-train`.
 - **[commands.md](commands.md)** — the manual command lifecycle the engines automate (Phase 1 → 7).
 
 ## Related
 
 - [harness-json.md](../harness-json.md) — the `planning/harness.json` config the engines read.
 - [`.claude/commands/README.md`](../../.claude/commands/README.md) — the command catalog.
-- [`planning/decisions/`](../../planning/decisions/index.md) — the ADRs behind each behavior (D6–D28).
+- [`planning/decisions/`](../../planning/decisions/index.md) — the ADRs behind each behavior (D6–D43).

@@ -25,9 +25,9 @@ The [`workflows/`](workflows/index.md) subfolder is the canonical reference for 
 | Page | Covers |
 |---|---|
 | [workflows/index.md](workflows/index.md) | Hub: the four engines compared, shared concepts (reports, gates, model tiering), token overview |
-| [workflows/sdlc-run.md](workflows/sdlc-run.md) | Sequential engine — `--from`, stages, resumption |
-| [workflows/sdlc-task.md](workflows/sdlc-task.md) | Parallel-safe single-task engine — worktrees, `--resume`, `--implement-only`, merge flow |
-| [workflows/sdlc-block.md](workflows/sdlc-block.md) | Lean spec orchestrator (D22–D28) — pre-flight, Analyze, in-place vs worktree waves, consolidated back-half |
+| [workflows/sdlc-run.md](workflows/sdlc-run.md) | Sequential engine — `--from`, stages, committed state, resumption |
+| [workflows/sdlc-task.md](workflows/sdlc-task.md) | Lean single-unit engine (D38) — implement→test→fix→commit, in-place or `--worktree`, pairs with `/chore`/`/ticket` |
+| [workflows/sdlc-block.md](workflows/sdlc-block.md) | Roadmap orchestrator (D39/D40/D43) — enumerate-blocks, per-block `/sdlc-flow`, branch train, `/review-PR`, `/merge-train` |
 | [workflows/sdlc-flow.md](workflows/sdlc-flow.md) | Shared-worktree feature engine (D30–D33) — sequential tasks, per-task test→fix, one end review, PR wrap-up |
 | [workflows/commands.md](workflows/commands.md) | The manual Phase 1–7 command lifecycle the engines automate |
 
@@ -35,7 +35,7 @@ The [`workflows/`](workflows/index.md) subfolder is the canonical reference for 
 
 - **Commands reference:** `.claude/commands/README.md` — all commands, the pipeline
   flow, the `sdlc-block` orchestrator.
-- **Architectural decisions:** `planning/decisions/` — the append-only ADR log (D1–D33).
+- **Architectural decisions:** `planning/decisions/` — the append-only ADR log (D1–D43).
 - **Change history:** `log.md` — dated entries for every factory change.
 - **Why OKF Phase 2 happened:** `planning/decisions/D5-okf-phase-2-adopted.md` — the
   mechanism/policy split, schema, and MVP scope calls.

@@ -118,7 +118,12 @@ replaces the 5 × N report files:
 `state.json` keys: `spec_slug`, `branch`, `worktree_path`, `started_at`, `updated_at`,
 `status` (`running|review|docs|wrapup|blocked|done`), `current_task`, `tasks` (per-task
 `status/attempts/summary/issues/fixes/decisions/files_changed/commit/validated`), `review`
-(`verdict/findings/attempts`), `docs` (`changed/created`), `bail_reason`, `pr` (`url/number`).
+(`verdict/findings/attempts`), `docs` (`changed/created`), `bail_reason`, `pr` (`url/number`),
+`tokens` (per-task and per-stage token usage + cumulative `total`).
+
+> **Token roll-up note:** `tokens.total` covers substantive stages (implement, test, fix, review,
+> docs, wrap-up). Cheap Haiku helper agents (state writers, enumerate, update-task) are excluded.
+> See [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md).
 
 A **Haiku state-writer agent** stamps `started_at`/`updated_at` and commits both files (bundled
 with the `tasks.md` checkbox edit) in one `chore: flow state — <label>` commit per task/phase.
@@ -209,10 +214,11 @@ state is in git history.
 
 | Engine | Reach for it when |
 |---|---|
-| `/sdlc-flow` | **Default for non-trivial feature work** — a spec with multiple tasks, where reliability and a clean PR handoff matter more than parallel speed. |
-| `/sdlc-run` | A single task or a simple spec on the current branch. The consolidated back-half of `/sdlc-block`. |
-| `/sdlc-task` | One task that needs an isolated worktree — typically invoked by `/sdlc-block` for genuinely parallel waves. |
-| `/sdlc-block` | Rare speed case: task-level parallelism when truly independent tasks can run simultaneously. Note — `/sdlc-block` is slated for repositioning as a block-level orchestrator driving `/sdlc-flow` per block (see [D30](../../planning/decisions/D30-sdlc-flow-engine.md)). |
+| `/patch` | Trivial hotfix with no tests needed. |
+| `/sdlc-task` | Small tested change — a `/chore` or `/ticket` spec. Fast implement → test → commit. |
+| `/sdlc-run` | One task or a full spec on the current branch — no isolation or PR needed. |
+| `/sdlc-flow` | **Default for non-trivial feature work** — sequential, conflict-free, terminates in a PR. |
+| `/sdlc-block` | A whole roadmap — fans out one `/sdlc-flow` per independent block, branch train of PRs. |
 
 ---
 

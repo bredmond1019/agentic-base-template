@@ -8,8 +8,8 @@ description: The sequential engine that drives one task or a full spec from the 
 
 Runs the full SDLC pipeline for a spec **from its current stage to completion**, on the **current
 branch** (usually `main`). No worktree is created; each stage commits its own work, and the wrap-up
-stage updates `status.md` + `log.md` directly. It is the simplest engine and the back-half of
-`/sdlc-block`.
+stage updates `status.md` + `log.md` directly. It is the simplest engine — use it when you don't
+need branch isolation or a PR handoff.
 
 Engine: [`.claude/workflows/sdlc-run.js`](../../.claude/workflows/sdlc-run.js)
 
@@ -29,9 +29,6 @@ Engine: [`.claude/workflows/sdlc-run.js`](../../.claude/workflows/sdlc-run.js)
 | `<spec-slug>` | **Required.** The spec directory name — drives every `planning/<spec-slug>/…` path. | — |
 | `[N]` (2nd positional) | Optional task number. Scopes **every** stage to task N and prefixes every report `taskN-`. Omit for a full-spec run. | all tasks |
 | `--from <stage>` | Skip the scout and start at the named stage (the caller already knows the resume point). Valid: `implement`, `fix`, `test`, `review`, `ui-test`, `document`, `wrap-up`. | scout decides |
-
-> `--from` is how `/sdlc-block` invokes its consolidated back-half (`/sdlc-run <spec> --from test`) — see
-> [D17](../../planning/decisions/D17-sdlc-run-stage-flag.md) and [D24](../../planning/decisions/D24-consolidated-back-half.md).
 
 ---
 
@@ -101,20 +98,22 @@ the first incomplete stage; reports are authoritative, the log is a cross-refere
 | `review.md` = PASS | `document` |
 | `document.md` | `wrap-up` |
 
-A best-effort `sdlc-state.json` breadcrumb is written after each phase (D27 — `sdlc-run` phase state, landing with the `tac8-adoptions` branch)
-— a cheap, machine-readable "what phase is this run in" for humans/watchers. It is gitignored and does
-**not** drive resumption (the committed reports do).
+A committed `sdlc-run-state.json` is written after each phase — a compact, machine-readable
+index of what's in flight (current phase, completed phases, token usage). It lives under
+`planning/<spec>/sdlc/` and is swept into the final `chore:` wrap-up commit. The committed
+reports remain the authoritative resume signal; `sdlc-run-state.json` is the at-a-glance index
+and the token-accounting artifact. See [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md).
 
 ---
 
 ## When to use it
 
-- A single task or a full spec where **no parallelism** is needed.
+- A single task or a full spec where **no branch isolation** is needed.
 - **Resuming** a partially-completed spec — the scout picks up where the reports left off.
-- As the **consolidated back-half** of `/sdlc-block` (invoked automatically with `--from test`).
 
-Reach for [`/sdlc-task`](sdlc-task.md) instead when you need an isolated worktree (parallel runs, or
-keeping `main` clean); reach for [`/sdlc-block`](sdlc-block.md) to drive a whole multi-task spec.
+Reach for [`/sdlc-flow`](sdlc-flow.md) when you want branch isolation and a PR handoff.
+Reach for [`/sdlc-task`](sdlc-task.md) for small tested work (`/chore`/`/ticket`).
+Reach for [`/sdlc-block`](sdlc-block.md) to drive a whole roadmap as a branch train.
 
 ---
 
@@ -133,5 +132,5 @@ keeping `main` clean); reach for [`/sdlc-block`](sdlc-block.md) to drive a whole
 | **Full run (one task, PASS first try)** | — | _TBD_ (~6–8 agents) |
 
 Levers: a sharp upstream spec keeps the pipeline on Sonnet (no escalation); a clean first-try review
-avoids the fix→test→review cycles (each adds ~3 agents). Telemetry is not yet instrumented in
-`sdlc-run.js` the way it is in `sdlc-task.js` — fill these from measured runs.
+avoids the fix→test→review cycles (each adds ~3 agents). Per-stage token usage is recorded in
+`sdlc-run-state.json` after each phase — check the committed state file for measured figures.

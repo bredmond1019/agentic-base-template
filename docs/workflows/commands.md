@@ -6,7 +6,7 @@ description: The step-by-step slash-command pipeline (Phase 1–7) that the auto
 
 # Manual SDLC command lifecycle
 
-The three engines ([`/sdlc-run`](sdlc-run.md), [`/sdlc-task`](sdlc-task.md), [`/sdlc-block`](sdlc-block.md))
+The four engines ([`/sdlc-run`](sdlc-run.md), [`/sdlc-task`](sdlc-task.md), [`/sdlc-flow`](sdlc-flow.md), [`/sdlc-block`](sdlc-block.md))
 **automate** the manual slash-command pipeline below. Run the commands by hand when you want a human
 checkpoint between stages — inspect each report before proceeding, intervene, or cherry-pick stages.
 
@@ -48,7 +48,7 @@ flowchart TD
 | Start | `/status` · `/process-tasks` · `/session-recap` | Orient: current focus, eligible specs, recent work | chat only |
 | Block setup | `/start-block [spec]` | Flip the spec to `In progress` | `status.md` |
 | **1 — Plan** | `/generate-tasks <spec>` | Author the full task spec from the master plan + commit it | `tasks.md` |
-| 1 — Plan (ad-hoc) | `/chore` · `/feature` · `/plan <desc>` | Plan work that isn't a master-plan block | `planning/<prefix>-<slug>/{tasks,plan}.md` |
+| 1 — Plan (ad-hoc) | `/chore` · `/ticket` · `/plan <desc>` | Plan work that isn't a master-plan block | `planning/<prefix>-<slug>/{tasks,plan}.md` |
 | 1 — Plan (opt.) | `/breakdown <spec>` | Decompose the spec into atomic sub-steps (HOW) | `breakdown.md` |
 | **2 — Implement** | `/implement <spec> [N]` | Execute the task(s); completeness self-check before commit | `[taskN-]implement.md` |
 | 2 — Fix | `/fix <spec> [N]` | Targeted fixes for a FAIL/PARTIAL verdict (overwrites implement slot) | `[taskN-]implement.md` |
@@ -111,9 +111,10 @@ Phase 2–6 pipeline (downstream commands derive report paths from the spec's pa
 `plan.md` spec flows through identically to a `tasks.md` one):
 
 ```
-/chore <desc>    → planning/chore-<slug>/tasks.md
-/feature <desc>  → planning/feature-<slug>/tasks.md   ┐
-/plan <desc>     → planning/plan-<slug>/plan.md        ├─→ /implement → /test → /review-task → /document → /log-work
+/chore <desc>    → planning/chore-<slug>/tasks.md   ─→ lean /sdlc-task (fast path)
+/ticket <desc>   → planning/ticket-<slug>/tasks.md  ─→ lean /sdlc-task (fast path)
+/plan <desc>     → planning/plan-<slug>/plan.md     ─→ /sdlc-block (multi-block)
+                                                        or /generate-tasks --from + /sdlc-flow (single block)
 ```
 
 ---
@@ -138,6 +139,7 @@ that [`/sdlc-task`](sdlc-task.md) and [`/sdlc-block`](sdlc-block.md) automate.
 | Situation | Reach for |
 |---|---|
 | Step-by-step with a human checkpoint between stages | manual commands (this page) |
+| Small tested change — a `/chore` or `/ticket` spec | [`/sdlc-task`](sdlc-task.md) |
 | One task / full spec, sequential, no isolation | [`/sdlc-run`](sdlc-run.md) |
-| Tasks running at the same time, or keep `main` clean | [`/sdlc-task`](sdlc-task.md) (one per session) |
-| Drive a whole multi-task spec to completion in one shot | [`/sdlc-block`](sdlc-block.md) |
+| Non-trivial feature work, branch-isolated, terminates in PR | [`/sdlc-flow`](sdlc-flow.md) |
+| Drive a whole roadmap as a branch train of PRs | [`/sdlc-block`](sdlc-block.md) |

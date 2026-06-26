@@ -210,15 +210,16 @@ remaining, open questions, first command for the next agent), then invokes `/log
 `/commit`. `/prime` in the next session detects the handoff file and surfaces it first.
 Delete `planning/handoff.md` once the new session has consumed it.
 
-### `/close-out [--skip-coverage] [note]`
-Quality-close pipeline for the end of an `sdlc-run` or `sdlc-flow` session. Runs three
+### `/close-out [--gap-check-only] [--skip-coverage] [note]`
+Quality-close pipeline for the end of an `sdlc-run` or `sdlc-flow` session. Runs four
 steps in sequence: **(1)** the full validation suite from `planning/harness.json` — stops
 immediately if any gating check fails; **(2)** coverage gap scan — reads changed source
 files, classifies gaps as adequate/non-blocking/blocking, writes minimal targeted tests for
 blocking gaps and re-runs the suite to confirm; **(3)** `/update-docs --patch`; **(4)**
 `/handoff` with the provided note. Pass `--skip-coverage` to skip step 2 when coverage was
-already verified by a prior `/review-task`. Non-blocking gaps are noted in the handoff rather
-than blocking it.
+already verified by a prior `/review-task`. Pass `--gap-check-only` to skip step 4 (the
+handoff) — used by `/sdlc-block` for automated per-block gap-checks mid-run. Non-blocking
+gaps are noted in the handoff rather than blocking it.
 
 ### `/session-recap`
 Start-of-session briefing: reads the three most recent Log entries, status.md, the current

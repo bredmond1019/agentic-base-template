@@ -5,6 +5,35 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## 2026-06-26 — Phase 3 B: Workflow + command docs rewrite — redesign master-plan complete
+
+Phase 3 Block B of the SDLC engines + planner surface redesign master-plan. Final block.
+
+**Full rewrites:**
+- `docs/workflows/sdlc-block.md` — block-level roadmap orchestrator (was task-wave machine)
+- `docs/workflows/sdlc-task.md` — lean implement→test→fix→commit engine (was full pipeline)
+
+**Targeted updates:**
+- `docs/workflows/sdlc-run.md` — committed `sdlc-run-state.json`; removed stale back-half refs
+- `docs/workflows/sdlc-flow.md` — `tokens` block added to state description; engine ladder updated
+- `docs/workflows/index.md` — new engine ladder, updated mermaid, committed-state model table
+- `docs/workflows/commands.md` — `/feature` replaced with `/ticket`; updated ad-hoc routes
+- `docs/index.md` — sdlc-block/sdlc-task descriptions updated; ADR range D1–D43
+- `docs/harness-json.md` — `block` object rewritten (`maxParallelBlocks`/`autoMerge`); `count-delta`
+  caveat note added; stale `/feature` + `--under-block` refs removed
+- `.claude/commands/README.md` — `/close-out` description updated (4 steps, `--gap-check-only`)
+
+**Dead-link sweep clean:** `execution-plan.json`, `--from test` (back-half), `--verify-depth`,
+`block.verify`, `/feature`, `sdlc-block-state.json`, `sdlc-state.json` — all removed.
+
+**`.agents/` mirrors frozen** — D4 addendum documents that `.agents/skills/` is frozen at
+current state; not updated, not shipped, not maintained in lockstep. Separate from `.claude/`.
+
+All four engines `node --check` clean. The SDLC engines + planner surface redesign master-plan
+is now complete in `base-template`. Downstream propagation (Wave 5) is next.
+
+---
+
 ## 2026-06-26 — Phase 3 C: Schema + scaffold + harness config finalized
 
 Phase 3 Block C of the SDLC engines + planner surface redesign master-plan.
