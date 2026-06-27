@@ -57,7 +57,8 @@ None known at initialization.
 ```
 {{SLUG}}/
 ├── .claude/        ← Claude Code commands + SDLC workflow engines
-├── planning/       ← context, status, master-plan, harness.json, decisions/, <concept>/
+├── planning/       ← context, status (+Momentum/Metrics), master-plan, knowledge, memory,
+│                     artifacts/, harness.json, decisions/, <concept>/
 └── <source dirs>   ← add as the project grows
 ```
 
