@@ -5,6 +5,15 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## [2026-06-27]
+
+### Plan: global ~/.claude/commands/ migration authored (plan-create-global-commands)
+- **What:** Authored the `plan-create-global-commands` mini-roadmap (2 phases, 3 blocks) for migrating all 34 universal SDLC commands to `~/.claude/commands/` globally. Block A = `/sync-global-commands` command + initial install; Block B = trim `scaffold/.claude/commands/`; Block C (brain repo) = `/new-project` engines-only default + delete 9 brain duplicate commands. Also clarified sub-brain command model (currently empty, inherit global) and confirmed `~/.claude/workflows/` not recommended as global location.
+- **Why:** Reduce per-project command duplication — all 34 universal SDLC commands repeat in every downstream repo; a single global install eliminates the copy and keeps them in sync.
+- **Refs:** planning/plan-create-global-commands/plan.md
+
+---
+
 ## 2026-06-26 — Wave 5 downstream propagation complete
 
 Completed Wave 5 downstream propagation of the SDLC engines + planner surface redesign to all five downstream projects (bastion, bella, markdown-engine-validator, price-scout, amistad). Each repo now carries the full harness through Phase 3 C: committed state + token telemetry (D37), lean `/sdlc-task` + `/patch` ladder (D38), block-level `/sdlc-block` orchestrator (D39), branch-train + PR model (D40), restructured planner (D41–D42), and `/close-out` integration (D43). Cross-repo coordination tracked in `planning/handoff.md`. All four engines `node --check` clean across all repos. Brain-level `/new-project` rewrite to call `/generate-master-plan` (D34 follow-up) also complete.
