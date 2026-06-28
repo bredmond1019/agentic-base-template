@@ -5,6 +5,15 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## [2026-06-28]
+
+### Per-block specs (A/B/C) generated for global-commands migration + 8 HQ commands copied into core/ + side/ sub-brains
+- **What:** Generated per-block task specs (A/B/C) for the global-commands migration and copied 8 tier-scoped HQ commands into the core/ and side/ sub-brains. Wrote handoff for Block A execution. Concretely: (1) Generated 3 per-block task specs for `plan-create-global-commands`, each in its own slug-dir (independent runs would collide on a shared `tasks.md`): `planning/gc-blockA-sync-command/tasks.md`, `planning/gc-blockB-trim-scaffold/tasks.md`, `planning/gc-blockC-new-project/tasks.md`; registered all three in `planning/index.md`. Model recommendation: Sonnet for all three; each runs as a lean `/sdlc-task`; none flagged for `/breakdown`. (Committed 70e9cd4.) (2) Copied 8 HQ commands into `core/.claude/commands/` + `side/.claude/commands/` (byte-identical) in the BRAIN repo (`agentic-portfolio/`, committed separately there), with a README index. Adaptations: `prime` rewritten tier-scoped; `log-work` given tier-root mode (tier roots aren't registered `[[repos]]` in `brain.toml`); `generate-master-plan` tier-prefixed RAG path; `handoff` resume-dir fix; `session-recap` cosmetic; `archive`/`commit`/`wrap-up` verbatim. Each carries a TEMP banner (pending the global-commands migration). (3) Wrote `planning/handoff.md` pointing at Block A execution (`/sdlc-task gc-blockA-sync-command`).
+- **Why:** User wanted runnable per-block specs for the global-commands work, plus the 8 sub-brain commands copied into core/ and side/ now ("easier to copy them in while I wait for this work to finish").
+- **Refs:** `planning/plan-create-global-commands/plan.md`, `planning/handoff.md`
+
+---
+
 ## [2026-06-27]
 
 ### Plan: global ~/.claude/commands/ migration authored (plan-create-global-commands)
