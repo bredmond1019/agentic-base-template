@@ -23,13 +23,13 @@ Read-only — does not modify any files.
 <One sentence: what unblocks the next stage.>
 
 ### Platform Status
-- **LinkedIn:** [✅ live / ⬜ not updated] — <one-line note on headline/about/posts>
-- **Upwork:** [✅ live / ⬜ not started]
-- **Toptal:** [✅ applied / ⬜ gated — after competence checkpoint]
-- **Rust repos public:** [✅ / ⬜ not yet — Brandon's call]
+- **LinkedIn:** [live / not updated] — <one-line note on headline/about/posts>
+- **Upwork:** [live / not started]
+- **Toptal:** [applied / gated — after competence checkpoint]
+- **Rust repos public:** [yes / not yet — Brandon's call]
 
 ### Active Leads
-<List each lead from pipeline.md as: "- [Name] — Stage: X — Next: Y [🔒 if gated]">
+<List each lead from pipeline.md as: "- [Name] — Stage: X — Next: Y [(locked) if gated]">
 <If pipeline is empty: "No active leads. Both warm leads gated on competence checkpoint.">
 
 ### Content Queue

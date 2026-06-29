@@ -24,7 +24,7 @@ Return the subagent's result to the user.
 
    **If it's the headline, about section, featured section, or profile photo:**
    - Find the corresponding row in the Platform Status table (Section 7 of linkedin.md)
-   - Change the Status cell from "Not updated" to "✅ Live — <today's date>"
+   - Change the Status cell from "Not updated" to "Live — <today's date>"
    - If new copy was provided in $ARGUMENTS, update the relevant copy section (Section 1 or 2)
 
    **If it's a new post going live:**

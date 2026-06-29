@@ -23,9 +23,9 @@ Return the subagent's result to the user.
 2. Read `docs/progress.md` in full.
 
 3. Identify the checklist item(s) that match $ARGUMENTS:
-   - In the **Where You Are Now** section: change `⬜` to `✅` for the matching item(s)
-   - In the relevant **Stage** section: change `⬜` to `✅` for the matching task(s)
-   - If a whole stage is now complete, mark its **Done when:** line with ✅
+   - In the **Where You Are Now** section: change `[ ]` to `[x]` for the matching item(s)
+   - In the relevant **Stage** section: change `[ ]` to `[x]` for the matching task(s)
+   - If a whole stage is now complete, mark its **Done when:** line with `[x]`
 
 4. Rewrite the **CURRENT POSITION** callout at the top to reflect the new state:
    - If the completed item was the gate blocking a stage, advance to the next stage
@@ -41,7 +41,7 @@ Return the subagent's result to the user.
 ## Notes
 
 - Only touch items that match $ARGUMENTS — do not check off anything else
-- Do not rewrite prose sections — only change ⬜ → ✅ and the CURRENT POSITION callout
+- Do not rewrite prose sections — only change `[ ]` to `[x]` and update the CURRENT POSITION callout
 - If the item described in $ARGUMENTS doesn't clearly map to a checklist item, show the user the closest matches and ask which to check off
 
 ## Context / Files to Read

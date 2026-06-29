@@ -31,7 +31,7 @@ Return the subagent's result to the user.
    - **Stage** — infer from notes; default to `identified` if no contact made yet
 
 5. Determine gate status:
-   - If competence checkpoint NOT cleared: set Gate column to `🔒 After competence checkpoint`
+   - If competence checkpoint NOT cleared: set Gate column to `(locked) After competence checkpoint`
    - If competence checkpoint IS cleared: set Gate column to `—`
 
 6. Add a row to the Active Leads table in `docs/business/pipeline.md`:

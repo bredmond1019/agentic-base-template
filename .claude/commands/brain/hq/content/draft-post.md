@@ -38,10 +38,10 @@ Examples:
    - Tone: same directness as LinkedIn but longer form; first-person throughout
 
 7. Apply brand guardrails before outputting:
-   - ✅ Subject of every sentence is you, your work, or your reasons — never a former employer's conduct
-   - ✅ No fabricated metrics (don't invent numbers; use only documented figures from profile-and-pitch.md or brand.md)
-   - ✅ De-identification: no employer names, client names, or identifying details unless already public
-   - ✅ Voice check: does this sound like Brandon or like a LinkedIn influencer? Cut anything that sounds like the latter.
+   - Subject of every sentence is you, your work, or your reasons — never a former employer's conduct
+   - No fabricated metrics (don't invent numbers; use only documented figures from profile-and-pitch.md or brand.md)
+   - De-identification: no employer names, client names, or identifying details unless already public
+   - Voice check: does this sound like Brandon or like a LinkedIn influencer? Cut anything that sounds like the latter.
 
 8. Output the draft(s). If both EN and PT requested, output EN first, then PT (written fresh — not translated).
 

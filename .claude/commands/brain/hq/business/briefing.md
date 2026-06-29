@@ -50,7 +50,7 @@ Current focus: <NOW line from planning/status.md Operating Board>
 <One sentence from docs/progress.md — current stage and the gate>
 
 ### Platform Status
-<LinkedIn / Upwork / Toptal — one line each: ✅ live or ⬜ pending>
+<LinkedIn / Upwork / Toptal — one line each: live or pending>
 
 ### Active Leads
 <From pipeline.md — leads with stage and open next action>
