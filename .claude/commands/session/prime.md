@@ -1,4 +1,4 @@
-# Prime — Orient to this repo at the start of a session.
+# Prime — Deep orient to the current project at the start of a session.
 
 ## Instructions
 

@@ -1,4 +1,4 @@
-# Prime — Orient to this repo at the start of a session.
+# Prime — Orient to the full company brain (HQ + all tiers) at the start of a session.
 
 This command is **`brain.toml`-driven**. Bare invocation reads HQ top-level + the four tier rollups
 (compact generated tables) + `_root` repo cache cards — far fewer files than a flat all-projects scan.

@@ -3,11 +3,18 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-06-29
+**Last updated:** 2026-06-29T00:00:00-03:00
 
 ---
 
 ## [2026-06-29]
+
+### Block A complete (global commands install) + capture fix in brain + prime title updates
+- **What:** Block A of plan-create-global-commands executed: git mv'd all 34 flat `.claude/commands/` files into `session/`, `planning/`, `sdlc/`, `git/` subdirs; populated `brain/` reference dir (28 brain commands, capture excluded from `shared/session/`); created `sync-global-commands.md`; ran initial global install to `~/.claude/commands/`; updated `commands/README.md` and plan file. Fixed `/capture` command in brain repo (`agentic-portfolio/.claude/commands/capture.md`) — old version wrote backlog to CWD-relative path with no brain.toml walk-up; updated to match harness version so it always routes to HQ backlog. Fixed Block A spec: removed `capture.md` from `brain/shared/session/` copy list, updated AC count 29→28. Updated `/prime` titles: `session/prime.md` → "Deep orient to the current project"; `brain/prime.md` + `brain/shared/session/prime.md` → "Orient to the full company brain (HQ + all tiers)". Reverted `session-recap.md` rename (would conflict with Claude Code built-in `/recap`).
+- **Why:** Block A is the first execution block of the global-commands migration — establishes the subdirectory structure and performs the initial install to `~/.claude/commands/`. Capture fix ensures the brain HQ command routes correctly regardless of CWD.
+- **Refs:** `.claude/commands/` (reorganized), `planning/plan-create-global-commands/plan.md`, `planning/gc-blockA-sync-command/tasks.md`
+
+---
 
 ### Global-commands migration replanned — all 4 block specs (A/B/C revised + Block D) rewritten and ready to execute
 - **What:** Settled the global-commands migration design: subdirectory structure for `~/.claude/commands/`, brain/sub-brain command model, `/capture` behavior, naming convention, and `(global)` tag protocol. Rewrote all four block specs — Blocks A/B/C revised and a new Block D added for downstream sweep. All specs committed and ready to execute.
