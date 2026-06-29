@@ -3,11 +3,18 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-06-29T00:00:00-03:00
+**Last updated:** 2026-06-29T14:47:59-03:00
 
 ---
 
 ## [2026-06-29]
+
+### Block C — Brain command reorganization
+- **What:** Reorganized brain `.claude/commands/` flat list into `shared/` + `hq/` subdirectories; created `sync-brain-commands.md`; bootstrapped all 4 sub-brains (core, side, client, portfolio) with `session/`, `planning/`, `projects/` command sets; updated `/new-project` with `--include-commands` flag; updated `/generate-sub-brain` with shared command bootstrap step; updated brain `CLAUDE.md` with namespaced command names + Available Globally section.
+- **Why:** Block C is part of the gc-global-commands initiative to restructure brain commands into `shared/` + `hq/` subdirs and distribute shared commands to all sub-brain tiers, completing the brain-side reorganization before Block D's downstream sweep.
+- **Refs:** `planning/plan-create-global-commands/plan.md`; `planning/gc-blockC-new-project/tasks.md`
+
+---
 
 ### Block B complete (trim scaffold + update docs)
 - **What:** Block B of plan-create-global-commands executed (5/5 tasks): deleted 3 redundant scaffold command stubs, added "Available Commands" listing to `scaffold/CLAUDE.md`, updated `docs/using-the-template.md` and `README.md` to reflect the global-commands model. Block C (brain repo reorganization) handed off to a separate brain session.

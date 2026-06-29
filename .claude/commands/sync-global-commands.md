@@ -85,7 +85,7 @@ excluding the `brain/` reference directory.
 
 - Run this command any time harness commands are added, moved, or renamed in base-template.
 - `brain/` is a reference-only directory — it is never synced globally by design.
-- After the sync, commands are available globally as `/session:prime`, `/planning:plan`,
-  `/sdlc:implement`, `/git:commit`, `/e2e:test_crud_api`, etc.
+- After the sync, all commands are available globally by their filename: `/prime`, `/plan`,
+  `/implement`, `/commit`, `/test_crud_api`, etc. No namespace prefix.
 - Downstream project repos that have their own `.claude/commands/` override global commands
   of the same name — Claude Code's local-first walk-up takes precedence.
