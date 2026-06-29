@@ -23,7 +23,10 @@ Run `/new-project` from the `agentic-portfolio/` brain root. It will prompt for:
 
 `/new-project` then:
 
-1. Copies `.claude/` from `base-template` into `<slug>/`.
+1. Copies `.claude/workflows/` (the JS engines) from `base-template` into `<slug>/.claude/workflows/`.
+   Command files are **not** copied — they live globally in `~/.claude/commands/` and are available
+   automatically to every project. Pass `--include-commands` (Block C) to opt into a full local copy
+   for portable, offline, or shareable projects.
 2. Copies the **contents** of `scaffold/` into `<slug>/` (so `scaffold/planning/` becomes
    `<slug>/planning/`, etc.) and substitutes all `{{TOKENS}}`.
 3. Stamps the `base-template` commit hash as provenance in `planning/.template-version` and
@@ -33,6 +36,16 @@ Run `/new-project` from the `agentic-portfolio/` brain root. It will prompt for:
 
 After generation the project has a complete `planning/` skeleton and the full SDLC harness,
 but **no application code and no configured validation commands yet**.
+
+### What a new project inherits
+
+- **Global commands** — all harness slash commands from `~/.claude/commands/` are available
+  immediately (installed via `/session:sync-global-commands` from base-template). Invoke them using
+  the subdirectory namespace: `/session:prime`, `/planning:plan`, `/sdlc:implement`, etc.
+- **Workflow engines** — `.claude/workflows/*.js` ship per-project so they can read the local
+  `planning/harness.json` for stack-specific config.
+- **Project-specific commands** — if your project needs custom commands, place them in
+  `.claude/commands/`. Project-level commands take precedence over global commands on name conflict.
 
 ## 2. Configure harness.json for your stack
 
@@ -80,9 +93,9 @@ The scaffold ships tokenized stubs. Replace the tokens with real project content
 ## 4. Start your first session
 
 ```
-/prime                         # orient the agent: reads README, CLAUDE.md, context.md, status.md
-/status                        # confirm current focus
-/process-tasks                 # check which specs are eligible
+/session:prime                 # orient the agent: reads README, CLAUDE.md, context.md, status.md
+/session:status                # confirm current focus
+/sdlc:process-tasks            # check which specs are eligible
 ```
 
 ## 5. Run a spec through the pipeline
@@ -90,20 +103,20 @@ The scaffold ships tokenized stubs. Replace the tokens with real project content
 The typical flow for one spec (here `my-feature`):
 
 ```
-/generate-tasks my-feature     # write planning/my-feature/tasks.md
+/planning:generate-tasks my-feature     # write planning/my-feature/tasks.md
 
-/implement planning/my-feature/tasks.md
-/test      planning/my-feature/tasks.md
-/review-task planning/my-feature/tasks.md
+/sdlc:implement planning/my-feature/tasks.md
+/sdlc:test      planning/my-feature/tasks.md
+/sdlc:review-task planning/my-feature/tasks.md
 
 # if FAIL or PARTIAL:
-/fix       planning/my-feature/tasks.md
-/test      planning/my-feature/tasks.md
-/review-task planning/my-feature/tasks.md
+/sdlc:fix       planning/my-feature/tasks.md
+/sdlc:test      planning/my-feature/tasks.md
+/sdlc:review-task planning/my-feature/tasks.md
 
 # once PASS:
-/document  planning/my-feature/tasks.md
-/log-work
+/sdlc:document  planning/my-feature/tasks.md
+/session:log-work
 ```
 
 Or run it all unattended:
@@ -118,8 +131,8 @@ Or run it all unattended:
 For a small feature you want to try on a branch *before* committing it to `master-plan.md`:
 
 ```
-/plan add-rate-limiter                              # writes planning/plan-add-rate-limiter/plan.md
-/generate-tasks --from planning/plan-add-rate-limiter/plan.md   # → planning/plan-add-rate-limiter/tasks.md
+/planning:plan add-rate-limiter                              # writes planning/plan-add-rate-limiter/plan.md
+/planning:generate-tasks --from planning/plan-add-rate-limiter/plan.md   # → planning/plan-add-rate-limiter/tasks.md
 /sdlc-flow plan-add-rate-limiter                    # run it on a feature branch, terminates in a PR
 ```
 
@@ -127,8 +140,9 @@ This gets the experimental work the same decomposition rigor as a roadmap block 
 analysis, pipeline recommendation) without polluting the roadmap. See
 `planning/decisions/D34-adhoc-planning-seam.md`.
 
-See `.claude/commands/README.md` for the full pipeline reference, argument conventions, and
-`sdlc-block` options.
+See `scaffold/CLAUDE.md` → "Available Commands" for the full list of global harness commands,
+invocation format, and category descriptions. See `.claude/commands/README.md` (if present in your
+project) for project-level command conventions.
 
 ## 6. The update loop (pulling harness improvements later)
 
