@@ -9,6 +9,13 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [2026-06-29]
 
+### Block B complete (trim scaffold + update docs)
+- **What:** Block B of plan-create-global-commands executed (5/5 tasks): deleted 3 redundant scaffold command stubs, added "Available Commands" listing to `scaffold/CLAUDE.md`, updated `docs/using-the-template.md` and `README.md` to reflect the global-commands model. Block C (brain repo reorganization) handed off to a separate brain session.
+- **Why:** Block B completes the base-template side of the migration — scaffold no longer ships per-repo command copies for commands that live globally.
+- **Refs:** `scaffold/CLAUDE.md`, `docs/using-the-template.md`, `README.md`, `planning/gc-blockB-trim-scaffold/`
+
+---
+
 ### Block A complete (global commands install) + capture fix in brain + prime title updates
 - **What:** Block A of plan-create-global-commands executed: git mv'd all 34 flat `.claude/commands/` files into `session/`, `planning/`, `sdlc/`, `git/` subdirs; populated `brain/` reference dir (28 brain commands, capture excluded from `shared/session/`); created `sync-global-commands.md`; ran initial global install to `~/.claude/commands/`; updated `commands/README.md` and plan file. Fixed `/capture` command in brain repo (`agentic-portfolio/.claude/commands/capture.md`) — old version wrote backlog to CWD-relative path with no brain.toml walk-up; updated to match harness version so it always routes to HQ backlog. Fixed Block A spec: removed `capture.md` from `brain/shared/session/` copy list, updated AC count 29→28. Updated `/prime` titles: `session/prime.md` → "Deep orient to the current project"; `brain/prime.md` + `brain/shared/session/prime.md` → "Orient to the full company brain (HQ + all tiers)". Reverted `session-recap.md` rename (would conflict with Claude Code built-in `/recap`).
 - **Why:** Block A is the first execution block of the global-commands migration — establishes the subdirectory structure and performs the initial install to `~/.claude/commands/`. Capture fix ensures the brain HQ command routes correctly regardless of CWD.
