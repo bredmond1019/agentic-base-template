@@ -3,6 +3,17 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
+**Last updated:** 2026-06-29
+
+---
+
+## [2026-06-29]
+
+### Global-commands migration replanned — all 4 block specs (A/B/C revised + Block D) rewritten and ready to execute
+- **What:** Settled the global-commands migration design: subdirectory structure for `~/.claude/commands/`, brain/sub-brain command model, `/capture` behavior, naming convention, and `(global)` tag protocol. Rewrote all four block specs — Blocks A/B/C revised and a new Block D added for downstream sweep. All specs committed and ready to execute.
+- **Why:** Earlier specs had ambiguities around naming, the sub-brain command model, and capture behavior that needed resolution before execution to avoid rework.
+- **Refs:** `planning/plan-create-global-commands/plan.md`, `planning/gc-blockA-sync-command/tasks.md`, `planning/gc-blockB-trim-scaffold/tasks.md`, `planning/gc-blockC-new-project/tasks.md`
+
 ---
 
 ## [2026-06-28]
