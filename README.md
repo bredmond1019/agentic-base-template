@@ -47,7 +47,8 @@ these are the settled lowercase / concept-folder conventions:
 ```
 base-template/
 ├── .claude/              ← curated, project-agnostic Claude Code harness (mechanism only)
-│   ├── commands/         ← 22 SDLC + general commands (see commands/README.md)
+│   ├── commands/         ← global SDLC + general commands (installed to ~/.claude/commands/ via
+│   │                       /session:sync-global-commands; see commands/README.md)
 │   └── workflows/        ← sdlc-run / sdlc-task / sdlc-block engines + harness.schema.json
 │                           + templates/spec-template.md
 ├── scaffold/             ← TOKENIZED project templates — copied into each new project
@@ -96,7 +97,11 @@ The `scaffold/` files use placeholder tokens, substituted by `/new-project` at g
 
 `/new-project` (run from the `agentic-portfolio/` brain root) does the following:
 
-1. Copies `base-template/.claude/` into `<slug>/`.
+1. Copies `base-template/.claude/workflows/` into `<slug>/.claude/workflows/` — the SDLC
+   engine JS files only. Commands are **not** copied by default; they come from
+   `~/.claude/commands/` (global), which is installed from base-template via
+   `/session:sync-global-commands`. Use `--include-commands` (Block C) to opt into a full local
+   copy for portable/offline/shareable projects.
 2. Copies the **contents** of `base-template/scaffold/` into `<slug>/` (so `scaffold/planning/`
    becomes `<slug>/planning/`, etc.).
 3. Substitutes the tokens above across the copied files.
