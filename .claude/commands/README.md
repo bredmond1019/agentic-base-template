@@ -320,7 +320,7 @@ targeted changes addressing only the failures. Overwrites the `implement.md` slo
 if the review report is absent; soft-stops if the verdict is already PASS.
 
 ### `/update-task`
-Optionally marks a step done (prepends ✅) and/or appends a dated note to the spec's `## Notes`
+Optionally marks a step done (prepends `[done]`) and/or appends a dated note to the spec's `## Notes`
 section. Auto-detects the current spec from status.md if not given. Does not touch status.md.
 
 ### `/commit`
