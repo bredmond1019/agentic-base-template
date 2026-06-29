@@ -3,11 +3,18 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-06-29T14:47:59-03:00
+**Last updated:** 2026-06-29T16:30:00-03:00
 
 ---
 
 ## [2026-06-29]
+
+### plan-create-global-commands complete
+- **What:** Reverted `scaffold/CLAUDE.md` commands table from `<dir>:<name>` subdirectory format back to plain `/<name>` flat format. Block D (downstream CLAUDE.md sweep) declared obsolete — the subdirectory naming convention was abandoned before the sweep ran, so only the scaffold needed fixing. Marked the effort complete in `planning/status.md` and `planning/plan-create-global-commands/plan.md`.
+- **Why:** Commands were flattened back to root-level global install; the `<dir>:<name>` format was never propagated downstream, making Block D a no-op.
+- **Refs:** `planning/plan-create-global-commands/plan.md`
+
+---
 
 ### Block C — Brain command reorganization
 - **What:** Reorganized brain `.claude/commands/` flat list into `shared/` + `hq/` subdirectories; created `sync-brain-commands.md`; bootstrapped all 4 sub-brains (core, side, client, portfolio) with `session/`, `planning/`, `projects/` command sets; updated `/new-project` with `--include-commands` flag; updated `/generate-sub-brain` with shared command bootstrap step; updated brain `CLAUDE.md` with namespaced command names + Available Globally section.
