@@ -273,6 +273,20 @@ Reads a task spec and the source files each step touches, then writes a granular
 and `/fix` auto-detect this file and use the matching `### Step N:` section as the primary
 execution guide (HOW); `tasks.md` stays authoritative for scope (WHAT).
 
+### Pre-planning capture — `/capture`
+
+Before something is ready to plan, use `/capture` to park rich conversation notes without
+losing them. Creates `planning/<slug>/notes.md` with a structured scaffold and adds a
+pointer ticket to the brain's `planning/backlog.md`.
+
+| Command | Use for | Writes to |
+|---|---|---|
+| `/capture <title>` | Rich pre-plan notes — detailed enough to need a file, not yet a plan | `planning/<slug>/notes.md` + brain backlog |
+
+The notes file sections (What & Why · Context & Background · Key Information · Open Questions ·
+Rough Scope) are designed as direct input to the planning commands below — paste conversation
+content in, then promote with `/plan`, `/chore`, or `/generate-master-plan` when ready.
+
 ### Ad-hoc planners — `/chore`, `/ticket`, `/plan`
 
 Entry points into Phase 1 for work that **isn't** a master-plan block. Each takes a free-text
