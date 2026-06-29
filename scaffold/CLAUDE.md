@@ -68,11 +68,81 @@ None known at initialization.
 
 ---
 
+## Available Commands
+
+All harness commands are installed globally in `~/.claude/commands/` via `/session:sync-global-commands`
+(run from base-template). Invoke them with the `<dir>:<name>` format shown below. Project-specific
+commands (if any) live in `.claude/commands/` and take precedence over global commands on name conflict.
+
+### Session
+
+| Command | What it does |
+|---|---|
+| `/session:prime` (global) | Deep session start — reads key docs and summarizes state |
+| `/session:session-recap` (global) | Start-of-session briefing: recent log, current focus, next action |
+| `/session:handoff` (global) | Write handoff.md + log work + commit; hands off to a fresh agent |
+| `/session:wrap-up` (global) | Log work + commit; clean session close without a handoff file |
+| `/session:status` (global) | Quick status snapshot of current focus and momentum |
+| `/session:log-work` (global) | Log a completed work session and update status.md |
+| `/session:archive` (global) | Retire a folder/file — distill durable residue first (D35 gate) |
+| `/session:capture` (global) | Scaffold planning/<slug>/notes.md for pre-plan ideas; adds backlog ticket to brain |
+
+### Planning
+
+| Command | What it does |
+|---|---|
+| `/planning:plan` (global) | Author a mini-roadmap (phases/blocks) into planning/plan-<slug>/plan.md |
+| `/planning:ticket` (global) | Single-block behavior-change spec with observable AC + testing strategy |
+| `/planning:chore` (global) | Plan a maintenance or housekeeping task |
+| `/planning:breakdown` (global) | Decompose a task spec into agent-executable sub-steps |
+| `/planning:generate-tasks` (global) | Generate a task spec for a specified phase and block |
+| `/planning:generate-master-plan` (global) | Author the project roadmap as canonical block definitions |
+
+### SDLC
+
+| Command | What it does |
+|---|---|
+| `/sdlc:implement` (global) | Execute a plan file against the codebase |
+| `/sdlc:test` (global) | Application validation test suite |
+| `/sdlc:fix` (global) | Make targeted fixes for a FAIL or PARTIAL review verdict |
+| `/sdlc:patch` (global) | Hotfix ladder: small targeted fix routed to lean /sdlc-task |
+| `/sdlc:document` (global) | Update docs to reflect a completed, reviewed implementation |
+| `/sdlc:update-docs` (global) | Documentation health sweep: find stale sections and create missing coverage |
+| `/sdlc:conditional_docs` (global) | Task-type documentation router |
+| `/sdlc:process-tasks` (global) | Process a task list sequentially |
+| `/sdlc:update-task` (global) | Update a task spec after a deviation or completion |
+| `/sdlc:review-task` (global) | Verify a completed task against its spec and acceptance criteria |
+| `/sdlc:review-workflow` (global) | Verify that a completed pipeline executed correctly |
+| `/sdlc:review-PR` (global) | Review a PR against its block spec; post structured verdict |
+| `/sdlc:close-out` (global) | Verify test coverage, patch docs, and hand off cleanly |
+
+### Git
+
+| Command | What it does |
+|---|---|
+| `/git:commit` (global) | Stage and commit changes with a conventional message |
+| `/git:init-worktree` (global) | Initialize a new git worktree for isolated work |
+| `/git:clean-worktree` (global) | Merge a completed worktree branch into main and remove it |
+| `/git:start-block` (global) | Start a new spec block: branch, initial commit, worktree setup |
+| `/git:merge-train` (global) | Merge all approved block PRs in dependency order |
+
+### E2E
+
+| Command | What it does |
+|---|---|
+| `/e2e:test_auth_gate` (global) | E2E test template: authentication gate |
+| `/e2e:test_crud_api` (global) | E2E test template: CRUD API |
+| `/e2e:test_error_handling` (global) | E2E test template: error handling |
+| `/e2e:test_ui_form` (global) | E2E test template: UI form |
+
+> `/session:sync-global-commands` (global) is available in base-template only — it syncs
+> these commands to `~/.claude/commands/` and aborts if run outside the base-template root.
+
 ## SDLC pipeline
 
-This project carries the curated SDLC harness. Run `/prime` to orient, then drive structured
-work through `/generate-tasks → /implement → /test → /review-task → /document → /log-work`.
-See `.claude/commands/README.md` for the full pipeline reference.
+This project carries the curated SDLC harness. Run `/session:prime` to orient, then drive
+structured work through:
+`/planning:generate-tasks → /sdlc:implement → /sdlc:test → /sdlc:review-task → /sdlc:document → /session:log-work`.
 
 > **Stack note:** the SDLC engines carry no stack defaults. Point them at this project's stack
 > by filling `planning/harness.json` (validation commands + optional UI-test config). Copy a
