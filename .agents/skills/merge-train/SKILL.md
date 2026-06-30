@@ -1,7 +1,7 @@
 ---
 name: merge-train
 description: >
-  Trigger on '/merge-train' or when running the Merge Train command (Merge the block branch train into the base in recorded dependency order, halting on conflict.)
+  >
 ---
 
 # Merge Train — Merge the block branch train in dependency order.
@@ -221,3 +221,4 @@ git branch | grep "<planSlug>"
 - **Auto-merge mode.** If `/sdlc-block` ran with `--auto-merge`, blocks were already landed
   during the run. This command exits early in that case.
 - Run from the **main repo root**, not from inside a worktree.
+

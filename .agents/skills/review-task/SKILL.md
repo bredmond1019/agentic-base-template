@@ -1,7 +1,7 @@
 ---
 name: review-task
 description: >
-  Trigger on '/review-task' or when running the Review Task command (Verify a completed task against its spec and acceptance criteria.)
+  >
 ---
 
 # Review Task — Verify a completed task against its spec and acceptance criteria.
@@ -135,3 +135,4 @@ If verdict is not PASS: /fix planning/phase0-blockC/tasks.md [N]
                         then: /test planning/phase0-blockC/tasks.md [N]
                         then: /review-task planning/phase0-blockC/tasks.md [N]
 ```
+

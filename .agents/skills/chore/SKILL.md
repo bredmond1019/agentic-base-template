@@ -1,8 +1,7 @@
 ---
 name: chore
 description: >
-  Trigger on '/chore' or when running the Chore command (Plan a maintenance or
-  housekeeping task.)
+  >
 ---
 
 # Chore — Plan a maintenance or housekeeping task.
@@ -86,3 +85,4 @@ planning/chore-{name}/tasks.md
 Next (implement + test loop):
   /sdlc-task chore-{name}
 ```
+

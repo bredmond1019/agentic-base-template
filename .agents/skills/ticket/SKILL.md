@@ -1,8 +1,7 @@
 ---
 name: ticket
 description: >
-  Trigger on '/ticket' or when running the Ticket command (Plan a small behavior-change with
-  observable Acceptance Criteria and a Testing Strategy, routing to lean /sdlc-task).
+  >
 ---
 
 # Ticket — Plan a small behavior-change with observable Acceptance Criteria.
@@ -125,3 +124,4 @@ planning/ticket-{slug}/tasks.md
 Next (implement + test loop):
   /sdlc-task ticket-{slug}
 ```
+

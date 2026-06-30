@@ -1,7 +1,7 @@
 ---
 name: clean-worktree
 description: >
-  Trigger on '/clean-worktree' or when running the Clean Worktree command (Merge a completed SDLC worktree branch into main and remove it.)
+  >
 ---
 
 # Clean Worktree — Merge a completed SDLC worktree branch into main and remove it.
@@ -188,3 +188,4 @@ The literal single-token form is output by `/sdlc-task` when it creates a suffix
 - **Task log (sdlc-task only):** When a task was run with `/sdlc-task`, the worktree branch contains a `task<N>-log.md` file instead of status.md/log.md changes. Step 6.5 reads that file and applies the updates to main after the merge. Always merge tasks in task-number order so status.md's "Current focus" ends up pointing to the right next task.
 - **Suffix worktrees:** If `/sdlc-task` created `<spec-slug>-task8-2` (due to a collision), pass the full name as a single argument: `/clean-worktree <spec-slug>-task8-2`. The task log is still found at `planning/<spec-slug>/sdlc/reports/task8-log.md` (based on the task number extracted from the branch name).
 - **`/sdlc-block` does its own merges.** Do not run `/clean-worktree` for tasks driven by `/sdlc-block` — it merges each wave for you. Use this command only for standalone `/sdlc-task` runs or manual worktrees from `/init-worktree`.
+

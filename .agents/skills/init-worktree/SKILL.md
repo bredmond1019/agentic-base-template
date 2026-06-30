@@ -1,7 +1,7 @@
 ---
 name: init-worktree
 description: >
-  Trigger on '/init-worktree' or when running the Init Worktree command (Create an isolated git worktree for an SDLC spec or task.)
+  >
 ---
 
 # Init Worktree — Create an isolated git worktree for an SDLC spec or task.
@@ -114,3 +114,4 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
 - `.env` / `.env.local` are gitignored and must be copied manually (step 9).
 - All `git commit` calls inside the pipeline will commit to branch `<worktreeName>`, not `main`, because git detects the worktree context automatically.
 - When the pipeline finishes, run `/clean-worktree` from the main repo session to merge the branch and clean up.
+

@@ -1,7 +1,7 @@
 ---
 name: fix
 description: >
-  Trigger on '/fix' or when running the Fix command (Make targeted fixes for a FAIL or PARTIAL review verdict.)
+  >
 ---
 
 # Fix — Make targeted fixes for a FAIL or PARTIAL review verdict.
@@ -165,3 +165,4 @@ Then output:
 Next: /test <spec> [N]
 then: /review-task <spec> [N]
 ```
+

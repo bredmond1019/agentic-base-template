@@ -1,7 +1,7 @@
 ---
 name: review-PR
 description: >
-  Trigger on '/review-PR' or when running the Review PR command (Spec-aware review for a branch-train PR: checkout, gating suite, AC check, gh verdict post.)
+  >
 ---
 
 # Review PR — Spec-aware review for a branch-train PR.
@@ -159,8 +159,8 @@ on gating results only." and continue.
 - **REQUEST_CHANGES** — any gating check with `gates: true` fails, emoji gate fails,
   or any AC is NOT MET or PARTIAL.
 - **COMMENT** — use only when informational (no spec found + all gating checks pass, **or** no gating
-  suite could be located at all per Step 4 — never APPROVE in that case);
-  note what could not be verified so the human reviewer can fill the gap.
+  suite could be located at all per Step 4); note what could not be verified so the human reviewer can
+  fill the gap. Never APPROVE when the gating suite could not be located.
 
 ### Step 7 — Compose and post the review
 
@@ -227,3 +227,4 @@ Report to the user:
   block's spec because `baseRefName` is the train branch from which this block forked.
 - **`/merge-train`** reads the orchestration state and merges all approved PRs bottom-up
   in dependency order. Run it after every PR in the train is approved.
+

@@ -1,7 +1,7 @@
 ---
 name: close-out
 description: >
-  Trigger on '/close-out' or when running the Close Out command (Verify test coverage, patch docs, and hand off cleanly after an sdlc-run or sdlc-flow session.)
+  >
 ---
 
 # Close Out — Verify test coverage, patch docs, and hand off cleanly.
@@ -137,3 +137,4 @@ Coverage note: <comma-separated list of files with non-blocking gaps> — not bl
 
 - `planning/harness.json` — validation suite (checks + gating flags)
 - `planning/status.md` — current focus (to scope coverage check to recent work)
+

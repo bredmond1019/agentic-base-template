@@ -1,7 +1,7 @@
 ---
 name: test
 description: >
-  Trigger on '/test' or when running the Application Validation Test Suite command (Run the Application Validation Test Suite command.)
+  >
 ---
 
 # Application Validation Test Suite
@@ -187,3 +187,4 @@ After writing the file, output one line to chat:
 ```
 Next: /review-task planning/<spec-slug>/tasks.md [N]
 ```
+

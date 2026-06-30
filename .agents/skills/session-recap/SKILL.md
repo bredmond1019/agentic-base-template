@@ -1,7 +1,7 @@
 ---
 name: session-recap
 description: >
-  Trigger on '/session-recap' or when running the Session Recap command (Summarize recent work and current standing before starting a session.)
+  >
 ---
 
 # Session Recap — Summarize recent work and current standing before starting a session.
@@ -35,7 +35,7 @@ start of a coding session before doing anything else.
 
 3. If a task spec exists for the current focus block at
    `planning/<name>/tasks.md`, read it. Identify:
-   - Which steps are marked done (have ✅)
+   - Which steps are marked done (have `[done]` prefix)
    - Which steps remain
    - Any notes in the `## Notes` section
 
@@ -53,11 +53,11 @@ Use the author's own language where possible.>
 
 ## Where We Left Off
 <One paragraph. State: current block, last completed pipeline step (based on report files
-present), last completed spec task (based on ✅ markers), and anything explicitly noted
+present), last completed spec task (based on `[done]` markers), and anything explicitly noted
 as "in flight" or "next" in the Log.>
 
 ## Remaining Spec Tasks
-<Numbered list of un-checked (no ✅) steps from the current task spec.
+<Numbered list of un-checked (no `[done]` prefix) steps from the current task spec.
 If the spec is missing, say so. If all steps are done, say "All steps marked complete.">
 
 ## Next Pipeline Step
@@ -76,3 +76,4 @@ Do not read any source code files. Do not run any commands. This is read-only.
 - `planning/status.md`
 - `planning/<name>/tasks.md` (current block's spec, if it exists)
 - `planning/<name>/sdlc/reports/` (directory listing to check which step reports exist)
+

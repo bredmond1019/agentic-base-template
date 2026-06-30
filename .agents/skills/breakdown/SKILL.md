@@ -1,7 +1,7 @@
 ---
 name: breakdown
 description: >
-  Trigger on '/breakdown' or when running the Breakdown command (Decompose a task spec into agent-executable sub-steps.)
+  >
 ---
 
 # Breakdown — Decompose a task spec into agent-executable sub-steps.
@@ -144,3 +144,4 @@ checks as you go — do not batch them at the end. Each check must pass before c
 ## Report
 
 Return only the path to the file created (e.g. `planning/<spec-slug>/breakdown.md`).
+

@@ -1,7 +1,7 @@
 ---
 name: wrap-up
 description: >
-  Trigger on '/wrap-up' or when running the Wrap Up command (Log work and commit at the end of a session.)
+  >
 ---
 
 # Wrap Up — Log work and commit at the end of a session.
@@ -24,3 +24,4 @@ $ARGUMENTS — optional free-text note about what was done (passed straight thro
 2. Run `/commit` — stages and commits all remaining changes with a conventional message.
 
 That's it. No handoff file, no context summary — just log + commit.
+

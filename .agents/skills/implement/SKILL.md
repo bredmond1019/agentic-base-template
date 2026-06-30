@@ -1,7 +1,7 @@
 ---
 name: implement
 description: >
-  Trigger on '/implement' or when running the Implement command (Execute a plan file against the codebase.)
+  >
 ---
 
 # Implement — Execute a plan file against the codebase.
@@ -100,3 +100,4 @@ Then output the pipeline next step:
 ```
 Next: /test planning/<spec-slug>/tasks.md [N]
 ```
+

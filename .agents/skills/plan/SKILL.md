@@ -1,8 +1,7 @@
 ---
 name: plan
 description: >
-  Trigger on '/plan' or when running the Plan command (Author a mini-roadmap for an ad-hoc or
-  experimental feature — master-plan format, output to planning/plan-<slug>/plan.md).
+  >
 ---
 
 # Plan — Author a mini-roadmap for an ad-hoc or experimental feature.
@@ -176,3 +175,4 @@ Next (single block — decompose and run):
 Next (all blocks as a branch train):
   /sdlc-block planning/plan-<slug>/plan.md
 ```
+

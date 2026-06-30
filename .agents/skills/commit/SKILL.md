@@ -1,7 +1,7 @@
 ---
 name: commit
 description: >
-  Trigger on '/commit' or when running the Commit command (Stage and commit changes with a conventional message.)
+  >
 ---
 
 # Commit — Stage and commit changes with a conventional message.
@@ -35,3 +35,4 @@ Return the subagent's result to the user.
 ## Context / Files to Read
 
 None — this command runs git commands only.
+

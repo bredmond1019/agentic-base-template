@@ -1,10 +1,10 @@
 ---
 name: prime
 description: >
-  Trigger on '/prime' or when running the Prime command (Orient to this repo at the start of a session.)
+  >
 ---
 
-# Prime — Orient to this repo at the start of a session.
+# Prime — Deep orient to the current project at the start of a session.
 
 ## Instructions
 
@@ -37,3 +37,4 @@ description: >
 - `planning/context.md`
 - `planning/status.md`
 - `planning/handoff.md` (if present — check with ls first)
+

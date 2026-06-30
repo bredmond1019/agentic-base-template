@@ -1,7 +1,7 @@
 ---
 name: review-workflow
 description: >
-  Trigger on '/review-workflow' or when running the Review Workflow command (Verify that a completed sdlc-run pipeline executed correctly.)
+  >
 ---
 
 # Review Workflow — Verify that a completed sdlc-run pipeline executed correctly.
@@ -144,11 +144,11 @@ Use EXACTLY this format:
 
 | Stage | Report File | Present | Well-formed |
 |---|---|---|---|
-| Implement | [taskN-]implement.md | ✓ / ✗ | ✓ / ✗ / N/A |
-| Test | [taskN-]test.md | ✓ / ✗ | ✓ / ✗ / N/A |
-| Review | [taskN-]review.md | ✓ / ✗ | ✓ / ✗ / N/A |
-| Document | [taskN-]document.md | ✓ / ✗ | ✓ / ✗ / N/A |
-| Workflow | [taskN-]workflow.md | ✓ / ✗ | ✓ / ✗ / N/A |
+| Implement | [taskN-]implement.md | Y / N | Y / N / N/A |
+| Test | [taskN-]test.md | Y / N | Y / N / N/A |
+| Review | [taskN-]review.md | Y / N | Y / N / N/A |
+| Document | [taskN-]document.md | Y / N | Y / N / N/A |
+| Workflow | [taskN-]workflow.md | Y / N | Y / N / N/A |
 
 ## Pipeline Outcome
 
@@ -162,10 +162,10 @@ Use EXACTLY this format:
 
 | Expected Commit | Present | Hash | Notes |
 |---|---|---|---|
-| feat/fix: implement <stem> | ✓ / ✗ | abc1234 | — |
-| fix: fix pass 1 for <stem> | ✓ / ✗ | — | only if fix cycle ran |
-| docs: update docs for <stem> | ✓ / ✗ | abc1234 | only if verdict PASS |
-| chore: wrap up <stem> | ✓ / ✗ | abc1234 | — |
+| feat/fix: implement <stem> | Y / N | abc1234 | — |
+| fix: fix pass 1 for <stem> | Y / N | — | only if fix cycle ran |
+| docs: update docs for <stem> | Y / N | abc1234 | only if verdict PASS |
+| chore: wrap up <stem> | Y / N | abc1234 | — |
 
 ## Log Check
 
@@ -202,3 +202,4 @@ If PARTIAL or FAIL, list the specific blocking items that need manual follow-up.
   was FAIL and no fix cycle was attempted.
 
 Then summarize the verdict and any issues requiring manual follow-up to the user in the chat.
+

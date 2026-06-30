@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: >
-  Trigger on '/handoff' or when running the Handoff command (Hand off an in-flight session cleanly to a fresh agent.)
+  >
 ---
 
 # Handoff — Hand off an in-flight session cleanly to a fresh agent.
@@ -114,3 +114,4 @@ Tell the user:
 - `log.md` (last 3 entries)
 - The current in-flight task spec (path from status.md, if any)
 - `planning/handoff.md` (if it already exists)
+

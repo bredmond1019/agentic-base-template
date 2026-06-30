@@ -1,8 +1,7 @@
 ---
 name: generate-tasks
 description: >
-  Trigger on '/generate-tasks' or when running the Generate Tasks command (Generate a task spec
-  for a specified phase and block, from master-plan.md or a --from plan file).
+  >
 ---
 
 # Generate Tasks — Generate a task spec for a specified phase and block.
@@ -256,3 +255,4 @@ Next (optional — decompose first):
 Next (run directly):
   /<recommended-command> <spec-slug>
 ```
+

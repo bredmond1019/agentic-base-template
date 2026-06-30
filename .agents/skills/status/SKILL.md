@@ -1,7 +1,7 @@
 ---
 name: status
 description: >
-  Trigger on '/status' or when running the Status command (Report current focus and sequence state.)
+  >
 ---
 
 # Status — Report current focus and sequence state.
@@ -19,3 +19,4 @@ description: >
 ## Context / Files to Read
 
 - `planning/status.md`
+

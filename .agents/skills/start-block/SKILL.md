@@ -1,7 +1,7 @@
 ---
 name: start-block
 description: >
-  Trigger on '/start-block' or when running the Start Block command (Mark a block as in-progress in status.md.)
+  >
 ---
 
 # Start Block — Mark a block as in-progress in status.md.
@@ -40,3 +40,4 @@ Return the subagent's result to the user.
 - Which block was marked in-progress.
 - The updated Current focus line.
 - Success or failure of the file write.
+
