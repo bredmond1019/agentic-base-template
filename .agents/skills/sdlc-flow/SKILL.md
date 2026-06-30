@@ -1,7 +1,7 @@
 ---
 name: sdlc-flow
 description: >
-  Run a spec sequentially in one shared worktree with a per-task test→fix loop, one end review, a docs patch, and a PR
+  >
 ---
 
 =============================================================================
@@ -78,4 +78,9 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
    - If PASS, run `/update-docs --patch` to update documentation.
    - Update the status and log.
    - Create a pull request (PR) using git CLI or GitHub CLI (unless `--no-pr` is specified).
+
+
+
+
+
 

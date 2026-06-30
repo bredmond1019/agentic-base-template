@@ -3,7 +3,15 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-06-29T16:30:00-03:00
+**Last updated:** 2026-06-30T12:38:00-03:00
+
+---
+
+## [2026-06-30]
+
+### Sub-brain specific .agents/ skills sync
+- **What:** Modified `sync_skills.py` to automatically discover sub-brain tiers from `brain.toml` and sync their `.claude/commands` to `<tier>/.agents/skills/` (the plural format expected by the Gemini Agent workspace customizations). Removed all singular `.agent/` custom skill directories from the project and removed singular `.agent` folder sync operations from `sync_skills.py`. Unified `prime.md` and `handoff.md` to dynamically support both HQ and sub-brain scopes based on local files and CWD.
+- **Why:** Ensures that each sub-brain tier has its own local, tier-specific `.agents/skills` customization directory (e.g. tier-specific `/prime` skill logic) so they run in their own local contexts without falling back to HQ's global commands or crashing.
 
 ---
 

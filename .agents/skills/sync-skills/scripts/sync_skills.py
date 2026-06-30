@@ -205,8 +205,8 @@ def main():
     sync_command_skills(base_skills, base_commands)
     sync_workflow_skills(base_skills, base_workflows)
     
-    # 2. Root workspace (called .agent/skills as verified)
-    root_skills = ".agent/skills"
+    # 2. Root workspace (.agents/skills)
+    root_skills = ".agents/skills"
     root_commands = ".claude/commands"
     
     sync_command_skills(root_skills, root_commands)
@@ -215,6 +215,23 @@ def main():
     global_skills = "~/agentic-portfolio"
     copy_to_global(base_skills, global_skills)
     
+    # 4. Sub-brain tiers (core, portfolio, side, client)
+    tiers = set()
+    if os.path.exists("brain.toml"):
+        with open("brain.toml", "r", encoding="utf-8") as f:
+            for line in f:
+                match = re.search(r'tier\s*=\s*"([^"]+)"', line)
+                if match:
+                    t = match.group(1)
+                    if t != "_root" and not t.startswith("_"):
+                        tiers.add(t)
+                        
+    for tier in sorted(tiers):
+        tier_commands = f"{tier}/.claude/commands"
+        tier_skills = f"{tier}/.agents/skills"
+        if os.path.exists(tier_commands):
+            sync_command_skills(tier_skills, tier_commands)
+            
     print("\nSync and migration complete!")
 
 if __name__ == "__main__":

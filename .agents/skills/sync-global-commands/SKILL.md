@@ -1,7 +1,7 @@
 ---
 name: sync-global-commands
 description: >
-  Syncs all non-brain .claude/commands/ files to ~/.claude/commands/ using rsync, with guard, report, and dry-run verify.
+  >
 ---
 
 # sync-global-commands — Sync harness commands to global install

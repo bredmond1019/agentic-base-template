@@ -112,7 +112,9 @@ Tell the user:
 - `planning/handoff.md` was written (or updated)
 - What was logged and committed
 - The exact sequence to resume:
-  1. Open a fresh Claude Code session in `agentic-portfolio/`
+  1. Open a fresh Claude Code session:
+     - **At HQ root:** open in `agentic-portfolio/`
+     - **In a sub-brain tier:** open in this sub-brain directory (e.g. `agentic-portfolio/core/`), not the brain root
   2. Run `/prime` — it will surface the handoff automatically
   3. Run the first command listed in the handoff
 

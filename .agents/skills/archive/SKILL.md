@@ -1,7 +1,7 @@
 ---
 name: archive
 description: >
-  Retire a folder/file into planning/archive/ — but distill its durable residue into knowledge.md/memory.md/decisions/ FIRST (D35 "never archive empty-handed" gate). Depth-agnostic; reads brain.toml. Sets status:archived and updates the archive + parent index.
+  >
 ---
 
 # Archive — Retire a folder/file into `planning/archive/`, distilling its durable residue first.

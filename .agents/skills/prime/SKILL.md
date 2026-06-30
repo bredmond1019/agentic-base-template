@@ -27,6 +27,10 @@ description: >
    - What this repo does (one paragraph).
    - Key directories and what lives in each.
    - Current project phase and focus (from context.md and status.md).
+   - **Carryover** — if `planning/state.json` has any `carryover[]` entries, list the active ones
+     (those whose `clears_when` is unresolved): slug, `kind` (constraint / known_issue / env /
+     deferred), and a one-line gist. These are durable caveats/follow-ons the session must respect.
+     Omit if there are none or the file is absent.
    - Anything flagged as standing rules worth keeping in mind.
 5. Do not edit any file. This command is read-only.
 
@@ -36,5 +40,6 @@ description: >
 - `CLAUDE.md`
 - `planning/context.md`
 - `planning/status.md`
+- `planning/state.json` (the `carryover[]` array, if present)
 - `planning/handoff.md` (if present — check with ls first)
 

@@ -1,7 +1,7 @@
 ---
 name: log-work
 description: >
-  Log a completed work session — append a dated log.md entry, sync planning/status.md (state + momentum), refresh the brain.toml-resolved cache with a synced_from watermark, and regenerate the owning tier's rollup. Depth-agnostic; reads brain.toml.
+  >
 ---
 
 # Log Work — Append a Log entry, sync status, and refresh the brain cache + tier rollup.
