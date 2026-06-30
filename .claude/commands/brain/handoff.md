@@ -23,13 +23,36 @@ Read:
 - `planning/status.md` — current focus and active work
 - `log.md` — the three most recent entries (for narrative context)
 - `planning/handoff.md` — if it exists, read it (you are updating it, not replacing blindly)
+- `planning/state.json` — the existing `carryover[]` (you are appending to it, not duplicating)
+- `planning/state-schema.md` — the `carryover[]` section, for the field shape
 
 Run:
 - `git log --oneline -10` — recent commits
 - `git diff --stat` — uncommitted changes
 - `git status` — untracked / staged state
 
-### Step 2 — Write `planning/handoff.md`
+### Step 2 — Drain durable context into `state.json` `carryover[]`
+
+**This is what keeps `handoff.md` disposable.** Before writing the handoff, route anything that must
+outlive *this* handoff (so the next one can't overwrite it away) into the right durable home — do **not**
+leave it living only in the prose below:
+
+- **Committed, sequenced work** with real dependencies → a `tracks[].blocks[]` block in the target repo.
+- **Free-floating ideas/chores** not on a critical path → HQ `backlog[]` (via `/backlog-ticket`).
+- **Durable caveats, known-issues, environmental notes, and not-yet-ticketed deferred follow-ons** →
+  append a `carryover[]` entry to `planning/state.json`. This is the in-between lane the other two miss:
+  - `kind: constraint` — a rule the next agent must honor (e.g. "rename must be brain+leaf atomic").
+  - `kind: known_issue` — a don't-re-investigate fact (e.g. "~1750 dangling errors are pre-existing").
+  - `kind: env` — a transient environmental caveat (e.g. "installed binary is stale, rebuild first").
+  - `kind: deferred` — a real follow-on you haven't ticketed yet; promote it to a block/backlog when ready.
+
+  Follow the `carryover[]` field shape in `planning/state-schema.md` (`slug`, `scope`, `kind`, `text`,
+  optional `related` + `clears_when`, `created`). Keep it valid JSON; append, don't duplicate an existing
+  slug. **Delete** any existing `carryover[]` entry whose `clears_when` resolved this session.
+
+The handoff prose in Step 3 then *points at* these slugs instead of being their only home.
+
+### Step 3 — Write `planning/handoff.md`
 
 Create or overwrite `planning/handoff.md` using this template. Be specific: the next agent
 has zero session memory and relies entirely on this file + `/prime` to orient.
@@ -54,14 +77,17 @@ Pull from git log. Be specific: "updated docs/career.md Upwork section + plannin
 focus line" not "updated docs".>
 
 ## Remaining work
-<Bulleted list of what's left, in priority order. Mark blockers explicitly.>
+<Bulleted list of what's left, in priority order. Mark blockers explicitly. For anything durable
+you drained in Step 2, *point at the home* rather than re-describing it: "see `state.json` carryover
+`cortex-leaf-migration`" or "block `BA.11.C` in `core/bastion`".>
 
 ## Open questions / choices
 <Unresolved decisions or things to verify before proceeding. If none: "None — clear to proceed.">
 
 ## Context the next agent needs
-<Non-obvious constraints, gotchas, or state the next agent would lose time re-deriving.
-Omit if everything is covered above.>
+<Only ephemeral, this-session framing the next agent needs to read the above. Durable constraints,
+known-issues, and env caveats belong in `state.json` `carryover[]` (Step 2) — reference their slugs
+here, don't restate them. Omit this section if Step 2 captured everything.>
 
 ## First command after `/prime`
 `<exact command to run first>`
@@ -69,17 +95,18 @@ Omit if everything is covered above.>
 
 Fill every section. Do not leave placeholder text.
 
-### Step 3 — Invoke `/log-work`
+### Step 4 — Invoke `/log-work`
 
 Invoke the `/log-work` skill. Pass $ARGUMENTS if provided so the log entry gets the same
 narrative. The brain's `/log-work` will ask for the narrative if not passed — let that flow.
 
-### Step 4 — Invoke `/commit`
+### Step 5 — Invoke `/commit`
 
-After `/log-work` completes, invoke the `/commit` skill. It will pick up `planning/handoff.md`
-plus any other uncommitted changes and ask for confirmation before committing.
+After `/log-work` completes, invoke the `/commit` skill. It will pick up `planning/handoff.md`,
+the `state.json` `carryover[]` edits, plus any other uncommitted changes and ask for confirmation
+before committing.
 
-### Step 5 — Report
+### Step 6 — Report
 
 Tell the user:
 - `planning/handoff.md` was written (or updated)
@@ -94,3 +121,4 @@ Tell the user:
 - `planning/status.md`
 - `log.md` (last 3 entries)
 - `planning/handoff.md` (if it already exists)
+- `planning/state.json` (existing `carryover[]`) + `planning/state-schema.md` (`carryover[]` field shape)

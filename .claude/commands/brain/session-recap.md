@@ -26,7 +26,11 @@ Use this at the start of a brain session instead of the heavier `/prime`.
    - Any active plans or tasks with pending items
    - Last updated timestamp
 
-3. Output the briefing in this exact format — keep it under 250 words:
+3. Read `planning/state.json` if present. Extract any active `carryover[]` entries (those whose
+   `clears_when` is unresolved) — durable constraints, known-issues, env caveats, and deferred
+   follow-ons. Skip silently if the file or array is absent.
+
+4. Output the briefing in this exact format — keep it under 250 words:
 
 ---
 
@@ -35,6 +39,10 @@ Use this at the start of a brain session instead of the heavier `/prime`.
 
 ## Where We Left Off
 <One paragraph: current focus, what was last completed, anything noted as in-flight or next.>
+
+## Carryover
+<One line per active `carryover[]` entry: `slug` (`kind`) — gist. Omit this section entirely if there
+are none. Flag any `kind: env` caveat that gates the next action (e.g. "rebuild binary first").>
 
 ## Next Action
 <Single line: the exact command or action to take next.>
@@ -50,3 +58,4 @@ Do not read any source code files. Do not run any commands. This is read-only.
 - `planning/handoff.md` (if present — check with ls first)
 - `log.md` (last 3 dated sections)
 - `planning/status.md`
+- `planning/state.json` (the `carryover[]` array, if present)

@@ -35,6 +35,8 @@ Read in order:
 - `README.md` — project index and quick status
 - `CLAUDE.md` — standing rules and structure
 - `planning/status.md` — Operating Board (NOW/NEXT/BLOCKED)
+- `planning/state.json` — the `carryover[]` array (durable constraints, known-issues, env caveats,
+  and not-yet-ticketed deferred follow-ons that must survive across handoffs). Skip if absent.
 
 ### Step 2 — Tier rollups (always)
 
@@ -62,7 +64,10 @@ Output in plain prose:
 4. **Tier summaries** — for each tier rollup read: one short paragraph on what's active and blocked.
    For a drill-down tier: per-repo one-liner (current block, status, blocker if any).
 5. **`_root` repos** — one sentence each from the cache cards (learn-ai, base-template).
-6. **Standing rules** — key items from CLAUDE.md worth flagging for this session.
+6. **Carryover** — if `planning/state.json` has any `carryover[]` entries, list the active ones
+   (those whose `clears_when` is unresolved): slug, `kind`, and a one-line gist. These are the durable
+   caveats/follow-ons the session must respect. Omit the section if there are none.
+7. **Standing rules** — key items from CLAUDE.md worth flagging for this session.
 
 ## Context / Files to Read
 
@@ -71,6 +76,7 @@ Always:
 - `README.md`
 - `CLAUDE.md`
 - `planning/status.md`
+- `planning/state.json` (the `carryover[]` array, if present)
 - `core/planning/status.md` (if exists)
 - `portfolio/planning/status.md` (if exists)
 - `side/planning/status.md` (if exists)
