@@ -53,12 +53,19 @@ def find_brain_root(start: Path) -> Path:
 
 
 def find_base_template_root(start: Path) -> Path:
-    """Walk up from `start` looking for the base-template root (has .claude/workflows/sdlc-flow.js)."""
+    """Walk up from `start` looking for the base-template root.
+
+    NOT `.claude/workflows/sdlc-flow.js` alone - every downstream repo has a copy of that file
+    (that's the whole point of this script), so checking for it would misidentify any scaffolded
+    repo as base-template if the script were ever run from inside one. `scripts/` is never part of
+    the sync target set (see harness_files()), so `scripts/sync_downstream_harness.py` existing is
+    a reliable base-template-only anchor.
+    """
     current = start.resolve()
     for candidate in [current, *current.parents]:
-        if (candidate / ".claude" / "workflows" / "sdlc-flow.js").is_file():
+        if (candidate / "scripts" / "sync_downstream_harness.py").is_file():
             return candidate
-    raise SystemExit("ERROR: could not find base-template root (no .claude/workflows/sdlc-flow.js) walking up from " + str(start))
+    raise SystemExit("ERROR: could not find base-template root (no scripts/sync_downstream_harness.py) walking up from " + str(start))
 
 
 @dataclass
