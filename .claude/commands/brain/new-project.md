@@ -26,7 +26,7 @@ new project is immediately visible to `/log-work`, `/prime`, and the indexer wit
 
 ## Instructions
 
-1. If parameters are missing from `$ARGUMENTS`, prompt for: Project Name; one-sentence description;
+1. If parameters are missing from `$ARGUMENTS`, prompt for: Project Name; two-letter uppercase project prefix (e.g. 'BA' for Bastion). **This 2-letter prefix must be unique across all projects in `brain.toml`.**; one-sentence description;
    Project Type; **Tier** (`core`/`portfolio`/`side`/`client`/`_root`); **Stack**
    (`Rust` / `Next.js` / `FastAPI` / `Other`); git init (yes/no); planning-doc path (optional).
 
@@ -79,6 +79,7 @@ new project is immediately visible to `/log-work`, `/prime`, and the indexer wit
    ```toml
    [[repos]]
    slug = "<slug>"
+   prefix = "<prefix>"
    tier = "<tier>"            # or "_root"
    repo_path = "<PROJECT_DIR>"
    status_file = "<PROJECT_DIR>/planning/status.md"
@@ -123,7 +124,7 @@ new project is immediately visible to `/log-work`, `/prime`, and the indexer wit
    | `{{VERIFIED_HANDLES}}` | `none` |
 
    ```bash
-   export PROJECT_NAME="…" SLUG="…" DESCRIPTION="…" PROJECT_TYPE="…" \
+   export PROJECT_NAME="…" SLUG="…" PREFIX="…" DESCRIPTION="…" PROJECT_TYPE="…" \
           DATE="<today>" TEMPLATE_COMMIT="$TEMPLATE_COMMIT" VERIFIED_HANDLES="none"
    ( cd <PROJECT_DIR> && grep -rl '{{' . | while IFS= read -r f; do
        perl -pi -e 's/\{\{(\w+)\}\}/exists $ENV{$1} ? $ENV{$1} : $&/ge' "$f"; done )

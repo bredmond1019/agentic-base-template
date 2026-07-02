@@ -56,6 +56,11 @@ leave it living only in the prose below:
   slug. **Delete** any existing `carryover[]` entry whose `clears_when` resolved this session. If this repo
   has no `planning/state.json` yet, skip this step.
 
+After making any changes to `planning/state.json`'s `carryover[]`, or after writing/updating a
+block's `tasks.json`, run `mev emit-state --write` to ensure the new state is tracked across
+brains. Never hand-edit a block's `tasks` field yourself — it's a derived pointer + status summary
+(see `core/planning/state-schema.md`), not something you inject entries into.
+
 The handoff prose in Step 3 then *points at* these slugs instead of being their only home.
 
 ### Step 3 — Write `planning/handoff.md`
@@ -86,8 +91,12 @@ all 3 engines (sdlc-block.js:473, sdlc-task.js:455, sdlc-run.js:326)" not "fixed
 
 ## Remaining work
 <Bulleted list of what's left, in priority order. Mark blockers explicitly.
-If work is blocked on an answer to an open question, say so. For anything durable you drained in
-Step 2, *point at the home* rather than re-describing it: "see `state.json` carryover `<slug>`".>
+If work is blocked on an answer to an open question, say so.>
+
+## Durable State Updates
+<List any items you added to `state.json`'s `carryover[]`, and any block whose `tasks.json` you
+created or changed this session. Note their slug / block ID so the next agent can find them easily
+without having to hunt.>
 
 ## Open questions / choices
 <Bulleted list of unresolved decisions or things to verify before proceeding. If none, write

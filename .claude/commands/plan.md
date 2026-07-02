@@ -32,9 +32,14 @@ can run a single block.
      or the repo — **stop and ask the user a targeted question** rather than write a plausible-looking
      guess. An honest "I need X to define block N" beats a confident invention.
 3. Read `CLAUDE.md` and `planning/context.md` — internalize the standing rules and current architecture.
-4. **Determine the Block ID Prefix:** Find this repo's `prefix` in `brain.toml` at the brain root (e.g., `BA`). Use this for all block IDs.
+4. **Determine the Block ID Prefix:** find this repo's `prefix` in `brain.toml` at the brain root
+   (e.g. `BA`). Record it per-block as a `**Block ID:** <Prefix>.<PhaseNumber>.<BlockLetter>`
+   bullet in the block body (Output Format below) — the `### Block <Letter>` **heading itself stays
+   a single uppercase letter, unprefixed.** `/sdlc-block` parses `### Block X` expecting `X` to be
+   exactly one letter (`.claude/workflows/sdlc-block.js`); embedding the full prefixed ID in the
+   heading text breaks that parse.
 5. Read any files directly relevant to the task (the files the blocks will touch).
-5. **THINK HARD about scope and decomposition before writing:**
+6. **THINK HARD about scope and decomposition before writing:**
    - A mini-roadmap is typically 1–3 phases and 1–5 blocks. If it grows larger than that, it belongs
      in `master-plan.md` via `/generate-master-plan`, not here.
    - A **block** is a coherent, independently reviewable unit of work that `/generate-tasks` can turn
@@ -46,13 +51,15 @@ can run a single block.
    - **Name files by path.** Tasks sharing a file must be serialized (`dependsOn`) or append-only;
      tasks owning distinct files may run in parallel.
    - Sequence blocks by dependency and competence — foundational / enabling work first.
-6. Choose a short descriptive slug (e.g. `keyboard-nav`, `auth-refresh`, `rust-streaming`).
-7. Create `planning/plan-<slug>/` if it does not exist, then write the plan to
+7. Choose a short descriptive slug (e.g. `keyboard-nav`, `auth-refresh`, `rust-streaming`).
+8. Create `planning/plan-<slug>/` if it does not exist, then write the plan to
    `planning/plan-<slug>/plan.md` using the Output Format below.
-8. **Property self-check.** Before reporting, re-read the plan and **revise in place** until every
+9. **Property self-check.** Before reporting, re-read the plan and **revise in place** until every
    property holds, then re-check:
-   - Every block is a `### Block X — <name>` heading under a `## Phase N — <name>` heading, so
-     `/generate-tasks phaseN-blockX` can parse and locate it.
+   - Every block is a `### Block X — <name>` heading (single uppercase letter, no prefix) under a
+     `## Phase N — <name>` heading, so `/generate-tasks phaseN-blockX` and `/sdlc-block` can both
+     parse and locate it. The full `<Prefix>.<PhaseNumber>.<BlockLetter>` id lives in a
+     `**Block ID:**` bullet in the block body, not the heading.
    - Every block names its **Files** (New vs Modified, by path).
    - Every block declares **Out of scope** — at least one explicit boundary.
    - Every block has non-empty **What**, **Why**, and observable **Acceptance criteria** — each a
@@ -60,7 +67,7 @@ can run a single block.
    - The **Quick Reference Sequence Table** has one row per block and matches the block headings.
    - No leftover scaffold sentinels (`{{TOKEN}}`, unfilled `<placeholder>`-style angle stubs, empty
      bullets). Legitimate `<...>` in code/prose is fine.
-9. Report the path and next steps.
+10. Report the path and next steps.
 
 ## Codebase Structure
 
@@ -127,7 +134,10 @@ and uses the same skeleton:
 
 ## Phase 0 — <name>
 
-### Block <Prefix>.<PhaseNumber>.<BlockLetter> — <name>
+### Block <Letter> — <name>
+- **Block ID:** <Prefix>.<PhaseNumber>.<BlockLetter> — the canonical id used in `state.json` /
+  `depends_on` / `/generate-tasks --from`. The heading above stays a bare letter; `/sdlc-block`
+  parses it as one.
 - **What:** <scope in implementation terms>
 - **Why:** <why this block, why now in the sequence>
 - **Files:**
@@ -155,12 +165,16 @@ and uses the same skeleton:
 
 ### Step X — Register the block(s) in state.json
 After writing the `plan.md` file, you MUST also register its blocks in `planning/state.json` — this
-plan is ad-hoc (not in `master-plan.md`), so its blocks don't exist there yet.
+plan is ad-hoc (not in `master-plan.md`), so its blocks don't exist there yet. **No `tasks.json`
+exists for any of these blocks yet** — `/plan` only defines blocks; `/generate-tasks --from` (run
+separately, per block, later) is what produces a block's `tasks.json`. Do not add a `tasks` field
+to any block registered here.
 1. Open `planning/state.json`. Find or create a `tracks[]` entry titled `"plan-<slug>"` (or reuse an
    existing ad-hoc-plans track if the convention already exists in this repo).
 2. For each block in `plan-<slug>/plan.md`, add an entry to that track's `blocks[]` if it doesn't
    already exist (match by `id`):
-   - `id`: the block's canonical ID
+   - `id`: the block's canonical ID (the `**Block ID:**` bullet value, e.g. `BA.0.A` — full
+     prefixed form; the plan.md *heading* stays the bare letter)
    - `title`: the block's name
    - `status`: `"open"`
    - `wave`: an integer rank placing it after this repo's current highest wave (so ad-hoc plans queue
@@ -170,16 +184,7 @@ plan is ad-hoc (not in `master-plan.md`), so its blocks don't exist there yet.
      "Depends on" line in the block; `[]` if none.
    - `origin`: omit unless this plan was promoted from an HQ backlog item, in which case
      `{ "type": "backlog", "slug": "<backlog-slug>" }`.
-3. Add a `tasks` array to each registered block. For each task generated in the spec, add an object with
-   the following schema (aligning with SDLC_FLOW):
-   - `task_id`: Integer (1-indexed)
-   - `title`: The task title
-   - `description`: The task description
-   - `acceptance_criteria`: Array of acceptance criteria strings
-   - `status`: "pending"
-   - `validation_commands`: []
-   - `max_attempts`: 3
-4. Save `planning/state.json` and validate it is still valid JSON:
+3. Save `planning/state.json` and validate it is still valid JSON:
    `python3 -c "import json;json.load(open('planning/state.json'))"`.
 
 ### State Refresh
@@ -194,11 +199,11 @@ Output the path written and the next steps:
 planning/plan-<slug>/plan.md  (<N> phases, <M> blocks)
 
 Blocks ready to generate:
-  - BA.0.A — <name>
+  - BA.0.A — <name>   (block heading: ### Block A)
   ...
 
 Next (single block — decompose and run):
-  /generate-tasks --from planning/plan-<slug>/plan.md BA.0.A
+  /generate-tasks --from planning/plan-<slug>/plan.md phase0-blockA
   /sdlc-flow plan-<slug>
 
 Next (all blocks as a branch train):

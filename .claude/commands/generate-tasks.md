@@ -248,23 +248,14 @@ Validate task needs ≥1 entry. `dependsOn` — ids that must complete first; th
 depends on every other id.
 
 
-### Step X — Update state.json tasks
-After writing the `tasks.md` file, you MUST also register these tasks in `planning/state.json`.
-1. Open `planning/state.json`.
-2. Locate the block in `tracks[].blocks[]` that matches this spec's ID or slug.
-3. Add a `tasks` array to that block. For each task generated in the spec, add an object with the following schema (aligning with SDLC_FLOW):
-   - `task_id`: Integer (1-indexed)
-   - `title`: The task title
-   - `description`: The task description
-   - `acceptance_criteria`: Array of acceptance criteria strings
-   - `status`: "pending"
-   - `validation_commands`: []
-   - `max_attempts`: 3
-4. Save `planning/state.json`.
+### State refresh (do not hand-author `state.json`'s `tasks` field)
 
-### State Refresh
-
-Run `mev emit-state --write` to update the brain's focus derivation and state based on the new planning files.
+If this repo has a `planning/state.json`, run `mev emit-state --write` after committing — it derives
+`tracks[].blocks[].tasks` (a `{ file, generated, counts }` pointer + status summary, **not** a copy
+of the task list — see `core/planning/state-schema.md`) from the `tasks.json` you just wrote. Do not
+hand-edit a `tasks` array into `state.json` yourself; that field is derived, same as `focus`. (This
+derivation isn't implemented in `mev` yet — running the command is a no-op until it ships; it's
+listed here so the step is already in place when it does.)
 
 ## Report
 

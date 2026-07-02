@@ -75,5 +75,5 @@ agents working inside a tier use the HQ harness, which resolves the brain root b
    the tier matches the shape of the existing four (same files, same status.md sections + ROLLUP markers).
 
 6. **Report:** the tier path + files created; the HQ files updated (.gitignore, CLAUDE.md, indexes); that
-   no `[[repos]]` entry was added (tiers aren't repos); next step — `/new-project <tier> <name>` to add the
+   no `[[repos]]` entry was added (tiers aren't repos, they just hold repos with their own two-letter prefixes); next step — `/new-project <tier> <name>` to add the
    first project.

@@ -3,11 +3,32 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-02T00:00:00-03:00
+**Last updated:** 2026-07-02T01:00:00-03:00
 
 ---
 
 ## [2026-07-02]
+
+### D46 — tasks.json propagated to chore/plan/ticket; state.json tasks field corrected to a pointer
+- **What:** Verified D44/D45's `tasks.json` shape against `core/orchestrator/docs/sdlc-flow-
+  workflow.md` (matched, once D45 landed) then audited the rest of the commit family the user
+  flagged. Found the same `### <BlockID>.N` heading break already **committed** — not uncommitted
+  WIP — in `chore.md` and `ticket.md` (commit `610a4d9`), plus a block-level twin in `plan.md`
+  (`### Block <Prefix>.<Phase>.<Letter>` breaks `sdlc-block.js`'s single-letter block parser,
+  confirmed still unchanged there). Propagated the D44/D45 `tasks.json` contract to `chore.md` and
+  `ticket.md`; reverted `plan.md`'s block heading to a bare letter, moving the canonical
+  `<Prefix>.<Phase>.<Letter>` id into a `**Block ID:**` body bullet instead, and fixed a duplicate-
+  numbered step plus the Report's block-selector example. Redesigned `state.json`'s
+  `tracks[].blocks[].tasks` (`core/planning/state-schema.md`, brain repo) from a full duplicate task
+  array into a derived `{file, generated, counts}` pointer + status summary; updated every planning
+  command's state-registration section (`chore`, `plan`, `ticket`, `generate-tasks`,
+  `generate-master-plan`, `handoff`) to stop hand-authoring it.
+- **Why:** Same root cause as D44 — a contract changed without checking every consumer.
+  `state.json` duplicating the full task list would have created two sources of truth for the same
+  content; a pointer + summary keeps `tasks.json` the only place a task's real content lives.
+- **Refs:** `planning/decisions/D46-tasks-json-propagation-and-state-pointer.md`
+
+---
 
 ### D44 — tasks.json replaces markdown heading regex as the task-list contract
 - **What:** Found an uncommitted, undocumented drift in `generate-tasks.md` (task headings changed
