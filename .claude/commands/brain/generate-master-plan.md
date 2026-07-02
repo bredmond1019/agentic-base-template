@@ -76,11 +76,13 @@ repo's own `/generate-master-plan` / `/generate-tasks` / `/sdlc-flow`.
      its **Ladder rung** (where it sits on solve→repeatable→skill→workflow→harness→eval→automation→
      monitor→trust→package, and which rung it advances). These keep the program pointed at compounding
      leverage rather than one-off motion.
-5. Write (or revise) `planning/<concept>/master-plan.md` using the Output Format below. Maintain OKF
+6. Write (or revise) `planning/<concept>/master-plan.md` using the Output Format below. Maintain OKF
    frontmatter.
-6. **Property self-check (before reporting).** Re-read and **revise in place** until every property
+7. **Property self-check (before reporting).** Re-read and **revise in place** until every property
    holds, then re-check:
-   - **Every block is a `### Block X — <name>` heading under a `## Phase N — <name>` heading.** No flat
+   - **Every block is a `### <Prefix>.<PhaseNumber>.<BlockLetter> — <name>` heading under a
+     `## Phase N — <name>` heading** — the heading is the bare ID (e.g. `### BA.0.A — <name>`), no
+     literal "Block" word. No flat
      lists.
    - **Every block names a target Repo** and **at least one cross-repo interface/contract** (or states
      it is self-contained in one repo with no cross-repo seam).
@@ -183,7 +185,8 @@ Each block below is **executed in the sub-repo it names** (open Claude Code ther
 
 ## Phase 0 — <name>
 
-### Block A — <name>
+### <Prefix>.<PhaseNumber>.<BlockLetter> — <name>
+<!-- Example: ### BA.0.A — Foundation setup (no "Block" word in the heading — the ID is self-describing) -->
 - **What:** <segment scope>
 - **Why:** <why now in the cross-repo order>
 - **Repo:** <which sub-repo this is built in>
@@ -195,7 +198,7 @@ Each block below is **executed in the sub-repo it names** (open Claude Code ther
 - **Ladder rung:** <position on solve→…→package and which rung it advances; omit only for purely mechanical blocks>
 - **Acceptance criteria:** <observable conditions; include the target repo's gating checks>
 
-### Block B — <name>
+### <Prefix>.<PhaseNumber>.B — <name>
 <!-- same skeleton -->
 
 ---
