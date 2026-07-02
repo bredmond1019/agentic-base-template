@@ -28,24 +28,29 @@ like?>
 
 The task list is **not** written here — it lives in the companion `tasks.json` (same directory,
 same basename). This file just points at it; the pipeline reads `tasks.json` directly, never a
-markdown heading. See `planning/<concept>/tasks.json`:
+markdown heading. The shape matches orchestrator's `SDLCTask` schema
+(`core/orchestrator/app/schemas/sdlc_schema.py`) exactly, so a spec either pipeline can consume —
+**a bare array, not wrapped in an object.** See `planning/<concept>/tasks.json`:
 
 ```json
-{
-  "tasks": [
-    { "id": 1, "title": "<Foundational step>", "actions": ["<what to build and where>"], "files": ["<path/to/file>"], "dependsOn": [] },
-    { "id": 2, "title": "<Next step>", "actions": ["<what to build and where>"], "files": ["<path/to/file>"], "dependsOn": [1] },
-    { "id": 3, "title": "<Next step>", "actions": ["<what to build and where>"], "files": ["<path/to/file>"], "dependsOn": [1] },
-    { "id": 4, "title": "Validate", "actions": ["Run the Validation Commands listed below and confirm all pass."], "files": [], "dependsOn": [1, 2, 3] }
-  ]
-}
+[
+  { "task_id": 1, "title": "<Foundational step>", "description": "<what to build and where>", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": ["<path/to/file>"], "dependsOn": [] },
+  { "task_id": 2, "title": "<Next step>", "description": "<what to build and where>", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": ["<path/to/file>"], "dependsOn": [1] },
+  { "task_id": 3, "title": "<Next step>", "description": "<what to build and where>", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": ["<path/to/file>"], "dependsOn": [1] },
+  { "task_id": 4, "title": "Validate", "description": "Run the Validation Commands listed below and confirm all pass.", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": [], "dependsOn": [1, 2, 3] }
+]
 ```
 
-`id` — 1-indexed, dependency-ordered, no gaps. `title` — short, matches what a heading used to
-say. `actions` — the bulleted "what to build and where," one string per bullet. `files` — every
-task except the final Validate task must name ≥1 concrete file it creates or modifies (the
-dependency analysis and disjoint-ownership guard read this). `dependsOn` — ids this task
-requires to run first; the final Validate task depends on every other id.
+`task_id` — 1-indexed, dependency-ordered, no gaps. `title` — short, matches what a heading used to
+say. `description` — the "what to build and where" prose (bulleted lines in one string are fine).
+`acceptance_criteria` / `validation_commands` — usually left `[]`; the spec-level `## Acceptance
+Criteria` / `## Validation Commands` sections below stay authoritative, these per-task arrays exist
+because orchestrator's schema has them, not because base-template's engines populate them.
+`max_attempts` — defaults to 3; only set it to override for one task. `files` and `dependsOn` are
+**not** part of orchestrator's schema — orchestrator ignores them (Pydantic default), base-template
+uses them for the disjoint-file-ownership self-check and dependency ordering. `files`: every task
+except the final Validate task must name ≥1 concrete file it creates or modifies. `dependsOn`: ids
+this task requires to run first; the final Validate task depends on every other id.
 
 ## Acceptance Criteria
 

@@ -97,8 +97,10 @@ $ARGUMENTS — one of two input modes:
    - **Disjoint file ownership (parallel-merge safety).** A block's tasks run as parallel pipelines that merge independently, so two tasks editing the same existing file collide at merge. Decompose so each task **owns a distinct set of files**. When two tasks would touch the same file, either (a) make one `dependsOn` the other so `/sdlc-block` serializes them into different waves, or (b) restrict the shared file to **append-only** edits (the block engine union-merges files declared `additiveFiles`). Name each task's primary files in its step so the dependency analysis can see the boundaries — an undeclared overlap escalates the whole block on a merge conflict.
    - Foundational steps come first; the final step is always Validate.
    - **Write the task list as `tasks.json`, not markdown headings.** Every SDLC engine reads
-     `planning/<spec-slug>/tasks.json` directly (a `tasks[]` array of `{id, title, actions, files,
-     dependsOn}` objects — see Output Format below) instead of parsing `tasks.md` for a heading
+     `planning/<spec-slug>/tasks.json` directly — a **bare array** of `{task_id, title, description,
+     acceptance_criteria, validation_commands, max_attempts, files, dependsOn}` objects (see Output
+     Format below), the same shape orchestrator's `SDLC_FLOW` workflow already consumes
+     (`app/schemas/sdlc_schema.py`'s `SDLCTask`) — instead of parsing `tasks.md` for a heading
      pattern. `tasks.md` still carries the prose (Goal, Context Pointers, Acceptance Criteria,
      Validation Commands, Notes, Amendment Log) but the Step-by-Step Tasks section in it is just a
      one-line pointer at the JSON file, not the task list itself.
@@ -111,11 +113,12 @@ $ARGUMENTS — one of two input modes:
 8. **Property self-check (before committing).** A structurally valid spec can still be substantively
    thin and waste pipeline tokens. Re-read what you just wrote and confirm every required property
    holds; **revise the spec in place** if any fails, then re-check:
-   - **`tasks.json` parses as valid JSON** and its `tasks[]` array is non-empty.
+   - **`tasks.json` parses as valid JSON** and is a non-empty array (not wrapped in an object —
+     orchestrator's `LoadTaskStateNode` expects a bare array).
    - **Every task except the final Validate task names ≥1 file** in its `files[]` (so the dependency
      analysis and disjoint-ownership guard can see boundaries).
-   - **`dependsOn` ids are all valid** — every id referenced exists in the same array, and the final
-     Validate task depends on every other task's id.
+   - **`dependsOn` ids are all valid** — every id referenced exists as some task's `task_id` in the
+     same array, and the final Validate task depends on every other task's id.
    - **Acceptance Criteria are non-empty and observable** — each criterion can be judged true/false.
    - **Validation Commands are present** (or `planning/harness.json` → `validation.checks[]` supplies
      them as the fallback).
@@ -232,20 +235,23 @@ See `tasks.json` in this directory — the task list is defined there, not here.
 _No amendments yet._
 ```
 
-`planning/<spec-slug>/tasks.json`:
+`planning/<spec-slug>/tasks.json` — a **bare array** (not wrapped in an object), matching
+orchestrator's `SDLCTask` schema (`core/orchestrator/app/schemas/sdlc_schema.py`) field-for-field
+plus two additive fields (`files`, `dependsOn`) orchestrator ignores harmlessly:
 ```json
-{
-  "tasks": [
-    { "id": 1, "title": "<Foundational step>", "actions": ["<bulleted action>"], "files": ["<path/to/file>"], "dependsOn": [] },
-    { "id": 2, "title": "<Next step>", "actions": ["<bulleted action>"], "files": ["<path/to/file>"], "dependsOn": [1] },
-    { "id": "N", "title": "Validate", "actions": ["Run the Validation Commands listed below and confirm all pass."], "files": [], "dependsOn": [1, 2] }
-  ]
-}
+[
+  { "task_id": 1, "title": "<Foundational step>", "description": "<bulleted actions, one string>", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": ["<path/to/file>"], "dependsOn": [] },
+  { "task_id": 2, "title": "<Next step>", "description": "<bulleted actions, one string>", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": ["<path/to/file>"], "dependsOn": [1] },
+  { "task_id": "N", "title": "Validate", "description": "Run the Validation Commands listed below and confirm all pass.", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": [], "dependsOn": [1, 2] }
+]
 ```
-`id` — 1-indexed integers, dependency-ordered, no gaps (the `"N"` above is illustrative — use the
-real next integer). `actions` — one string per bullet, same content a `### N.` heading's bullets
-used to hold. `files` — every task but the final Validate task needs ≥1 entry. `dependsOn` — ids
-that must complete first; the final Validate task depends on every other id.
+`task_id` — 1-indexed integers, dependency-ordered, no gaps (the `"N"` above is illustrative — use
+the real next integer). `title`/`description` — required; `description` holds what a `### N.`
+heading's bullets used to hold (bulleted lines in one string are fine). `acceptance_criteria` /
+`validation_commands` — usually `[]`; the spec-level markdown sections stay authoritative.
+`max_attempts` — defaults to 3, only set per-task to override. `files` — every task but the final
+Validate task needs ≥1 entry. `dependsOn` — ids that must complete first; the final Validate task
+depends on every other id.
 
 
 ### Step X — Update state.json tasks

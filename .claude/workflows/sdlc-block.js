@@ -686,7 +686,7 @@ async function ensureTasks(slug, blk) {
   const present = await agent(`
 You run from the MAIN repo root. Print whether a runnable spec already exists for this block:
   cat ${blockTasksJson} 2>/dev/null || echo "MISSING"
-Return via StructuredOutput: exists=true iff the output is valid JSON with a non-empty "tasks" array, else false.
+Return via StructuredOutput: exists=true iff the output is valid JSON and is a non-empty array (a bare array — not wrapped in an object; matches orchestrator's SDLCTask schema), else false.
 `, { label: `tasks-check-${slug}`, schema: { type: 'object', required: ['exists'], properties: { exists: { type: 'boolean' } } }, model: 'haiku' })
   if (present?.exists) { log(`Block ${slug}: tasks.json present — reusing.`); return { success: true, tasksFile: blockTasks } }
 
@@ -717,10 +717,14 @@ Write to:        ${blockTasks} (prose) and ${blockTasksJson} (task list)
    build/test commands), and an empty "## Amendment Log" with "_No amendments yet._". Record any
    deferral under ## Notes.
 
-3. Write ${blockTasksJson} as valid JSON: an object with one "tasks" array, each entry shaped
-   { id, title, actions, files, dependsOn } — 1-indexed ids, dependency-ordered, no gaps; each task names the concrete file(s) it owns in
-   "files" so tasks are disjoint and merge-safe (final Validate task exempt, and its "dependsOn"
-   lists every other id); the final task is always titled "Validate".
+3. Write ${blockTasksJson} as valid JSON: a BARE ARRAY (not wrapped in an object — matches
+   orchestrator's SDLCTask schema, app/schemas/sdlc_schema.py), each entry shaped
+   { task_id, title, description, acceptance_criteria, validation_commands, max_attempts, files,
+   dependsOn } — 1-indexed task_ids, dependency-ordered, no gaps; each task names the concrete
+   file(s) it owns in "files" so tasks are disjoint and merge-safe (final Validate task exempt, and
+   its "dependsOn" lists every other task_id); the final task is always titled "Validate".
+   acceptance_criteria/validation_commands can stay `[]` per task — the spec-level markdown
+   sections are authoritative; max_attempts defaults to 3.
 
 4. Commit on the train branch (stage explicitly):
    git add planning/${slug}

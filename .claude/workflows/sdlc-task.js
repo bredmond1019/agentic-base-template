@@ -148,14 +148,15 @@ const SETUP_SCHEMA = {
   }
 }
 
-// D16 preflight lint — the spec MUST carry a non-empty tasks.json `tasks[]` array or the loop
-// would have to guess the task count non-deterministically.
+// D16 preflight lint — the spec MUST carry a non-empty tasks.json array (a bare array of
+// SDLCTask-shaped objects, matching orchestrator's app/schemas/sdlc_schema.py — see D45) or the
+// loop would have to guess the task count non-deterministically.
 const ENUMERATE_SCHEMA = {
   type: 'object',
   required: ['hasTasks', 'allTasks'],
   properties: {
-    hasTasks: { type: 'boolean', description: 'true if tasks.json parses and its tasks[] array is non-empty' },
-    allTasks: { type: 'array', items: { type: 'integer' }, description: 'Every task id in tasks.json, in array order' },
+    hasTasks: { type: 'boolean', description: 'true if tasks.json parses as a non-empty array' },
+    allTasks: { type: 'array', items: { type: 'integer' }, description: 'Every task_id in tasks.json, in array order' },
     notes:    { type: 'string' }
   }
 }
@@ -693,15 +694,16 @@ You enumerate the tasks defined in a spec's tasks.json. Do NOT modify anything.
 STEP 1 — read the task list:
   cd ${runDir} && cat ${tasksJsonFile} 2>/dev/null || echo "NO_TASKS_JSON"
 
-STEP 2 — Parse it as JSON. Collect every task's "id" (in array order) into allTasks.
-  Set hasTasks=true iff it parsed and tasks[] has at least one entry.
+STEP 2 — Parse it as JSON. It is a BARE ARRAY (not wrapped in an object — matches orchestrator's
+  SDLCTask schema). Collect every task's "task_id" (in array order) into allTasks.
+  Set hasTasks=true iff it parsed as an array with at least one entry.
 
 Return via StructuredOutput: hasTasks, allTasks (integers in order), notes.
 `, withModel({ label: 'enumerate', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
 
 if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
   // D16 preflight lint — refuse to guess the task structure.
-  log(`ABORTED (D16) — ${tasksJsonFile} is missing, invalid, or has an empty tasks[] array.`)
+  log(`ABORTED (D16) — ${tasksJsonFile} is missing, invalid, or is an empty array.`)
   log(`Fix: run /generate-tasks ${blockId} to author tasks.json (see the spec template), commit, then re-run.`)
   return { error: 'No tasks.json (D16)', blockId, specFile: tasksJsonFile }
 }
@@ -843,7 +845,7 @@ Target:
   Spec:        ${blockId}
   Task:        Task ${taskNum} only
   Spec file:   ${specFile} (prose — Goal, Acceptance Criteria, Validation Commands)
-  Tasks file:  ${tasksJsonFile} (the task list — find the entry with "id": ${taskNum})
+  Tasks file:  ${tasksJsonFile} (the task list — find the entry with "task_id": ${taskNum})
 
 1. Read CLAUDE.md and planning/context.md — internalize the project's standing rules (CLAUDE.md is the
    authority; assume no stack/locale/narrative/content rule unless written there). Universal harness
@@ -852,8 +854,8 @@ Target:
 
 2. Read the spec and the task list:
    Run: cd ${runDir} && cat ${specFile} ${tasksJsonFile}
-   Find the object in tasks.json's "tasks" array whose "id" is ${taskNum} — its "title", "actions", and
-   "files" define exactly what this task is.
+   tasks.json is a bare array — find the object whose "task_id" is ${taskNum}. Its "title",
+   "description", and "files" define exactly what this task is.
    ${isFix ? `Do NOT re-implement from scratch. Make the MINIMUM targeted changes to address THIS failure:
    ${prevFailBlob ? 'Failing checks/output from the last test run:\n' + prevFailBlob.split('\n').map(l => '     ' + l).join('\n') : ''}` : `Implement ONLY task id ${taskNum} — do NOT implement other tasks.`}
 

@@ -832,8 +832,10 @@ Instructions:
 
 3. Read the generic spec skeleton as a format reference: .claude/workflows/templates/spec-template.md
    Study its structure: Goal, Context Pointers, a pointer to tasks.json, Acceptance Criteria,
-   Validation Commands, Notes section — and the tasks.json schema shown in the same template
-   ({ tasks: [{ id, title, actions, files, dependsOn }] }).
+   Validation Commands, Notes section — and the tasks.json schema shown in the same template (a
+   bare array of SDLCTask-shaped objects: task_id, title, description, acceptance_criteria,
+   validation_commands, max_attempts, files, dependsOn — matches orchestrator's
+   app/schemas/sdlc_schema.py).
 
    Also create the spec directory structure now if it does not yet exist:
    mkdir -p planning/${blockId}/sdlc/reports
@@ -859,17 +861,17 @@ Instructions:
    ## Notes
    [empty section for in-progress updates]
 
-5. Write ${tasksJsonFile} as valid JSON:
-   { "tasks": [
-     { "id": 1, "title": "[Task Name]", "actions": ["[sub-step with exact file paths and component/function names]"], "files": ["[path/to/file]"], "dependsOn": [] },
+5. Write ${tasksJsonFile} as valid JSON — a BARE ARRAY, not wrapped in an object:
+   [
+     { "task_id": 1, "title": "[Task Name]", "description": "[sub-steps with exact file paths and component/function names]", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": ["[path/to/file]"], "dependsOn": [] },
      ...
-     { "id": N, "title": "Validate", "actions": ["Run the Validation Commands listed below and confirm all pass."], "files": [], "dependsOn": [1, 2, "…every prior id"] }
-   ] }
+     { "task_id": N, "title": "Validate", "description": "Run the Validation Commands listed below and confirm all pass.", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": [], "dependsOn": [1, 2, "…every prior task_id"] }
+   ]
 
    Rules:
    - Follow every CLAUDE.md standing rule; record any deferral in the Notes section
    - The Validation Commands section must mirror planning/harness.json (or the project's documented suite)
-   - The final task's id must always be titled "Validate" and depend on every other id
+   - The final task's title must always be "Validate" and its dependsOn must list every other task_id
    - Tasks should be sized for the 21 hrs/week schedule
    - Every task's "files" must name exact file paths; every task but Validate needs ≥1 entry
 
@@ -936,8 +938,8 @@ Instructions:
 
 2. Read the spec file and the task list: ${specFile} ${tasksJsonFile}
    ${taskNumber !== null
-     ? `Find the object in tasks.json's "tasks" array whose "id" is ${taskNumber} — its "title", "actions", and "files" define exactly what this task is. Implement ONLY that task. Do not implement other tasks.`
-     : 'Read every entry in tasks.json\'s "tasks" array and execute them in array order from first to last.'}
+     ? `tasks.json is a bare array — find the object whose "task_id" is ${taskNumber}. Its "title", "description", and "files" define exactly what this task is. Implement ONLY that task. Do not implement other tasks.`
+     : `tasks.json is a bare array — read every entry and execute them in array order from first to last.`}
 
 2.5. Check for an optional breakdown file (more granular sub-steps written by /breakdown):
    Run: ls ${breakdownFile} 2>/dev/null && echo "BREAKDOWN_EXISTS" || echo "NO_BREAKDOWN"
