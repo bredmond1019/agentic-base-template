@@ -3,11 +3,33 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-02T01:30:00-03:00
+**Last updated:** 2026-07-02T02:00:00-03:00
 
 ---
 
 ## [2026-07-02]
+
+### D48 — scripts/sync_downstream_harness.py — automate the manual "update loop"
+- **What:** `bastion` generated a spec with the exact D44 bug *after* D44 was already committed
+  (11:21:37 vs D44's 10:31:49) — confirming nothing propagates a base-template harness fix into
+  downstream repos automatically, and `.claude/workflows/*.js` (the SDLC engines) has no
+  global-install path the way `.claude/commands/*.md` does via `/sync-global-commands`. Built
+  `scripts/sync_downstream_harness.py`: discovers every repo via `brain.toml`, copies changed
+  `.claude/commands/*.md` (flat, never `brain/`) + `.claude/workflows/` files into each one that
+  already has its own `.claude/workflows/` directory, never deletes a repo's own customizations,
+  and stamps `planning/.template-version`. Dry-run by default. Ran it: 9 repos updated + committed
+  (bastion, orchestrator, mev, bastion-ui, bella, amistad, price-scout, learn-ai,
+  client-repo); 3 portfolio-tier Rust repos gitignore `.claude/`/`planning/` entirely by
+  design (D8) — updated locally, nothing to commit there. Converted bastion's affected
+  `13.1-persistent-agent-panel` spec (still `Not started`) to the corrected `tasks.json` contract
+  in a follow-up commit; swept every other repo's specs for the same broken pattern — nothing else
+  found.
+- **Why:** The "update loop" in `docs/using-the-template.md` was fully manual and, in practice,
+  never run — every repo's `.template-version` was six days stale. A fix that only lives in
+  base-template isn't actually fixed anywhere real work happens.
+- **Refs:** `planning/decisions/D48-downstream-harness-sync-script.md`
+
+---
 
 ### D47 — .agents/skills/ cleanup — mirror gaps, dead scripts, a copy-paste sync bug
 - **What:** Audited everything still sitting untracked after D44–D46. Regenerated `backlog-ticket`'s
