@@ -32,7 +32,8 @@ can run a single block.
      or the repo — **stop and ask the user a targeted question** rather than write a plausible-looking
      guess. An honest "I need X to define block N" beats a confident invention.
 3. Read `CLAUDE.md` and `planning/context.md` — internalize the standing rules and current architecture.
-4. Read any files directly relevant to the task (the files the blocks will touch).
+4. **Determine the Block ID Prefix:** Find this repo's `prefix` in `brain.toml` at the brain root (e.g., `BA`). Use this for all block IDs.
+5. Read any files directly relevant to the task (the files the blocks will touch).
 5. **THINK HARD about scope and decomposition before writing:**
    - A mini-roadmap is typically 1–3 phases and 1–5 blocks. If it grows larger than that, it belongs
      in `master-plan.md` via `/generate-master-plan`, not here.
@@ -126,7 +127,7 @@ and uses the same skeleton:
 
 ## Phase 0 — <name>
 
-### Block A — <name>
+### Block <Prefix>.<PhaseNumber>.<BlockLetter> — <name>
 - **What:** <scope in implementation terms>
 - **Why:** <why this block, why now in the sequence>
 - **Files:**
@@ -151,6 +152,40 @@ and uses the same skeleton:
 *Ad-hoc mini-roadmap — run one block or the full train (see Report below).*
 ~~~
 
+
+### Step X — Register the block(s) in state.json
+After writing the `plan.md` file, you MUST also register its blocks in `planning/state.json` — this
+plan is ad-hoc (not in `master-plan.md`), so its blocks don't exist there yet.
+1. Open `planning/state.json`. Find or create a `tracks[]` entry titled `"plan-<slug>"` (or reuse an
+   existing ad-hoc-plans track if the convention already exists in this repo).
+2. For each block in `plan-<slug>/plan.md`, add an entry to that track's `blocks[]` if it doesn't
+   already exist (match by `id`):
+   - `id`: the block's canonical ID
+   - `title`: the block's name
+   - `status`: `"open"`
+   - `wave`: an integer rank placing it after this repo's current highest wave (so ad-hoc plans queue
+     behind committed roadmap work) — default to `10 * (floor(highest existing wave / 10) + 1)`, keeping
+     blocks in the same phase on the same wave.
+   - `depends_on`: one `{ "type": "block", "repo": "<this-repo-slug>", "id": "<ID>" }` entry per explicit
+     "Depends on" line in the block; `[]` if none.
+   - `origin`: omit unless this plan was promoted from an HQ backlog item, in which case
+     `{ "type": "backlog", "slug": "<backlog-slug>" }`.
+3. Add a `tasks` array to each registered block. For each task generated in the spec, add an object with
+   the following schema (aligning with SDLC_FLOW):
+   - `task_id`: Integer (1-indexed)
+   - `title`: The task title
+   - `description`: The task description
+   - `acceptance_criteria`: Array of acceptance criteria strings
+   - `status`: "pending"
+   - `validation_commands`: []
+   - `max_attempts`: 3
+4. Save `planning/state.json` and validate it is still valid JSON:
+   `python3 -c "import json;json.load(open('planning/state.json'))"`.
+
+### State Refresh
+
+Run `mev emit-state --write` to update the brain's focus derivation and state based on the new planning files.
+
 ## Report
 
 Output the path written and the next steps:
@@ -159,11 +194,11 @@ Output the path written and the next steps:
 planning/plan-<slug>/plan.md  (<N> phases, <M> blocks)
 
 Blocks ready to generate:
-  - phase0-blockA — <name>
+  - BA.0.A — <name>
   ...
 
 Next (single block — decompose and run):
-  /generate-tasks --from planning/plan-<slug>/plan.md phase0-blockA
+  /generate-tasks --from planning/plan-<slug>/plan.md BA.0.A
   /sdlc-flow plan-<slug>
 
 Next (all blocks as a branch train):

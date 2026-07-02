@@ -1,4 +1,4 @@
-# Backlog Ticket — Capture a queued idea into planning/backlog.md
+# Backlog Ticket — Capture a queued idea into the HQ backlog
 
 ## Variables
 
@@ -7,7 +7,7 @@ $ARGUMENTS — free-form description of the idea, improvement, or research threa
 
 ## Execution Model
 
-Spawn a Haiku subagent (Agent tool, `model: "haiku"`) to execute all steps below.
+Spawn a subagent to execute all steps below.
 Pass the resolved `$ARGUMENTS` value and the complete Instructions section in the subagent prompt.
 Return the subagent's result to the user.
 
@@ -15,9 +15,11 @@ Return the subagent's result to the user.
 
 1. If $ARGUMENTS is not provided, stop and ask the user to describe the idea.
 
-2. Read `planning/backlog.md` to understand the current format and check for near-duplicates.
+2. **Find the HQ brain root.** From the current working directory, walk **up** parent by parent looking for a `brain.toml` file (its first line begins `# brain.toml`). The directory containing it is `BRAIN_ROOT`. If not found, abort and explain this command requires the HQ brain context.
 
-3. From $ARGUMENTS infer the following fields:
+3. Read `$BRAIN_ROOT/core/planning/backlog.md` to understand the current format and check for near-duplicates. This command ALWAYS writes to the HQ backlog, never a sub-brain or project repo backlog.
+
+4. From $ARGUMENTS infer the following fields:
 
    **title** — a concise, action-oriented title (5–10 words)
 
@@ -40,7 +42,7 @@ Return the subagent's result to the user.
 
    **gist** — 1–3 sentences: what it is and why it matters. Be specific. Do not pad.
 
-4. Append to the `## Active` section of `planning/backlog.md` (before the `## Promoted` section)
+5. Append to the `## Active` section of `$BRAIN_ROOT/core/planning/backlog.md` (before the `## Promoted` section)
    using this exact format:
 
    ```
@@ -55,23 +57,23 @@ Return the subagent's result to the user.
 
    Use today's date for YYYY-MM-DD.
 
-5. Also register the idea as a structured node in this tier's `planning/state.json`'s `backlog[]`
+6. Also register the idea as a structured node in `$BRAIN_ROOT/core/planning/state.json`'s `backlog[]`
    array (HQ-only; create the array if it's absent) — the queryable twin of the same
    `backlog.md` entry:
    - `slug`: kebab-case derived from the title (check `backlog[]` for a collision; disambiguate if needed)
-   - `title`: the title from step 3
-   - `repo`: the repo from step 3
-   - `type`: the type from step 3
-   - `status`: the status from step 3
+   - `title`: the title from step 4
+   - `repo`: the repo from step 4
+   - `type`: the type from step 4
+   - `status`: the status from step 4
    - `depends_on`: `[]` unless the description names a concrete blocking block, in which case one
      `{ "type": "block", "repo": "<repo>", "id": "<ID>" }` entry per block named
    - `notes`: the path to a pre-plan notes doc if one exists (e.g. from `/capture`); omit otherwise
    Save the file and validate it is still valid JSON:
-   `python3 -c "import json;json.load(open('planning/state.json'))"`.
+   `python3 -c "import json;json.load(open('$BRAIN_ROOT/core/planning/state.json'))"`.
 
-6. Shell out to `mev emit-state --write` to update the brain's focus derivation and state.
+7. Shell out to `mev emit-state --write` to update the brain's focus derivation and state.
 
-7. Confirm: output the ticket title, repo, type, and the first sentence of the gist.
+8. Confirm: output the ticket title, repo, type, and the first sentence of the gist.
    Nothing else.
 
 ## Notes
