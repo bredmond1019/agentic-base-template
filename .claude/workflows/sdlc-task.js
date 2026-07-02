@@ -59,7 +59,7 @@ export const meta = {
   whenToUse: 'For one small unit of behaviour-changing work (a /ticket or /chore). No review/docs/PR — use /sdlc-flow for those. Usage: /sdlc-task <spec-slug> [task|range] [--worktree] [--resume]',
   phases: [
     { title: 'Setup', detail: 'Locate the repo root (or create an isolated worktree under --worktree)' },
-    { title: 'Plan',  detail: 'Enumerate tasks from tasks.md (### N. lint) + load resume state' },
+    { title: 'Plan',  detail: 'Enumerate tasks from tasks.json (D16 lint) + load resume state' },
     { title: 'Tasks', detail: 'Per task: implement → fast-test → (triage → fix/bail), then a state write' },
   ]
 }
@@ -118,6 +118,7 @@ if (rangeSpec) {
 
 const blockDir      = `planning/${blockId}`
 const specFile      = `${blockDir}/tasks.md`
+const tasksJsonFile = `${blockDir}/tasks.json`
 const breakdownFile = `${blockDir}/breakdown.md`
 const reportsDir    = `${blockDir}/sdlc/reports`
 const stateFile     = `${blockDir}/sdlc/sdlc-task-state.json`   // COMMITTED authoritative run index (Block A)
@@ -147,15 +148,15 @@ const SETUP_SCHEMA = {
   }
 }
 
-// D16 preflight lint — the spec MUST carry `### N.` task headings or the loop would have to guess
-// the task count non-deterministically.
+// D16 preflight lint — the spec MUST carry a non-empty tasks.json `tasks[]` array or the loop
+// would have to guess the task count non-deterministically.
 const ENUMERATE_SCHEMA = {
   type: 'object',
-  required: ['hasTaskHeadings', 'allTasks'],
+  required: ['hasTasks', 'allTasks'],
   properties: {
-    hasTaskHeadings: { type: 'boolean', description: 'true if tasks.md has at least one "### N." numbered task heading' },
-    allTasks:        { type: 'array', items: { type: 'integer' }, description: 'Every task number found as a "### N." heading, in order' },
-    notes:           { type: 'string' }
+    hasTasks: { type: 'boolean', description: 'true if tasks.json parses and its tasks[] array is non-empty' },
+    allTasks: { type: 'array', items: { type: 'integer' }, description: 'Every task id in tasks.json, in array order' },
+    notes:    { type: 'string' }
   }
 }
 
@@ -228,7 +229,7 @@ const STATE_WRITE_SCHEMA = {
 // ----------------------------------------------------------------
 const MODEL = {
   setup:       'haiku',    // scripted git: locate the repo root, or follow the worktree free-name recipe
-  enumerate:   'haiku',    // grep the spec for "### N." headings — a fixed procedure
+  enumerate:   'haiku',    // read + parse tasks.json's task list — a fixed procedure
   stateLoad:   'haiku',    // read + parse one JSON file (resume only)
   implement:   'sonnet',   // writes code/content + tests against a scoped task
   fix:         'sonnet',   // targeted fixes; failures escalate, never silently ship
@@ -687,22 +688,22 @@ Run all build/test/validation from the run root; relative paths (planning/...) r
 phase('Plan')
 
 const enumResult = await tracedAgent(`${W}
-You enumerate the numbered tasks in a spec. Do NOT modify anything.
+You enumerate the tasks defined in a spec's tasks.json. Do NOT modify anything.
 
-STEP 1 — read the spec headings:
-  cd ${runDir} && grep -nE '^### [0-9]+\\.' ${specFile} || echo "NO_TASK_HEADINGS"
+STEP 1 — read the task list:
+  cd ${runDir} && cat ${tasksJsonFile} 2>/dev/null || echo "NO_TASKS_JSON"
 
-STEP 2 — Each "### N." line is one task. Collect every N in document order into allTasks.
-  Set hasTaskHeadings=true iff at least one "### N." heading exists.
+STEP 2 — Parse it as JSON. Collect every task's "id" (in array order) into allTasks.
+  Set hasTasks=true iff it parsed and tasks[] has at least one entry.
 
-Return via StructuredOutput: hasTaskHeadings, allTasks (integers in order), notes.
+Return via StructuredOutput: hasTasks, allTasks (integers in order), notes.
 `, withModel({ label: 'enumerate', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
 
-if (!enumResult || !enumResult.hasTaskHeadings || !(enumResult.allTasks || []).length) {
+if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
   // D16 preflight lint — refuse to guess the task structure.
-  log(`ABORTED (D16) — ${specFile} has no "### N." numbered task headings.`)
-  log(`Fix: structure the spec with "### 1.", "### 2.", … task headings (see the spec template), commit, then re-run.`)
-  return { error: 'No task headings (D16)', blockId, specFile }
+  log(`ABORTED (D16) — ${tasksJsonFile} is missing, invalid, or has an empty tasks[] array.`)
+  log(`Fix: run /generate-tasks ${blockId} to author tasks.json (see the spec template), commit, then re-run.`)
+  return { error: 'No tasks.json (D16)', blockId, specFile: tasksJsonFile }
 }
 
 const allTasks = enumResult.allTasks
@@ -839,24 +840,27 @@ the branch (sequential — earlier tasks in this spec are already committed on t
 Task ${taskNum} of this spec.
 
 Target:
-  Spec:       ${blockId}
-  Task:       Task ${taskNum} only
-  Spec file:  ${specFile}
+  Spec:        ${blockId}
+  Task:        Task ${taskNum} only
+  Spec file:   ${specFile} (prose — Goal, Acceptance Criteria, Validation Commands)
+  Tasks file:  ${tasksJsonFile} (the task list — find the entry with "id": ${taskNum})
 
 1. Read CLAUDE.md and planning/context.md — internalize the project's standing rules (CLAUDE.md is the
    authority; assume no stack/locale/narrative/content rule unless written there). Universal harness
    rules always apply: no fabricated metrics or quotes, no emoji, every change ships with tests.
    Run: cd ${runDir} && cat CLAUDE.md
 
-2. Read the spec, focusing on the "### ${taskNum}." section:
-   Run: cd ${runDir} && cat ${specFile}
+2. Read the spec and the task list:
+   Run: cd ${runDir} && cat ${specFile} ${tasksJsonFile}
+   Find the object in tasks.json's "tasks" array whose "id" is ${taskNum} — its "title", "actions", and
+   "files" define exactly what this task is.
    ${isFix ? `Do NOT re-implement from scratch. Make the MINIMUM targeted changes to address THIS failure:
-   ${prevFailBlob ? 'Failing checks/output from the last test run:\n' + prevFailBlob.split('\n').map(l => '     ' + l).join('\n') : ''}` : 'Implement ONLY "### ' + taskNum + '." — do NOT implement other tasks.'}
+   ${prevFailBlob ? 'Failing checks/output from the last test run:\n' + prevFailBlob.split('\n').map(l => '     ' + l).join('\n') : ''}` : `Implement ONLY task id ${taskNum} — do NOT implement other tasks.`}
 
 2.5. Optional breakdown (more granular sub-steps from /breakdown):
    Run: cd ${runDir} && ls ${breakdownFile} 2>/dev/null && echo "BREAKDOWN_EXISTS" || echo "NO_BREAKDOWN"
    If BREAKDOWN_EXISTS: read ${breakdownFile}, find "### Step ${taskNum}:", and use its atomic sub-steps as
-   the execution guide (run each inline "Verify:" checkpoint). tasks.md stays authoritative for scope.
+   the execution guide (run each inline "Verify:" checkpoint). tasks.json stays authoritative for scope.
 
 3. Execute methodically with Read/Edit/Write/Bash (all paths resolve from the run root).
 

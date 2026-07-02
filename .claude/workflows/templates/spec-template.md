@@ -6,8 +6,9 @@ description: One-line summary of what this spec delivers.
 
 # <Concept Name>
 
-> Format reference for SDLC task specs. A real spec lives at `planning/<concept>/tasks.md`.
-> Replace every `<...>` placeholder; keep the section headings — the pipeline reads them.
+> Format reference for SDLC task specs. A real spec lives at `planning/<concept>/tasks.md` +
+> a companion `planning/<concept>/tasks.json`. Replace every `<...>` placeholder; keep the
+> section headings — the pipeline reads them.
 
 **Status:** Not started · **Last run:** _never_
 
@@ -25,24 +26,26 @@ like?>
 
 ## Step-by-Step Tasks
 
-Numbered, dependency-ordered. Each task is a unit a single pipeline run can implement, test,
-and review. **Use `### N. Title` heading format** — sdlc-block enumerates tasks by this
-pattern and aborts pre-flight if no `### N.` headings are found.
+The task list is **not** written here — it lives in the companion `tasks.json` (same directory,
+same basename). This file just points at it; the pipeline reads `tasks.json` directly, never a
+markdown heading. See `planning/<concept>/tasks.json`:
 
-### 1. <Foundational step>
-- <what to build and where>
-- Depends on: none.
+```json
+{
+  "tasks": [
+    { "id": 1, "title": "<Foundational step>", "actions": ["<what to build and where>"], "files": ["<path/to/file>"], "dependsOn": [] },
+    { "id": 2, "title": "<Next step>", "actions": ["<what to build and where>"], "files": ["<path/to/file>"], "dependsOn": [1] },
+    { "id": 3, "title": "<Next step>", "actions": ["<what to build and where>"], "files": ["<path/to/file>"], "dependsOn": [1] },
+    { "id": 4, "title": "Validate", "actions": ["Run the Validation Commands listed below and confirm all pass."], "files": [], "dependsOn": [1, 2, 3] }
+  ]
+}
+```
 
-### 2. <Next step>
-- <what to build and where>
-- Depends on: 1.
-
-### 3. <Next step>
-- <what to build and where>
-- Depends on: 1.
-
-### N. Validate
-- Run the Validation Commands listed below and confirm all pass.
+`id` — 1-indexed, dependency-ordered, no gaps. `title` — short, matches what a heading used to
+say. `actions` — the bulleted "what to build and where," one string per bullet. `files` — every
+task except the final Validate task must name ≥1 concrete file it creates or modifies (the
+dependency analysis and disjoint-ownership guard read this). `dependsOn` — ids this task
+requires to run first; the final Validate task depends on every other id.
 
 ## Acceptance Criteria
 

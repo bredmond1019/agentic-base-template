@@ -3,7 +3,28 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-06-30T12:38:00-03:00
+**Last updated:** 2026-07-02T00:00:00-03:00
+
+---
+
+## [2026-07-02]
+
+### D44 — tasks.json replaces markdown heading regex as the task-list contract
+- **What:** Found an uncommitted, undocumented drift in `generate-tasks.md` (task headings changed
+  from `### N.` to `### <BlockID>.<N>`) that had already leaked into global `~/.claude/commands/`
+  via `/sync-global-commands` and silently broken the D16 preflight lint in mev/bastion (one spec
+  hand-patched back in a standalone fix commit, four others never run through the strict engines at
+  all). Root-caused and fixed properly: the per-spec task list now lives in a structured
+  `planning/<spec>/tasks.json` (`{id, title, actions, files, dependsOn}`) that all four SDLC engines
+  (`sdlc-flow.js`, `sdlc-run.js`, `sdlc-task.js`, `sdlc-block.js`) read directly — no heading regex
+  anywhere in the pipeline. `tasks.md` keeps only prose (Goal, Context Pointers, Acceptance
+  Criteria, Validation Commands, Notes, Amendment Log). Updated `generate-tasks.md` (+ its
+  `.agents/skills` mirror) and `spec-template.md` to author both files. `sdlc-flow.js` also drops
+  its now-redundant "mark task in-progress via tasks.md checkbox" stage (that signal already lives
+  in the committed `sdlc-flow-state.json`).
+- **Why:** A markdown heading convention is not a real contract — nothing enforced that spec
+  authoring and the four independent engines agreed on the exact regex shape, so they silently drifted apart. JSON parsing either succeeds or the D16 abort fires with an unambiguous reason.
+- **Refs:** `planning/decisions/D44-tasks-json-task-list.md`
 
 ---
 

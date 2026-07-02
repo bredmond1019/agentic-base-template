@@ -48,7 +48,7 @@ $ARGUMENTS — one of two input modes:
      directory form (e.g. `<spec-slug>`). If the argument cannot be parsed into a phase + block, stop
      and explain the expected format.
 
-3. Check whether a spec already exists at `planning/<spec-slug>/tasks.md` (using the slug resolved in
+3. Check whether a spec already exists at `planning/<spec-slug>/tasks.md` + `tasks.json` (using the slug resolved in
    step 2; in `--from` mode the slug is the source file's parent directory).
    - If it exists, read it and report: "Spec already exists at <path>. Overwrite? (re-run with
      `--force` appended to overwrite, or run `/breakdown <path>` to decompose it instead.)"
@@ -59,8 +59,8 @@ $ARGUMENTS — one of two input modes:
      format, read ONLY the section for the block resolved in step 2 (its `## Phase N` → `### Block X`
      subsection) — not the overview, not sibling blocks; when it is a single standalone block file,
      read the whole file. Treat its substance — the goal/description, problem/solution, relevant
-     files, and acceptance criteria — as the block definition. **Author fresh decomposed `### N.`
-     tasks from it; do not merely copy a pre-existing step list verbatim** (apply the same scoping
+     files, and acceptance criteria — as the block definition. **Author a fresh decomposed
+     `tasks.json` from it; do not merely copy a pre-existing step list verbatim** (apply the same scoping
      and disjoint-ownership rigor below). Do NOT read `master-plan.md` in this mode.
    - **Master-plan slug mode:** read ONLY the relevant section for the requested block in
      `planning/master-plan.md` (the phase/block definition).
@@ -96,27 +96,37 @@ $ARGUMENTS — one of two input modes:
    - Enforce **the project's standing rules** as written in `CLAUDE.md` — do not assume any stack, locale-parity, or content-layout rule unless written there. Every task must leave the project's gated checks (`planning/harness.json` → `validation.checks[]` with `gates: true`) passing.
    - **Disjoint file ownership (parallel-merge safety).** A block's tasks run as parallel pipelines that merge independently, so two tasks editing the same existing file collide at merge. Decompose so each task **owns a distinct set of files**. When two tasks would touch the same file, either (a) make one `dependsOn` the other so `/sdlc-block` serializes them into different waves, or (b) restrict the shared file to **append-only** edits (the block engine union-merges files declared `additiveFiles`). Name each task's primary files in its step so the dependency analysis can see the boundaries — an undeclared overlap escalates the whole block on a merge conflict.
    - Foundational steps come first; the final step is always Validate.
-   - **Use `### N. Title` heading format for every task** — sdlc-block enumerates tasks by
-     this pattern (`### N.`) and will abort pre-flight on a spec that has none. Never use
-     flat numbered lists (`1. **Title**`) or any other format for the task headings.
+   - **Write the task list as `tasks.json`, not markdown headings.** Every SDLC engine reads
+     `planning/<spec-slug>/tasks.json` directly (a `tasks[]` array of `{id, title, actions, files,
+     dependsOn}` objects — see Output Format below) instead of parsing `tasks.md` for a heading
+     pattern. `tasks.md` still carries the prose (Goal, Context Pointers, Acceptance Criteria,
+     Validation Commands, Notes, Amendment Log) but the Step-by-Step Tasks section in it is just a
+     one-line pointer at the JSON file, not the task list itself.
 
-7. Create the directory `planning/<spec-slug>/` if it does not exist, then write the spec to `planning/<spec-slug>/tasks.md` using the Output Format below. (In `--from` mode the directory already exists — it holds the source block file — so the new `tasks.md` lands beside it.)
+7. Create the directory `planning/<spec-slug>/` if it does not exist, then write **both**
+   `planning/<spec-slug>/tasks.md` (prose) and `planning/<spec-slug>/tasks.json` (task list) using
+   the Output Format below. (In `--from` mode the directory already exists — it holds the source
+   block file — so the two new files land beside it.)
 
 8. **Property self-check (before committing).** A structurally valid spec can still be substantively
    thin and waste pipeline tokens. Re-read what you just wrote and confirm every required property
    holds; **revise the spec in place** if any fails, then re-check:
-   - **Every `### N.` task names ≥1 concrete file** it creates or modifies (so the dependency analysis
-     and disjoint-ownership guard can see boundaries). The final Validate step is exempt.
+   - **`tasks.json` parses as valid JSON** and its `tasks[]` array is non-empty.
+   - **Every task except the final Validate task names ≥1 file** in its `files[]` (so the dependency
+     analysis and disjoint-ownership guard can see boundaries).
+   - **`dependsOn` ids are all valid** — every id referenced exists in the same array, and the final
+     Validate task depends on every other task's id.
    - **Acceptance Criteria are non-empty and observable** — each criterion can be judged true/false.
    - **Validation Commands are present** (or `planning/harness.json` → `validation.checks[]` supplies
      them as the fallback).
    - **No leftover template sentinels** — no `{{TOKEN}}`, no literal seed strings the Output Format
-     ships (`<placeholder>`-style angle stubs left unfilled, empty AC/Validation bullets). Do **not**
-     treat legitimate `<...>` in code/prose (e.g. `Vec<T>`, "the `<concept>` folder") or a bare
-     `TODO`/`TBD` inside authored content as a sentinel.
+     ships (`<placeholder>`-style angle stubs left unfilled, empty AC/Validation bullets, or a
+     `tasks.json` task still reading `<Foundational step>`). Do **not** treat legitimate `<...>` in
+     code/prose (e.g. `Vec<T>`, "the `<concept>` folder") or a bare `TODO`/`TBD` inside authored
+     content as a sentinel.
 
 9. **Commit the spec.** Leave the working tree clean so a downstream `/sdlc-block` run never trips
-   its clean-tree merge guard (an uncommitted `tasks.md` blocks every merge):
+   its clean-tree merge guard (an uncommitted `tasks.md`/`tasks.json` blocks every merge):
    ```bash
    git add planning/<spec-slug>/
    git commit -m "chore: add spec for <spec-slug>"
@@ -186,6 +196,10 @@ $ARGUMENTS — one of two input modes:
 
 ## Output Format
 
+Two files, same directory, same basename. `tasks.md` carries the prose; `tasks.json` carries the
+task list the engines actually execute against.
+
+`planning/<spec-slug>/tasks.md`:
 ```md
 # Task Spec — Phase <N>, <Block/Project> <X>
 
@@ -198,17 +212,7 @@ $ARGUMENTS — one of two input modes:
 <which plan sections are relevant + which repo files / CLAUDE.md sections apply>
 
 ## Step-by-Step Tasks
-
-### 1. <Foundational step>
-- <bulleted actions>
-
-### 2. <Next step>
-- <bulleted actions>
-
-<!-- ... continue; last step is always validation -->
-
-### N. Validate
-- Run the Validation Commands listed below and confirm all pass.
+See `tasks.json` in this directory — the task list is defined there, not here.
 
 ## Acceptance Criteria
 - <specific, measurable condition>
@@ -228,11 +232,45 @@ $ARGUMENTS — one of two input modes:
 _No amendments yet._
 ```
 
+`planning/<spec-slug>/tasks.json`:
+```json
+{
+  "tasks": [
+    { "id": 1, "title": "<Foundational step>", "actions": ["<bulleted action>"], "files": ["<path/to/file>"], "dependsOn": [] },
+    { "id": 2, "title": "<Next step>", "actions": ["<bulleted action>"], "files": ["<path/to/file>"], "dependsOn": [1] },
+    { "id": "N", "title": "Validate", "actions": ["Run the Validation Commands listed below and confirm all pass."], "files": [], "dependsOn": [1, 2] }
+  ]
+}
+```
+`id` — 1-indexed integers, dependency-ordered, no gaps (the `"N"` above is illustrative — use the
+real next integer). `actions` — one string per bullet, same content a `### N.` heading's bullets
+used to hold. `files` — every task but the final Validate task needs ≥1 entry. `dependsOn` — ids
+that must complete first; the final Validate task depends on every other id.
+
+
+### Step X — Update state.json tasks
+After writing the `tasks.md` file, you MUST also register these tasks in `planning/state.json`.
+1. Open `planning/state.json`.
+2. Locate the block in `tracks[].blocks[]` that matches this spec's ID or slug.
+3. Add a `tasks` array to that block. For each task generated in the spec, add an object with the following schema (aligning with SDLC_FLOW):
+   - `task_id`: Integer (1-indexed)
+   - `title`: The task title
+   - `description`: The task description
+   - `acceptance_criteria`: Array of acceptance criteria strings
+   - `status`: "pending"
+   - `validation_commands`: []
+   - `max_attempts`: 3
+4. Save `planning/state.json`.
+
+### State Refresh
+
+Run `mev emit-state --write` to update the brain's focus derivation and state based on the new planning files.
+
 ## Report
 
 Output the path to the file created, the decomposition assessment, the pipeline recommendation, and the next-step options:
 ```
-planning/<spec-slug>/tasks.md
+planning/<spec-slug>/tasks.md + tasks.json
 
 Decomposition assessment:
   <"All tasks appropriately scoped." OR a list like:>
@@ -255,4 +293,3 @@ Next (optional — decompose first):
 Next (run directly):
   /<recommended-command> <spec-slug>
 ```
-
