@@ -4,229 +4,247 @@ description: >
   >
 ---
 
-# Generate Master Plan — Author the project roadmap as canonical block definitions.
+# Generate Master Plan — Author a cross-repo program master-plan in a brain planning folder.
+
+> **Brain-adapted** from `base-template/.claude/commands/generate-master-plan.md` (provenance:
+> base-template@b8ebbf7, D34/D35). The base command authors a *single-repo* roadmap that
+> `/generate-tasks` consumes in place. This brain version authors a **cross-repo program plan** that
+> lives in `planning/<concept>/` and coordinates work across the sub-repos. It is **not** consumed by
+> `/generate-tasks` here (the brain has no SDLC harness) — each block is *executed* by opening Claude
+> Code in the sub-repo it names and running that repo's own harness. The brain keeps track of all the
+> moving parts and the order they go in. This is a brain-maintained fork; it does not auto-sync with
+> base-template.
 
 ## Variables
 
-$ARGUMENTS — free-text description of the project, its goal, and any planning notes from a
-             planning session (paste the conversation's conclusions here). Optional `--clarify`.
-             If omitted, the command reads `planning/context.md` + `CLAUDE.md` and asks the user to
-             describe the goal before writing.
+$ARGUMENTS — the **concept folder** under `planning/` to author the master-plan into
+             (e.g. `bastion-product`), optionally followed by free-text framing notes and `--clarify`.
+             Required. If the concept folder is omitted, stop and say:
+             "Usage: /generate-master-plan <concept-folder>  (e.g. bastion-product)"
 
 ## Purpose
 
-Turn a free-form planning session into a `planning/master-plan.md` whose phase/block structure
-`/generate-tasks` can consume **directly**. The master plan is the roadmap source of truth: a
-sequence of **block definitions** (What / Why / Build notes / Acceptance criteria), each addressable
-by a parseable `phaseN-blockX` identifier. `/generate-tasks <phaseN-blockX>` later explodes one
-block into a runnable `tasks.md`.
-
-> This is the **roadmap** producer. For a single ad-hoc / experimental feature you don't yet want in
-> the roadmap, use `/plan` (one standalone block) → `/generate-tasks --from`. See
-> `planning/decisions/D34-adhoc-planning-seam.md`.
+Turn a planning folder's raw material (its `plan.md`, `architecture.md`, etc.) into a canonical
+`planning/<concept>/master-plan.md`: a dependency-sequenced set of **block definitions**, each one
+naming **which sub-repo it executes in** and the **cross-repo interfaces** it consumes or produces.
+The brain master-plan is the program-level coordination artifact — it answers *what lands where, in
+what order, and how the pieces connect* — while the actual building happens in each sub-repo via that
+repo's own `/generate-master-plan` / `/generate-tasks` / `/sdlc-flow`.
 
 ## Instructions
 
-1. Run `/prime` to orient (standing rules, architecture, current state).
-2. Read `planning/context.md` (why the project exists), `CLAUDE.md` (the project's actual stack +
-   standing rules), and any existing `planning/master-plan.md` (you may be *revising/extending* it,
-   not always writing from scratch — preserve completed phases).
-3. **Clarify gate (only when enabled, OR when `$ARGUMENTS` is thin).** Read `planning/harness.json` →
-   `planning.clarify`. When it is `true`, when `$ARGUMENTS` contains `--clarify`, or when the goal /
-   scope / destination is genuinely underspecified, pause and ask the user **2–4 targeted clarifying
-   questions** (the destination, the competence/delivery checkpoint that signals "done", the
-   load-bearing architectural choices, the rough phase boundaries) before writing. Fold the answers
-   in. When the gate is off and the input is already rich, proceed immediately. Strip a `--clarify`
-   token before using `$ARGUMENTS` as prose.
-   - **Plan-quality floor — clarify, don't fabricate (holds even when the gate is off).** The plan is
-     the highest-leverage artifact; a wrong assumption here multiplies through every downstream task.
-     If filling a load-bearing element (a block's Files, Acceptance criteria, scope boundary, a phase
-     ordering, or a dependency) would require *inventing* a fact you cannot ground in `$ARGUMENTS`,
-     `CLAUDE.md`, `planning/context.md`, the repo, or an existing `master-plan.md` — **stop and ask the
-     user a targeted question** instead of writing a plausible-looking guess. The clarify gate governs
-     *proactive* question rounds; this floor governs *never fabricating*. Prefer an honest "I need X to
-     define block N" over a confident invention.
-4. **THINK HARD about phase/block decomposition before writing:**
-   - **Sequence by dependency and competence, not calendar.** Foundational, enabling work is Phase 0;
-     the hardest, most-differentiating work is the last phase. `/sdlc-block` runs **phases
-     sequentially and the blocks within a phase in parallel** by default; add an optional
-     `- **Depends on:** Block <id>` line to a block only to override that default (e.g. to serialize
-     two same-phase blocks that edit the same file).
-   - A **block** is a coherent unit of work that `/generate-tasks` can turn into ~one spec (roughly a
-     21-hour spread across a few sessions). Don't make blocks so large they hide separable concerns,
-     nor so small they fragment one feature across many.
-   - **`/generate-tasks` reads ONLY the target block's section** — not this overview, not sibling
-     blocks. So every block must be **self-sufficient**: it must hand the generator the four things it
-     is required to produce — concrete **files per task** (for disjoint, merge-safe decomposition),
-     **observable acceptance criteria**, correct **scope boundaries**, and (if any) the **shared
-     interface surface** the block leans on. Use the per-block skeleton in the Output Format (What /
-     Why / Files / Interfaces / Out of scope / Acceptance criteria).
-   - **Name each block's files (New vs Modified), by path.** This is load-bearing, not decoration:
-     it is how `/generate-tasks` derives disjoint task ownership without guessing. Tasks that would
-     share a file must be serialized (`dependsOn`) or restricted to append-only; tasks owning distinct
-     files run in parallel. A block that doesn't name its files forces the generator to guess.
-   - **Declare each block's Out of scope** — the explicit boundary of what belongs to a *later* block.
-     If a block depends on a sibling repo or a not-yet-built project, note that prerequisite here.
-   - **Distant (later-phase) blocks may be forward-looking** — author them with the full skeleton
-     while the context is fresh, but say so, and expect their Files / interface lines to need
-     refinement when each becomes next.
-   - Do **not** bake stack/locale/deployment specifics into blocks — those live in `CLAUDE.md` +
-     `planning/harness.json`. Keep block definitions about *what*, *why*, *which files*, and *bounds*.
-5. Write (or revise) `planning/master-plan.md` using the Output Format below. Preserve the OKF
-   frontmatter and any already-completed phases when revising.
-6. **Property self-check (before reporting).** Re-read what you wrote and **revise in place** until
-   every property holds, then re-check:
-   - **Every block is a `### Block X — <name>` heading under a `## Phase N — <name>` heading**, so
-     `/generate-tasks phaseN-blockX` can parse and locate it. No flat lists for blocks.
-   - **Every block names its Files** (New vs Modified, by path), so `/generate-tasks` can derive
-     ownership without guessing. A block with no named files is too thin (a forward-looking distant
-     block may name them provisionally — but it must say it is provisional).
+1. Run `/prime` to orient to the brain (cross-project state, standing rules, the public-narrative
+   rule, all sub-projects).
+2. Read the target concept folder and surrounding context — **do not write from a blank slate**:
+   - `planning/<concept>/` — every file in it (`plan.md`, `architecture.md`, `index.md`, …). This
+     existing material **is** the planning-session input; the master-plan structures it, it does not
+     replace it.
+   - `CLAUDE.md` (brain standing rules, the sub-project + data-contract map), `docs/projects/index.md`
+     and the `docs/projects/<slug>.md` for each sub-repo the plan touches (to ground each block's repo
+     assignment and sequencing in each repo's real current state).
+   - Any existing `planning/<concept>/master-plan.md` — you may be **revising/extending** it; preserve
+     completed phases.
+3. **Clarify gate + plan-quality floor.**
+   - **Clarify** when `$ARGUMENTS` is thin, when it contains `--clarify`, or when the destination /
+     phase boundaries / which-repo-does-what is genuinely ambiguous: pause and ask **2–4 targeted
+     questions** before writing. Strip a `--clarify` token before using `$ARGUMENTS` as prose.
+   - **Plan-quality floor — clarify, don't fabricate (always).** The program plan is the
+     highest-leverage artifact; a wrong assumption here multiplies across every repo. If filling a
+     load-bearing element (a block's target **repo**, its cross-repo **interface/contract**, its
+     **sequencing/dependency**, scope, or acceptance criteria) would require *inventing* a fact you
+     cannot ground in `planning/<concept>/`, `CLAUDE.md`, the sub-project docs, or `$ARGUMENTS` —
+     **stop and ask** rather than write a plausible-looking guess. An honest "I need X to place block
+     N / assign its repo" beats a confident invention.
+4. **THINK HARD about cross-repo decomposition before writing:**
+   - **Sequence by dependency across repos, not calendar.** Foundational/enabling work (the shared
+     contracts, the repo that others consume) comes first; the most-differentiating integration is
+     last. The brain's whole job here is the *order*.
+   - A **block** is a coherent segment of the program — typically one that executes in **one sub-repo**
+     and produces something a later block (often in another repo) consumes.
+   - **Name each block's target repo** (where you'd open Claude Code and run that repo's harness). A
+     block with no repo is too abstract to execute.
+   - **Name each block's cross-repo interfaces/contracts** — the data contracts, APIs, or shared
+     formats it consumes from or produces for other repos. This is the load-bearing seam (the
+     cross-repo analog of single-repo file-ownership): it is what makes the ordering real. (See the
+     orchestrator↔bastion data-contract rule in `CLAUDE.md` for the established pattern.)
+   - **Declare each block's Out of scope** — what belongs to a later block or a different repo.
+   - **Distant blocks may be forward-looking** — full skeleton now, but say so; expect to refine the
+     interface/repo lines when the prerequisite repos are further along.
+   - Keep blocks about *what / why / which repo / which contracts / bounds* — not low-level
+     stack detail (that surfaces when the sub-repo runs its own `/generate-master-plan`).
+   - **North-star enrichment (encouraged for capability-building blocks).** Per the
+     [north star](file://~/agentic-portfolio)
+     and [D30](file://~/agentic-portfolio),
+     a block isn't "done" when it runs once — it is done when it **graduates one rung of the
+     capability-acquisition ladder and leaves a reusable ratchet behind.** For any block that builds a
+     durable capability (not a one-off mechanical edit), also state its **Ratchet** (the reusable asset
+     left behind), its **Eval slice** (how "better/done" is measured — the eval domain it feeds), and
+     its **Ladder rung** (where it sits on solve→repeatable→skill→workflow→harness→eval→automation→
+     monitor→trust→package, and which rung it advances). These keep the program pointed at compounding
+     leverage rather than one-off motion.
+6. Write (or revise) `planning/<concept>/master-plan.md` using the Output Format below. Maintain OKF
+   frontmatter.
+7. **Property self-check (before reporting).** Re-read and **revise in place** until every property
+   holds, then re-check:
+   - **Every block is a `### <Prefix>.<PhaseNumber>.<BlockLetter> — <name>` heading under a
+     `## Phase N — <name>` heading** — the heading is the bare ID (e.g. `### BA.0.A — <name>`), no
+     literal "Block" word. No flat
+     lists.
+   - **Every block names a target Repo** and **at least one cross-repo interface/contract** (or states
+     it is self-contained in one repo with no cross-repo seam).
    - **Every block declares Out of scope** — at least one explicit boundary.
-   - **Every block has a non-empty What, Why, and observable Acceptance criteria** that **end with the
-     project's gating checks passing**. A block whose Acceptance criteria can't be judged true/false
-     against a diff is too vague for `/generate-tasks`.
-   - **The Quick Reference Sequence Table lists one row per block** and matches the block headings.
-   - **No leftover scaffold sentinels** — no `{{TOKEN}}`, no unfilled `<...>` HTML-comment stubs, no
-     empty bullets. (Legitimate `<...>` in code/prose is fine.)
-7. Report the path written and the first runnable block (see Report).
+   - **Every block has a non-empty What, Why, and observable Acceptance criteria** — each judgable
+     true/false (a block whose work lands in a sub-repo should reference that repo's gates as part of
+     "done").
+   - **Every capability-building block carries the north-star enrichment trio** — a **Ratchet**, an
+     **Eval slice** (or an explicit "n/a — deterministic acceptance only"), and a **Ladder rung**. A
+     purely mechanical block (a rename, a doc move) may omit them; a block that builds a durable
+     capability and omits them is incomplete — add them or justify the omission.
+   - **The Quick Reference Sequence Table lists one row per block** (with its Repo) and matches the
+     block headings.
+   - **No fabricated facts** (repos, contracts, metrics) and **no leftover `<...>` stubs**. Honor the
+     public-narrative rule from `CLAUDE.md`.
+7. **Update `planning/<concept>/index.md`** to list the new `master-plan.md` (brain OKF rule: adding a
+   file to a directory requires updating its `index.md`).
+8. **Register the program in the Brain RAG corpus when `planning/<concept>/` is new.** The brain
+   indexer's CORPUS list (`python-orchestration-system/scripts/index_brain.py`) is a hand-maintained
+   set of paths — a new top-level `planning/<concept>/` is **not** picked up automatically and will be
+   silently absent from the Brain vector store until added. If this command creates a *new* program
+   folder that should be queryable (a standing cross-repo program like `bastion-product` /
+   `bastion-ui`, not a transient single-initiative folder), flag it in the Report: the next
+   orchestrator session must add `("planning/<concept>", "plan")` to `index_brain.py`'s CORPUS before
+   the next `--rebuild`. (Cross-repo edit — the brain command does not touch the orchestrator repo;
+   surface it so it isn't forgotten. See `planning/brain-rag-improvements/plan.md` Block E1.)
+9. Report the path written and the first block to execute (see Report). Do **not** commit — leave that
+   to `/commit`.
 
-## Codebase Structure
+## Context / Files to Read
 
-- `CLAUDE.md` — the project's actual stack, standing rules, build/test/validate commands (start here)
-- `planning/context.md` — why the project exists; `planning/status.md` — current state
-- `planning/harness.json` — the project's validation commands + UI-test config
-- `planning/master-plan.md` — the file this command writes (the roadmap)
-
-Read `CLAUDE.md` for the project's real stack and conventions — do not assume any framework,
-language, or directory structure that isn't written there.
+- `planning/<concept>/` (all files — the raw planning material)
+- `CLAUDE.md` (brain standing rules + sub-project / data-contract map)
+- `docs/projects/index.md` + the `docs/projects/<slug>.md` for each repo the plan touches
+- any existing `planning/<concept>/master-plan.md`
 
 ## Standing rules to respect
 
-Read `CLAUDE.md` and `planning/context.md` and enforce **the project's standing rules**. CLAUDE.md is
-the authority; assume no stack, locale-parity, narrative, or content-layout rule unless written
-there. Universal harness rules apply: no fabricated metrics/quotes, no emoji, every block's
-Acceptance criteria leave the project's gated checks (`planning/harness.json` →
-`validation.checks[]`) passing. Maintain OKF frontmatter on `master-plan.md`.
+Enforce the **brain standing rules** in `CLAUDE.md` — especially the public-narrative rule, "decisions
+belong where they are scoped" (cross-repo → `docs/decisions/`; per-repo → that repo's
+`planning/decisions/`), and the data-contract protocol. No fabricated metrics/quotes, no emoji.
+Maintain OKF frontmatter. This command never edits a sub-repo — it only writes under
+`planning/<concept>/`.
 
 ## Output Format
 
 ```md
 ---
 type: Plan
-title: <Project Name> Master Plan
-description: Strategic roadmap and phase specifications for <Project Name>.
+title: <Concept Name> Master Plan
+description: Cross-repo program roadmap for <Concept Name> — what lands in which repo, in what order.
 ---
 
-# <Project Name> — Master Plan
+# <Concept Name> — Master Plan
 
-*Living document. Created <DATE>.*
+*Living document. Cross-repo program plan. Created <DATE>.*
 
 ## The Goal, Stated Plainly
-<2–3 paragraphs: what the project is, why it matters, and what "ready" means — the competence or
-delivery checkpoint that signals project completion.>
+<2–3 paragraphs: what the combined product is, why it matters, and what "ready" means — the
+checkpoint that signals the program is delivered.>
 
 ## The Destination
-<The named product or outcome. If commercial: the buyer, the differentiator, the through-line.>
+<The named product/outcome that combines the sub-repos. The through-line tying them together.>
 
-## Architecture / Design Overview
-<The key structural design: layers, an ASCII diagram with per-file/module annotations if useful, and
-the load-bearing design decisions (with rationale, pointing to a decisions/ file for the full case).
-Keep deployment specifics out — those live in CLAUDE.md + harness.json.>
+## Cross-Repo Architecture
+<How the sub-repos combine into one product: which repo owns what, the data contracts / APIs / shared
+formats that connect them, an ASCII diagram if useful, and the load-bearing decisions (point to
+`architecture.md` and any `docs/decisions/` file). This is the map the block sequencing is built on.>
+
+## Repos In Play
+<Bullet list: each sub-repo this program touches, one line on its role in the combined product, and a
+pointer to its `docs/projects/<slug>.md`.>
 
 ---
 
 ## The Block Contract
 
-`/generate-tasks` reads **only the target block's section** below — not this overview, not sibling
-blocks. So every block section must be self-sufficient and hand the generator the four things it is
-required to produce: concrete **files per task** (for disjoint, merge-safe decomposition),
-**observable acceptance criteria**, correct **scope boundaries**, and the **shared interface surface**
-it leans on. Every block uses the same skeleton:
+Each block below is **executed in the sub-repo it names** (open Claude Code there and run that repo's
+`/generate-master-plan` → `/generate-tasks` → `/sdlc-flow`). The brain master-plan coordinates the
+*order* and the *seams between repos*. Every block uses the same skeleton:
 
-- **What** — the scope, in implementation terms.
-- **Why** — the motivation (keeps the generator from over- or under-scoping).
-- **Files** — *new* vs *modified*, named by path. Load-bearing: tasks sharing a file must be
-  serialized (`dependsOn`) or append-only; tasks owning distinct files run in parallel. A block that
-  doesn't name its files forces the generator to guess ownership.
-- **Interfaces / shared surface** *(optional — when the project has a shared API/contract layer)* —
-  which shared exports/APIs/contracts the block consumes, and any *new* one it must add. Omit for
-  projects with no shared layer.
-- **Out of scope** — explicit boundaries; what belongs to a later block. Note any cross-repo /
-  not-yet-built prerequisite here.
-- **Depends on** *(optional)* — `- **Depends on:** Block <id>` (a bare `Block A` means Block A of the
-  *same* phase; a fully-qualified `phase0-blockA` is also accepted). Names sibling blocks that must
-  merge first. Omit it and the default order applies (see below); add it only to override that default —
-  e.g. two blocks in the same phase that edit the same file must be serialized.
-- **Acceptance criteria** — each a true/false condition a reviewer can check against the diff, ending
-  with the project's gating checks passing.
-
-**Default ordering — phases sequential, blocks within a phase parallel.** `/sdlc-block` runs each
-phase as a wave: all blocks of Phase N run in parallel (each in its own worktree → PR), and Phase N+1
-starts only after Phase N's blocks merge. A `Depends on` line refines this by adding an explicit edge,
-so a dependent block waves after the block it names (use it to serialize same-phase blocks that share a
-file).
-
-Later-phase blocks may be **forward-looking** — authored with the full skeleton while the context is
-fresh, but expect to refine their Files / interface lines when each becomes next (say so explicitly in
-those blocks).
+- **What** — the segment's scope.
+- **Why** — why this segment, why now in the cross-repo sequence.
+- **Repo** — the sub-repo where this block is built (the execution home).
+- **Interfaces / contracts** — the cross-repo seams it consumes from / produces for other repos (data
+  contracts, APIs, shared formats). The load-bearing part — what makes the ordering real.
+- **Depends on** — the earlier block(s)/repo output(s) this block needs first.
+- **Out of scope** — what belongs to a later block or another repo.
+- **Ratchet** — *(north-star, capability blocks)* the reusable asset this block leaves behind: a skill,
+  workflow, harness, eval, template, dashboard, monitor, policy, or memory artifact. If it leaves none,
+  some of the value is being lost (north-star §"Momentum Ratchets").
+- **Eval slice** — *(north-star, capability blocks)* how "better/done" is measured — the eval domain
+  this block adds to the program's eval engine — or "n/a — deterministic acceptance only".
+- **Ladder rung** — *(north-star, capability blocks)* where the block sits on the capability-acquisition
+  ladder (solve→repeatable→skill→workflow→harness→eval→automation→monitor→trust→package) and which rung
+  it advances to.
+- **Acceptance criteria** — observable, true/false; include the target repo's gates as part of "done".
 
 ---
 
 ## Phase 0 — <name>
 
-### Block A — <name>
-- **What:** <scope in implementation terms — concrete enough to scope tasks>
-- **Why:** <why this block, why now in the sequence>
-- **Files:**
-  - *New* <path> (what it holds), …
-  - *Modified* <path> (what changes), …
-- **Interfaces / shared surface:** <optional — shared exports/APIs this block consumes or must add>
-- **Out of scope:** <explicit boundaries; what is a later block's job; any cross-repo prerequisite>
-- **Depends on:** Block <id>   *(include only when a sibling in the same phase must merge first; omit this line entirely when the default phase-sequential / block-parallel order suffices)*
-- **Acceptance criteria:** <observable, true/false conditions checkable against the diff; end with the
-  project's gating checks passing>
+### <Prefix>.<PhaseNumber>.<BlockLetter> — <name>
+<!-- Example: ### BA.0.A — Foundation setup (no "Block" word in the heading — the ID is self-describing) -->
+- **What:** <segment scope>
+- **Why:** <why now in the cross-repo order>
+- **Repo:** <which sub-repo this is built in>
+- **Interfaces / contracts:** <cross-repo seams consumed/produced; or "self-contained, no cross-repo seam">
+- **Depends on:** <earlier block(s) / repo output(s), or "nothing — foundational">
+- **Out of scope:** <boundaries; later-block / other-repo work>
+- **Ratchet:** <reusable asset left behind — skill/workflow/harness/eval/template/dashboard/monitor/policy/memory; omit only for purely mechanical blocks>
+- **Eval slice:** <how "better/done" is measured / the eval domain it feeds; or "n/a — deterministic acceptance only">
+- **Ladder rung:** <position on solve→…→package and which rung it advances; omit only for purely mechanical blocks>
+- **Acceptance criteria:** <observable conditions; include the target repo's gating checks>
 
-### Block B — <name>
+### <Prefix>.<PhaseNumber>.B — <name>
 <!-- same skeleton -->
 
 ---
 
-## Phase 1 — <name>
-
-### Block A — <name>
-<!-- same skeleton; one sub-section per block -->
-
----
-
-<!-- ...continue for each phase; the last phase is the hardest, most-differentiating work.
-     Distant phases' blocks carry the full skeleton but may be flagged forward-looking. -->
+<!-- ...continue per phase; the last phase is the hardest cross-repo integration.
+     Distant blocks carry the full skeleton but may be flagged forward-looking. -->
 
 ---
 
 ## Quick Reference Sequence Table
 
-| Phase | Block | What | Why | Role in destination |
-|---|---|---|---|---|
-| 0 | A | <short> | <short> | <short> |
+| Phase | Block | Repo | What | Depends on | Role in destination |
+|---|---|---|---|---|---|
+| 0 | A | <repo> | <short> | <short> | <short> |
 
 ---
 
-*Sequenced by dependency and competence, not calendar. When life gets in the way, pick up where you
-left off.*
+*Sequenced by cross-repo dependency, not calendar. Each block is built in its named repo; the brain
+tracks the order. Pick up where you left off.*
 ```
 
 ## Report
 
 Output the path written and the next step:
 ```
-planning/master-plan.md  (<N> phases, <M> blocks)
+planning/<concept>/master-plan.md  (<N> phases, <M> blocks across <K> repos)
 
-Blocks ready to generate:
-  - phase0-blockA — <name>
-  - phase0-blockB — <name>
+Blocks, in order:
+  - 0.A [<repo>] — <name>
+  - 0.B [<repo>] — <name>
   ...
 
-Next (turn the first block into a runnable spec):
-  /generate-tasks phase0-blockA
+Next (execute the first block in its repo):
+  cd <repo-path> && /generate-master-plan <slug>   (or /generate-tasks / /sdlc-flow there)
+
+Then /commit here to save the program plan.
 ```
 
+If a **new** `planning/<concept>/` folder was created and should be queryable, also emit:
+```
+Brain RAG: planning/<concept>/ is a new corpus path — add ("planning/<concept>", "plan") to
+index_brain.py CORPUS (orchestrator) before the next --rebuild, or it won't be indexed.
+```
