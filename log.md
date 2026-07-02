@@ -3,11 +3,29 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-02T01:00:00-03:00
+**Last updated:** 2026-07-02T01:30:00-03:00
 
 ---
 
 ## [2026-07-02]
+
+### D47 — .agents/skills/ cleanup — mirror gaps, dead scripts, a copy-paste sync bug
+- **What:** Audited everything still sitting untracked after D44–D46. Regenerated `backlog-ticket`'s
+  stale `SKILL.md` mirror (it was missing a whole step its `.claude/commands/` counterpart already
+  had). Added missing `.claude/commands/sync-brain-skills.md` + `sync-global-skills.md` sources —
+  both skills existed only under `.agents/skills/` with no Claude Code-visible counterpart, same
+  gap class as `write-lesson`. Fixed `sync-brain-skills`'s rsync include-list: three entries
+  (`log-decision`, `sync-status`, `update-progress`) were copied from the brain repo's analogous
+  `sync-brain-commands.md` list but don't exist anywhere in base-template — silently matched
+  nothing. Deleted `add_state_tasks.py` and `update_planners.py`: these were the actual scripts
+  that generated the `### <BlockID>.N` headings and full-array `state.json` sections D44–D46 just
+  fixed, and both guard on marker text that no longer exists post-fix — re-running either today
+  would re-introduce the bug. Refreshed `.agents/skills/README.md` for `tasks.json`.
+- **Why:** Same instinct as D44–D46 — don't leave a known-stale or known-dangerous artifact lying
+  around just because it wasn't the file directly asked about.
+- **Refs:** `planning/decisions/D47-agent-skills-cleanup.md`
+
+---
 
 ### D46 — tasks.json propagated to chore/plan/ticket; state.json tasks field corrected to a pointer
 - **What:** Verified D44/D45's `tasks.json` shape against `core/orchestrator/docs/sdlc-flow-
@@ -27,6 +45,24 @@ records changes to the **factory** — it is never copied into generated project
   `state.json` duplicating the full task list would have created two sources of truth for the same
   content; a pointer + summary keeps `tasks.json` the only place a task's real content lives.
 - **Refs:** `planning/decisions/D46-tasks-json-propagation-and-state-pointer.md`
+
+---
+
+### D45 — tasks.json shape aligned to orchestrator's shipped SDLCTask schema
+- **What:** D44 designed `tasks.json` from base-template's side only. Checked it against
+  `core/orchestrator/app/schemas/sdlc_schema.py` (`SDLC_FLOW`'s already-shipped, tested task
+  schema) and found real, structural mismatches — D44 wrapped the array in `{"tasks": [...]}`,
+  `SDLCTask` expects a bare array; D44 used `id`, `SDLCTask` uses `task_id`; D44 used an `actions`
+  array, `SDLCTask` requires a single `description` string. Corrected `tasks.json` to match
+  `SDLCTask` field-for-field, keeping `files`/`dependsOn` as two harmless additive fields (Pydantic
+  v2's default `extra='ignore'`, confirmed by reading the model — no `model_config` override).
+  Marked D44 `superseded` (shape only; the move off heading-regex parsing stands). Updated all four
+  `sdlc-*.js` engines + `generate-tasks.md` + `spec-template.md` to match.
+- **Why:** A second, independently-shipped implementation of the same pipeline already existed and
+  the two were supposed to be interoperable ("both consume the same kind of task list," per
+  orchestrator's own docs) — inventing a shape without checking is the same mistake D44 fixed, one
+  level up.
+- **Refs:** `planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md`
 
 ---
 
