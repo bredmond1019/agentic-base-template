@@ -28,7 +28,7 @@ All commands live directly in `.claude/commands/` — no subdirectories (except 
 
   archive.md        capture.md       commit.md        handoff.md
   log-work.md       prime.md         session-recap.md status.md
-  wrap-up.md
+  wrap-up.md        update-state.md
 
   breakdown.md      chore.md         generate-master-plan.md  generate-tasks.md
   plan.md           ticket.md
@@ -51,6 +51,7 @@ All commands live directly in `.claude/commands/` — no subdirectories (except 
 | Group | Commands |
 |---|---|
 | Session | `/prime`, `/session-recap`, `/status`, `/handoff`, `/wrap-up`, `/log-work`, `/archive`, `/capture` |
+| State | `/update-state` — how to safely edit `planning/state.json` per `state-schema.md` |
 | Planning | `/generate-master-plan`, `/generate-tasks`, `/plan`, `/ticket`, `/chore`, `/breakdown` |
 | SDLC | `/implement`, `/test`, `/fix`, `/patch`, `/document`, `/update-docs`, `/conditional_docs`, `/process-tasks`, `/update-task`, `/review-task`, `/review-workflow`, `/review-PR`, `/close-out` |
 | Git | `/commit`, `/init-worktree`, `/clean-worktree`, `/start-block`, `/merge-train` |
@@ -284,6 +285,15 @@ gaps are noted in the handoff rather than blocking it.
 Start-of-session briefing: reads the three most recent Log entries, status.md, the current
 spec's `tasks.md`, and the `reports/` directory listing; outputs a concise briefing (under 300
 words) and the exact next command. Read-only.
+
+### `/update-state`
+The canonical workflow for hand-editing any repo's `planning/state.json`: the authored-vs-derived
+field boundary, which `kind` (`project` / `brain` / `portfolio`) applies and what it requires, the
+`<Prefix>.<Phase>.<Letter>` block-ID convention and what has to move in lockstep when an id is
+renamed, and the edit → validate → `mev emit-state --write` → `mev validate-brain --state`
+procedure. Points to `core/planning/state-schema.md` as the single source of truth for field
+shapes rather than duplicating them. Use before any non-trivial `state.json` edit, or when another
+command's instructions say "update state.json" without repeating the mechanics.
 
 ### `/conditional_docs [task-type]`
 Routes the agent to the documentation most relevant to the current task type (feature, bug/fix,
