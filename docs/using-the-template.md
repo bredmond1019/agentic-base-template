@@ -146,7 +146,14 @@ project) for project-level command conventions.
 
 ## 6. The update loop (pulling harness improvements later)
 
-When `base-template` ships a harness improvement you want to pull into an existing project:
+When `base-template` ships a harness improvement you want to pull into an existing project, run
+`/sync-downstream-harness` from `base-template`'s root (dry-run first, then `--apply`) — it copies
+every changed `.claude/commands/*.md` + `.claude/workflows/` file into every scaffolded repo at
+once, never deletes a project's own customizations, and stamps `planning/.template-version` for
+you. See `planning/decisions/D48-downstream-harness-sync-script.md`.
+
+The fully manual version (useful for a single targeted pull, or if the repo isn't registered in
+`brain.toml`):
 
 1. Check `base-template/log.md` to see what changed and which files were affected.
 2. Copy the changed files from `base-template/.claude/` into your project's `.claude/`.
@@ -154,4 +161,5 @@ When `base-template` ships a harness improvement you want to pull into an existi
    `base-template/docs/harness-json.md` and update your project's config.
 4. Append a note to your project's `log.md` recording the pull and the base-template commit hash.
 
-Downstream projects diverge by design after generation — pull selectively and verify.
+Downstream projects diverge by design after generation — pull selectively and verify. Either way,
+this doesn't commit for you — review the diff in each project and commit there.

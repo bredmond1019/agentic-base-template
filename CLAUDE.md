@@ -36,9 +36,18 @@ When a discovery in a downstream project improves the harness:
    explaining *why*.
 3. Append a dated `log.md` entry describing *what* changed.
 4. Commit. The new commit hash becomes the provenance stamp for the next generated project.
+5. **Run `/sync-downstream-harness`** (dry-run first, then `--apply`) to pull the change into every
+   already-scaffolded repo — see `planning/decisions/D48-downstream-harness-sync-script.md`. This
+   is not optional busywork: a fix that lives only here isn't fixed anywhere real work happens. If
+   the change touched `sdlc-flow.js` or the `tasks.json` contract specifically, also check
+   `core/orchestrator`'s `SDLC_FLOW` workflow (`app/schemas/sdlc_schema.py`) — it's a second,
+   independently-implemented consumer of the same contract (see
+   `core/orchestrator/docs/sdlc-flow-workflow.md`) that this script does not touch.
 
-Downstream projects **do not auto-sync**. They pull improvements manually and diverge by
-design — so keep changes here additive and well-documented.
+Downstream projects **do not auto-sync** — pulling is still a deliberate, reviewed step (the
+script never commits for you) — but it is no longer a fully manual copy-paste; `/sync-downstream-
+harness` does steps 5's mechanical part. Repos still diverge by design after the pull (their own
+customizations are never touched) — keep changes here additive and well-documented.
 
 ## Standing rules
 
