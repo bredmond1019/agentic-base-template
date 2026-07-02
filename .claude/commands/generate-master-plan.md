@@ -45,7 +45,7 @@ block into a runnable `tasks.md`.
    - **Sequence by dependency and competence, not calendar.** Foundational, enabling work is Phase 0;
      the hardest, most-differentiating work is the last phase. `/sdlc-block` runs **phases
      sequentially and the blocks within a phase in parallel** by default; add an optional
-     `- **Depends on:** Block <id> (e.g., `BA.0.A`)` line to a block only to override that default (e.g. to serialize
+     `- **Depends on:** <id> (e.g., `BA.0.A`)` line to a block only to override that default (e.g. to serialize
      two same-phase blocks that edit the same file).
    - A **block** is a coherent unit of work that `/generate-tasks` can turn into ~one spec (roughly a
      21-hour spread across a few sessions). Don't make blocks so large they hide separable concerns,
@@ -71,8 +71,10 @@ block into a runnable `tasks.md`.
    frontmatter and any already-completed phases when revising.
 7. **Property self-check (before reporting).** Re-read what you wrote and **revise in place** until
    every property holds, then re-check:
-   - **Every block is a `### Block X — <name>` heading under a `## Phase N — <name>` heading**, so
-     `/generate-tasks <Prefix>.<PhaseNumber>.<BlockLetter>` can parse and locate it. No flat lists for blocks.
+   - **Every block is a `### <Prefix>.<PhaseNumber>.<BlockLetter> — <name>` heading under a
+     `## Phase N — <name>` heading** — the heading is the bare ID (e.g. `### BA.0.A — <name>`), no
+     literal "Block" word — so `/generate-tasks <Prefix>.<PhaseNumber>.<BlockLetter>` can parse and
+     locate it. No flat lists for blocks.
    - **Every block names its Files** (New vs Modified, by path), so `/generate-tasks` can derive
      ownership without guessing. A block with no named files is too thin (a forward-looking distant
      block may name them provisionally — but it must say it is provisional).
@@ -148,10 +150,11 @@ it leans on. Every block uses the same skeleton:
   projects with no shared layer.
 - **Out of scope** — explicit boundaries; what belongs to a later block. Note any cross-repo /
   not-yet-built prerequisite here.
-- **Depends on** *(optional)* — `- **Depends on:** Block <id> (e.g., `BA.0.A`)` (a bare `Block <Prefix>.<Phase>.A` means Block <Prefix>.<Phase>.A of the
-  *same* phase; a fully-qualified `BA.0.A` is also accepted). Names sibling blocks that must
-  merge first. Omit it and the default order applies (see below); add it only to override that default —
-  e.g. two blocks in the same phase that edit the same file must be serialized.
+- **Depends on** *(optional)* — `- **Depends on:** <id> (e.g., `BA.0.A`)` (a bare letter `<BlockLetter>`
+  means `<Prefix>.<Phase>.<BlockLetter>` of the *same* phase; a fully-qualified `BA.0.A` is also
+  accepted). Names sibling blocks that must merge first. Omit it and the default order applies (see
+  below); add it only to override that default — e.g. two blocks in the same phase that edit the same
+  file must be serialized.
 - **Acceptance criteria** — each a true/false condition a reviewer can check against the diff, ending
   with the project's gating checks passing.
 
@@ -169,8 +172,8 @@ those blocks).
 
 ## Phase 0 — <name>
 
-### Block <Prefix>.<PhaseNumber>.<BlockLetter> — <name>
-<!-- Example: ### Block BA.0.A — Foundation setup -->
+### <Prefix>.<PhaseNumber>.<BlockLetter> — <name>
+<!-- Example: ### BA.0.A — Foundation setup (no "Block" word in the heading — the ID is self-describing) -->
 - **What:** <scope in implementation terms — concrete enough to scope tasks>
 - **Why:** <why this block, why now in the sequence>
 - **Files:**
@@ -178,19 +181,19 @@ those blocks).
   - *Modified* <path> (what changes), …
 - **Interfaces / shared surface:** <optional — shared exports/APIs this block consumes or must add>
 - **Out of scope:** <explicit boundaries; what is a later block's job; any cross-repo prerequisite>
-- **Depends on:** Block <id> (e.g., `BA.0.A`)   *(include only when a sibling in the same phase must merge first; omit this line entirely when the default phase-sequential / block-parallel order suffices)*
+- **Depends on:** <id> (e.g., `BA.0.A`)   *(include only when a sibling in the same phase must merge first; omit this line entirely when the default phase-sequential / block-parallel order suffices)*
 - **Acceptance criteria:** <observable, true/false conditions checkable against the diff; end with the
   project's gating checks passing>
 
-### Block <Prefix>.<PhaseNumber>.B — <name>
+### <Prefix>.<PhaseNumber>.B — <name>
 <!-- same skeleton -->
 
 ---
 
 ## Phase 1 — <name>
 
-### Block <Prefix>.<PhaseNumber>.<BlockLetter> — <name>
-<!-- Example: ### Block BA.0.A — Foundation setup -->
+### <Prefix>.<PhaseNumber>.<BlockLetter> — <name>
+<!-- Example: ### BA.1.C — Foundation setup -->
 <!-- same skeleton; one sub-section per block -->
 
 ---
@@ -228,7 +231,7 @@ After writing/revising `master-plan.md`, register every block (new or changed) i
    - `wave`: an integer execution-order rank. Default to `10 * <phase number>` (Phase 0 → `10`, Phase 1
      → `20`, …) so every block in a phase shares a wave and later phases sort after.
    - `depends_on`: one `{ "type": "block", "repo": "<this-repo-slug>", "id": "<ID>" }` entry per explicit
-     **Depends on:** line on the block (resolve a bare `Block X` to `<Prefix>.<PhaseNumber>.X`). Omit or
+     **Depends on:** line on the block (resolve a bare letter `X` to `<Prefix>.<PhaseNumber>.X`). Omit or
      use `[]` when the block has no explicit "Depends on" line — do **not** encode the implicit
      phase-sequential default as a `depends_on` edge; `wave` already expresses that ordering.
    - If the block was promoted from an HQ backlog item, add `"origin": { "type": "backlog", "slug": "<slug>" }`.
