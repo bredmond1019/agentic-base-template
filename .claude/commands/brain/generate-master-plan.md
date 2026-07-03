@@ -98,6 +98,10 @@ repo's own `/generate-master-plan` / `/generate-tasks` / `/sdlc-flow`.
      block headings.
    - **No fabricated facts** (repos, contracts, metrics) and **no leftover `<...>` stubs**. Honor the
      public-narrative rule from `CLAUDE.md`.
+   - **Frontmatter `related:` carries ≥1 real `doc_id`** (not `[]`) so the program plan is not an
+     isolated graph node (`mev`'s `W_GRAPH_ISOLATED_NODE`) — a governing cross-repo decision
+     (`docs/decisions/`), the concept's `index`/`notes`, or a coordinated project doc. Use genuine
+     doc_ids only; never invent one. On a *revise*, leave an already-populated `related:` intact.
 7. **Update `planning/<concept>/index.md`** to list the new `master-plan.md` (brain OKF rule: adding a
    file to a directory requires updating its `index.md`).
 8. **Register the program in the Brain RAG corpus when `planning/<concept>/` is new.** The brain
@@ -134,6 +138,8 @@ Maintain OKF frontmatter. This command never edits a sub-repo — it only writes
 type: Plan
 title: <Concept Name> Master Plan
 description: Cross-repo program roadmap for <Concept Name> — what lands in which repo, in what order.
+doc_id: <concept>-master-plan
+related: [<≥1 real doc_id>]   # required — never leave empty; else this program plan is an isolated graph node (mev W_GRAPH_ISOLATED_NODE)
 ---
 
 # <Concept Name> — Master Plan

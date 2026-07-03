@@ -61,7 +61,9 @@ Check if `brain.toml` exists in the current directory:
    - **What this brain is** — one paragraph (what it tracks, who it's for, primary program).
    - **Active Handoff** — lead with this if present.
    - **Operating Board** — current focus, NOW/NEXT/BLOCKED from `planning/status.md`.
-   - **Tier summaries** — one paragraph per tier rollup on what's active and blocked.
+   - **Tier summaries** — indented bullet points for each tier (e.g., `core (Bastion Program)`, `portfolio`, `side`, `client`), structured as:
+     - **<tier-name>** (e.g. core (Bastion Program)): <overview of the tier rollup as a whole (momentum, blockers)>
+       - `<repo-slug>`: <repo status/updates from the rollup table/cache card>
    - **`_root` repos** — one sentence each from the cache cards.
    - **Carryover** — active `carryover[]` entries (slug, kind, one-line gist).
    - **Standing rules** — key items from CLAUDE.md.

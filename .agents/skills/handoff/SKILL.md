@@ -150,3 +150,4 @@ Tell the user:
 - The current in-flight task spec (path from status.md, if any)
 - `planning/handoff.md` (if it already exists)
 - `planning/state.json` (existing `carryover[]`) + `planning/state-schema.md` (`carryover[]` field shape)
+

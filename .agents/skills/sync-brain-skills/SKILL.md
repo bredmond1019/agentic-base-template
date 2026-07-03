@@ -56,3 +56,4 @@ generic session/planning skills — not any brain-specific command.
    - Any errors or missing directories
 
 5. Summarize: N tiers updated, total files synced.
+

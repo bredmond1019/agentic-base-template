@@ -91,3 +91,4 @@ Return the subagent's result to the user.
   `> Promoted: [date] → [where]` line, **and** update the matching `state.json` `backlog[]` node's
   `status` to `"promoted"` + add its `block: "<ID>"` field — then go create the plan in the target repo.
 - Never edit existing entries unless the user explicitly asks.
+

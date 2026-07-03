@@ -31,7 +31,7 @@ description: >
      → end-review → docs (gated on PASS) → wrap-up(PR)
 
    Per-task loop (sequential, in the one worktree):
-     /update-task (in-progress) → implement → fast-test → (triage → fix/​bail) ×≤3
+     implement → fast-test → (triage → fix/​bail) ×≤3
      One state-commit per task. A triage MAJOR / immediate-bail reason breaks
      straight to wrap-up (draft PR) — it does NOT burn three attempts.
 
@@ -48,7 +48,7 @@ description: >
    chore: wrap up <spec>               wrap-up agent (status/log/amendment-log)
 
  MODEL TIERING (the token lever — see the MODEL map below)
-   haiku : worktree-setup, enumerate, scout/state-load, test, update-task, state-writer
+   haiku : worktree-setup, enumerate, scout/state-load, test, state-writer
    sonnet: implement, fix, review, triage, docs, wrap-up
    opus  : ESCALATION on the FINAL per-task fix pass and the FINAL review attempt
 
@@ -78,6 +78,7 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
    - If PASS, run `/update-docs --patch` to update documentation.
    - Update the status and log.
    - Create a pull request (PR) using git CLI or GitHub CLI (unless `--no-pr` is specified).
+
 
 
 

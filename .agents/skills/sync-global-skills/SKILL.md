@@ -65,3 +65,4 @@ itself reads `.claude/commands/` and does not need this sync.
 - Run this command any time harness skills are added, moved, or renamed in base-template.
 - Unlike `/sync-global-commands`, there is no `brain/` reference directory to exclude under
   `.agents/skills/` — the full tree syncs.
+
