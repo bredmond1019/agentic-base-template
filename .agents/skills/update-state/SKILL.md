@@ -1,7 +1,7 @@
 ---
 name: update-state
 description: >
-  Custom skill: update-state
+  >
 ---
 
 # Update State — Safely edit a repo's `planning/state.json` per the canonical schema.
