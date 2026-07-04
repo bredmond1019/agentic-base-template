@@ -9,6 +9,27 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [2026-07-04]
 
+### /close-out after BT.1.B — doc patch + state repair
+- **What:** Ran `/close-out` after the `bt-1-b-log-work-sync-rewire` `/sdlc-run`. Gating check
+  (`engines-parse`) + emoji gate both passed clean; coverage scan correctly skipped (both changed
+  files are markdown command definitions, docs/config-only). `/update-docs --patch` fixed two stale
+  sections in `.claude/commands/README.md` — the `/prime` entry (missing the new freshness-gate/
+  handoff/carryover mentions) and the `/log-work` entry + "Company Brain Integration" section (both
+  still described the pre-rewrite hand-edited-cache behavior instead of the `mev emit-state --write`
+  mechanism). Discovered and fixed a `planning/state.json` drift: `BT.1.B` was still `status: "open"`
+  in `tracks[].blocks[]` despite being DONE — the prior wrap-up never flipped it. Flipped it to
+  `closed`, ran `mev emit-state --write` to re-derive `focus` (correctly went empty, since BT.1.C
+  isn't a registered `tracks[]` block yet). Verified mev PR #18 is `MERGED` and cleared the
+  now-resolved `bt-1-b-mev-pr-unmerged` carryover. Recorded two new carryover entries for follow-ups
+  found this session: the sdlc-run's review stage returned PASS but never wrote `review.md` to disk
+  (blocked the document stage that run); and `.agents/skills/log-work/SKILL.md` +
+  `.agents/skills/prime/SKILL.md` are now stale mirrors of the two commands BT.1.B changed — this
+  session's own `/log-work` invocation loaded the stale mirror and had to be redirected to follow
+  the current `.claude/commands/log-work.md` body instead, live confirmation of the gap.
+- **Why:** `/close-out` closes the quality loop before handoff — verifying gating, filling doc gaps,
+  and reconciling derived state so the next session doesn't inherit silent drift.
+- **Refs:** `.claude/commands/README.md`, `planning/state.json`, `planning/handoff.md`.
+
 ### BT.1.B — rewire /log-work + session-start --sync gate (state-sync-loop Phase 1)
 - **What:** Rewired `.claude/commands/log-work.md` so the agent no longer hand-edits the brain
   cache doc's focus line/`synced_from` watermark or hand-regenerates the tier rollup table — those
