@@ -76,9 +76,13 @@ When the user asks you to run `/sdlc-block [plan-file] [flags]`, perform the roa
 
 1. **Pre-flight**: ensure the main tree is clean and the plan file is committed; check out (or create)
    the train branch off the base.
-2. **Enumerate**: parse the plan's `## Phase N` / `### Block X` sections into blocks + a dependency
-   graph (explicit `- **Depends on:**` lines plus the phase-sequential default), then compute
-   block-level waves in code.
+2. **Enumerate**: parse the plan's `## Phase N` sections into blocks + a dependency graph (explicit
+   `- **Depends on:**` lines plus the phase-sequential default), then compute block-level waves in
+   code. Blocks are headed either by the canonical `### <Prefix>.<PhaseNumber>.<BlockLetter>` id (no
+   "Block" word) or the legacy `### Block X` form; the canonical id (constructed from the repo's
+   `brain.toml` prefix for a legacy heading) is used to sync each block's authored status in
+   `planning/state.json`, when the repo has one — `open` → `in_progress` at wave start, → `closed` on
+   an `--auto-merge` landing.
 3. **Per wave**: ensure each block has a committed `planning/<slug>/tasks.md` (generate it from the
    block's plan section if missing), then fan out one `/sdlc-flow <slug> --no-pr` per block, up to the
    parallel cap.

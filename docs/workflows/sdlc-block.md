@@ -56,22 +56,36 @@ Engine: [`.claude/workflows/sdlc-block.js`](../../.claude/workflows/sdlc-block.j
 ## The plan-file format
 
 `/sdlc-block` reads any file that follows the master-plan format — `## Phase N` sections
-containing `### Block X` sub-sections. Default ordering: **phases sequential, blocks
-within a phase parallel**. Override with an explicit `- **Depends on:** Block <id>` line
-inside a block definition.
+containing block sub-sections, headed either by the canonical `### <Prefix>.<PhaseNumber>.<BlockLetter>`
+id (no "Block" word — what `/generate-master-plan` and `/plan` author today) or the legacy
+`### Block X` form (older plans; still parsed for backward compatibility). Default ordering:
+**phases sequential, blocks within a phase parallel**. Override with an explicit
+`- **Depends on:** <id>` line inside a block definition — a bare letter, a legacy
+`phaseN-blockX` ref, or a fully-qualified id (`LA.1.A`) are all accepted.
 
 ```markdown
 ## Phase 0 — Foundation
 
-### Block A — Shared types
+### BA.0.A — Shared types
 ...
-### Block B — Config layer
+### BA.0.B — Config layer
 ...
-- **Depends on:** Block A
+- **Depends on:** BA.0.A
 ```
 
 `/generate-master-plan` authors this format. `/plan` writes a mini-roadmap in the same shape.
 `/generate-tasks --from <path>` decomposes a single block into `tasks.md`.
+
+**`planning/state.json` sync.** When a repo has one (see `core/planning/state-schema.md`),
+`/sdlc-block` resolves each block's canonical `<Prefix>.<PhaseNumber>.<BlockLetter>` id (reading
+it straight off a canonical heading, or constructing it from the repo's `brain.toml` prefix for a
+legacy heading) and flips that block's authored `status` there: `open` → `in_progress` when its
+wave starts, and → `closed` once merged, in `--auto-merge` mode only (the only mode where the
+merge target *is* the base branch — default/`--no-pr` mode merges into the disposable train
+branch, so the block stays `in_progress` until `/merge-train` or a manual merge lands it on base).
+Repos without `planning/state.json`, or a legacy heading with no resolvable prefix (a standalone
+repo outside any brain), are unaffected — the sync is a best-effort no-op for them, never a hard
+failure.
 
 ---
 
