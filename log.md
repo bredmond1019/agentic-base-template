@@ -3,7 +3,7 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-04T08:27:38-03:00
+**Last updated:** 2026-07-04T08:58:10-03:00
 
 ---
 
@@ -25,6 +25,26 @@ records changes to the **factory** — it is never copied into generated project
   let block state drift from status.md. BT.1.B (rewiring canonical `/log-work`) remains blocked on
   mev's MV.4.E, unaffected by this block.
 - **Refs:** `planning/state.json` (BT.1.A closed, BT.1.B still open/blocked on MV.4.E)
+
+### Handoff written — BT.1.B discovered unblocked (mev MV.4.E closed), status.md/state.json corrected
+- **What:** Wrote `planning/handoff.md` for the next session, pointing at BT.1.B (rewire canonical
+  `/log-work` + session-start `--sync` gate) as the next block. While drafting it, discovered mev's
+  `MV.4.E` — the block BT.1.B was recorded as blocked on — closed earlier today in a concurrent mev
+  session (`4.E-emit-state-wiring`), so BT.1.B's authored dependency is now met. Corrected
+  `planning/status.md`'s `next`/`blocked` frontmatter fields and body prose accordingly (BT.1.B no
+  longer listed as blocked). Added a carryover entry `bt-1-b-mev-pr-unmerged` to `planning/state.json`
+  flagging that mev's PR #18 (the actual `4.E` shipment) was still open/unmerged at the time of this
+  session — clears once confirmed merged. Separately reviewed and committed a legitimate brain-wide
+  `mev emit-state --write` refresh (`core/planning/state.json`, `core/planning/status.md`,
+  `core/docs/projects/mev.md`) in the brain repo, reflecting mev's real, already-committed closure of
+  `MV.4.E`; deliberately left unrelated pre-existing uncommitted brain-root work (a company-name-search
+  thread, an in-progress learn-ai visual-redesign cache update) untouched.
+- **Why:** A stale "blocked" status would have sent the next session down a wait-and-check-again path
+  instead of straight into BT.1.B; catching the mev-side closure now (rather than after another
+  needless blocked-check) keeps the state-sync-loop initiative moving. The mev PR-unmerged caveat
+  prevents BT.1.B's spec from being written against a shipment that isn't actually on mev's `main` yet.
+- **Refs:** `planning/handoff.md`, `planning/status.md` (`next`/`blocked` corrected), `planning/state.json`
+  (carryover `bt-1-b-mev-pr-unmerged` added)
 
 ## [2026-07-03]
 
