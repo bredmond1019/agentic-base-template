@@ -3,9 +3,16 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-02T02:00:00-03:00
+**Last updated:** 2026-07-03T20:30:00-03:00
 
 ---
+
+## [2026-07-03]
+
+### D49 — /close-out code review and worktree cleanup options
+- **What:** Modified `.claude/commands/close-out.md` and `.agents/skills/close-out/SKILL.md` to support customizable code review (`Step 2.5`) and opt-in worktree cleanup (`Step 5`). Added `--no-review` and `--review-level <level>` (default: `low`) to customize or bypass the `/code-review` invocation, and added `--clean-worktree` to fast-forward merge the current worktree/branch and remove it at the end of the close-out session. Updated `.claude/commands/README.md` to document the new parameters.
+- **Why:** Code reviews and worktree cleanup are fundamental quality and hygiene steps at the end of implementation. Integrating them directly into `/close-out` makes the workflow more seamless while maintaining safety (the cleanup remains opt-in to protect the "never auto-merge" rule).
+- **Refs:** `planning/decisions/D49-close-out-review-and-clean-worktree-options.md`
 
 ## [2026-07-02]
 
