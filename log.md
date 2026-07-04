@@ -3,11 +3,42 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-04T08:58:10-03:00
+**Last updated:** 2026-07-04
 
 ---
 
 ## [2026-07-04]
+
+### BT.1.B — rewire /log-work + session-start --sync gate (state-sync-loop Phase 1)
+- **What:** Rewired `.claude/commands/log-work.md` so the agent no longer hand-edits the brain
+  cache doc's focus line/`synced_from` watermark or hand-regenerates the tier rollup table — those
+  two former manual steps (old Steps 3–4) collapsed into one new Step 3 ("Regenerate derived
+  surfaces") that shells out to `mev emit-state --write`, whose description now accurately lists
+  every surface the engine regenerates per `core/mev/docs/cli.md` (leaf/brain `state.json` focus +
+  rollup, per-project cache `synced_from`, tier-rollup tables, HQ Operating Board, master-plan wave
+  tables). The header/Execution-Model over-claim ("`/log-work` writes the freshness spine") is gone
+  — reframed as authored state in, `emit-state` derives out. The one surviving manual edit (`_root`
+  repos' `README.md` Quick Status — no `generated:` sentinel exists for it) is kept as Step 3b with
+  the reason stated. Added a new Step 3.5 to `.claude/commands/prime.md`: a read-only
+  `mev validate-brain --sync` gate that surfaces stale projects and *offers* (never auto-runs) the
+  reconciling `mev emit-state --write`, degrading gracefully with no `mev`/`brain.toml`; the
+  `/prime` summary gained a Freshness line. Reviewed PASS on attempt 1 (all acceptance criteria
+  met); all four SDLC engines `node --check` clean. Documentation stage failed (blocked on the
+  review report path) — no doc patches applied this run.
+- **Why:** Closes Part 3 of the state-sync-loop initiative in base-template — `/log-work` was
+  over-claiming ownership of surfaces `mev emit-state` now derives, and there was no session-start
+  signal for brain/cache drift. mev's `MV.4.E` (merged PR #18) made this rewire safe to land against
+  real generated-surface behavior rather than a design still in flight.
+- **Refs:** `.claude/commands/log-work.md`, `.claude/commands/prime.md`,
+  `planning/bt-1-b-log-work-sync-rewire/` (spec + reports). Next: BT.1.C (propagate downstream).
+
+```
+716a0b9 feat: implement bt-1-b-log-work-sync-rewire
+8e82443 chore: add spec for bt-1-b-log-work-sync-rewire
+208008f docs: handoff — BT.1.B unblocked (mev MV.4.E closed)
+74abab7 feat(BT.1.A): authoring completeness for state-sync-loop
+7ec6826 chore(state): register BT.1.A/B (authoring completeness + log-work/session-start rewire)
+```
 
 ### BT.1.A — authoring completeness (state-sync-loop Phase 1)
 - **What:** `/ticket` now registers its own block in `planning/state.json` (mirroring `/chore`'s
