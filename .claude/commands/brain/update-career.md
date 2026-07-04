@@ -1,4 +1,4 @@
-# Update Career — Make a surgical edit to docs/career.md.
+# Update Career — Make a surgical edit to business/docs/career.md.
 
 ## Variables
 
@@ -15,7 +15,7 @@ Return the subagent's result to the user.
 
 1. If `$ARGUMENTS` is not provided, stop and ask the user what they want to update.
 
-2. Read `docs/career.md` in full.
+2. Read `business/docs/career.md` in full.
 
 3. Identify which section the update belongs to:
    - **Warm Leads** — new lead, status change, outcome (converted, dropped, paused)
@@ -34,9 +34,9 @@ Return the subagent's result to the user.
 ## Notes
 
 - For routine project progress updates, use `/sync-status` instead — it pulls from both sub-project STATUS files.
-- For business correspondence (emails, meetings), use `/log-correspondence` — that goes to `docs/business/correspondence.md`.
+- For business correspondence (emails, meetings), use `/log-correspondence` — that goes to `business/docs/correspondence.md`.
 - Never fabricate lead status, rates, or metrics. Record only what the user states.
 
 ## Context / Files to Read
 
-- `docs/career.md`
+- `business/docs/career.md`

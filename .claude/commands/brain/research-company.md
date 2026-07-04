@@ -1,7 +1,7 @@
 # Research Company — Deep research brief on a specific prospect before a conversation.
 
 Research a company or lead, synthesize what's relevant to Brandon's services,
-and produce a conversation-ready brief. Saves a reference file in docs/business/leads/.
+and produce a conversation-ready brief. Saves a reference file in business/docs/leads/.
 
 ## Variables
 
@@ -19,8 +19,8 @@ $ARGUMENTS — company name, website URL, or description of the business. Requir
    - Look for: what they sell, how many employees, how long they've been operating,
      what tools/tech they mention, any job postings (signals about pain points and team size),
      customer reviews, recent news or changes
-   - If the company is an already-documented lead in `docs/business/pipeline.md`, check
-     `docs/business/correspondence.md` for any existing notes
+   - If the company is an already-documented lead in `business/docs/pipeline.md`, check
+     `business/docs/correspondence.md` for any existing notes
 
 4. Synthesize a research brief in this format:
 
@@ -63,7 +63,7 @@ $ARGUMENTS — company name, website URL, or description of the business. Requir
    Single sentence: what to do after reading this brief.
    ---
 
-5. Save the brief to `docs/business/leads/<slug>.md` where `<slug>` is a lowercase
+5. Save the brief to `business/docs/leads/<slug>.md` where `<slug>` is a lowercase
    kebab-case version of the company name (e.g. `acme-corp.md`, `smb-client.md`).
 
 6. Report back: where the file was saved and the one-sentence service fit summary.
@@ -80,6 +80,6 @@ $ARGUMENTS — company name, website URL, or description of the business. Requir
 
 ## Context / Files to Read
 
-- `docs/career.md`
-- `docs/profile-and-pitch.md`
-- `docs/business/correspondence.md` (if it exists — skip silently if not)
+- `business/docs/career.md`
+- `business/docs/profile-and-pitch.md`
+- `business/docs/correspondence.md` (if it exists — skip silently if not)

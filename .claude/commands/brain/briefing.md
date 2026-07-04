@@ -16,10 +16,10 @@ rollups and cache cards rather than individual project status files. Read-only; 
    - For every `[[repos]]` entry with `tier == "_root"` and `slug != "brain"`: read its `cache_doc`
 
 3. Read the **business docs**:
-   - `docs/career.md` — contracting strategy and checkpoint status
-   - `docs/progress.md` — launch stage and immediately actionable items
-   - `docs/linkedin.md` — platform status
-   - `docs/business/pipeline.md` — active leads
+   - `business/docs/career.md` — contracting strategy and checkpoint status
+   - `business/docs/progress.md` — launch stage and immediately actionable items
+   - `business/docs/linkedin.md` — platform status
+   - `business/docs/pipeline.md` — active leads
    - `docs/content/ideas.md` — content backlog
 
 4. Output the briefing in this format — keep it under 500 words:
@@ -47,7 +47,7 @@ Current focus: <NOW line from planning/status.md Operating Board>
 ## Business Operations
 
 ### Launch Stage
-<One sentence from docs/progress.md — current stage and the gate>
+<One sentence from business/docs/progress.md — current stage and the gate>
 
 ### Platform Status
 <LinkedIn / Upwork / Toptal — one line each: live or pending>
@@ -71,8 +71,8 @@ Current focus: <NOW line from planning/status.md Operating Board>
 - `portfolio/planning/status.md` (if exists)
 - `side/planning/status.md` (if exists)
 - Each `cache_doc` from brain.toml where `tier == "_root"` and `slug != "brain"`
-- `docs/career.md`
-- `docs/progress.md`
-- `docs/linkedin.md`
-- `docs/business/pipeline.md`
+- `business/docs/career.md`
+- `business/docs/progress.md`
+- `business/docs/linkedin.md`
+- `business/docs/pipeline.md`
 - `docs/content/ideas.md`

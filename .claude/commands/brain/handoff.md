@@ -73,7 +73,7 @@ Reference specific file paths, doc sections, or business context where helpful.>
 
 ## Completed this session
 <Bulleted list of concrete things done — commits made, docs updated, decisions reached.
-Pull from git log. Be specific: "updated docs/career.md Upwork section + planning/status.md
+Pull from git log. Be specific: "updated business/docs/career.md Upwork section + planning/status.md
 focus line" not "updated docs".>
 
 ## Remaining work

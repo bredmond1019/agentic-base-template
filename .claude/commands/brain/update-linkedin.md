@@ -18,7 +18,7 @@ Return the subagent's result to the user.
 
 1. If $ARGUMENTS is not provided, stop and ask: "What did you update on LinkedIn? (headline, about section, featured section, or a post?)"
 
-2. Read `docs/linkedin.md` in full.
+2. Read `business/docs/linkedin.md` in full.
 
 3. Determine what was updated based on $ARGUMENTS:
 
@@ -35,8 +35,8 @@ Return the subagent's result to the user.
    - Update the Platform Status table row for "First post" if this is the first published post
    - Check `docs/content/linkedin/` for a draft file matching this post. If found, note its filename in the Published row so there's a record of where the draft lived.
 
-4. Show the user the updated sections of `docs/linkedin.md` to confirm.
+4. Show the user the updated sections of `business/docs/linkedin.md` to confirm.
 
 ## Context / Files to Read
 
-- `docs/linkedin.md`
+- `business/docs/linkedin.md`

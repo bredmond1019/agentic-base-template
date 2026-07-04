@@ -1,7 +1,7 @@
 # Log Lead — Add a new lead to the pipeline.
 
 Quick capture for when a contact or opportunity surfaces.
-For a full research brief, use `/research-company` instead — that does web research and saves a deep brief to `docs/business/leads/`.
+For a full research brief, use `/research-company` instead — that does web research and saves a deep brief to `business/docs/leads/`.
 
 ## Variables
 
@@ -20,8 +20,8 @@ Return the subagent's result to the user.
 
 1. If $ARGUMENTS is not provided, stop and ask: "Who is the lead and how did they come in? Include any notes on the opportunity and what the next action should be."
 
-2. Read `docs/business/pipeline.md` in full.
-3. Read `docs/career.md` — check whether the competence checkpoint has cleared.
+2. Read `business/docs/pipeline.md` in full.
+3. Read `business/docs/career.md` — check whether the competence checkpoint has cleared.
 
 4. Parse $ARGUMENTS into:
    - **Name/description** — the lead identifier (use generic descriptors per de-identification rules)
@@ -34,7 +34,7 @@ Return the subagent's result to the user.
    - If competence checkpoint NOT cleared: set Gate column to `(locked) After competence checkpoint`
    - If competence checkpoint IS cleared: set Gate column to `—`
 
-6. Add a row to the Active Leads table in `docs/business/pipeline.md`:
+6. Add a row to the Active Leads table in `business/docs/pipeline.md`:
    `| <Name> | <Source> | <stage> | <last contact or —> | <Next Action> | <Gate> |`
 
 7. Add a dated entry to the Lead History section:
@@ -49,5 +49,5 @@ Return the subagent's result to the user.
 
 ## Context / Files to Read
 
-- `docs/business/pipeline.md`
-- `docs/career.md`
+- `business/docs/pipeline.md`
+- `business/docs/career.md`

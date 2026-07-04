@@ -16,10 +16,10 @@ Examples:
 
 1. If $ARGUMENTS is not provided, ask: "What post do you want to draft? Give me a title or angle, and whether you want EN, PT, or both."
 
-2. Read `docs/brand.md` — absorb the six public rules, de-identification requirements, voice guidelines, and the five-part arc.
-3. Read `docs/linkedin.md` — check Upcoming posts (Section 5) for any spec or notes on this topic. Check Engagement Rules (Section 6) for format guidance.
+2. Read `business/docs/brand.md` — absorb the six public rules, de-identification requirements, voice guidelines, and the five-part arc.
+3. Read `business/docs/linkedin.md` — check Upcoming posts (Section 5) for any spec or notes on this topic. Check Engagement Rules (Section 6) for format guidance.
 4. Read `docs/content/ideas.md` — check whether this idea is in the backlog with any notes on angle or hook.
-5. Read `docs/profile-and-pitch.md` — use the verbal pitches and positioning language as a voice reference.
+5. Read `business/docs/profile-and-pitch.md` — use the verbal pitches and positioning language as a voice reference.
 
 6. Draft the post. Format depends on the target platform:
 
@@ -51,7 +51,7 @@ Examples:
 
 ## Context / Files to Read
 
-- `docs/brand.md`
-- `docs/linkedin.md`
+- `business/docs/brand.md`
+- `business/docs/linkedin.md`
 - `docs/content/ideas.md`
-- `docs/profile-and-pitch.md`
+- `business/docs/profile-and-pitch.md`

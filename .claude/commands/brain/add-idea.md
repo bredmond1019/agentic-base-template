@@ -25,7 +25,7 @@ Return the subagent's result to the user.
 4. **Apply the public narrative guardrails** before shaping the title and hook:
    - Frame Brandon and his work as the subject
    - Never name or criticize a former employer
-   - De-identify any client/employer reference (see `docs/brand.md`)
+   - De-identify any client/employer reference (see `business/docs/brand.md`)
    - No fabricated metrics — if the hook leans on a number, it must be verifiable
 
 5. Append to the appropriate section using this format:

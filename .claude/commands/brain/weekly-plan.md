@@ -16,12 +16,12 @@ Read-only; does not modify any files.
    - For every `[[repos]]` entry with `tier == "_root"` and `slug != "brain"`: read its `cache_doc`
 
 3. Read the **business + content docs**:
-   - `docs/career.md` — competence checkpoint status, active leads, open checklist
+   - `business/docs/career.md` — competence checkpoint status, active leads, open checklist
    - `docs/content/ideas.md` — confirmed/committed pieces ready to move
    - `docs/content/blog-tracker.md` — last post date (cadence check: flag if >3 weeks)
-   - `docs/progress.md` — current stage and immediately actionable items
-   - `docs/linkedin.md` — what's drafted vs. live
-   - `docs/business/pipeline.md` — leads with open next actions
+   - `business/docs/progress.md` — current stage and immediately actionable items
+   - `business/docs/linkedin.md` — what's drafted vs. live
+   - `business/docs/pipeline.md` — leads with open next actions
 
 4. Output the plan in this exact format — keep it under 400 words:
 
@@ -45,14 +45,14 @@ platform tasks. One bullet per item — max 3.>
 
 ### Visibility
 <LinkedIn, GitHub, or profile/presence tasks. Name the specific action — not "update LinkedIn"
-but "go live with the headline copy in docs/linkedin.md Section 1". Skip if nothing actionable.>
+but "go live with the headline copy in business/docs/linkedin.md Section 1". Skip if nothing actionable.>
 
 ### Protect
 <One line: what is off-limits this week.>
 
 ---
 
-Do not read source code files. Do not suggest tasks outside the documented strategy in docs/career.md.
+Do not read source code files. Do not suggest tasks outside the documented strategy in business/docs/career.md.
 
 ## Context / Files to Read
 
@@ -62,9 +62,9 @@ Do not read source code files. Do not suggest tasks outside the documented strat
 - `portfolio/planning/status.md` (if exists)
 - `side/planning/status.md` (if exists)
 - Each `cache_doc` from brain.toml where `tier == "_root"` and `slug != "brain"`
-- `docs/career.md`
+- `business/docs/career.md`
 - `docs/content/ideas.md`
 - `docs/content/blog-tracker.md`
-- `docs/progress.md`
-- `docs/linkedin.md`
-- `docs/business/pipeline.md`
+- `business/docs/progress.md`
+- `business/docs/linkedin.md`
+- `business/docs/pipeline.md`

@@ -1,4 +1,4 @@
-# Update Progress — Check off completed items in docs/progress.md and update the current position callout.
+# Update Progress — Check off completed items in business/docs/progress.md and update the current position callout.
 
 ## Variables
 
@@ -20,7 +20,7 @@ Return the subagent's result to the user.
 
 1. If $ARGUMENTS is not provided, stop and ask: "What did you complete? Describe it and I'll check it off in progress.md."
 
-2. Read `docs/progress.md` in full.
+2. Read `business/docs/progress.md` in full.
 
 3. Identify the checklist item(s) that match $ARGUMENTS:
    - In the **Where You Are Now** section: change `[ ]` to `[x]` for the matching item(s)
@@ -46,4 +46,4 @@ Return the subagent's result to the user.
 
 ## Context / Files to Read
 
-- `docs/progress.md`
+- `business/docs/progress.md`

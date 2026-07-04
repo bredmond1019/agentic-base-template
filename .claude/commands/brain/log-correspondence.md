@@ -16,7 +16,7 @@ Return the subagent's result to the user.
 ## Instructions
 
 1. If $ARGUMENTS is not provided, ask the user to describe the correspondence.
-2. Check if `docs/business/correspondence.md` exists. If not, create it with:
+2. Check if `business/docs/correspondence.md` exists. If not, create it with:
    ```
    # Business Correspondence Log
 
@@ -39,7 +39,7 @@ Return the subagent's result to the user.
    **Next action:** <what happens next, or "None">
    ```
 
-5. If there's a next action with a specific date, ask: "Want me to note this in docs/career.md
+5. If there's a next action with a specific date, ask: "Want me to note this in business/docs/career.md
    under the contracting pipeline section?"
 
 ## Notes

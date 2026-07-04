@@ -48,7 +48,7 @@ Examples: "how to price the first diagnostic", "whether to reach out to a lead n
 
 ## Context / Files to Read
 
-- `docs/career.md`
-- `docs/profile-and-pitch.md`
-- `docs/progress.md`
-- `docs/business/correspondence.md` (if it exists — skip silently if not)
+- `business/docs/career.md`
+- `business/docs/profile-and-pitch.md`
+- `business/docs/progress.md`
+- `business/docs/correspondence.md` (if it exists — skip silently if not)

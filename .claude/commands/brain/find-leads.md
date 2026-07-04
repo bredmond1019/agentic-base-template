@@ -49,6 +49,6 @@ Examples: "São Paulo brick-and-mortar", "remote US SaaS", "document-heavy busin
 
 ## Context / Files to Read
 
-- `docs/career.md`
-- `docs/profile-and-pitch.md`
-- `docs/progress.md`
+- `business/docs/career.md`
+- `business/docs/profile-and-pitch.md`
+- `business/docs/progress.md`

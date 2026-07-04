@@ -6,11 +6,11 @@ Read-only — does not modify any files.
 
 ## Instructions
 
-1. Read `docs/progress.md` — extract the current stage callout and what's blocking.
-2. Read `docs/linkedin.md` — extract Platform Status table (Section 7) for LinkedIn, and note any post that's queued or live.
-3. Read `docs/business/pipeline.md` — extract Active Leads table (name, stage, next action, gate status).
+1. Read `business/docs/progress.md` — extract the current stage callout and what's blocking.
+2. Read `business/docs/linkedin.md` — extract Platform Status table (Section 7) for LinkedIn, and note any post that's queued or live.
+3. Read `business/docs/pipeline.md` — extract Active Leads table (name, stage, next action, gate status).
 4. Read `docs/content/ideas.md` — identify any Confirmed or Committed pieces ready to publish.
-5. Read `docs/career.md` — note competence checkpoint status and whether post-checkpoint tasks are unlocked.
+5. Read `business/docs/career.md` — note competence checkpoint status and whether post-checkpoint tasks are unlocked.
 
 6. Output in this exact format — keep it tight and scannable:
 
@@ -46,8 +46,8 @@ Read-only — does not modify any files.
 
 ## Context / Files to Read
 
-- `docs/progress.md`
-- `docs/linkedin.md`
-- `docs/business/pipeline.md`
+- `business/docs/progress.md`
+- `business/docs/linkedin.md`
+- `business/docs/pipeline.md`
 - `docs/content/ideas.md`
-- `docs/career.md`
+- `business/docs/career.md`
