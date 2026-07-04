@@ -36,8 +36,10 @@ description: >
      --resume                load block-orchestration-state.json, skip done blocks, continue.
 
  MODEL
-   sonnet : pre-flight, enumerate-blocks, merge, report   |   opus : per-block generate-tasks (planning)
-   haiku  : state-writer   |   the inner /sdlc-flow carries its OWN model tiering per stage.
+   sonnet : pre-flight, enumerate-blocks, merge, gap-check, pr-open, final close-out, report
+   opus   : per-block generate-tasks (planning)
+   haiku  : state-writer, state.json status sync
+   the inner /sdlc-flow carries its OWN model tiering per stage.
 
  BRANCH TRAIN
    The orchestrator keeps a "train" branch checked out at the MAIN repo root; every wave's child

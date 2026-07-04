@@ -85,7 +85,11 @@ merge target *is* the base branch — default/`--no-pr` mode merges into the dis
 branch, so the block stays `in_progress` until `/merge-train` or a manual merge lands it on base).
 Repos without `planning/state.json`, or a legacy heading with no resolvable prefix (a standalone
 repo outside any brain), are unaffected — the sync is a best-effort no-op for them, never a hard
-failure.
+failure. The sync agent verifies `git status --porcelain -- planning/state.json` is empty after
+committing (retrying, then discarding the edit, if it isn't) — this call must never leave the
+train branch dirty, since that would silently block the next merge step. The merge step itself
+also self-heals a dirty `planning/state.json` (commits it before merging) as a second layer of
+defense, in case a status flip lands uncommitted some other way.
 
 ---
 
@@ -147,7 +151,10 @@ Per wave the orchestrator:
 
 ### Final close-out
 After all waves: runs `/close-out --gap-check-only` over the full train branch — surfacing
-any train-level coverage or doc gaps before human review of the PRs.
+any train-level coverage or doc gaps before human review of the PRs. Immediately after, a
+best-effort `mev emit-state --write` refreshes derived `planning/state.json` views (focus, wave
+tables, tier rollups) so they reflect every block status flip the run made — a no-op when the
+repo has no `state.json` or `mev` isn't on PATH.
 
 ### Committed state
 A Haiku state-writer commits `planning/<planSlug>/sdlc/block-orchestration-state.json`
