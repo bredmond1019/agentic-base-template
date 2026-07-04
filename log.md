@@ -3,9 +3,28 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-03T20:30:00-03:00
+**Last updated:** 2026-07-04T08:27:38-03:00
 
 ---
+
+## [2026-07-04]
+
+### BT.1.A — authoring completeness (state-sync-loop Phase 1)
+- **What:** `/ticket` now registers its own block in `planning/state.json` (mirroring `/chore`'s
+  `<Prefix>.ticket.<slug>` convention). `/start-block` flips the matching `state.json` block status
+  `open` → `in_progress` alongside `status.md`. `/generate-master-plan`, `/plan`, and `/chore` each
+  gained an explicit cross-repo-edge prompt — asking whether a block depends on another repo before
+  defaulting `depends_on` to same-repo/empty. `/update-state`'s Purpose section now lists `/plan`,
+  `/chore`, `/ticket`, `/start-block` among the callers. Edited
+  `.claude/commands/{ticket,start-block,chore,plan,generate-master-plan,update-state}.md` and synced
+  all six `.agents/skills/*/SKILL.md` mirrors byte-for-byte. Flipped BT.1.A to `closed` in
+  `planning/state.json` (hand-adjusted `focus.next` since `mev emit-state --write`'s derivation isn't
+  implemented yet).
+- **Why:** Closes the authoring-completeness gap in the state-sync-loop initiative — planning
+  commands were creating state.json entries inconsistently (or not flipping status on start), which
+  let block state drift from status.md. BT.1.B (rewiring canonical `/log-work`) remains blocked on
+  mev's MV.4.E, unaffected by this block.
+- **Refs:** `planning/state.json` (BT.1.A closed, BT.1.B still open/blocked on MV.4.E)
 
 ## [2026-07-03]
 
