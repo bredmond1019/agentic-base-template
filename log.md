@@ -9,6 +9,38 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [2026-07-04]
 
+### Root-caused silent state.json reverts; opened sdlc-block --resume ticket
+- **What:** Investigated a reported bug where uncommitted edits to `planning/state.json` (and
+  similar files) were being silently reverted across repos with no `git checkout`/`reset`/`clean`
+  involved. Live-audited `core/mev`'s Rust source (not just the workflow prompts) and root-caused
+  it to `mev emit-state --write`: it resolves every repo's derived-file paths via `brain.toml`'s
+  registered `repo_path` (`root.join(repo_path)`) regardless of CWD, so running it from inside a
+  linked git worktree (e.g. `<repo>/trees/<slug>/`, used by `/sdlc-flow`/`/sdlc-block`) still
+  silently writes to the **main checkout's** files, not the worktree's own copy. With several
+  `sdlc-flow`s running concurrently in separate worktrees, each one's `mev emit-state --write`
+  (invoked from `/log-work` and `sdlc-block.js`) was racing on the same shared main-repo files,
+  clobbering any uncommitted manual edits sitting there. Wrote and registered a ticket for this in
+  `core/mev` (`planning/update-write-state-in-trees/`, block `MV.ticket.update-write-state-in-trees`)
+  with the full root-cause writeup and a fix design (guard `--write` against linked worktrees via
+  `is_linked_worktree()`); that ticket has since been implemented and closed by another agent
+  (mev commit `46e1e2e`, state.json status `closed`).
+
+  A second, related bug surfaced: `sdlc-block.js`'s `--resume` path re-launched an already-merged
+  block because it trusts a single `tracedAgent` read of the `block-orchestration-state.json`
+  breadcrumb as the sole completion signal, with no fallback to git-derived truth — despite the
+  file's own comment on `writeBlockState` claiming the child commits/PRs are the authoritative
+  resume signal. Wrote and registered a ticket for this **in this repo**:
+  `planning/ticket-sdlc-block-resume-stale-state/` (`tasks.md` + `tasks.json`), block
+  `BT.ticket.sdlc-block-resume-stale-state`, added to `planning/state.json` under a new "Tickets"
+  track at wave 21, status `open`. Fix design: cross-check each block's merge status via
+  `git merge-base --is-ancestor ${slug}-flow ${trainBranch}` (branch-naming convention confirmed
+  from `sdlc-flow.js:128`) OR'd with the breadcrumb — never trust the breadcrumb alone. Per explicit
+  instruction, this ticket is left `open`/not-started — do not implement or start it yet.
+- **Why:** A user report of files reverting with no visible git operation involved; needed a live
+  source audit rather than trusting prompt-level assumptions to find the actual race condition.
+- **Refs:** `core/mev/planning/update-write-state-in-trees/` (closed, mev commit `46e1e2e`);
+  `planning/ticket-sdlc-block-resume-stale-state/` (open, deferred).
+
 ### /close-out after BT.1.B — doc patch + state repair
 - **What:** Ran `/close-out` after the `bt-1-b-log-work-sync-rewire` `/sdlc-run`. Gating check
   (`engines-parse`) + emoji gate both passed clean; coverage scan correctly skipped (both changed
