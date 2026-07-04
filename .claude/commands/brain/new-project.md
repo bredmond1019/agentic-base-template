@@ -88,8 +88,11 @@ new project is immediately visible to `/log-work`, `/prime`, and the indexer wit
    ```
 
 5. **Add the tier-rollup row + propagate `index.md`:**
-   - **tiered:** in `TIER_STATUS`, add a row inside the `<!-- ROLLUP:BEGIN --> … <!-- ROLLUP:END -->`
-     block (do not touch Momentum/Metrics): `| [<slug>](../docs/projects/<slug>.md) | Phase 0, Block A | <today> |`.
+   - **tiered:** the tier rollup in `TIER_STATUS` is a **generated region**
+     (`<!-- BEGIN generated:tier-rollup --> … <!-- END generated:tier-rollup -->`, columns
+     `Repo | Now | Next | Blocked`) — do **NOT** hand-edit inside the sentinels. `mev emit-state` (run by
+     `/log-work`) fills the new project's row from its `[[repos]]` entry. Just ensure the tier's
+     `status.md` carries the sentinel pair. Momentum/Metrics are untouched.
    - add the cache to `CACHE_DIR/index.md`.
    - **_root:** add a row to the `## Projects` table and the `## Quick Status` in `README.md`, and an
      entry in `docs/index.md`; add the cache to `docs/projects/index.md`.
