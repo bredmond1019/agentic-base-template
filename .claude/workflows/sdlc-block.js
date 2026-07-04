@@ -637,7 +637,9 @@ STEP 3 — Find every block: any heading that appears under a "## Phase N — <n
 Return using StructuredOutput: planFormatOk, blocks (in document order), notes.
 `, { label: 'enumerate-blocks', schema: ENUMERATE_BLOCKS_SCHEMA, phase: 'Enumerate', model: 'sonnet' })
 
-if (!enumResult || !enumResult.planFormatOk || !(enumResult.blocks || []).length) {
+// A non-empty blocks array IS the format-ok signal — planFormatOk is optional in the schema and the
+// agent may omit it even on a clean parse, so do not treat its absence as a parse failure.
+if (!enumResult || !(enumResult.blocks || []).length) {
   log(`ABORTED — ${planFile} has no parseable "## Phase N" / block-heading structure.`)
   log(`Fix: author it with /generate-master-plan (or /plan), which emits the canonical "### <Prefix>.<N>.<Letter>" block headings, commit, then re-run.`)
   return { error: 'Plan not in master-plan format', planFile, notes: enumResult?.notes }
