@@ -3,11 +3,16 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-04
+**Last updated:** 2026-07-05
 
 ---
 
 ## [2026-07-04]
+
+### Update capture command and sync all skills
+- **What:** Updated `.claude/commands/capture.md` to add the `--backlog` flag, improved its body prompts, and updated the Output Format instructions. Synced the changes to global commands and skills.
+- **Why:** To prevent generating unneeded backlog tickets during rapid research sessions and to ensure notes are thoroughly detailed without hallucinated content.
+- **Refs:** None
 
 ### Root-caused silent state.json reverts; opened sdlc-block --resume ticket
 - **What:** Investigated a reported bug where uncommitted edits to `planning/state.json` (and
