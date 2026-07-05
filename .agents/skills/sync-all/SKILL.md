@@ -6,12 +6,12 @@ description: >
 
 # sync-all — Sync all commands and skills across workspaces, sub-brains, and global configs
 
-Runs the comprehensive python sync utility `sync_all.py` to reconcile and distribute all agent commands and skills.
+Runs the comprehensive python sync utility `sync_all_skills_commands.py` to reconcile and distribute all agent commands and skills.
 
 ## Instructions
 
 Run the sync script:
-`python3 base-template/scripts/sync_all.py`
+`python3 base-template/scripts/sync_all_skills_commands.py`
 
 This will automatically execute the following steps:
 1. Sync `base-template` commands/workflows to `base-template` skills.
