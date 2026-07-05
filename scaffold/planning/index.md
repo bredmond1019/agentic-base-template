@@ -18,16 +18,18 @@ folder is the map.
 
 | File | What it is | Open it when… |
 |---|---|---|
-| `context.md` | Orientation + governing principles (read first) | You need to understand the project |
-| `status.md` | Current progress tracker + Momentum/Metrics board | You need to know what's done / next |
-| `master-plan.md` | Strategy + phase specifications | You need the sequence of work |
-| `knowledge.md` | Distilled, durable project knowledge (semantic memory) | You need to understand how it works |
-| `memory.md` | Repo-scoped durable memory — episodic notes, preferences (portable) | You need a fact that must survive a handoff |
-| `artifacts/` | Durable outputs/evidence (reports, generated specs) | You're storing or retrieving an artifact |
+| [`context.md`](context.md) | Orientation + governing principles (read first) | You need to understand the project |
+| [`status.md`](status.md) | Current progress tracker + Momentum/Metrics board | You need to know what's done / next |
+| [`master-plan.md`](master-plan.md) | Strategy + phase specifications | You need the sequence of work |
+| [`knowledge.md`](knowledge.md) | Distilled, durable project knowledge (semantic memory) | You need to understand how it works |
+| [`memory.md`](memory.md) | Repo-scoped durable memory — episodic notes, preferences (portable) | You need a fact that must survive a handoff |
+| [`artifacts/`](artifacts/) | Durable outputs/evidence (reports, generated specs) | You're storing or retrieving an artifact |
 | `harness.json` | Validation/UI-test config the SDLC engines read | You're adapting the pipeline to this stack |
-| `decisions/` | Atomic, append-only architectural decisions | You want to check a prior choice |
-| `handoff.md` | Active session handoff (transient — created by `/handoff`, read by `/prime`, delete after consuming) | A prior session handed off in-flight work |
+| [`harness.examples.md`](harness.examples.md) | Example validation rules for harness.json | You need to reference harness.json syntax |
+| [`decisions/`](decisions/) | Atomic, append-only architectural decisions | You want to check a prior choice |
+| [`handoff.md`](handoff.md) | Active session handoff (transient — created by `/handoff`, read by `/prime`, delete after consuming) | A prior session handed off in-flight work |
 | `<concept>/` | Per-spec planning folders (task specs + pipeline state) | You're running the SDLC pipeline |
+
 
 ## The concept-folder model
 

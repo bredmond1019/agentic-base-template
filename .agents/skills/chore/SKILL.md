@@ -137,3 +137,4 @@ planning/chore-{name}/tasks.md + tasks.json
 Next (implement + test loop):
   /sdlc-task chore-{name}
 ```
+

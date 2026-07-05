@@ -130,3 +130,4 @@ checks) — so favour accuracy over speed in the authored parts, use a capable m
 - the current `planning/<concept>/tasks.md`, if any
 - `core/mev/docs/cli.md` (`emit-state` section) if unfamiliar with exactly what it regenerates
 - `BRAIN_ROOT/README.md` (`## Quick Status` — the one manual target, `_root` repos only)
+

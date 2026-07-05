@@ -118,3 +118,4 @@ error-prone part of editing `state.json` by hand:
 
 State what changed (which file, which fields, authored vs regenerated), the `mev validate-brain
 --state` result, and whether `emit-state --write` produced any downstream file changes (list them).
+

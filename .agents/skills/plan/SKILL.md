@@ -227,3 +227,4 @@ Next (single block — decompose and run):
 Next (all blocks as a branch train):
   /sdlc-block planning/plan-<slug>/plan.md
 ```
+
