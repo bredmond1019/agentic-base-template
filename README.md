@@ -12,6 +12,8 @@ related: [base-template-architecture, base-template-docs-index, base-template-pl
 
 # base-template — the software-factory source
 
+> Part of the **Bastion** ecosystem — see the [bastion-os](https://github.com/bredmond1019/bastion-os) front door for the full architecture.
+
 This repo is the **single curated source** that `/new-project` clones to scaffold a new
 project. It is not a product and not application code — it is the harness and document
 skeleton every new project in the practice starts from. It has its own git history so every
