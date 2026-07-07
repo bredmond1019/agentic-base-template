@@ -13,3 +13,4 @@ trees/
 # No runtime breadcrumbs are gitignored under planning/*/sdlc/.
 
 planning/state.json
+planning/
