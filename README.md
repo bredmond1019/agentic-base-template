@@ -124,3 +124,8 @@ See `CLAUDE.md` for the discipline. In short: when a discovery improves the harn
 **here**, log *why* in `log.md` (and add a `planning/decisions/` ADR for keep/drop/behavioral
 calls), then commit. The new commit hash becomes the provenance stamp for the next generated
 project.
+
+## Roadmap / Known limitations
+
+- **SDLC Task Wrap-up:** The lightweight `/sdlc-task` workflow engine does not automatically call `/log-work` at the end of a run, which can leave `state.json` open until manually closed.
+- **Decision Propagation:** A formal strategy for propagating architectural decisions (ADRs) to downstream generated projects after generation is a planned enhancement.
