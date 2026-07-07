@@ -27,7 +27,7 @@ change to the factory records *what* changed and *why*.
 ## Canonical document names (OKF Phase-2 conventions — settled)
 
 The scaffold ships the **load-bearing names the SDLC workflows depend on**, so a freshly generated
-project runs the pipeline on day one. As of OKF Phase 2 ([D5](planning/decisions/D5-okf-phase-2-adopted.md))
+project runs the pipeline on day one. As of OKF Phase 2 (D5, `planning/decisions/D5-okf-phase-2-adopted.md`)
 these are the settled lowercase / concept-folder conventions:
 
 - `planning/status.md`, `planning/master-plan.md`, `planning/context.md`
@@ -40,7 +40,7 @@ these are the settled lowercase / concept-folder conventions:
   (Rust / Python / Next.js profiles); the engines carry no stack defaults of their own.
 
 > These names are read by the SDLC engine JS. Any future rename must move in **lockstep** with the
-> workflow code in `.claude/workflows/`, not piecemeal. See [D5](planning/decisions/D5-okf-phase-2-adopted.md).
+> workflow code in `.claude/workflows/`, not piecemeal. See D5, `planning/decisions/D5-okf-phase-2-adopted.md`.
 
 ---
 
