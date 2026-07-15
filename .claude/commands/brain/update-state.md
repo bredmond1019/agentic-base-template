@@ -9,9 +9,9 @@ part of it. This command is the one place that spells out **how** to do that saf
 edits the same file the same way instead of re-deriving the rules from scratch (or worse, guessing).
 
 **The schema itself lives in one place — do not duplicate its field shapes here or anywhere else:**
-[`core/planning/state-schema.md`](../../../core/planning/state-schema.md) (path relative to the brain
+[`docs/state/state-schema.md`](../../../docs/state/state-schema.md) (path relative to the brain
 root; walk up from wherever you are until you find `brain.toml` if you're in a leaf repo, then resolve
-`core/planning/state-schema.md` from there). Read it before making any non-trivial edit. This command
+`docs/state/state-schema.md` from there). Read it before making any non-trivial edit. This command
 is the *workflow*; `state-schema.md` is the *ground truth*.
 
 ## When to use this

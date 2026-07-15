@@ -24,7 +24,7 @@ Read:
 - `log.md` — the three most recent entries (for narrative context)
 - `planning/handoff.md` — if it exists, read it (you are updating it, not replacing blindly)
 - `planning/state.json` — the existing `carryover[]` (you are appending to it, not duplicating)
-- `planning/state-schema.md` — the `carryover[]` section, for the field shape
+- `docs/state/state-schema.md` — the `carryover[]` section, for the field shape
 
 Run:
 - `git log --oneline -10` — recent commits
@@ -46,7 +46,7 @@ leave it living only in the prose below:
   - `kind: env` — a transient environmental caveat (e.g. "installed binary is stale, rebuild first").
   - `kind: deferred` — a real follow-on you haven't ticketed yet; promote it to a block/backlog when ready.
 
-  Follow the `carryover[]` field shape in `planning/state-schema.md` (`slug`, `scope`, `kind`, `text`,
+  Follow the `carryover[]` field shape in `docs/state/state-schema.md` (`slug`, `scope`, `kind`, `text`,
   optional `related` + `clears_when`, `created`). Keep it valid JSON; append, don't duplicate an existing
   slug. **Delete** any existing `carryover[]` entry whose `clears_when` resolved this session.
 
@@ -123,4 +123,4 @@ Tell the user:
 - `planning/status.md`
 - `log.md` (last 3 entries)
 - `planning/handoff.md` (if it already exists)
-- `planning/state.json` (existing `carryover[]`) + `planning/state-schema.md` (`carryover[]` field shape)
+- `planning/state.json` (existing `carryover[]`) + `docs/state/state-schema.md` (`carryover[]` field shape)

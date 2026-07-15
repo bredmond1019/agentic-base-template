@@ -15,7 +15,7 @@ $ARGUMENTS — free-text note about what was done (passed straight through to `/
 1. **Drain any durable caveat first.** If this session surfaced something the next agent must not
    lose — a constraint, a known-issue/don't-re-investigate fact, an environmental gotcha, or a
    not-yet-ticketed deferred follow-on — append it to `planning/state.json` `carryover[]` (field shape
-   in `planning/state-schema.md`). `/wrap-up` writes no handoff file, so `carryover[]` is the only
+   in `docs/state/state-schema.md`). `/wrap-up` writes no handoff file, so `carryover[]` is the only
    place this kind of note survives. Skip if the session produced none.
 
 2. Run `/log-work $ARGUMENTS` — appends the log entry and updates `planning/status.md`.

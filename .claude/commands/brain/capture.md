@@ -55,7 +55,7 @@ to the user.
      with zero outbound edges is an isolated graph node (`mev`'s `W_GRAPH_ISOLATED_NODE`). Use
      genuine doc_ids that exist in the corpus — do not invent one to satisfy the rule.
 
-### Step 4 — Brain backlog pointer (skip if standalone)
+### Step 4 — Brain backlog pointer + structured node (skip if standalone)
 
 6. Append a pointer ticket to `<BRAIN_ROOT>/planning/backlog.md` in the `## Active` section
    (before `## Promoted`) using this format:
@@ -74,11 +74,28 @@ to the user.
    (from the `[[repos]]` `repo_path` field). The `**notes:**` line is the link back to
    the detail — the backlog entry stays a one-liner pointer.
 
+7. **Register the structured capture node** in `<BRAIN_ROOT>/planning/state.json` `backlog[]`
+   (via the `/update-state` discipline — read
+   [`docs/state/state-schema.md`](../../docs/state/state-schema.md); authored fields only;
+   validate JSON). Append one node:
+
+   ```json
+   { "slug": "<slug>", "title": "<title>", "repo": "<repo-slug>", "type": "<type>",
+     "status": "idea", "created": "<YYYY-MM-DD>",
+     "notes": "<repo-path>/planning/<slug>/notes.md",
+     "origin": { "type": "capture", "notes": "<repo-path>/planning/<slug>/notes.md" } }
+   ```
+
+   `origin.type: "capture"` is what routes this to the Attention board's **Orphaned captures** lane
+   once it ages past the `[attention]` `backlog_days` threshold — so a captured note that never gets
+   promoted resurfaces instead of rotting. `created` is the required staleness anchor. Then run
+   `mev emit-state --write` from `BRAIN_ROOT`.
+
 ### Step 5 — Report
 
-7. Confirm: output the local path created and (if applicable) the brain backlog entry.
+8. Confirm: output the local path created and (if applicable) the brain backlog entry + node.
    Tell the user to open `planning/<slug>/notes.md` and paste their conversation content
-   into the relevant sections.
+   into the relevant sections, and that `/attention` will resurface it if it ages unpromoted.
 
 ## Output Format — `planning/<slug>/notes.md`
 

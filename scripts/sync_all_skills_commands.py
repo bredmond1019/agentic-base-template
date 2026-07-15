@@ -74,32 +74,24 @@ def main():
             f"--include='session-recap.md' --include='wrap-up.md' "
             f"--include='backlog-ticket.md' --include='generate-master-plan.md' "
             f"--include='log-decision.md' --include='sync-status.md' --include='update-progress.md' "
-            f"--include='update-state.md' "
+            f"--include='update-state.md' --include='attention.md' --include='snooze.md' "
             f"--exclude='*' "
             f"base-template/.claude/commands/brain/ {tier}/.claude/commands/"
         )
         run_cmd(tier_commands_cmd)
 
-        print(f"=== Syncing brain skills for tier: {tier} ===")
-        # Ensure destination folder exists
-        os.makedirs(f"{tier}/.agents/skills", exist_ok=True)
-        tier_skills_cmd = (
-            f"rsync -av --delete "
-            f"--include='archive/***' "
-            f"--include='capture/***' "
-            f"--include='commit/***' "
-            f"--include='handoff/***' "
-            f"--include='log-work/***' "
-            f"--include='prime/***' "
-            f"--include='session-recap/***' "
-            f"--include='wrap-up/***' "
-            f"--include='backlog-ticket/***' "
-            f"--include='generate-master-plan/***' "
-            f"--include='update-state/***' "
-            f"--exclude='*' "
-            f"base-template/.agents/skills/ {tier}/.agents/skills/"
-        )
-        run_cmd(tier_skills_cmd)
+    # 6. Regenerate each tier's skills from its OWN (just-updated) commands.
+    # NOTE: this deliberately does not rsync from base-template/.agents/skills/ —
+    # several brain/-scoped commands (capture, backlog-ticket, handoff, update-state)
+    # have a DIFFERENT flat (leaf-project) variant at base-template's top level, and
+    # base-template's own generated skills are derived from that flat variant, not
+    # the brain/ one. Rsyncing tier skills from there would silently swap a tier's
+    # skill content for the wrong (leaf-project) variant. Re-running sync_skills.py
+    # here regenerates each tier's skills directly from the brain-scoped commands
+    # that were just synced into that tier's own .claude/commands/ above.
+    print("=== Regenerating tier skills from tier commands ===")
+    if not run_cmd([sys.executable, sync_skills_script]):
+        sys.exit(1)
 
     print("\nAll syncs completed successfully!")
 

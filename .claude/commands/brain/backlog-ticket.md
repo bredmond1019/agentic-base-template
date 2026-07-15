@@ -15,7 +15,11 @@ Return the subagent's result to the user.
 
 1. If $ARGUMENTS is not provided, stop and ask the user to describe the idea.
 
-2. Read `planning/backlog.md` to understand the current format and check for near-duplicates.
+   **Resolve the HQ root first.** The backlog is **HQ-only** (D2): walk up from the current directory
+   to the dir containing `brain.toml` (`BRAIN_ROOT`). Both the human-readable `planning/backlog.md` and
+   the structured `backlog[]` node live at `$BRAIN_ROOT/planning/…` — never in a tier or leaf repo.
+
+2. Read `$BRAIN_ROOT/planning/backlog.md` to understand the current format and check for near-duplicates.
 
 3. From $ARGUMENTS infer the following fields:
 
@@ -40,8 +44,11 @@ Return the subagent's result to the user.
 
    **gist** — 1–3 sentences: what it is and why it matters. Be specific. Do not pad.
 
-4. Append to the `## Active` section of `planning/backlog.md` (before the `## Promoted` section)
-   using this exact format:
+   Also infer a **slug** — a stable kebab-case key (2–4 words from the title). This is the node key
+   shared by the markdown ticket and the structured node.
+
+4. Append to the `## Active` section of `$BRAIN_ROOT/planning/backlog.md` (before the `## Promoted`
+   section) using this exact format:
 
    ```
    ### [YYYY-MM-DD] <title>
@@ -55,31 +62,30 @@ Return the subagent's result to the user.
 
    Use today's date for YYYY-MM-DD.
 
-5. Also register the idea as a structured node in this tier's `planning/state.json`'s `backlog[]`
-   array (HQ-only; create the array if it's absent) — the queryable twin of the same
-   `backlog.md` entry:
-   - `slug`: kebab-case derived from the title (check `backlog[]` for a collision; disambiguate if needed)
-   - `title`: the title from step 3
-   - `repo`: the repo from step 3
-   - `type`: the type from step 3
-   - `status`: the status from step 3
-   - `depends_on`: `[]` unless the description names a concrete blocking block, in which case one
-     `{ "type": "block", "repo": "<repo>", "id": "<ID>" }` entry per block named
-   - `notes`: the path to a pre-plan notes doc if one exists (e.g. from `/capture`); omit otherwise
-   Save the file and validate it is still valid JSON:
-   `python3 -c "import json;json.load(open('planning/state.json'))"`.
+5. **Register the structured twin** in `$BRAIN_ROOT/planning/state.json` `backlog[]` (via the
+   `/update-state` discipline — read [`docs/state/state-schema.md`](../../docs/state/state-schema.md);
+   edit authored fields only; validate JSON). Append one node:
 
-6. Shell out to `mev emit-state --write` to update the brain's focus derivation and state.
+   ```json
+   { "slug": "<slug>", "title": "<title>", "repo": "<repo>", "type": "<type>",
+     "status": "<status>", "created": "<YYYY-MM-DD>",
+     "origin": { "type": "backlog" } }
+   ```
 
-7. Confirm: output the ticket title, repo, type, and the first sentence of the gist.
+   The `created` date is the staleness-clock anchor — **required** so the item resurfaces on the
+   Attention board once it ages past the `[attention]` `backlog_days` threshold. Then run
+   `mev emit-state --write` (from `BRAIN_ROOT`) so the boards pick it up.
+
+6. Confirm: output the ticket title, repo, type, and the first sentence of the gist.
    Nothing else.
 
 ## Notes
 
 - Capture-only. Do not create plans, tasks, or sub-repo files — the backlog is the holding area.
+- The item will resurface on the Attention board once it ages; triage it with `/attention`, nap it with
+  `/snooze <slug>`, or promote it (which flips the node to `status:"promoted"` + `block`).
 - If the idea is clearly a content piece (blog post, LinkedIn), add it here AND suggest running
   `/add-idea` to also capture it in `docs/content/ideas.md`.
-- When an item is ready to promote: update its `status` tag to `promoted` in `backlog.md`, add a
-  `> Promoted: [date] → [where]` line, **and** update the matching `state.json` `backlog[]` node's
-  `status` to `"promoted"` + add its `block: "<ID>"` field — then go create the plan in the target repo.
+- When an item is ready to promote: update its `status` tag to `promoted`, add a
+  `> Promoted: [date] → [where]` line, then go create the plan in the target repo.
 - Never edit existing entries unless the user explicitly asks.

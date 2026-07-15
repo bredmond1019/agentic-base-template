@@ -76,7 +76,7 @@ id (no "Block" word — what `/generate-master-plan` and `/plan` author today) o
 `/generate-master-plan` authors this format. `/plan` writes a mini-roadmap in the same shape.
 `/generate-tasks --from <path>` decomposes a single block into `tasks.md`.
 
-**`planning/state.json` sync.** When a repo has one (see `core/planning/state-schema.md`),
+**`planning/state.json` sync.** When a repo has one (see `docs/state/state-schema.md`),
 `/sdlc-block` resolves each block's canonical `<Prefix>.<PhaseNumber>.<BlockLetter>` id (reading
 it straight off a canonical heading, or constructing it from the repo's `brain.toml` prefix for a
 legacy heading) and flips that block's authored `status` there: `open` → `in_progress` when its
