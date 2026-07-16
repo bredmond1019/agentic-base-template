@@ -3,9 +3,43 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-15
+**Last updated:** 2026-07-16
 
 ---
+
+## [2026-07-16]
+
+### sdlc-flow resume-safety fixes (follow-up to D51)
+- **What:** Investigated a recurring report that `/sdlc-flow --resume` (worktree and branch mode
+  alike) restarted from task 1 instead of skipping already-passed tasks. Found two distinct causes
+  and fixed the engine-side one:
+  1. **Operator error (separate incident, no engine fix):** restarting via `Workflow({scriptPath,
+     resumeFromRunId})` without also adding `--resume` to `args`. `resumeFromRunId` only replays the
+     Workflow tool's own cached `agent()` calls — it has no relationship to `sdlc-flow.js`'s own
+     `resumeMode = hasFlag('--resume')`. Without the flag, the engine has no signal a prior run
+     exists and walks every task fresh.
+  2. **Real engine bug, fixed:** `state.tasks` (the in-memory object `writeFlowState()` serializes
+     wholesale on every commit) was only ever populated for tasks executed in the CURRENT invocation.
+     Tasks skipped via `--resume` (already `passed`) never re-entered it, so the first state write
+     after a resume silently dropped them from the committed `sdlc-flow-state.json` — the *next*
+     resume would then see them as never-passed and re-run them. Fix: the resume-state-load agent now
+     also returns the prior file's full `tasks` object (`tasksJson`), merged into `state.tasks` before
+     the per-task loop runs, so committed history survives multiple resume cycles.
+  3. **Backstop for cause #1:** Setup's name-picker (`worktreeRecipe` + `branchRecipe`, STEP 2) now
+     checks the exact `<spec>-flow` candidate first. If it's already taken and `--resume` wasn't
+     passed, setup **aborts** with a `setupError` explaining that `--resume` is required (spelling out
+     that this holds even under a cached `resumeFromRunId` restart) instead of silently bumping to a
+     `-2` name and orphaning the prior run's progress. Only a genuine unrelated-name collision still
+     falls through to `-2`/`-3`/etc.
+  - Docs: `docs/workflows/sdlc-flow.md` "Resumption" section rewritten to cover both causes and the
+    new setup guard.
+- **Why:** The silent-`-2`-fallback + `state.tasks`-truncation combo meant a resumed run could look
+  like it acknowledged prior progress (`Resume: N task(s) already passed... skipping them.`) while
+  simultaneously erasing that same progress from the committed record for the *next* resume — a
+  correctness gap independent of whether the operator remembered `--resume`.
+- **Refs:** `.claude/workflows/sdlc-flow.js`, `docs/workflows/sdlc-flow.md`. Folded into the same
+  commit as D51 (`b8a000b`) since both touch `sdlc-flow.js`'s resume path. `node --check` clean.
+  Same real-run verification requirement as D51 applies (untested on a live resumed run).
 
 ## [2026-07-15]
 

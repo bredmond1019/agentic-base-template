@@ -224,15 +224,31 @@ branch mode; re-attaches the worktree under `--worktree`), reads the committed `
 and skips every task whose status is `passed`. Tasks whose status is `running` or `failed` are
 retried from scratch. Resume in the same mode the run started in.
 
+**`--resume` must be passed explicitly** — it is a flag inside `args`, not something the pipeline
+infers from how it was invoked. This matters when re-launching via `Workflow({scriptPath,
+resumeFromRunId})`: `resumeFromRunId` only replays cached prior `agent()` calls from the Workflow
+tool's own journal — it has no effect on `sdlc-flow.js`'s own `resumeMode` flag. If an agent restarts
+a failed/interrupted run without adding `--resume` to `args`, the engine has no way to know a prior
+attempt exists from that alone.
+
+As a backstop, **Setup refuses to silently start over**: if the exact `<spec>-flow` branch/worktree
+name is already taken (evidence of a prior run) and `--resume` wasn't passed, setup aborts with an
+explicit `setupError` telling the caller to add `--resume` — rather than quietly falling back to a
+`-2` name and orphaning the earlier progress. Only a genuine name collision with something unrelated
+still falls through to `-2`/`-3`/etc.
+
 | State | On `--resume` |
 |---|---|
 | `state.json` absent | Runs all selected tasks fresh |
 | Task N status `passed` | Skipped |
 | Task N status `running` / `failed` | Retried from implement |
 | `bail_reason` set | Logged; end-review proceeds immediately |
+| `<spec>-flow` branch/worktree exists, `--resume` NOT passed | Setup aborts (`setupError`) instead of silently forking a `-2` run |
 
 Because `state.json` is committed, a forced kill never loses progress — the last successful task's
-state is in git history.
+state is in git history. Resume also re-seeds the in-memory task history from the committed file
+before the per-task loop runs, so skipped (already-passed) tasks stay in the record across multiple
+resumes instead of dropping out of `state.json` on the next write.
 
 ---
 
