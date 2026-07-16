@@ -1,49 +1,46 @@
-# Update Progress — Check off completed items in business/docs/progress.md and update the current position callout.
+# Update Progress — Mark a business task block complete in the state.json graph and regenerate the board.
 
 ## Variables
 
-$ARGUMENTS — what was completed. Be specific enough to identify the item(s) in the checklist.
-Examples:
-  - `"manual site review done — site approved"`
-  - `"Upwork profile live"`
-  - `"Builder's Arc PT post published 2026-06-22"`
-  - `"first research conversation with a lead"`
-  - `"competence checkpoint cleared"`
+$ARGUMENTS — the BZ.* block ID (e.g. `BZ.1.C`) or a description of what was completed, and optionally assignment updates (e.g., priority or due date).
 
 ## Execution Model
 
-Spawn a Haiku subagent (Agent tool, `model: "haiku"`) to execute all steps below.
+Spawn a self subagent (Agent tool, `model: "self"`) to execute all steps below.
 Pass the resolved `$ARGUMENTS` value and the complete Instructions section in the subagent prompt.
 Return the subagent's result to the user.
 
+## Priority Rubric (P0–P3)
+When assigning priority, use this anchored rubric:
+- **P0**: Blocks revenue now or due <~1 week
+- **P1**: Enables revenue / this month
+- **P2**: Normal, default
+- **P3**: Someday
+
 ## Instructions
 
-1. If $ARGUMENTS is not provided, stop and ask: "What did you complete? Describe it and I'll check it off in progress.md."
+1. If $ARGUMENTS is not provided, stop and ask: "What did you complete?"
 
-2. Read `business/docs/progress.md` in full.
+2. Read `business/planning/state.json`.
 
-3. Identify the checklist item(s) that match $ARGUMENTS:
-   - In the **Where You Are Now** section: change `[ ]` to `[x]` for the matching item(s)
-   - In the relevant **Stage** section: change `[ ]` to `[x]` for the matching task(s)
-   - If a whole stage is now complete, mark its **Done when:** line with `[x]`
+3. Identify the `BZ.*` block in the `tracks` array that matches $ARGUMENTS (either by exact ID or by title/description matching).
 
-4. Rewrite the **CURRENT POSITION** callout at the top to reflect the new state:
-   - If the completed item was the gate blocking a stage, advance to the next stage
-   - Format: `> **CURRENT POSITION: <stage description>. <What's next / what's now unblocked.>**`
-   - Keep it to 1–2 sentences — it's a quick-glance callout, not a summary
+4. Update the block in `state.json`:
+   - If the task was completed, set its `status` to `"closed"`.
+   - If $ARGUMENTS includes a priority change, update the `priority` field using the Priority Rubric.
+   - If $ARGUMENTS includes a due date change, update the `due` field (ISO format `YYYY-MM-DD`).
 
-5. Update the `*Last updated:*` date at the top of the file to today's date.
+5. Run `mev emit-state --write` to regenerate the HQ board (which now includes the unified priority-ranked view).
 
 6. Show the user:
-   - The updated CURRENT POSITION callout
-   - Each line that was changed (before → after)
+   - Confirmation of the block(s) updated and closed.
+   - The output of the board regeneration.
 
 ## Notes
 
-- Only touch items that match $ARGUMENTS — do not check off anything else
-- Do not rewrite prose sections — only change `[ ]` to `[x]` and update the CURRENT POSITION callout
-- If the item described in $ARGUMENTS doesn't clearly map to a checklist item, show the user the closest matches and ask which to check off
+- The status-of-record for business progress is `business/planning/state.json`. Do NOT edit `business/docs/progress.md` for status changes; it is narrative-only.
+- Only touch items that match $ARGUMENTS.
 
 ## Context / Files to Read
 
-- `business/docs/progress.md`
+- `business/planning/state.json`

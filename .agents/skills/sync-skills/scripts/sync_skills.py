@@ -195,7 +195,7 @@ def copy_to_global(skills_dir, global_skills_dir):
         print(f"  Copied {folder} -> global")
 
 def main():
-    os.chdir("~/agentic-portfolio")
+    os.chdir(os.path.expanduser("~/Dev/agentic-portfolio"))
     
     # 1. Base template
     base_skills = "base-template/.agents/skills"
