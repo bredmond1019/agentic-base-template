@@ -9,6 +9,39 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [2026-07-16]
 
+### D51 + resume-safety fixes committed; doc patch landed
+
+- **What:** Committed D51 (`/sdlc-flow` defaults to a plain branch checked out in the main working
+  tree, `--worktree` opt-in; `/close-out --merge-branch`; worktree `planning/` symlink repair in both
+  `sdlc-flow.js` and `sdlc-task.js`; mode-aware auto-merge running `mev emit-state --write` on the
+  base) as commit `b8a000b`. Also investigated and fixed a resume-safety bug in `sdlc-flow.js`
+  discovered while debugging reports of "`/sdlc-flow --resume` restarts from task 1": `state.tasks`
+  was only populated for tasks executed in the current invocation, so the first `writeFlowState()`
+  after a resume silently dropped already-passed tasks from the committed `sdlc-flow-state.json`,
+  causing the next resume to re-run them — fixed by merging the prior file's full `tasks` object into
+  `state.tasks` before the per-task loop runs. Also hardened Setup's branch/worktree name-picker to
+  abort with an explicit `setupError` (telling the caller to add `--resume`) instead of silently
+  forking a `-2` name when the exact `<spec>-flow` candidate is already taken and `--resume` wasn't
+  passed — this addresses a separate cause where an agent restarts a failed run via a cached Workflow
+  `resumeFromRunId` without also adding `--resume` to args (`resumeFromRunId` only replays the
+  Workflow tool's own cache; it has no effect on `sdlc-flow.js`'s own `resumeMode` flag). Ran
+  `/code-review` low over the full diff — no findings. Confirmed no blocking coverage gaps (this
+  repo's only build gate for the three engines is `node --check`; no unit-test convention exists for
+  these prompt-orchestration scripts). Patched `docs/workflows/sdlc-flow.md`'s Resumption section to
+  document both causes and the new setup guard. Committed the doc patch + log entry as `4c6d476`.
+  Wrote `planning/handoff.md` and added a new carryover entry
+  `sdlc-flow-resume-state-tasks-truncation` to `planning/state.json` (already done manually this
+  session — not duplicated here). Both D51 and the resume-safety fixes are committed but NOT YET
+  real-run verified (`node --check` clean, logic traced by hand only) — real-run verification on a
+  vaulted downstream repo (not base-template) is the next step, tracked via the
+  `worktree-relative-symlink-breakage` and `sdlc-flow-resume-state-tasks-truncation` carryovers in
+  `planning/state.json`.
+- **Why:** Two silent correctness gaps (a resumed run erasing its own passed-task history on the next
+  state write, and a stale-name collision silently orphaning prior progress instead of telling the
+  operator to `--resume`) needed fixing and landing before D51 could be trusted for real-run
+  verification on a downstream repo.
+- **Refs:** commits `b8a000b`, `4c6d476`. `.claude/workflows/sdlc-flow.js`, `.claude/workflows/sdlc-task.js`, `docs/workflows/sdlc-flow.md`.
+
 ### sdlc-flow resume-safety fixes (follow-up to D51)
 - **What:** Investigated a recurring report that `/sdlc-flow --resume` (worktree and branch mode
   alike) restarted from task 1 instead of skipping already-passed tasks. Found two distinct causes
