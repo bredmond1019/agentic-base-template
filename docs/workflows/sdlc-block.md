@@ -187,7 +187,10 @@ the block's Acceptance Criteria, and posts an APPROVE/REQUEST_CHANGES/COMMENT ve
 
 `/merge-train` reads `merge_order` from the state file, classifies each PR (ready /
 already-merged / needs-approval / has-conflicts / escalated), and merges them via
-`gh pr merge --merge --delete-branch` in dependency order — halting on the first conflict.
+`gh pr merge --merge --delete-branch` in dependency order — halting on the first conflict. Once
+all merges land, it runs `mev emit-state --write` from the base branch to regenerate derived
+surfaces from any `planning/state.json` block-status flips the merged branches carried
+([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)).
 
 ---
 

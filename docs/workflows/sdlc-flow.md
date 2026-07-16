@@ -92,7 +92,7 @@ flowchart TD
 | **End-review** | sonnet | ONE consolidated review over the integrated tree. Re-runs the **full** gating suite (authoritative). Reads `git diff <prBase>..HEAD` + `tasks.md` acceptance criteria + the committed `state.json` as the localization index. Verdict: `PASS` / `PARTIAL` / `FAIL`. |
 | **Review fix** | sonnet | Bounded fix for localized end-review findings. Escalates to `opus` on the final pass. A broad or structural finding bails instead (triage decision). |
 | **Docs patch** | sonnet | Surgical `--patch` of affected doc files. **Hard-gated on a PASS verdict.** Skipped entirely on bail. |
-| **Wrap-up** | sonnet | Updates `status.md` + appends the `log.md` entry + writes D18 Amendment-Log entries — all **on the flow branch** (so they ride in the PR and merge atomically with the code). |
+| **Wrap-up** | sonnet | Updates `status.md` + appends the `log.md` entry + writes D18 Amendment-Log entries — all **on the flow branch** (so they ride in the PR and merge atomically with the code). On a fully-done block, also flips `planning/state.json`'s block status to `"closed"` on the branch — `mev emit-state --write` cannot run inside a linked worktree, so derived surfaces regenerate later when `/clean-worktree` or `/merge-train` lands the branch on `main` ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)). |
 | **PR** | sonnet | Pushes the branch and runs `gh pr create --base <prBase>`. Builds the PR body from the committed `state.json` (per-task summary, verdict, open items). Opens a **draft** PR on bail. Degrades gracefully when `gh` is absent — prints the branch name and the exact commands. |
 
 ### Per-task retry loop

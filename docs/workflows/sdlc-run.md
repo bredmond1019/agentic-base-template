@@ -67,7 +67,7 @@ flowchart TD
 | **Fix** | sonnet | Targeted fixes for the failing criteria only — never a re-implement. Overwrites the `implement.md` slot, then loops back to Test. |
 | **UI Test** | sonnet | Live browser smoke check via playwright-cli. **Skipped** unless `harness.json` `uiTest.enabled` is true (config absent → skipped). Auto-skips for docs-only changes. |
 | **Document** | sonnet | Surgically patches `docs/*.md` for the changed source. **Hard-gated** on a `PASS` verdict. |
-| **Wrap-up** | sonnet | Updates `status.md` + appends the `log.md` entry + writes `workflow.md`, then one `chore:` commit. Merged log-work + finalize into one agent ([D14](../../planning/decisions/D14-sdlc-task-agent-consolidation.md)); applies any spec Amendment-Log deviations on `main` ([D18](../../planning/decisions/D18-living-artifact-specs.md)). |
+| **Wrap-up** | sonnet | Updates `status.md` + appends the `log.md` entry + writes `workflow.md`, then one `chore:` commit. Merged log-work + finalize into one agent ([D14](../../planning/decisions/D14-sdlc-task-agent-consolidation.md)); applies any spec Amendment-Log deviations on `main` ([D18](../../planning/decisions/D18-living-artifact-specs.md)). On a fully-done block, also flips `planning/state.json`'s block status to `"closed"` and runs `mev emit-state --write` in place (safe — this run is on `main`, not a worktree) ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)). |
 
 ### Retry loop
 `implement → test → review →` **PASS** → document, or **FAIL/PARTIAL** → `fix → test → review`, up to

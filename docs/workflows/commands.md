@@ -134,7 +134,10 @@ that [`/sdlc-task`](sdlc-task.md) and [`/sdlc-block`](sdlc-block.md) automate.
   cone-mode sparse checkout. Open it as a new Claude Code session and run the pipeline (manual or
   `/sdlc-run`) inside it.
 - **`/clean-worktree <branch>`** — **merge before delete**: fast-forward the branch into `main`, apply the
-  deferred `status.md`/`log.md` updates from the task log, then remove the worktree and branch.
+  deferred `status.md`/`log.md` updates from the task log, run `mev emit-state --write` to regenerate
+  derived surfaces from any `planning/state.json` block-status flip the branch carried
+  ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)), then remove the
+  worktree and branch.
 
 > Do **not** run `/clean-worktree` for `/sdlc-block` tasks — the orchestrator merges each wave for you.
 

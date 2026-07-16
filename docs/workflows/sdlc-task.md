@@ -52,6 +52,7 @@ flowchart TD
     Test -- "FAIL" --> Triage{"Triage<br/><i>sonnet</i>"}
     Triage -- "RETRYABLE (≤ 3 attempts)" --> Fix["Fix<br/><i>sonnet → opus on final attempt</i>"] --> Test
     Triage -- "stuck / exhausted" --> Commit
+    Commit -- "full spec passed" --> Bookkeep["Bookkeep close-out<br/><i>haiku — tasks.md + status.md + state.json flip</i>"]
 
     classDef gate fill:#3b0764,stroke:#a78bfa,color:#e5e7eb;
     class Triage gate;
@@ -65,6 +66,7 @@ flowchart TD
 | **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). Stuck → commit the current state as `FAIL` and exit. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **Commit + state** | haiku | Writes `sdlc-task-state.json` (per-task status + token usage) and commits all work + state. In-place: one final `chore:` commit. `--worktree`: one commit per phase write (throwaway branch, applied at merge). |
+| **Bookkeep close-out** | haiku | Runs only on a full, fully-passing spec run (never on a partial task range or a bail). Marks `tasks.md` tasks done, flips the `status.md` Progress row to `Done`, and flips `planning/state.json`'s block status to `"closed"`. In-place: also runs `mev emit-state --write`. `--worktree`: skips `emit-state` (unsafe in a linked worktree) — derived surfaces regenerate when `/clean-worktree` lands the branch. Writes no prose `log.md` entry — run `/log-work` for the narrative. ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)) |
 
 ### The retry loop
 
