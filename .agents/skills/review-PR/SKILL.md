@@ -1,7 +1,7 @@
 ---
 name: review-PR
 description: >
-  >
+  Custom skill: review-PR
 ---
 
 # Review PR — Spec-aware review for a branch-train PR.

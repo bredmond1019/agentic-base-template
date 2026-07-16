@@ -1,7 +1,7 @@
 ---
 name: sync-all
 description: >
-  >
+  Run the python script to sync templates, workspace commands, global tools, and tiers in one command.
 ---
 
 # sync-all — Sync all commands and skills across workspaces, sub-brains, and global configs

@@ -1,7 +1,7 @@
 ---
 name: breakdown
 description: >
-  >
+  Custom skill: breakdown
 ---
 
 # Breakdown — Decompose a task spec into agent-executable sub-steps.

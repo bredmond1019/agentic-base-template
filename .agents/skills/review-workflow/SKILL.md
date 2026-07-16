@@ -1,7 +1,7 @@
 ---
 name: review-workflow
 description: >
-  >
+  Custom skill: review-workflow
 ---
 
 # Review Workflow — Verify that a completed sdlc-run pipeline executed correctly.

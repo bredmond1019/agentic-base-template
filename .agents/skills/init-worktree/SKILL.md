@@ -1,7 +1,7 @@
 ---
 name: init-worktree
 description: >
-  >
+  Custom skill: init-worktree
 ---
 
 # Init Worktree — Create an isolated git worktree for an SDLC spec or task.

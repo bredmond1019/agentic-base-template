@@ -1,7 +1,7 @@
 ---
 name: sync-brain-skills
 description: >
-  >
+  Custom skill: sync-brain-skills
 ---
 
 # sync-brain-skills — Distribute shared skills to all sub-brain tiers
@@ -45,6 +45,7 @@ generic session/planning skills — not any brain-specific command.
      --include="wrap-up/***"\
      --include="backlog-ticket/***"\
      --include="generate-master-plan/***"\
+     --include="next/***"\
      --exclude="*" \
      base-template/.agents/skills/ <tier>/.agents/skills/
    ```

@@ -1,7 +1,7 @@
 ---
 name: sync-global-skills
 description: >
-  >
+  Custom skill: sync-global-skills
 ---
 
 # sync-global-skills — Sync harness skills to global install

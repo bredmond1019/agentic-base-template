@@ -1,7 +1,7 @@
 ---
 name: plan
 description: >
-  >
+  Custom skill: plan
 ---
 
 # Plan — Author a mini-roadmap for an ad-hoc or experimental feature.

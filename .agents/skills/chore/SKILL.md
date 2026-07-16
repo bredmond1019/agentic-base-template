@@ -1,7 +1,7 @@
 ---
 name: chore
 description: >
-  >
+  Custom skill: chore
 ---
 
 # Chore — Plan a maintenance or housekeeping task.

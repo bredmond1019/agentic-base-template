@@ -1,7 +1,7 @@
 ---
 name: process-tasks
 description: >
-  >
+  Custom skill: process-tasks
 ---
 
 # Process Tasks — Analyze the block sequence and report what is eligible to start.

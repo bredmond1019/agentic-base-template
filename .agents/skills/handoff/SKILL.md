@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: >
-  >
+  Write handoff + log work + commit; hands off to a fresh session
 ---
 
 # Handoff — Hand off an in-flight session cleanly to a fresh agent.

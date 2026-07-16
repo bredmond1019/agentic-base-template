@@ -1,7 +1,7 @@
 ---
 name: sdlc-task
 description: >
-  >
+  Custom skill: sdlc-task
 ---
 
 =============================================================================
@@ -86,6 +86,12 @@ rung, not the full pipeline):
      D18 amendment log — recommend the user run `/log-work` for that.
 4. **Finish**: report the branch (and worktree path under `--worktree`), and remind the user to run
    `/log-work` for the narrative log entry.
+
+
+
+
+
+
 
 
 

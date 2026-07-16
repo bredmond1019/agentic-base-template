@@ -1,7 +1,7 @@
 ---
 name: sync-downstream-harness
 description: >
-  >
+  Runs scripts/sync_downstream_harness.py to copy changed .claude/commands/*.md + .claude/workflows/ files into every repo scaffolded from base-template, then reports what changed per repo so each can be reviewed and committed.
 ---
 
 # sync-downstream-harness — Pull the harness into every scaffolded repo

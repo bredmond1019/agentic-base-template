@@ -1,7 +1,7 @@
 ---
 name: session-recap
 description: >
-  >
+  Briefing: recent Log entries, where you left off, next step
 ---
 
 # Session Recap — Summarize recent work and current standing before starting a session.

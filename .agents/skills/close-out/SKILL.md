@@ -1,7 +1,7 @@
 ---
 name: close-out
 description: >
-  >
+  Custom skill: close-out
 ---
 
 # Close Out — Verify test coverage, patch docs, and hand off cleanly.

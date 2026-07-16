@@ -1,7 +1,7 @@
 ---
 name: review-task
 description: >
-  >
+  Custom skill: review-task
 ---
 
 # Review Task — Verify a completed task against its spec and acceptance criteria.

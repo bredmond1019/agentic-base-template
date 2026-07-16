@@ -1,7 +1,7 @@
 ---
 name: commit
 description: >
-  >
+  Custom skill: commit
 ---
 
 # Commit — Stage and commit changes with a conventional message.

@@ -1,7 +1,7 @@
 ---
 name: update-docs
 description: >
-  >
+  Custom skill: update-docs
 ---
 
 # Update Docs — Documentation health sweep: find stale sections and create missing coverage.

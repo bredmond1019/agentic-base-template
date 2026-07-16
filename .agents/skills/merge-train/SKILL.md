@@ -1,7 +1,7 @@
 ---
 name: merge-train
 description: >
-  >
+  Custom skill: merge-train
 ---
 
 # Merge Train — Merge the block branch train in dependency order.

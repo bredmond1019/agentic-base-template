@@ -28,7 +28,7 @@ All skills live in `.agents/skills/` — each skill in its own directory with a 
 
   archive/        capture/       commit/        handoff/
   log-work/       prime/         session-recap/ status/
-  wrap-up/         update-state/
+  wrap-up/         update-state/  next/
 
   breakdown/      chore/         generate-master-plan/  generate-tasks/
   plan/           ticket/        backlog-ticket/
@@ -65,6 +65,7 @@ predictably-named output file.
 | Session Start | `session-recap` | Briefing: recent Log entries, where you left off, next step | chat only |
 | Session Start | `status` | Check current focus and what's in progress | chat only |
 | Session Start | `process-tasks` | Check which specs are eligible to start | chat only |
+| Session Start | `next` | Briefing on what's up next, blocked, and recommend next action | chat only |
 | Session End | `wrap-up` | Log work + commit; clean close without a handoff file | status.md, log.md, git |
 | Session End | `handoff` | Write handoff + log work + commit; hands off to a fresh session | `planning/handoff.md`, status.md, log.md, git |
 | Session End | `close-out` | Verify coverage → patch docs → hand off; the quality-close pipeline after sdlc-run/sdlc-flow | status.md, log.md, docs/, git |
@@ -111,6 +112,9 @@ Reads only `planning/status.md` and reports the Current focus line, what's In pr
 
 ### `process-tasks`
 Reads `status.md`, applies sequential eligibility rules, and returns a status table. Read-only.
+
+### `next`
+Briefing on what's next, what's blocked, and a recommended next action based on local status and HQ/business/core goals. Read-only.
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: initial-research
 description: >
-  >
+  Custom skill: initial-research
 ---
 
 # Initial Research — Conduct reconnaissance on a topic and report back

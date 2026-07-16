@@ -13,6 +13,7 @@ NEW_SKILLS_DESCRIPTIONS = {
     "generate-master-plan": "Author the full roadmap as canonical block definitions",
     "handoff": "Write handoff + log work + commit; hands off to a fresh session",
     "session-recap": "Briefing: recent Log entries, where you left off, next step",
+    "next": "Show what's up next, what's blocked and by what, and recommend the next action based on company and sub-brain goals",
     "sync-brain-commands": "Reads brain.toml to discover sub-brain tiers and rsyncs base-template brain/ session/planning/projects commands into each tier's .claude/commands/",
     "wrap-up": "Log work + commit; clean close without a handoff file"
 }
@@ -66,11 +67,27 @@ def parse_frontmatter(content):
         if end_idx != -1:
             fm_text = "\n".join(lines[1:end_idx])
             body = "\n".join(lines[end_idx + 1:]).strip()
-            # Simple YAML parser for key-value
+            # Simple YAML parser supporting multiline indented values
+            current_key = None
+            current_value_lines = []
             for line in fm_text.split("\n"):
-                if ":" in line:
+                if not line.strip():
+                    continue
+                if line.startswith(" ") or line.startswith("\t"):
+                    if current_key:
+                        current_value_lines.append(line.strip())
+                elif ":" in line:
+                    if current_key:
+                        frontmatter[current_key] = " ".join(current_value_lines).strip()
                     k, v = line.split(":", 1)
-                    frontmatter[k.strip()] = v.strip().strip("'\"")
+                    current_key = k.strip()
+                    val = v.strip().strip("'\"")
+                    if val == ">" or val == "|":
+                        current_value_lines = []
+                    else:
+                        current_value_lines = [val]
+            if current_key:
+                frontmatter[current_key] = " ".join(current_value_lines).strip()
     return frontmatter, body
 
 def get_skill_frontmatter(skill_name, existing_skill_path, command_filepath=None):
@@ -78,21 +95,23 @@ def get_skill_frontmatter(skill_name, existing_skill_path, command_filepath=None
     description = NEW_SKILLS_DESCRIPTIONS.get(skill_name, f"Custom skill: {skill_name}")
     
     # 1. Try to read existing skill frontmatter
+    has_valid_desc = False
     if os.path.exists(existing_skill_path):
         with open(existing_skill_path, "r", encoding="utf-8") as f:
             existing_content = f.read()
         fm, _ = parse_frontmatter(existing_content)
         if "name" in fm:
             name = fm["name"]
-        if "description" in fm:
+        if "description" in fm and fm["description"].strip() not in ("", ">", "|"):
             description = fm["description"]
+            has_valid_desc = True
             
-    # 2. Try to read command frontmatter if description is generic
-    elif command_filepath and os.path.exists(command_filepath):
+    # 2. Try to read command frontmatter if description is generic or missing
+    if not has_valid_desc and command_filepath and os.path.exists(command_filepath):
         with open(command_filepath, "r", encoding="utf-8") as f:
             cmd_content = f.read()
         fm, _ = parse_frontmatter(cmd_content)
-        if "description" in fm:
+        if "description" in fm and fm["description"].strip() not in ("", ">", "|"):
             description = fm["description"]
         elif "title" in fm:
             description = fm["title"]

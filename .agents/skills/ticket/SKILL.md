@@ -1,7 +1,7 @@
 ---
 name: ticket
 description: >
-  >
+  Custom skill: ticket
 ---
 
 # Ticket — Plan a small behavior-change with observable Acceptance Criteria.

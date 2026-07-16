@@ -74,7 +74,7 @@ def main():
             f"--include='session-recap.md' --include='wrap-up.md' "
             f"--include='backlog-ticket.md' --include='generate-master-plan.md' "
             f"--include='log-decision.md' --include='sync-status.md' --include='update-progress.md' "
-            f"--include='update-state.md' --include='attention.md' --include='snooze.md' "
+            f"--include='update-state.md' --include='attention.md' --include='snooze.md' --include='next.md' "
             f"--exclude='*' "
             f"base-template/.claude/commands/brain/ {tier}/.claude/commands/"
         )

@@ -1,7 +1,7 @@
 ---
 name: backlog-ticket
 description: >
-  >
+  Custom skill: backlog-ticket
 ---
 
 # Backlog Ticket — Capture a queued idea into the HQ backlog

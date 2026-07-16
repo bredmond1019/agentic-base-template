@@ -1,7 +1,7 @@
 ---
 name: generate-master-plan
 description: >
-  >
+  Author the full roadmap as canonical block definitions
 ---
 
 # Generate Master Plan — Author the project roadmap as canonical block definitions.

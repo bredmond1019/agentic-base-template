@@ -1,7 +1,7 @@
 ---
 name: test
 description: >
-  >
+  Custom skill: test
 ---
 
 # Application Validation Test Suite

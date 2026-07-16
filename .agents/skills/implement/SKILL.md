@@ -1,7 +1,7 @@
 ---
 name: implement
 description: >
-  >
+  Custom skill: implement
 ---
 
 # Implement — Execute a plan file against the codebase.

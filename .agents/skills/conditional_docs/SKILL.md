@@ -1,7 +1,7 @@
 ---
 name: conditional_docs
 description: >
-  >
+  Task-type documentation router
 ---
 
 # /conditional_docs — Task-type documentation router

@@ -1,7 +1,7 @@
 ---
 name: log-work
 description: >
-  >
+  Custom skill: log-work
 ---
 
 # Log Work — Append a Log entry, sync status, and regenerate the freshness spine via `mev emit-state`.

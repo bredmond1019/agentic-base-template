@@ -1,7 +1,7 @@
 ---
 name: prime
 description: >
-  >
+  Custom skill: prime
 ---
 
 # Prime — Deep orient to the current project at the start of a session.

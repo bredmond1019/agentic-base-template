@@ -1,7 +1,7 @@
 ---
 name: fix
 description: >
-  >
+  Custom skill: fix
 ---
 
 # Fix — Make targeted fixes for a FAIL or PARTIAL review verdict.

@@ -1,7 +1,7 @@
 ---
 name: clean-worktree
 description: >
-  >
+  Custom skill: clean-worktree
 ---
 
 # Clean Worktree — Merge a completed SDLC worktree branch into main and remove it.

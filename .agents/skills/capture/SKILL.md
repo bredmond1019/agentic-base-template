@@ -1,7 +1,7 @@
 ---
 name: capture
 description: >
-  >
+  Scaffold a pre-plan notes file and add a backlog pointer
 ---
 
 # Capture — Scaffold a pre-plan notes file and optionally add a backlog ticket

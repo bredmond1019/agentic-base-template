@@ -1,7 +1,7 @@
 ---
 name: wrap-up
 description: >
-  >
+  Log work + commit; clean close without a handoff file
 ---
 
 # Wrap Up — Log work and commit at the end of a session.

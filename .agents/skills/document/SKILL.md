@@ -1,7 +1,7 @@
 ---
 name: document
 description: >
-  >
+  Custom skill: document
 ---
 
 # Document — Update docs to reflect a completed, reviewed implementation.

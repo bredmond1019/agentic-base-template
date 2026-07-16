@@ -1,7 +1,7 @@
 ---
 name: generate-tasks
 description: >
-  >
+  Custom skill: generate-tasks
 ---
 
 # Generate Tasks — Generate a task spec for a specified phase and block.

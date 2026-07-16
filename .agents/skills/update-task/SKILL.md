@@ -1,7 +1,7 @@
 ---
 name: update-task
 description: >
-  >
+  Custom skill: update-task
 ---
 
 # Update Task — Record progress in a task spec.

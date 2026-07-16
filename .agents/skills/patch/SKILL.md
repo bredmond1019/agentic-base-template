@@ -1,7 +1,7 @@
 ---
 name: patch
 description: >
-  >
+  Lightweight hotfix pipeline
 ---
 
 # /patch — Lightweight hotfix pipeline

@@ -1,7 +1,7 @@
 ---
 name: sdlc-run
 description: >
-  >
+  Custom skill: sdlc-run
 ---
 
 =============================================================================
@@ -100,6 +100,12 @@ When the user asks you to run `/sdlc-run <spec-slug> [N]`, do NOT try to execute
 3. **Wrap-up**:
    - Update `status.md` and `log.md`.
    - Write a summary report to `planning/<spec-slug>/sdlc/reports/workflow.md`.
+
+
+
+
+
+
 
 
 

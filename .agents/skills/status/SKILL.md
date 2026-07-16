@@ -1,7 +1,7 @@
 ---
 name: status
 description: >
-  >
+  Custom skill: status
 ---
 
 # Status — Report current focus and sequence state.

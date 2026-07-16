@@ -1,7 +1,7 @@
 ---
 name: start-block
 description: >
-  >
+  Custom skill: start-block
 ---
 
 # Start Block — Mark a block as in-progress in status.md.

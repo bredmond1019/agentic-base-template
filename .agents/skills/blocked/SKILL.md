@@ -1,7 +1,7 @@
 ---
 name: blocked
 description: >
-  >
+  Custom skill: blocked
 ---
 
 # Blocked — Capture a new blocker on the fly

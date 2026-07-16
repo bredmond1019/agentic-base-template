@@ -81,6 +81,7 @@ live in `.claude/commands/` and take precedence over global commands on name con
 |---|---|
 | `/prime` (global) | Deep session start — reads key docs and summarizes state |
 | `/session-recap` (global) | Start-of-session briefing: recent log, current focus, next action |
+| `/next` (global) | Briefing on what's next, what's blocked, and recommend next action |
 | `/handoff` (global) | Write handoff.md + log work + commit; hands off to a fresh agent |
 | `/wrap-up` (global) | Log work + commit; clean session close without a handoff file |
 | `/status` (global) | Quick status snapshot of current focus and momentum |

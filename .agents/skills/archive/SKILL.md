@@ -1,7 +1,7 @@
 ---
 name: archive
 description: >
-  >
+  Custom skill: archive
 ---
 
 # Archive — Retire a folder/file into `planning/archive/`, distilling its durable residue first.
