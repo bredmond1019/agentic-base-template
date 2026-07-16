@@ -1,7 +1,7 @@
 ---
 name: blocked
 description: >
-  Capture a new blocker on the fly, updating state.json and tracking dependencies.
+  >
 ---
 
 # Blocked — Capture a new blocker on the fly
@@ -42,3 +42,4 @@ When getting ready to start work and you discover that a block or track is block
 
    State regenerated successfully.
    ```
+

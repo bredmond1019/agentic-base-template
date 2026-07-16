@@ -3,9 +3,50 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-05
+**Last updated:** 2026-07-15
 
 ---
+
+## [2026-07-15]
+
+### Handoff for D50 review + sdlc-block auto-merge carryover
+- **What:** Wrote planning/handoff.md pointing the next agent at the uncommitted D50 changes for code review; appended a `carryover[]` entry `sdlc-block-auto-merge-no-emit-state` (kind: deferred) to planning/state.json capturing that D50 left /sdlc-block --auto-merge's merge path without a `mev emit-state --write` call (it lands blocks during its own run, bypassing /clean-worktree + /merge-train). Re-ran `mev emit-state --write` clean (0 errors).
+- **Why:** Preserve the one D50 follow-up before handing the review session to a fresh agent, so it isn't lost.
+- **Refs:** planning/handoff.md, planning/state.json (carryover `sdlc-block-auto-merge-no-emit-state`), planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md
+
+### D50 — SDLC engines flip state.json block-status on close (+ merge-command emit-state)
+- **What:** Closed the two `known_issue` carryovers where the SDLC engines finished blocks but left
+  `planning/state.json` `tracks[].blocks[].status` stale (silently rotting every
+  `mev emit-state`-derived surface — `focus`, rollups, cache watermarks, wave tables). Fixes,
+  mirroring `/start-block` Step 8's block-resolution-from-the-status.md-row pattern:
+  - **`sdlc-run.js`** (runs on main) — wrap-up now resolves the canonical block ID from the
+    status.md Progress row it edits, flips `tracks[].blocks[].status` → `"closed"`, validates JSON,
+    and runs `mev emit-state --write` (graceful degrade if `mev`/`brain.toml` absent); stages
+    `planning/state.json` into the wrap-up commit. New `blockStatusFlipped` schema field.
+  - **`sdlc-flow.js`** (runs in a worktree) — same authored flip, committed on the branch; does NOT
+    run `emit-state` (worktree-unsafe post the mev `is_linked_worktree()` fix). Guarded off on bail /
+    partial selection. New `blockStatusFlipped` schema field.
+  - **`sdlc-task.js`** — gained a **lean `haiku` bookkeep close-out** (not a full wrap-up): on a
+    passing run it marks `tasks.md` done, flips the status.md row + `state.json` block (full passing
+    run only) to `closed`, and (in place, on main) runs `emit-state`; under `--worktree` it commits
+    the flip and defers emit to merge. Writes no `log.md` narrative / D18 amendment log — prints a
+    `/log-work` recommendation. New `bookkeep` MODEL tier + `BOOKKEEP_SCHEMA`; header + SKILL.md
+    mirror reworded (and the stale "Antigravity Execution Guide" that told agents to run `sdlc-run`
+    and skip status updates was corrected).
+  - **`clean-worktree.md` + `merge-train.md`** — run `mev emit-state --write` on main post-merge
+    (graceful degrade) so the worktree-deferred derived-surface regen lands once the authored flip
+    merges.
+  - ADR `planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md` + index row.
+- **Why:** `state.json` is the authoritative block graph and `emit-state` derives one-way from its
+  authored status — a stale block status poisons every downstream surface until a human reconciles
+  by hand (the engine-rs `state-json-block-status-stale` incident). The engines were the last
+  writers that never authored the flip. Not the `tasks.json` contract — only wrap-up stages —
+  so `core/orchestrator`'s `SDLC_FLOW` schema consumer is unaffected (no action needed there).
+- **Refs:** `.claude/workflows/{sdlc-run,sdlc-flow,sdlc-task}.js`,
+  `.claude/commands/{clean-worktree,merge-train}.md`, `.agents/skills/sdlc-task/SKILL.md`,
+  `planning/decisions/D50-*.md`. Residual follow-up: wire `emit-state` into `sdlc-block.js`'s
+  `--auto-merge` path (out of scope this pass). Verify on a real downstream spec run (NOT this repo)
+  before clearing the two carryovers in `planning/state.json`.
 
 ## [2026-07-04]
 
