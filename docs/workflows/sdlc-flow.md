@@ -1,26 +1,43 @@
 ---
 type: Reference
-title: /sdlc-flow — shared-worktree, PR-terminating SDLC engine
-description: The default engine for non-trivial feature work. Runs one spec sequentially in a single shared worktree with a per-task test-fix loop, one consolidated end-review, a docs patch, and a PR as the terminal step.
+title: /sdlc-flow — single-branch, PR-terminating SDLC engine
+description: The default engine for non-trivial feature work. Runs one spec sequentially on a single branch (in the main tree by default, or an isolated worktree with --worktree) with a per-task test-fix loop, one consolidated end-review, a docs patch, and a PR as the terminal step.
 doc_id: sdlc-flow
 layer: [factory]
 project: base-template
 status: active
-keywords: [sdlc-flow, shared worktree, PR, test-fix loop, end-review, SDLC engine]
+keywords: [sdlc-flow, branch mode, worktree, PR, test-fix loop, end-review, SDLC engine]
 related: [base-template-workflows-index, sdlc-block, D30-sdlc-flow-engine, D31-committed-authoritative-state, D33-pr-based-wrap-up]
 ---
 
-# `/sdlc-flow` — shared-worktree, PR-terminating SDLC engine
+# `/sdlc-flow` — single-branch, PR-terminating SDLC engine
 
-The default engine for non-trivial feature work. Runs every task in a spec **sequentially in one
-shared worktree** — so there are no inter-task merge conflicts — with a per-task
+The default engine for non-trivial feature work. Runs every task in a spec **sequentially on one
+shared branch** — so there are no inter-task merge conflicts — with a per-task
 `implement → fast-test → fix` loop, **one** consolidated review over the integrated tree at the end,
 a surgical docs patch, and a **pull request** as the terminal step.
 
 Compared with `/sdlc-block`, `/sdlc-flow` trades task-level parallelism for reliability: one
 shared branch means zero inter-task merge conflicts, one end-review instead of a per-task pile, and
-a PR handoff rather than an in-place landing. Compared with `/sdlc-run`, it is branch-isolated (its
-own worktree) and terminates with a PR rather than committing directly to the current branch.
+a PR handoff rather than an in-place landing. Compared with `/sdlc-run`, it works on a dedicated
+`<spec>-flow` branch and terminates with a PR rather than committing directly to the current branch.
+
+## Isolation mode — branch (default) vs `--worktree`
+
+By **default**, `/sdlc-flow` creates the `<spec>-flow` branch and checks it out **in the main working
+tree** — no `trees/` worktree, no sparse-checkout. This keeps a relative `planning/` symlink
+(brain-vaulted repos) intact, which a sparse-checkout worktree breaks. `main` stays on the branch
+until the PR merges; a fresh run refuses to start on a **dirty** working tree (commit or stash first,
+or use `--worktree`).
+
+Pass **`--worktree`** to run in an isolated sparse-checkout worktree under `trees/<spec>-flow/`
+instead — the original behavior. Reach for it when you need true isolation: notably `/sdlc-block`,
+which fans out concurrent `/sdlc-flow` children and therefore always passes `--worktree` so parallel
+blocks don't collide in one working tree.
+
+Everything downstream (the per-task loop, review, docs, wrap-up, PR) is identical in both modes; only
+the checkout location differs. In branch mode the "worktree path" the engine reports is simply the
+repo root.
 
 Engine: [`.claude/workflows/sdlc-flow.js`](../../.claude/workflows/sdlc-flow.js)
 
@@ -34,9 +51,10 @@ Engine: [`.claude/workflows/sdlc-flow.js`](../../.claude/workflows/sdlc-flow.js)
 /sdlc-flow <spec-slug> 1,3,5                   scope to specific tasks
 /sdlc-flow <spec-slug> 1-3,7                   range plus an extra task
 /sdlc-flow <spec-slug> --tasks 1-7             explicit flag form (same as positional range)
-/sdlc-flow <spec-slug> --auto-merge            merge the PR + clean the worktree on clean PASS
+/sdlc-flow <spec-slug> --auto-merge            merge the PR + clean up + emit-state on clean PASS
 /sdlc-flow <spec-slug> --no-pr                 stop after wrap-up; do not create a PR
-/sdlc-flow <spec-slug> --resume                re-attach the worktree; skip already-passed tasks
+/sdlc-flow <spec-slug> --worktree              run in an isolated worktree (default: plain branch)
+/sdlc-flow <spec-slug> --resume                re-attach the branch/worktree; skip already-passed tasks
 /sdlc-flow <spec-slug> --test-depth full       run the full gating suite per task (default: fast)
 ```
 
@@ -45,9 +63,10 @@ Engine: [`.claude/workflows/sdlc-flow.js`](../../.claude/workflows/sdlc-flow.js)
 | `<spec-slug>` | **Required.** The spec directory name — drives every `planning/<spec-slug>/…` path. | — |
 | `[range]` | Optional task selection as the 2nd positional token or via `--tasks`. Forms: `1-7`, `1,3,5`, `1-3,7`, `5`. | all tasks |
 | `--tasks <range>` | Equivalent to the positional range. | — |
-| `--auto-merge` | After a clean PASS, merge the PR and tear down the worktree/branch. Only fires on a non-draft PR with a PASS verdict — never on bail. | off |
-| `--no-pr` | Stop after wrap-up; leave the branch for a manual PR. | off (create PR) |
-| `--resume` | Re-attach the existing worktree and skip tasks whose `state.json` status is `passed`. | off |
+| `--auto-merge` | After a clean PASS, merge the PR, delete the branch (tear down the worktree too under `--worktree`), and run `mev emit-state --write` on the base. Only fires on a non-draft PR with a PASS verdict — never on bail. | off |
+| `--no-pr` | Stop after wrap-up; leave the branch for a manual PR (or `/close-out --merge-branch`). | off (create PR) |
+| `--worktree` | Run in an isolated sparse-checkout worktree under `trees/<spec>-flow/` instead of a plain branch in the main tree. Needed for concurrent runs (e.g. `/sdlc-block` children). | off (plain branch) |
+| `--resume` | Re-attach the existing branch/worktree and skip tasks whose `state.json` status is `passed`. | off |
 | `--test-depth fast\|full` | Per-task validation depth. `fast` runs only `gates:true` checks (the tripwire); `full` runs the whole suite per task. | `fast` |
 
 > All CLI flags override the corresponding `flow.*` config key in `planning/harness.json`. The config
@@ -59,7 +78,7 @@ Engine: [`.claude/workflows/sdlc-flow.js`](../../.claude/workflows/sdlc-flow.js)
 
 ```mermaid
 flowchart TD
-    Setup["Worktree setup<br/><i>haiku</i>"] --> Enumerate["Enumerate tasks — D16 lint<br/><i>haiku — resume load if --resume</i>"]
+    Setup["Setup — branch or --worktree<br/><i>haiku</i>"] --> Enumerate["Enumerate tasks — D16 lint<br/><i>haiku — resume load if --resume</i>"]
     Enumerate --> UpdateTask["update-task (in-progress)<br/><i>haiku</i>"]
     UpdateTask --> Implement["Implement<br/><i>sonnet</i>"]
     Implement --> FastTest["Fast test<br/><i>haiku — gating checks only</i>"]
@@ -82,7 +101,7 @@ flowchart TD
 
 | Stage | Model | What it does |
 |---|---|---|
-| **Worktree setup** | haiku | Creates (or re-attaches on `--resume`) one isolated git worktree for the whole spec. Branch name: `<spec>-flow`. Applies the D5/P5 cone-all-tracked-dirs recipe. Checks for unfilled tokens (D19 thin-spec guard) on a fresh run. |
+| **Setup** | haiku | Creates (or re-attaches on `--resume`) the `<spec>-flow` branch for the whole spec. **Branch mode (default):** `git checkout -b` in the main tree (aborts on a dirty tree). **`--worktree`:** an isolated git worktree applying the D5/P5 cone-all-tracked-dirs recipe. Checks for unfilled tokens (D19 thin-spec guard) on a fresh run. |
 | **Enumerate** | haiku | Reads `tasks.md` for `### N.` task headings (D16 preflight lint — refuses to run if none found). On `--resume`, reads the committed `sdlc-flow-state.json` to identify already-passed tasks and skip them. |
 | **update-task** | haiku | Marks the current task in-progress in `tasks.md` (surgical checkbox edit). Does not commit — the state-writer commits it bundled with the state. |
 | **Implement** | sonnet | Executes task N against the spec (and `breakdown.md` if present). Runs the D8 completeness self-check before committing `feat:`. |
@@ -92,7 +111,7 @@ flowchart TD
 | **End-review** | sonnet | ONE consolidated review over the integrated tree. Re-runs the **full** gating suite (authoritative). Reads `git diff <prBase>..HEAD` + `tasks.md` acceptance criteria + the committed `state.json` as the localization index. Verdict: `PASS` / `PARTIAL` / `FAIL`. |
 | **Review fix** | sonnet | Bounded fix for localized end-review findings. Escalates to `opus` on the final pass. A broad or structural finding bails instead (triage decision). |
 | **Docs patch** | sonnet | Surgical `--patch` of affected doc files. **Hard-gated on a PASS verdict.** Skipped entirely on bail. |
-| **Wrap-up** | sonnet | Updates `status.md` + appends the `log.md` entry + writes D18 Amendment-Log entries — all **on the flow branch** (so they ride in the PR and merge atomically with the code). On a fully-done block, also flips `planning/state.json`'s block status to `"closed"` on the branch — `mev emit-state --write` cannot run inside a linked worktree, so derived surfaces regenerate later when `/clean-worktree` or `/merge-train` lands the branch on `main` ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)). |
+| **Wrap-up** | sonnet | Updates `status.md` + appends the `log.md` entry + writes D18 Amendment-Log entries — all **on the flow branch** (so they ride in the PR and merge atomically with the code). On a fully-done block, also flips `planning/state.json`'s block status to `"closed"` on the branch. It does **not** run `mev emit-state --write` in either mode (a worktree refuses it; a plain feature branch is not the base) — derived surfaces regenerate on the base when the branch merges via `/clean-worktree`, `/merge-train`, or `/close-out --merge-branch` ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md), [D51](../../planning/decisions/D51-sdlc-flow-branch-default.md)). |
 | **PR** | sonnet | Pushes the branch and runs `gh pr create --base <prBase>`. Builds the PR body from the committed `state.json` (per-task summary, verdict, open items). Opens a **draft** PR on bail. Degrades gracefully when `gh` is absent — prints the branch name and the exact commands. |
 
 ### Per-task retry loop
@@ -121,7 +140,7 @@ replaces the 5 × N report files:
 | `sdlc-flow-state.json` | `planning/<spec>/sdlc/` | **committed** — NOT gitignored | Authoritative run index. Drives `--resume`, feeds the end-review as a localization map, and lets wrap-up build the PR body. |
 | `worklog.md` | `planning/<spec>/sdlc/` | **committed** — NOT gitignored | Human-readable trail. One short section per task/phase: what completed, issues hit, how resolved, decisions. |
 
-`state.json` keys: `spec_slug`, `branch`, `worktree_path`, `started_at`, `updated_at`,
+`state.json` keys: `spec_slug`, `branch`, `mode` (`branch|worktree`), `worktree_path` (the repo root in branch mode), `started_at`, `updated_at`,
 `status` (`running|review|docs|wrapup|blocked|done`), `current_task`, `tasks` (per-task
 `status/attempts/summary/issues/fixes/decisions/files_changed/commit/validated`), `review`
 (`verdict/findings/attempts`), `docs` (`changed/created`), `bail_reason`, `pr` (`url/number`),
@@ -173,7 +192,7 @@ Projects append project-specific reasons via `flow.bailReasons[]`. The triage ag
 
 | Tier | Stages | Why |
 |---|---|---|
-| **haiku** | worktree-setup, enumerate, state-load, update-task, test, state-writer | Fixed procedures — no judgment required |
+| **haiku** | setup, enumerate, state-load, update-task, test, state-writer | Fixed procedures — no judgment required |
 | **sonnet** | implement, fix, triage, review, review-fix, docs, wrap-up, PR, merge | Judgment work — reading and writing code/prose |
 | **opus (escalation)** | final per-task fix attempt, final review fix pass | Hard tasks that already failed; one strong shot before bail |
 | **opus (planning fallback)** | `generate-tasks` if the spec is missing | Spec authoring — the leverage point |
@@ -189,7 +208,7 @@ All commits land on the `<spec>-flow` branch. The PR body is built from the comm
 
 | Commit | Agent | When |
 |---|---|---|
-| `chore: init worktree <branch>` | worktree-setup | Once, at branch creation |
+| `chore: init worktree <branch>` | setup | Once, at branch creation — **`--worktree` mode only** (branch mode adds no init commit) |
 | `feat: implement <stem> task N` | implement | Per task, attempt 1 |
 | `fix: fix pass P for <stem> task N` | fix | Per task, fix attempt P |
 | `chore: flow state — <label>` | state-writer | Per task/phase (bundles state.json + worklog.md + checkbox) |
@@ -200,9 +219,10 @@ All commits land on the `<spec>-flow` branch. The PR body is built from the comm
 
 ## Resumption
 
-Pass `--resume` after an interruption. The engine re-attaches the existing worktree, reads the
-committed `sdlc-flow-state.json`, and skips every task whose status is `passed`. Tasks whose
-status is `running` or `failed` are retried from scratch.
+Pass `--resume` after an interruption. The engine re-attaches the existing branch (checks it out in
+branch mode; re-attaches the worktree under `--worktree`), reads the committed `sdlc-flow-state.json`,
+and skips every task whose status is `passed`. Tasks whose status is `running` or `failed` are
+retried from scratch. Resume in the same mode the run started in.
 
 | State | On `--resume` |
 |---|---|
@@ -232,7 +252,7 @@ state is in git history.
 
 | Stage | Model | Typical tokens |
 |---|---|---|
-| worktree-setup | haiku | _TBD_ |
+| setup | haiku | _TBD_ |
 | enumerate | haiku | _TBD_ |
 | update-task (per task) | haiku | _TBD_ |
 | implement (per task) | sonnet | _TBD_ |

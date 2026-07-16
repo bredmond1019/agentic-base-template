@@ -5,13 +5,20 @@ description: >
 ---
 
 =============================================================================
- sdlc-flow — shared-worktree, single-review, PR-terminating SDLC engine
+ sdlc-flow — single-branch, single-review, PR-terminating SDLC engine
  =============================================================================
 
  The default engine for non-trivial feature work. Runs one spec's tasks
- SEQUENTIALLY in a SINGLE shared worktree (so there are no inter-task merges to
+ SEQUENTIALLY on a SINGLE shared branch (so there are no inter-task merges to
  conflict — sdlc-block's #1 failure mode), with a per-task test→fix loop, ONE
  consolidated review at the end, a docs patch, and a PR as the terminal step.
+
+ ISOLATION MODE
+   Default: a plain branch (<spec>-flow) checked out IN THE MAIN WORKING TREE. No
+   sparse-checkout worktree, so a relative planning/ symlink (brain-vaulted repos)
+   stays intact. main is left on the branch until the PR merges.
+   --worktree: the isolated sparse-checkout worktree under trees/<spec>-flow/ —
+   opt in when you need true isolation (e.g. /sdlc-block fans out parallel children).
 
  A compact, COMMITTED, AUTHORITATIVE state.json + one worklog.md replace the 5×N
  per-stage report files: resume + review + wrap-up read a structured index instead
@@ -21,16 +28,17 @@ description: >
  USAGE
    /sdlc-flow <spec-slug>                  run every task in the spec, open a PR, stop
    /sdlc-flow <spec-slug> 1-3              scope to a task range (1-3, 1,3,5, 5)
-   /sdlc-flow <spec-slug> --auto-merge     merge the PR + clean the worktree on success
+   /sdlc-flow <spec-slug> --auto-merge     merge the PR + clean up on success
    /sdlc-flow <spec-slug> --no-pr          stop after wrap-up; do not create a PR
-   /sdlc-flow <spec-slug> --resume         re-attach the worktree, resume from state.json
+   /sdlc-flow <spec-slug> --worktree       run in an isolated worktree (default: plain branch)
+   /sdlc-flow <spec-slug> --resume         re-attach the branch/worktree, resume from state.json
    /sdlc-flow <spec-slug> --test-depth full  run the FULL gating suite per task (default: fast)
 
  PIPELINE
    worktree-setup → enumerate (D16 lint) → [resume load] → per-task loop
      → end-review → docs (gated on PASS) → wrap-up(PR)
 
-   Per-task loop (sequential, in the one worktree):
+   Per-task loop (sequential, on the one branch):
      implement → fast-test → (triage → fix/​bail) ×≤3
      One state-commit per task. A triage MAJOR / immediate-bail reason breaks
      straight to wrap-up (draft PR) — it does NOT burn three attempts.
@@ -48,7 +56,7 @@ description: >
    chore: wrap up <spec>               wrap-up agent (status/log/amendment-log)
 
  MODEL TIERING (the token lever — see the MODEL map below)
-   haiku : worktree-setup, enumerate, scout/state-load, test, state-writer
+   haiku : setup, enumerate, scout/state-load, test, state-writer
    sonnet: implement, fix, review, triage, docs, wrap-up
    opus  : ESCALATION on the FINAL per-task fix pass and the FINAL review attempt
 
@@ -78,6 +86,7 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
    - If PASS, run `/update-docs --patch` to update documentation.
    - Update the status and log.
    - Create a pull request (PR) using git CLI or GitHub CLI (unless `--no-pr` is specified).
+
 
 
 

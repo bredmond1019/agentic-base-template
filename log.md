@@ -9,6 +9,49 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [2026-07-15]
 
+### D51 — /sdlc-flow defaults to a plain branch; --worktree opt-in; /close-out --merge-branch
+- **What:** Flipped `/sdlc-flow`'s default from an isolated worktree to a **plain branch checked out
+  in the main working tree**, keeping `--worktree` as an opt-in flag. Motivation: in brain-vaulted
+  repos `planning/` is a gitignored **relative symlink** (`planning -> ../_planning/<repo>`) that
+  breaks when evaluated from inside `trees/<slug>/`, so worktree runs hit the broken link and agents
+  clobber it (carryover `worktree-relative-symlink-breakage`). Changes:
+  - **`sdlc-flow.js`** — new `const useWorktree = hasFlag('--worktree')`. The setup agent now branches:
+    default recipe does `git checkout -b <slug>-flow` in the main tree (aborts on a dirty tree via a
+    new `setupError` schema field; no sparse-checkout/env-copy/init-commit; `worktreePath = repoRoot`);
+    `--worktree` keeps the exact old sparse-checkout recipe. The `${W}` run-context header, the log
+    lines, `state.mode`, and the return object are all mode-aware. Wrap-up's emit-state deferral note
+    reworded (branch mode: "on a feature branch, not the base"). **Auto-merge** is now mode-aware
+    (drops `git worktree remove/prune` in branch mode) **and runs `mev emit-state --write` on the base**
+    after landing the PR in both modes (new `emitStateRan` field) — also closing the prior gap where
+    `--auto-merge` merged without regenerating derived surfaces.
+  - **`sdlc-block.js`** — `runBlockFlow` now passes `--worktree` to every child `/sdlc-flow`
+    (`${slug} --no-pr --worktree`). Mandatory: the orchestrator fans out blocks concurrently and its
+    gap-check/PR-open read each child's worktree path — branch-mode children would collide in one tree.
+  - **`close-out.md`** — new `--merge-branch` flag (Step 5b): merges the current plain branch into the
+    base (`git merge --ff-only`, mirroring `/clean-worktree`'s failure handling), runs
+    `mev emit-state --write` on the base (graceful degrade), deletes the branch. Mutually exclusive
+    with `--clean-worktree`.
+  - **Worktree symlink repair (both `sdlc-flow.js` + `sdlc-task.js`):** `--worktree` setup now, when
+    the main repo's `planning` is a symlink, recreates it inside the worktree as an **absolute** symlink
+    to the resolved vault target (`python3 realpath` -> `ln -s`), for all paths (create / re-attach /
+    reuse). Reads+writes hit the real vault; gitignored so never committed/merged — the broken-link ->
+    real-dir -> force-add -> clobber chain can't start. Chosen over copying (which diverges committed
+    state and re-introduces the clobber vector). Addresses the `worktree-relative-symlink-breakage`
+    carryover in BOTH modes, not just the branch default.
+  - Docs: `docs/workflows/sdlc-flow.md` (new "Isolation mode" section + usage/args/stage-table/commit
+    updates), `docs/workflows/index.md`, `.claude/commands/README.md` (close-out signature + sdlc-flow
+    row). ADR `planning/decisions/D51-sdlc-flow-branch-default.md` + index row. `.agents/skills` mirrors
+    regenerated.
+- **Why:** Solo, sequential feature work — the common case — no longer needs worktree isolation, and
+  paying for it costs the vaulted-`planning/` symlink breakage. Branch mode sidesteps it entirely;
+  `--worktree` remains for true parallelism (which `/sdlc-block` now requests explicitly).
+- **Refs:** `.claude/workflows/{sdlc-flow,sdlc-block,sdlc-task}.js`, `.claude/commands/close-out.md`,
+  `docs/workflows/{sdlc-flow,index}.md`, `.claude/commands/README.md`,
+  `planning/decisions/D51-*.md`. All four engines `node --check` clean. **Uncommitted — pending review +
+  real-run verification on a vaulted repo before clearing the `worktree-relative-symlink-breakage`
+  carryover.** The worktree symlink repair (above) means the carryover is addressed in both the branch
+  default and `--worktree`; verify both on a real vaulted-repo run before clearing it.
+
 ### Handoff for D50 review + sdlc-block auto-merge carryover
 - **What:** Wrote planning/handoff.md pointing the next agent at the uncommitted D50 changes for code review; appended a `carryover[]` entry `sdlc-block-auto-merge-no-emit-state` (kind: deferred) to planning/state.json capturing that D50 left /sdlc-block --auto-merge's merge path without a `mev emit-state --write` call (it lands blocks during its own run, bypassing /clean-worktree + /merge-train). Re-ran `mev emit-state --write` clean (0 errors).
 - **Why:** Preserve the one D50 follow-up before handing the review session to a fresh agent, so it isn't lost.

@@ -29,7 +29,7 @@ slash-command lifecycle they automate.
 /patch          trivial hotfix · no tests · in-place
 /sdlc-task      small tested change · implement→test→fix→commit · in-place or --worktree
 /sdlc-run       full spec · sequential · in-place · no PR
-/sdlc-flow      full spec · sequential · shared worktree · terminates in PR   ← default for non-trivial work
+/sdlc-flow      full spec · sequential · branch (or --worktree) · terminates in PR   ← default for non-trivial work
 /sdlc-block     roadmap · one /sdlc-flow per block · branch train of PRs
 ```
 
@@ -39,7 +39,7 @@ slash-command lifecycle they automate.
 |---|---|---|---|---|
 | [`/sdlc-task`](sdlc-task.md) | **one small unit** | in-place / `--worktree` | `/chore`, `/ticket` | small tested change — fast implement→test→commit |
 | [`/sdlc-run`](sdlc-run.md) | one task **or** a full spec, **sequential** | none — runs on the current branch | `/generate-tasks` | sequential full pipeline on the current branch; resuming a spec |
-| [`/sdlc-flow`](sdlc-flow.md) | **a whole spec**, **sequential** | its own git worktree (one shared for the whole spec) | `/generate-tasks` | **the default for non-trivial feature work** — sequential, conflict-free, terminates in a PR |
+| [`/sdlc-flow`](sdlc-flow.md) | **a whole spec**, **sequential** | plain branch in the main tree (one shared for the whole spec), or `--worktree` | `/generate-tasks` | **the default for non-trivial feature work** — sequential, conflict-free, terminates in a PR |
 | [`/sdlc-block`](sdlc-block.md) | **a roadmap** (master-plan-format file) | per-block worktrees driving `/sdlc-flow` | `/generate-master-plan`, `/plan` | a whole roadmap fanned out as a branch train of reviewable PRs |
 
 For step-by-step **manual** control (run `/implement`, then inspect, then `/test`, …), see the
@@ -50,7 +50,7 @@ flowchart TD
     plan["planning/&lt;spec&gt;/tasks.md<br/>(written by /generate-tasks)"]
     roadmap["planning/master-plan.md<br/>(written by /generate-master-plan or /plan)"]
 
-    plan --> flow["/sdlc-flow<br/>whole spec, shared worktree, PR"]
+    plan --> flow["/sdlc-flow<br/>whole spec, branch (or --worktree), PR"]
     plan --> run["/sdlc-run<br/>sequential, on current branch"]
     plan --> task["/sdlc-task<br/>small unit, in-place or --worktree"]
 
@@ -64,9 +64,10 @@ flowchart TD
     class flow,run,task,block engine;
 ```
 
-- `/sdlc-flow` is the **default for non-trivial feature work**: one shared worktree eliminates
+- `/sdlc-flow` is the **default for non-trivial feature work**: one shared branch eliminates
   inter-task merge conflicts; a single end-review over the integrated tree replaces per-task reviews;
-  the terminal step is a PR.
+  the terminal step is a PR. Runs on a plain branch in the main tree by default (keeps a relative
+  `planning/` symlink intact), or in an isolated worktree with `--worktree`.
 - `/sdlc-block` is the **roadmap orchestrator**: it fans out one `/sdlc-flow` per independent block
   across dependency-ordered waves, producing a branch train of reviewable PRs.
 - `/sdlc-task` is the **fast path** for small work: a real implement→test→fix loop but no
@@ -137,7 +138,7 @@ Opus and the purely-procedural stages drop to Haiku.
 |---|---|---|
 | **Opus** | `generate-tasks` (fallback), `enumerate-blocks` | planning / dependency-graph derivation — the leverage point |
 | **Sonnet** | `implement`, `fix`, `triage`, `review`, `ui-test`, `document`, `wrap-up`, `pre-flight`, `PR` | judgment work |
-| **Haiku** | `scout`, `worktree-setup`, `test`, `update-task`, `state-writers` | fixed procedures, no judgment |
+| **Haiku** | `scout`, `setup`, `test`, `update-task`, `state-writers` | fixed procedures, no judgment |
 
 **Staged escalation:** inside `/sdlc-run`, `/sdlc-task`, and `/sdlc-flow`, the *final* fix pass and
 *final* review attempt run on `ESCALATION_MODEL` (`opus`). A hard task that has already failed gets one
@@ -164,7 +165,7 @@ each engine's committed state file — check the state JSON for real figures fro
 |---|---|---|
 | `/sdlc-task` (one task, PASS first try) | ~4–6 | scout + implement + test + commit |
 | `/sdlc-run` (one task, PASS first try) | ~6–8 | scout → implement → test → review → document → wrap-up |
-| `/sdlc-flow` (5-task spec, PASS first try) | ~30–40 | worktree-setup + per-task update/implement/test + end-review + docs + wrap-up + PR |
+| `/sdlc-flow` (5-task spec, PASS first try) | ~30–40 | setup + per-task update/implement/test + end-review + docs + wrap-up + PR |
 | `/sdlc-block` (5-block roadmap) | N × `/sdlc-flow` + orchestration | dominated by child flow costs; roll-up in `block-orchestration-state.json` |
 
 > **Token roll-up note:** all engines record **substantive-stages-only** totals — cheap Haiku helper

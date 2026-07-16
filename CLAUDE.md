@@ -9,6 +9,7 @@ generation flow.
 
 - **Orientation + current state:** `planning/context.md` (why this repo exists + governing rules)
   → `planning/status.md` (current focus + progress). Or run `/prime`.
+- **Symlink warning:** the `planning/` directory is actually a local symlink pointing to the company brain repo's `_planning/` vault (e.g. `_planning/base-template/`). The brain repo is responsible for tracking all planning files under Git. Do not track `planning/` in this project's public Git repository (it is gitignored).
 - **What this is + layout:** `README.md`
 - **How to use it:** `docs/using-the-template.md`
 - **Why the harness looks the way it does:** `planning/decisions/` (keep/drop ADRs + the
