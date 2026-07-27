@@ -3,9 +3,42 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-16
+**Last updated:** 2026-07-27
 
 ---
+
+## [2026-07-27]
+
+### BT.ticket.vault-aware-state-commits — SDLC engines made vault-aware when staging planning/ writes
+
+- **What:** Ran `/sdlc-task ticket-vault-aware-state-commits`; all 6 tasks passed in a single run,
+  each fast-tested and committed individually on `main` (`04bb0e9`, `d3174c8`, `7025f59`, `9d1ac4a`,
+  `a6ead54` — task 6 was validation-only, no code change). Added a `detectPlanningVault()` helper to
+  both `.claude/workflows/sdlc-flow.js` and `.claude/workflows/sdlc-task.js` (`fs.lstatSync` +
+  `fs.realpathSync`, in-process rather than shelling out) that reports whether `planning/` is a
+  symlink and, if so, its resolved realpath. `writeFlowState` / `writeTaskState` are now write-only —
+  they write `sdlc-flow-state.json` / the task-state file and append `worklog.md`, but issue no git
+  command at all (deleted the failing `addList`/STEP 5 commit path entirely). The wrap-up commit in
+  both engines now stages vault-owned files (`planning/status.md`, `planning/state.json`) via
+  `git -C <vault-realpath> add <absolute-path>` when vaulted, never falling back to a `git checkout`/
+  `git switch`/`git branch` outside the invoking repo's own root — both engines' state-writing prompts
+  now carry an explicit prohibition on that. `docs/workflows/sdlc-flow.md` updated: documents that
+  run-state is written but deliberately not committed (read back off disk only by `--resume`), plus a
+  new "Vaulted planning directories (D46)" subsection stating the `git -C <vault>` staging rule.
+  Validated: all four engines `node --check` clean; vault detection correct on vaulted vs. non-vaulted
+  repos; no brain branch/commit contamination from this run; `--resume` still recovers passed tasks
+  with run-state left uncommitted.
+- **Why:** Under [D46](planning/decisions/D46-planning-vault-symlink.md) every sub-repo's `planning/`
+  is a symlink into the brain's `_planning/` vault, so `git add planning/...` from the repo root fails
+  with `fatal: pathspec is beyond a symbolic link`. The state-writer agent was "recovering" from that
+  failure by checking out the run's branch inside the brain repo and committing there instead —
+  contaminating HQ with spec-named branches and a stream of per-task `chore: flow state` commits (live
+  evidence: 8 stray branches + commits touching `core/_planning/<repo>/`). This ticket fixes the two
+  engines that do the staging so the failure mode can't occur.
+- **Refs:** `planning/ticket-vault-aware-state-commits/tasks.md`,
+  `planning/ticket-vault-aware-state-commits/tasks.json`. Follow-up (not done this session): per
+  base-template's own `CLAUDE.md` update-loop rule, `/sync-downstream-harness` still needs to run to
+  propagate this engine change to already-scaffolded downstream repos.
 
 ## [2026-07-16]
 
