@@ -327,8 +327,7 @@ const STATE_WRITE_SCHEMA = {
   type: 'object',
   required: ['written'],
   properties: {
-    written:   { type: 'boolean', description: 'true if state.json (+ worklog.md) were written and committed' },
-    commitHash:{ type: 'string' },
+    written:   { type: 'boolean', description: 'true if sdlc-flow-state.json (+ worklog.md) were written to disk' },
     notes:     { type: 'string' }
   }
 }
@@ -648,16 +647,25 @@ const state = {
   tokens: { stages: [], total: { promptTokEst: 0, filesReadKb: 0, inTokEst: 0, outTok: 0 } },  // Block A — refreshed by writeFlowState on every write
 }
 
-// Persist `state` to the committed state.json + append `worklogEntry` (markdown) to worklog.md, then
-// commit both on the branch. `label` names the commit. `extraAdd` lists any other paths to stage
-// (e.g. the tasks.md checkbox edit was made by an upstream agent on the branch already).
+// Persist `state` to sdlc-flow-state.json + append `worklogEntry` (markdown) to worklog.md.
+// `label` names the write for logging. This is deliberately WRITE-ONLY — no git command runs here.
+//
+// Why: this run-state lives under planning/<blockId>/sdlc/, and under D46 every vaulted repo's
+// planning/ is a relative symlink into a brain-owned vault, so `git add planning/...` fails with
+// "fatal: pathspec is beyond a symbolic link". The state-writer agent used to "repair" that failure
+// by operating in the brain repo directly and checking out the run's branch there — contaminating
+// HQ with spec-named branches and a `chore: flow state` commit per task. Run-state is read back only
+// off disk (by --resume, via ${stateFile}), never out of git history, so there is no need to commit
+// it at all — removing the commit removes the git verb the agent was getting wrong. `extraAdd` is
+// kept in the signature for callers that have not yet been migrated off it; it is ignored here.
 async function writeFlowState(label, worklogEntry, { cwd, extraAdd = [] } = {}) {
-  state.tokens = buildTokensBlock()   // Block A — refresh the committed token roll-up before persisting
+  state.tokens = buildTokensBlock()   // Block A — refresh the token roll-up before persisting
   const stateJson = JSON.stringify(state, null, 2)
-  const addList = ['planning/' + blockId + '/sdlc/sdlc-flow-state.json', 'planning/' + blockId + '/sdlc/worklog.md', ...extraAdd]
   const result = await agent(`
-You maintain the COMMITTED, authoritative run-state for an /sdlc-flow pipeline. You run from the
-WORKTREE root. Write two files and commit them — do not run checks, edit source, or touch anything else.
+You maintain the run-state for an /sdlc-flow pipeline. You run from the WORKTREE root. Write two
+files to disk — do NOT run git commands, do not run checks, do not edit source, do not touch
+anything else. This state is read back off disk only (never out of git); it is deliberately not
+committed.
 
 STEP 1 — timestamps + preserved start time (from the worktree root):
   cd ${cwd} && NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -677,16 +685,9 @@ STEP 4 — append to ${worklogFile}. If the file does not exist, first write a h
   "# Worklog — ${blockId}" then a blank line. Then append this section verbatim (a blank line before it):
 ${worklogEntry ? '```\n' + worklogEntry + '\n```' : '(no worklog entry this write — skip the append)'}
 
-STEP 5 — commit on the branch (never git add -A; stage explicitly):
-  cd ${cwd} && git add ${addList.join(' ')}
-  cd ${cwd} && git commit -m "$(cat <<'EOF'
-chore: flow state — ${label}
-EOF
-)" || echo "NOTHING_TO_COMMIT"
-  cd ${cwd} && git log --oneline -1
-
-Use the Write tool for both files. Return via StructuredOutput: written=true on success, commitHash from
-the final git log line (empty string if nothing was committed).
+Use the Write tool for both files. Do not run `git add`, `git commit`, `git checkout`, `git switch`,
+or `git branch` — this write is disk-only. Return via StructuredOutput: written=true once both files
+are written to disk.
 `, withModel({ label: `state:${label}`, schema: STATE_WRITE_SCHEMA }, MODEL.stateWriter))
   if (!result || !result.written) {
     log(`(state) could not persist flow state for "${label}" — continuing`)
