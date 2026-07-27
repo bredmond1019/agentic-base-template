@@ -14,19 +14,19 @@
 
 ## Standing rules
 
-1. **Every block/task ships with tests** covering its core functionality. No exceptions.
-2. **Every new `.md` under `docs/` or `planning/` must open with OKF YAML frontmatter.**
-   Required fields: `type` (e.g. Decision, Index, Reference, Plan, Log, ProjectStatus, LocalContext,
-   Guide); `title` (human-readable); `description` (one-line summary for embedding).
-   Optional but strongly encouraged: `doc_id` (kebab-case stable id, defaults to filename stem);
-   `layer` (list from closed vocab: `factory` · `brain` · `engine` · `console` · `surface` ·
-   `infra` · `business` · `content` · `meta`); `project` (the project's own slug — see
-   `docs/okf-frontmatter.md` in the company brain for the controlled vocabulary); `status`
-   (`active` · `draft` · `deprecated` · `superseded` · `archived`); `keywords` (3–7 topic
-   terms); `related` (list of doc_ids). Canonical guide: `agentic-portfolio/docs/okf-frontmatter.md`
-   (governed by brain decision D27).
-   Adding a file to a directory requires updating that directory's `index.md` — propagate up
-   the chain as needed.
+1. **Every new function, module, or behaviour change ships with tests.** No exceptions — this applies to ad-hoc fixes and one-off changes just as much as formal blocks/tasks. If you add or change code, add or update the tests that cover it.
+2. **OKF frontmatter is required on every new `.md` file** under `docs/` and `planning/`.
+   Every new file must open with a YAML frontmatter block. Three fields are **required**:
+   `type`, `title`, `description`. Six fields are **optional but strongly encouraged**:
+   - `doc_id` — kebab-case stable id (defaults to filename stem if omitted)
+   - `layer` — list from closed vocab: `brain` · `engine` · `factory` · `console` · `surface` · `infra` · `business` · `content` · `meta`
+   - `project` — controlled slug (this repo: `{{SLUG}}`; omit for genuinely cross-cutting docs)
+   - `status` — one of: `active` · `draft` · `deprecated` · `superseded` · `archived`
+   - `keywords` — 3–7 free-form topic terms; never exceed 7
+   - `related` — list of `doc_id` values from other real docs in the repo
+   Canonical guide: `docs/okf-frontmatter.md` in the company-brain repo; governing decision: D27.
+   **Adding a file to a directory also requires updating that directory's `index.md`** — propagate
+   up the chain if the parent directory's scope changes.
 3. **Sequence, not calendar** — work the order in `master-plan.md`; pick up where you left off.
 4. **Decisions are append-only** — never edit a settled decision; supersede it with a new
    atomic file in `planning/decisions/` and link back.
