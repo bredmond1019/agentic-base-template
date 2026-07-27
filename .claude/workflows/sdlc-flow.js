@@ -1172,7 +1172,7 @@ Return via StructuredOutput:
     t.commit ? `Commit: ${t.commit}` : '',
     t.validated ? `Validated: ${t.validated}` : '',
   ].filter(Boolean).join('\n')
-  await writeFlowState(`task ${taskNum} ${t.status}`, worklogEntry, { cwd: worktreePath, extraAdd: [specFile] })
+  await writeFlowState(`task ${taskNum} ${t.status}`, worklogEntry, { cwd: worktreePath })
 
   if (bailed) break
 }
@@ -1366,6 +1366,16 @@ log(`Wrap-up. Verdict: ${finalVerdict} | passed ${passedTasks.length}/${taskList
 
 // Wrap-up writes status/log + the D18 amendment log ON THE BRANCH (so the PR is self-contained — no
 // deferred ff-merge dance). Sonnet: the human-facing prose + amendment judgment is the work.
+//
+// D46: when planning/ is a vaulted symlink, `planning/status.md` and `planning/state.json` do not
+// live in this repo at all — they live in the brain-owned vault repo at their symlink target. A
+// plain `git add planning/status.md` from the worktree root fails ("pathspec is beyond a symbolic
+// link"), and the wrong repair is to checkout/commit inside the vault. The right behaviour is to
+// stage+commit the vaulted files THROUGH their real path via `git -C <vault>`, on whatever branch
+// the vault repo is already on, with no checkout at all — while repo-local files (log.md, the spec)
+// stay staged and committed in the invoking repo exactly as before. detectPlanningVault() resolves
+// which case applies.
+const vault = detectPlanningVault(worktreePath)
 const wrapupResult = await tracedAgent(`${W}
 You are the wrap-up agent for an /sdlc-flow run. Write the human-facing status/log + the D18 amendment log
 ON THIS BRANCH (the PR will carry them), then commit. All Bash from the worktree root.
@@ -1426,7 +1436,30 @@ Target:
      - YYYY-MM-DD [task N] <what changed vs the spec, and why>
    If the spec has a provenance stub ("**Status:**"/"**Last run:**"), update it. Return the lines in amendments[].
 
-5. Commit on the branch (stage explicitly — never git add -A):
+5. Commit (stage explicitly — never git add -A). NEVER run git checkout, git switch, or git branch
+   outside this repo's own root (${worktreePath})${vault.vaulted ? ` or the vault's own root (${vault.planningPath})` : ''} —
+   if a git add fails, report the failure in notes; do not relocate the commit to make it succeed.
+${vault.vaulted ? `
+   planning/ is a vaulted symlink (D46) — its bytes live at ${vault.planningPath}, a different repo.
+   Stage + commit the vaulted files THERE, via \`git -C\`, on whatever branch that repo is already on.
+   Do NOT cd into it and do NOT checkout/switch/branch there:
+   cd ${worktreePath} && git -C ${vault.planningPath} add ${vault.planningPath}/status.md
+   cd ${worktreePath} && git -C ${vault.planningPath} add ${vault.planningPath}/state.json 2>/dev/null || true
+   cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+chore: wrap up ${stem}
+EOF
+)"
+   cd ${worktreePath} && git -C ${vault.planningPath} log --oneline -1
+
+   Repo-local files stay staged and committed in THIS repo, on this branch, as before:
+   cd ${worktreePath} && git add log.md
+   cd ${worktreePath} && git add ${specFile} 2>/dev/null || true
+   cd ${worktreePath} && git commit -m "$(cat <<'EOF'
+chore: wrap up ${stem}
+EOF
+)"
+   cd ${worktreePath} && git log --oneline -1` : `
+   planning/ is a plain directory here (not vaulted) — everything commits together as before:
    cd ${worktreePath} && git add planning/status.md log.md
    cd ${worktreePath} && git add planning/state.json 2>/dev/null || true
    cd ${worktreePath} && git add ${specFile} 2>/dev/null || true
@@ -1434,7 +1467,7 @@ Target:
 chore: wrap up ${stem}
 EOF
 )"
-   cd ${worktreePath} && git log --oneline -1
+   cd ${worktreePath} && git log --oneline -1`}
 
 Return via StructuredOutput: statusUpdated, devlogUpdated, nextFocus, amendments[], commitHash,
 blockStatusFlipped (the state.json block id closed in step 2b, or ""), notes.
