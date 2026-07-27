@@ -59,6 +59,8 @@
 //   worklog.md             the human-readable trail — one short section per task
 // =============================================================================
 
+import fs from 'node:fs'
+
 export const meta = {
   name: 'sdlc-flow',
   description: 'Run a spec sequentially on one branch (or --worktree) with a per-task test→fix loop, one end review, a docs patch, and a PR',
@@ -101,6 +103,31 @@ function parseRange(spec) {
     for (let i = Math.min(a, b); i <= Math.max(a, b); i++) out.add(i)
   }
   return [...out].sort((x, y) => x - y)
+}
+
+// D46: a vaulted repo's planning/ is a relative symlink into a brain-owned vault
+// (e.g. planning -> ../_planning/<repo>), so a plain `git add planning/...` from the
+// repo root fails with "pathspec is beyond a symbolic link". Given the invoking repo
+// root, this reports whether planning/ is such a symlink and resolves where its bytes
+// actually live, so state-writing steps can stage through the real path instead of
+// the link (and never "repair" the failure by checking out/committing in the vault
+// repo). Pure + synchronous — runs in-process rather than shelling out to python3
+// like the git-staging recipes below, so the engine itself can branch on the result.
+// Returns { vaulted, planningPath } where planningPath is always the absolute
+// resolved directory: the vault's realpath when vaulted, the plain planning/
+// directory otherwise.
+function detectPlanningVault(repoRoot) {
+  const planningPath = `${repoRoot}/planning`
+  try {
+    if (fs.lstatSync(planningPath).isSymbolicLink()) {
+      return { vaulted: true, planningPath: fs.realpathSync(planningPath) }
+    }
+    return { vaulted: false, planningPath: fs.realpathSync(planningPath) }
+  } catch {
+    // planning/ missing or unreadable — treat as not vaulted; callers fall back to
+    // the legacy single-repo path, which already tolerates a missing directory.
+    return { vaulted: false, planningPath }
+  }
 }
 
 const autoMergeFlag = hasFlag('--auto-merge')
