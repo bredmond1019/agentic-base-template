@@ -3,11 +3,28 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-27T23:58:00Z
 
 ---
 
 ## [2026-07-27]
+
+### Inline the cheap harness commands — drop subagent spawns from log-work, commit, and 8 others
+
+- **What:** Removed the "spawn a subagent" Execution Model from 17 command files (8 in
+  `.claude/commands/`, 9 mirrors in `.claude/commands/brain/`) in favour of running entirely
+  inline: `log-work`, `commit`, `backlog-ticket`, `capture`, `update-task`, `start-block`, plus
+  the brain-tier `add-idea`, `log-content`, `log-correspondence`, `log-decision`, `log-lead`,
+  `update-career`, `update-linkedin`. Each is a small state edit (one file append, one git commit,
+  one status flip) where a subagent round trip added latency without adding value — and for
+  `log-work`/`capture` specifically, a cold-started subagent has no memory of the current session
+  and can only reconstruct the narrative from `git log`, which actively hurt accuracy. Kept
+  subagent-spawning for `archive`, `audit-archive`, and `initial-research` (real multi-step
+  analytical work where the subagent boundary protects the main context window from long tool
+  output) and left `brain/update-progress.md`'s `model: "self"` subagent untouched (out of scope).
+- **Why:** User flagged that `log-work`/`commit` subagent round trips were taking too much time for
+  what they do; reviewing surfaced the same pattern repeated across 15 more commands.
+- **Refs:** none — mechanical command-doc edit, no spec.
 
 ### BT.ticket.vault-aware-state-commits — SDLC engines made vault-aware when staging planning/ writes
 

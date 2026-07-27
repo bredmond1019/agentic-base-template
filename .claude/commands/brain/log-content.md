@@ -7,9 +7,8 @@ $ARGUMENTS — description of what was published. Include: title, platform (blog
 
 ## Execution Model
 
-Spawn a Haiku subagent (Agent tool, `model: "haiku"`) to execute all steps below.
-Pass the resolved `$ARGUMENTS` value and the complete Instructions section in the subagent prompt.
-Return the subagent's result to the user.
+**Run entirely inline. Spawn no subagent.** This is a small, single-file append/edit —
+a subagent round trip adds latency without adding value.
 
 ## Instructions
 
