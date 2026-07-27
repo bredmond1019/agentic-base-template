@@ -6,8 +6,8 @@ doc_id: sdlc-flow
 layer: [factory]
 project: base-template
 status: active
-keywords: [sdlc-flow, branch mode, worktree, PR, test-fix loop, end-review, SDLC engine]
-related: [base-template-workflows-index, sdlc-block, D30-sdlc-flow-engine, D31-committed-authoritative-state, D33-pr-based-wrap-up]
+keywords: [sdlc-flow, branch mode, worktree, PR, test-fix loop, end-review, SDLC engine, planning-vault, D46]
+related: [base-template-workflows-index, sdlc-block, D30-sdlc-flow-engine, D31-committed-authoritative-state, D33-pr-based-wrap-up, ticket-vault-aware-state-commits]
 ---
 
 # `/sdlc-flow` — single-branch, PR-terminating SDLC engine
@@ -102,17 +102,17 @@ flowchart TD
 | Stage | Model | What it does |
 |---|---|---|
 | **Setup** | haiku | Creates (or re-attaches on `--resume`) the `<spec>-flow` branch for the whole spec. **Branch mode (default):** `git checkout -b` in the main tree (aborts on a dirty tree). **`--worktree`:** an isolated git worktree applying the D5/P5 cone-all-tracked-dirs recipe. Checks for unfilled tokens (D19 thin-spec guard) on a fresh run. |
-| **Enumerate** | haiku | Reads `tasks.md` for `### N.` task headings (D16 preflight lint — refuses to run if none found). On `--resume`, reads the committed `sdlc-flow-state.json` to identify already-passed tasks and skip them. |
-| **update-task** | haiku | Marks the current task in-progress in `tasks.md` (surgical checkbox edit). Does not commit — the state-writer commits it bundled with the state. |
+| **Enumerate** | haiku | Reads `tasks.md` for `### N.` task headings (D16 preflight lint — refuses to run if none found). On `--resume`, reads the on-disk (uncommitted) `sdlc-flow-state.json` to identify already-passed tasks and skip them. |
+| **update-task** | haiku | Marks the current task in-progress in `tasks.md` (surgical checkbox edit). Disk-only, like the state-writer — neither commits. |
 | **Implement** | sonnet | Executes task N against the spec (and `breakdown.md` if present). Runs the D8 completeness self-check before committing `feat:`. |
 | **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` (the per-task tripwire). Falls back to the spec's `## Validation Commands` if no config. Also runs the universal emoji gate on changed markdown. |
 | **Triage** | sonnet | Classifies a test failure as `RETRYABLE` (transient, or the failure changed — progress is possible) or `MAJOR` (an immediate-bail reason fires, or no progress). See [D32](../../planning/decisions/D32-triage-gated-bail.md). Bail means: break to end-review with `draft` flag. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
-| **End-review** | sonnet | ONE consolidated review over the integrated tree. Re-runs the **full** gating suite (authoritative). Reads `git diff <prBase>..HEAD` + `tasks.md` acceptance criteria + the committed `state.json` as the localization index. Verdict: `PASS` / `PARTIAL` / `FAIL`. |
+| **End-review** | sonnet | ONE consolidated review over the integrated tree. Re-runs the **full** gating suite (authoritative). Reads `git diff <prBase>..HEAD` + `tasks.md` acceptance criteria + the on-disk (uncommitted) `state.json` as the localization index. Verdict: `PASS` / `PARTIAL` / `FAIL`. |
 | **Review fix** | sonnet | Bounded fix for localized end-review findings. Escalates to `opus` on the final pass. A broad or structural finding bails instead (triage decision). |
 | **Docs patch** | sonnet | Surgical `--patch` of affected doc files. **Hard-gated on a PASS verdict.** Skipped entirely on bail. |
 | **Wrap-up** | sonnet | Updates `status.md` + appends the `log.md` entry + writes D18 Amendment-Log entries — all **on the flow branch** (so they ride in the PR and merge atomically with the code). On a fully-done block, also flips `planning/state.json`'s block status to `"closed"` on the branch. It does **not** run `mev emit-state --write` in either mode (a worktree refuses it; a plain feature branch is not the base) — derived surfaces regenerate on the base when the branch merges via `/clean-worktree`, `/merge-train`, or `/close-out --merge-branch` ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md), [D51](../../planning/decisions/D51-sdlc-flow-branch-default.md)). |
-| **PR** | sonnet | Pushes the branch and runs `gh pr create --base <prBase>`. Builds the PR body from the committed `state.json` (per-task summary, verdict, open items). Opens a **draft** PR on bail. Degrades gracefully when `gh` is absent — prints the branch name and the exact commands. |
+| **PR** | sonnet | Pushes the branch and runs `gh pr create --base <prBase>`. Builds the PR body from the on-disk (uncommitted) `state.json` (per-task summary, verdict, open items). Opens a **draft** PR on bail. Degrades gracefully when `gh` is absent — prints the branch name and the exact commands. |
 
 ### Per-task retry loop
 
@@ -128,17 +128,22 @@ and bails straight to wrap-up (draft PR).
 
 ---
 
-## Committed-state model (D31)
+## Run-state model — written to disk, deliberately NOT committed
 
-`/sdlc-flow` deliberately inverts the harness's usual rule about state files. In the other engines,
-per-stage report files are authoritative and the D27/D28 JSON breadcrumbs are gitignored. In
-`/sdlc-flow`, there is one writer, one branch, and sequential tasks — so a compact committed state
-replaces the 5 × N report files:
+`/sdlc-flow` keeps a compact run-state index instead of the other engines' 5 × N gitignored report
+files. Under D46 (`agentic-portfolio/docs/decisions/D46-planning-vault-symlink.md`, a brain-repo
+decision — cross-repo, so not linked from here), a brain-vaulted repo's `planning/` is a relative
+symlink into the brain, so `git add planning/...` fails with "pathspec is beyond a symbolic link."
+Committing run-state was the vector that led an agent recovering from that failure to
+checkout/commit inside the brain repo instead. Run-state is read back **only off disk** (never out
+of git) by `--resume`, so there is no need to commit it at all. See the "Vaulted planning
+directories (D46)" section below for the staging rule this implies for the files that *are* still
+committed.
 
 | File | Location | Status | Purpose |
 |---|---|---|---|
-| `sdlc-flow-state.json` | `planning/<spec>/sdlc/` | **committed** — NOT gitignored | Authoritative run index. Drives `--resume`, feeds the end-review as a localization map, and lets wrap-up build the PR body. |
-| `worklog.md` | `planning/<spec>/sdlc/` | **committed** — NOT gitignored | Human-readable trail. One short section per task/phase: what completed, issues hit, how resolved, decisions. |
+| `sdlc-flow-state.json` | `planning/<spec>/sdlc/` | written to disk — **not committed** | Authoritative run index. Drives `--resume`, feeds the end-review as a localization map, and lets wrap-up build the PR body. |
+| `worklog.md` | `planning/<spec>/sdlc/` | written to disk — **not committed** | Human-readable trail. One short section per task/phase: what completed, issues hit, how resolved, decisions. |
 
 `state.json` keys: `spec_slug`, `branch`, `mode` (`branch|worktree`), `worktree_path` (the repo root in branch mode), `started_at`, `updated_at`,
 `status` (`running|review|docs|wrapup|blocked|done`), `current_task`, `tasks` (per-task
@@ -150,9 +155,12 @@ replaces the 5 × N report files:
 > docs, wrap-up). Cheap Haiku helper agents (state writers, enumerate, update-task) are excluded.
 > See [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md).
 
-A **Haiku state-writer agent** stamps `started_at`/`updated_at` and commits both files (bundled
-with the `tasks.md` checkbox edit) in one `chore: flow state — <label>` commit per task/phase.
-This keeps the branch self-describing in the PR.
+A **Haiku state-writer agent** stamps `started_at`/`updated_at` and writes both files to disk with
+the Write tool. It runs **no git command at all** — no `git add`, `git commit`, `git checkout`,
+`git switch`, or `git branch`. The `tasks.md` checkbox edit (via `update-task`) is likewise disk-only
+and uncommitted between task/phase boundaries. This means an uncommitted working tree — beyond the
+implement/fix/docs/wrap-up commits themselves — is the **expected steady state** while a run is in
+progress, not a sign anything went wrong.
 
 **The state is the index, never a substitute for verification.** The end-review is fed `state.json`
 but must still read `git diff <prBase>..HEAD` + `tasks.md` criteria directly and re-run the full
@@ -204,25 +212,53 @@ To re-tier a stage, change one value in the `MODEL` map at the top of
 
 ## Commit strategy
 
-All commits land on the `<spec>-flow` branch. The PR body is built from the committed state.
+All commits land on the `<spec>-flow` branch. The PR body is built from the on-disk (uncommitted)
+state. The state-writer and `update-task` no longer commit anything — see "Run-state model" above —
+so there is no `chore: flow state` commit in this list.
 
 | Commit | Agent | When |
 |---|---|---|
 | `chore: init worktree <branch>` | setup | Once, at branch creation — **`--worktree` mode only** (branch mode adds no init commit) |
 | `feat: implement <stem> task N` | implement | Per task, attempt 1 |
 | `fix: fix pass P for <stem> task N` | fix | Per task, fix attempt P |
-| `chore: flow state — <label>` | state-writer | Per task/phase (bundles state.json + worklog.md + checkbox) |
 | `docs: update docs for <spec>` | docs | After PASS verdict |
-| `chore: wrap up <spec>` | wrap-up | Final commit before PR |
+| `chore: wrap up <spec>` | wrap-up | Final commit before PR — vault-aware, see below |
+
+---
+
+## Vaulted planning directories (D46)
+
+Under D46, a brain-vaulted sub-repo's `planning/` is a relative symlink into a brain-owned vault
+repo (e.g. `planning -> ../_planning/<repo>`), not a real tracked directory. `git add planning/...`
+against that path fails with `fatal: pathspec 'planning/...' is beyond a symbolic link` — git refuses
+to stage through a symlink boundary. The rule this engine follows wherever it needs to persist a
+tracked `planning/`-prefixed file (`planning/status.md`, `planning/state.json` at wrap-up):
+
+- **Never** issue a `git add` (or `git commit`) whose pathspec begins with `planning/`.
+- Resolve the symlink first — `fs.lstatSync('planning').isSymbolicLink()` +
+  `fs.realpathSync('planning')` — to get the vault's real, absolute path.
+- Stage and commit the vaulted files **through that real path**, via `git -C <vault> add <absolute
+  path>` and `git -C <vault> commit`, on whatever branch the vault repo is already on.
+- **Never** `git checkout`, `git switch`, or `git branch` inside the vault — the wrap-up prompt
+  states this prohibition explicitly. The commit lands wherever the vault repo currently sits; the
+  engine does not move it there.
+- Repo-local files that are not behind the symlink (`log.md`, the spec file) keep committing
+  normally, in the invoking repo, on the run's own branch — exactly as before.
+
+When `planning/` is a real tracked directory (non-vaulted repo), none of the above applies and
+everything commits together in one commit as it always has.
+
+This is why an uncommitted working tree in a vaulted repo can still show untouched `planning/` bytes
+after a run: those bytes were staged and committed in the vault repo, not here.
 
 ---
 
 ## Resumption
 
 Pass `--resume` after an interruption. The engine re-attaches the existing branch (checks it out in
-branch mode; re-attaches the worktree under `--worktree`), reads the committed `sdlc-flow-state.json`,
-and skips every task whose status is `passed`. Tasks whose status is `running` or `failed` are
-retried from scratch. Resume in the same mode the run started in.
+branch mode; re-attaches the worktree under `--worktree`), reads the on-disk (uncommitted, never
+gitignored) `sdlc-flow-state.json`, and skips every task whose status is `passed`. Tasks whose status
+is `running` or `failed` are retried from scratch. Resume in the same mode the run started in.
 
 **`--resume` must be passed explicitly** — it is a flag inside `args`, not something the pipeline
 infers from how it was invoked. This matters when re-launching via `Workflow({scriptPath,
@@ -245,10 +281,12 @@ still falls through to `-2`/`-3`/etc.
 | `bail_reason` set | Logged; end-review proceeds immediately |
 | `<spec>-flow` branch/worktree exists, `--resume` NOT passed | Setup aborts (`setupError`) instead of silently forking a `-2` run |
 
-Because `state.json` is committed, a forced kill never loses progress — the last successful task's
-state is in git history. Resume also re-seeds the in-memory task history from the committed file
-before the per-task loop runs, so skipped (already-passed) tasks stay in the record across multiple
-resumes instead of dropping out of `state.json` on the next write.
+Because `state.json` is durably written to disk after every task/phase (even though it is never
+committed), a forced kill never loses progress — the last successful task's state survives on disk
+and is read back by `--resume` without depending on git history at all. Resume also re-seeds the
+in-memory task history from that on-disk file before the per-task loop runs, so skipped
+(already-passed) tasks stay in the record across multiple resumes instead of dropping out of
+`state.json` on the next write.
 
 ---
 
