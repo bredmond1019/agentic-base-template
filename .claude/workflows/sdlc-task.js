@@ -249,8 +249,9 @@ const STATE_WRITE_SCHEMA = {
   type: 'object',
   required: ['written'],
   properties: {
-    written: { type: 'boolean', description: 'true if sdlc-task-state.json was written to disk' },
-    notes:   { type: 'string' }
+    written:   { type: 'boolean', description: 'true if sdlc-task-state.json was written to disk' },
+    startedAt: { type: 'string',  description: 'the started_at value used in this write (preserved from the existing file, or newly stamped)' },
+    notes:     { type: 'string' }
   }
 }
 
@@ -573,6 +574,14 @@ const state = {
   tokens: { stages: [], total: { promptTokEst: 0, filesReadKb: 0, inTokEst: 0, outTok: 0 } },  // Block A — refreshed on every write
 }
 
+// Learned from the first successful state write of this process. Later writes are handed it as a
+// literal so they can skip reading the state file back — the `cat` exists only to preserve
+// started_at, and once any write has reported the value it used, re-reading it is a wasted Bash
+// round trip. A fresh process — including every --resume — starts empty, so the first write always
+// does the full read-and-preserve path and resume semantics are unchanged. A failed write leaves
+// this null, so the next write re-reads rather than inventing a new started_at.
+let cachedStartedAt = null
+
 // Persist `state` to sdlc-task-state.json. This is deliberately WRITE-ONLY — no git command runs
 // here, and the `commit` option (if a caller still passes one) is ignored.
 //
@@ -586,29 +595,34 @@ const state = {
 async function writeTaskState(label, { cwd }) {
   state.tokens = buildTokensBlock()   // Block A — refresh the token roll-up before persisting
   const stateJson = JSON.stringify(state, null, 2)
+  const firstWrite = cachedStartedAt === null
   const result = await agent(`
 You maintain the run-state for an /sdlc-task pipeline. You run from the run root. Write ONE JSON
 file to disk — do NOT run git commands, do not run checks, do not edit source, do not touch anything
 else. This state is read back off disk only (never out of git); it is deliberately not committed.
 
-STEP 1 — timestamps + preserved start time (from the run root):
-  cd ${cwd} && NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  cd ${cwd} && cat ${stateFile} 2>/dev/null || echo "__NO_STATE__"
-  If that file exists and has a "started_at" value, REUSE it verbatim. Otherwise started_at = NOW.
+STEP 1 — run this as ONE Bash call, exactly as written. Do not split it into several calls.
+${firstWrite
+  ? `  cd ${cwd} && mkdir -p ${blockDir}/sdlc && date -u +%Y-%m-%dT%H:%M:%SZ && { cat ${stateFile} 2>/dev/null || echo "__NO_STATE__"; }
+  The FIRST line of output is NOW. Everything after it is the existing state file, or __NO_STATE__
+  when there is none. If that file exists and has a "started_at" value, REUSE it verbatim for
+  started_at below. Otherwise started_at = NOW.`
+  : `  cd ${cwd} && date -u +%Y-%m-%dT%H:%M:%SZ
+  That single line of output is NOW. started_at is already known for this run — use exactly
+  "${cachedStartedAt}". Do NOT read the existing state file and do NOT run mkdir: the directory
+  already exists and an earlier write in this run already established started_at.`}
 
-STEP 2 — ensure the dir exists:
-  cd ${cwd} && mkdir -p ${blockDir}/sdlc
-
-STEP 3 — write ${stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
-  "started_at" (preserved or NOW) and "updated_at" (NOW) right after "branch". Valid JSON only
+STEP 2 — write ${stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
+  "started_at" (${firstWrite ? 'preserved or NOW, per STEP 1' : 'the value given in STEP 1'}) and "updated_at" (NOW) right after "branch". Valid JSON only
   (double quotes, no trailing commas, no markdown fences). The object to write (verbatim except for
   adding those two timestamp keys):
 ${stateJson}
 
 Use the Write tool for the file. Do not run \`git add\`, \`git commit\`, \`git checkout\`,
 \`git switch\`, or \`git branch\` — this write is disk-only. Return via StructuredOutput: written=true
-once the file is written to disk.
+once the file is written to disk, and startedAt set to the started_at value you used.
 `, withModel({ label: `state:${label}`, schema: STATE_WRITE_SCHEMA }, MODEL.stateWriter))
+  if (result && result.startedAt) cachedStartedAt = result.startedAt
   if (!result || !result.written) {
     log(`(state) could not persist task state for "${label}" — continuing`)
   }
