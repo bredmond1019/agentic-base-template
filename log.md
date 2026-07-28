@@ -3,11 +3,30 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-27T23:58:00Z
+**Last updated:** 2026-07-28T00:30:00Z
 
 ---
 
 ## [2026-07-27]
+
+### Scoped BT.ticket.fold-state-write-into-test-agent — /handoff for Opus review before implementation
+
+- **What:** Wrote `planning/ticket-fold-state-write-into-test-agent/` (tasks.md + tasks.json, 6
+  tasks) — folds the per-task `writeFlowState`/`writeTaskState` call in `sdlc-flow.js` and
+  `sdlc-task.js` into the test agent's turn (on pass) or the triage agent's turn (on a terminal
+  bail), removing a dedicated Haiku state-writer spawn per task. Task 5 additionally scopes a
+  research pass (implement only if favorable) into folding `state:docs` and `state:wrap-up` the
+  same way, per a follow-up user ask. Registered as `BT.ticket.fold-state-write-into-test-agent`
+  in `planning/state.json` (Tickets track, wave 24, status open). Wrote `planning/handoff.md`
+  (replacing a stale 2026-07-16 handoff) — the ticket is deliberately NOT implemented yet.
+- **Why:** User measured `state:task` at 1.5–2 min/task and `test` at 0.5–3 min/task in real
+  `/sdlc-flow` runs and asked what could cut that; investigation traced both to fixed agent-spawn
+  overhead rather than model reasoning cost. Given this touches core engines every project's SDLC
+  pipeline depends on, the user asked for an Opus-model review of the ticket's scope before any
+  implementation, hence `/handoff` instead of proceeding straight to `/sdlc-task`.
+- **Refs:** `planning/ticket-fold-state-write-into-test-agent/tasks.md`, `planning/handoff.md`,
+  `planning/decisions/D52-inline-cheap-commands.md` (the related, already-committed command-level
+  fix from earlier this session).
 
 ### Inline the cheap harness commands — drop subagent spawns from log-work, commit, and 8 others
 
