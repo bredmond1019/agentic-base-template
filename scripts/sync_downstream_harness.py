@@ -12,6 +12,8 @@ What gets synced (base-template -> target), for every file that exists in base-t
   - .claude/commands/*.md          (flat root only - NOT .claude/commands/brain/, which is
                                      brain-only reference content, never propagated downstream)
   - .claude/workflows/*.js         (the SDLC engines)
+  - .claude/workflows/*.json       (e.g. harness.schema.json - the check schema the engines
+                                     validate planning/harness.json against; mechanism, not policy)
   - .claude/workflows/templates/*.md
 
 What never gets touched:
@@ -115,6 +117,7 @@ def harness_files(root: Path) -> list[Path]:
     workflows_dir = root / ".claude" / "workflows"
     if workflows_dir.is_dir():
         files.extend(p for p in workflows_dir.glob("*.js") if p.is_file())
+        files.extend(p for p in workflows_dir.glob("*.json") if p.is_file())
     templates_dir = workflows_dir / "templates"
     if templates_dir.is_dir():
         files.extend(p for p in templates_dir.glob("*.md") if p.is_file())
