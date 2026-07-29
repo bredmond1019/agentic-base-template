@@ -3,9 +3,57 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-28T00:30:00Z
+**Last updated:** 2026-07-29T00:00:00Z
 
 ---
+
+## [2026-07-29]
+
+### BT.ticket.per-task-fast-checks — perTask/fastCommand fields land, manually verified
+
+- **What:** Implemented `planning/ticket-per-task-fast-checks/` directly (no `/sdlc-task`),
+  working tasks.json 1–4 in strict sequence. Added optional `perTask` (boolean, default true) and
+  `fastCommand` (string) fields to `harness.schema.json`'s `$defs.check.properties`. Mirrored the
+  wiring into both `sdlc-flow.js` and `sdlc-task.js`: `HARNESS_CONFIG_SCHEMA` gains the two
+  properties; `loadHarnessConfig`'s STEP 2 field-copy instruction now names them so the loader
+  agent doesn't silently strip them; `renderCheckList`'s `gatingOnly` filter becomes
+  `c.gates && c.perTask !== false`; the plain-command/count-delta render branch substitutes
+  `c.fastCommand` for `c.command` only when `gatingOnly && c.fastCommand`. `sdlc-run.js` and
+  `sdlc-block.js` deliberately untouched (no `gatingOnly` concept / no `renderCheckList` copy).
+  `scaffold/planning/harness.examples.md`: Rust and Next.js `build` checks default to
+  `"perTask": false`; Python profile unchanged (no build check); new "Per-task fast tripwire"
+  subsection documents both fields plus a Rust `fastCommand` callout
+  (`cargo test --lib --workspace`) for when the test command itself becomes the per-task
+  bottleneck.
+  Task 5 (Validate) was done **manually and honestly**, per explicit instruction not to report
+  PASS on `node --check` alone (this repo's harness.json gates only that one check, which doesn't
+  exercise any Testing Strategy assertion). `node --check` passed on all four engines; all five
+  Testing Strategy assertions were then run against the ACTUAL extracted `renderCheckList` source
+  (exact line-range extraction from the real files, not a re-typed copy) via a scratch Node script
+  against fixture `harness.json` configs: (1) default-preserving — a check with neither field set
+  renders byte-identical between `gatingOnly:true`/`false`; (2) `perTask:false` excludes a check
+  from the fast-tripwire render only, still present unchanged in the full/review render; (3)
+  `fastCommand` substitution verified in **both directions** on **both** engines — the fast
+  tripwire emits `fastCommand` and never leaks `command`, the full/review render emits `command`
+  unchanged and never leaks `fastCommand` (this is the dangerous failure mode: a leak here would
+  silently weaken the review gate for every downstream repo, and it's invisible to every automated
+  check this repo has); (4) loader round-trip — grep-confirmed both `HARNESS_CONFIG_SCHEMA`s and
+  both `loadHarnessConfig` field lists name `perTask`/`fastCommand`; (5) profile spot-check —
+  grep-confirmed Rust/Next.js `build` checks carry `"perTask": false`, Python unchanged. All five
+  PASS on both engines; results recorded in `tasks.md`'s Amendment Log. `git status --porcelain`
+  confirmed only the four intended files changed.
+- **Why:** `testDepth:"fast"` (the default per-task tripwire in `/sdlc-flow` and `/sdlc-task`)
+  currently means "every `gates:true` check," not "a cheap subset" — discovered in engine-rs,
+  where all four `gates:true` checks (fmt/clippy/test/build --release) replayed a full ~1168-test
+  `cargo test` plus a release build up to 3x per task, turning a multi-task flow that should take
+  minutes into roughly an hour. The mechanism fix (optional, default-preserving opt-in fields) lets
+  a project keep every check `gates:true` for review while giving the per-task tripwire a cheaper
+  path, without weakening what review gates on.
+- **Refs:** `planning/ticket-per-task-fast-checks/tasks.md`, `planning/ticket-per-task-fast-checks/tasks.json`.
+  Downstream note: engine-rs (and any other repo) does not get this automatically —
+  `/sync-downstream-harness` plus that repo's own `harness.json` edit (its own carryover,
+  `harness-per-task-relinks-all-test-binaries`) is still required to realize the speedup; out of
+  scope for this ticket.
 
 ## [2026-07-27]
 

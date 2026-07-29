@@ -38,7 +38,7 @@ projects that have a dev server to smoke-test.
       { "name": "fmt",    "command": "cargo fmt --check",            "purpose": "Format gate", "gates": true },
       { "name": "clippy", "command": "cargo clippy -- -D warnings",  "purpose": "Lint gate",   "gates": true },
       { "name": "test",   "command": "cargo test",                   "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true },
-      { "name": "build",  "command": "cargo build --release",        "purpose": "Build gate",  "gates": true }
+      { "name": "build",  "command": "cargo build --release",        "purpose": "Build gate",  "gates": true, "perTask": false }
     ]
   },
   "uiTest": { "enabled": false }
@@ -151,6 +151,44 @@ only carries the interpretation. `kind` defaults to `"command"`, so mix plain an
 
 ---
 
+## Per-task fast tripwire: `perTask` and `fastCommand`
+
+`/sdlc-flow` (`testDepth: "fast"`, the default) and `/sdlc-task` (default depth) run a **per-task
+tripwire** before the end-of-run review: every `gates: true` check, replayed at every task and
+every retry attempt. For a project whose gating checks include a slow authoritative test suite or
+a release/production build, that full cost is paid many times over, not once.
+
+Both fields are optional and **default-preserving** — omit both and a check behaves exactly as
+before (included in the fast tripwire, using `command`).
+
+- **`perTask`** (boolean, default `true`) — set `false` to remove a check from the fast tripwire
+  while it still gates the full/review run. Use this for a check that adds nothing a per-task
+  safety net needs — e.g. a release/production build already covered by the `test`/`types` check
+  catching compile errors.
+- **`fastCommand`** (string) — a command substituted for `command` **only** inside the fast
+  tripwire; the full/review run always uses `command` unchanged. Use this when `command` itself
+  (not just a separate build step) has grown too slow to repeat every task/attempt, but a cheaper
+  stack-native subset still catches regressions early.
+
+Both fields apply only to the plain `command` kind (the default, un-`kind`ed shape) and
+`count-delta`; the richer kinds (`baseline-diff`, `warning-scan`, `forbidden-pattern-scan`) are out
+of scope.
+
+The Rust and Next.js `build` checks above default to `"perTask": false` — an optimized build adds
+nothing the fast tripwire needs. A slow **test** command is a different story: it is genuinely
+stack/test-topology-specific, so it is **not** defaulted in any profile above — opt in per
+project. For example, if a Rust project's integration-test files each link the whole crate and
+`cargo test` itself becomes the per-task bottleneck:
+
+```json
+{ "name": "test", "command": "cargo test", "fastCommand": "cargo test --lib --workspace", "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true }
+```
+
+This skips relinking the integration-test binaries on every task/attempt while the full
+`cargo test` (including integration tests) still runs at review.
+
+---
+
 ## Optional: stub / not-implemented scan (gating companion to the implement-stage self-check)
 
 The implement/fix stages already self-check for left-in placeholders before committing (re-read the
@@ -238,7 +276,7 @@ runs the engine uses `port + taskNumber` automatically. `routes[]` are smoke-che
       { "name": "lint",   "command": "npm run lint",        "purpose": "Lint gate",  "gates": true },
       { "name": "types",  "command": "npx tsc --noEmit",    "purpose": "Type gate",  "gates": true },
       { "name": "test",   "command": "npm test",            "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true },
-      { "name": "build",  "command": "npm run build",       "purpose": "Build gate", "gates": true }
+      { "name": "build",  "command": "npm run build",       "purpose": "Build gate", "gates": true, "perTask": false }
     ]
   },
   "uiTest": {
