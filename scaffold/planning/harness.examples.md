@@ -35,15 +35,22 @@ projects that have a dev server to smoke-test.
   "stack": "rust",
   "validation": {
     "checks": [
-      { "name": "fmt",    "command": "cargo fmt --check",            "purpose": "Format gate", "gates": true },
-      { "name": "clippy", "command": "cargo clippy -- -D warnings",  "purpose": "Lint gate",   "gates": true },
-      { "name": "test",   "command": "cargo test",                   "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true },
-      { "name": "build",  "command": "cargo build --release",        "purpose": "Build gate",  "gates": true, "perTask": false }
+      { "name": "fmt",    "command": "cargo fmt --check",             "purpose": "Format gate", "gates": true },
+      { "name": "clippy", "command": "cargo clippy -- -D warnings",   "purpose": "Lint gate",   "gates": true },
+      { "name": "test",   "command": "cargo nextest run --workspace", "fastCommand": "cargo nextest run --lib --workspace", "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true },
+      { "name": "build",  "command": "cargo build --release",         "purpose": "Build gate",  "gates": true, "perTask": false }
     ]
   },
   "uiTest": { "enabled": false }
 }
 ```
+
+> **Rust test speed is a link-time problem, not a test-time problem.** See
+> [rust-sdlc-iteration-speed.md](../../docs/rust-sdlc-iteration-speed.md) before tuning these
+> commands — on a real workspace, *running* the tests took 2s while compile+link took minutes, and
+> the three fixes that mattered (one integration-test binary, nextest, no sccache) are worth far
+> more than any change to the check list. `cargo-nextest` is assumed above (`brew install
+> cargo-nextest`); drop back to `cargo test` only if it is genuinely unavailable.
 
 ## Python / FastAPI + pydantic — no web UI to smoke-test
 
@@ -177,15 +184,37 @@ of scope.
 The Rust and Next.js `build` checks above default to `"perTask": false` — an optimized build adds
 nothing the fast tripwire needs. A slow **test** command is a different story: it is genuinely
 stack/test-topology-specific, so it is **not** defaulted in any profile above — opt in per
-project. For example, if a Rust project's integration-test files each link the whole crate and
-`cargo test` itself becomes the per-task bottleneck:
+project. For example, if a Rust project's integration-test files each link the whole crate and the
+test command itself becomes the per-task bottleneck:
 
 ```json
-{ "name": "test", "command": "cargo test", "fastCommand": "cargo test --lib --workspace", "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true }
+{ "name": "test", "command": "cargo nextest run --workspace", "fastCommand": "cargo nextest run --lib --workspace", "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true }
 ```
 
-This skips relinking the integration-test binaries on every task/attempt while the full
-`cargo test` (including integration tests) still runs at review.
+This skips relinking the integration-test binaries on every task/attempt while the full suite
+(including integration tests) still runs at review.
+
+**`fastCommand` is the last resort, not the first.** Reaching for it means accepting a weaker
+per-task signal. Fix the underlying link cost first — in a measured Rust workspace, collapsing 25
+integration-test binaries into one cut the full-suite build from 2m24s to 35s and the run from 58s
+to 2.2s, which is a bigger win than any `fastCommand` and costs no signal at all. See
+[rust-sdlc-iteration-speed.md](../../docs/rust-sdlc-iteration-speed.md).
+
+### Per-task overrides: `validation_commands` in `tasks.json`
+
+Orthogonal to `fastCommand`/`perTask`, which are project-wide. A single task can declare its own
+tripwire in `tasks.json`:
+
+```json
+{ "task_id": 9, "title": "Document the feature", "files": ["docs/thing.md"],
+  "validation_commands": ["test -f docs/thing.md", "grep -q '^type:' docs/thing.md"] }
+```
+
+`/sdlc-flow` and `/sdlc-task` run **those commands instead of** the project-wide gating checks for
+that task. Use it for docs-only and config-only tasks — a markdown edit should not pay for a
+compile. An empty or absent array falls back to the harness checks (the default), and the end
+review always re-runs the full gating suite over the integrated tree, so this changes only what
+the *tripwire* costs, never what is ultimately validated.
 
 ---
 
