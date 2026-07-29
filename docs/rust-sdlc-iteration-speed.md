@@ -1,18 +1,22 @@
 ---
 type: Guide
 title: Rust SDLC Iteration Speed
-description: Why agent-driven Rust pipelines get slow (linking, not testing) and the four fixes that measurably reverse it — with the numbers from engine-rs.
+description: Why agent-driven Rust pipelines get slow (linking and a rotten target/, not testing) and the five measured fixes that reverse it — with the numbers from engine-rs.
 doc_id: rust-sdlc-iteration-speed
 layer: [factory, engine]
 status: active
-keywords: [rust, cargo, nextest, link time, sdlc, iteration speed, sccache]
+keywords: [rust, cargo, nextest, link time, sdlc, iteration speed, sccache, cargo clean]
 related: [harness-json, using-the-template, d57-rust-sdlc-iteration-speed]
 ---
 
 # Rust SDLC Iteration Speed
 
-**The one-line version: in an agent-driven Rust repo, the SDLC loop is slow because of LINKING, not
-because of testing. Measure before you tune, and fix the link cost before you weaken any check.**
+**The one-line version: in an agent-driven Rust repo, the SDLC loop is slow because of LINKING and
+a bloated `target/`, not because of testing. Measure before you tune, and fix those before you
+weaken any check.**
+
+End state in `engine-rs`: a full 1215-test suite runs in **2.8s**, and the per-task tripwire after
+a real source edit is **6.4s** — down from ~3m10s.
 
 This is the generalized playbook from a 2026-07-29 investigation in `core/engine-rs`, where
 `/sdlc-flow` runs on a 10-task spec had grown to nearly two hours. Governed by
@@ -26,6 +30,9 @@ Before changing anything, get these four numbers. They take ten minutes and they
 that follows:
 
 ```bash
+# 0. Check for a rotten target/ FIRST — see 4b. This is often the whole answer.
+du -sh target target/debug/incremental
+
 # warm the tree first so you are measuring steady state, not a cold build
 cargo check --workspace --all-targets
 
@@ -88,7 +95,8 @@ name = "it"
 path = "tests/it/main.rs"
 ```
 
-**Measured effect** (`engine-core`, 25 files → 1 binary):
+**Measured effect** (`engine-core`, 25 files → 1 binary; on a bloated `target/` — see 4b, which
+compounded further):
 
 | | before | after |
 |---|---|---|
@@ -165,6 +173,47 @@ Record the reasoning where the next person will look, or it gets re-added on the
 
 ---
 
+## 4b. Fix 3b — a rotten `target/` silently taxes every build (the sleeper)
+
+This one was found last and turned out to be the largest single lever. Check it **first** on any
+repo that has been iterated in for months:
+
+```bash
+du -sh target target/debug/incremental
+```
+
+In `engine-rs`: **40GB total, 17GB of it `incremental/`**. `cargo clean` reported
+**930,599 files / 78.4GiB removed**. Cargo stats and fingerprints that tree on every invocation, and
+incremental state accumulates across branches, rebases, and abandoned builds — none of it is ever
+garbage-collected.
+
+The result is counterintuitive enough to be worth stating plainly:
+
+> After `cargo clean`, a **from-scratch cold build of the entire workspace took 48.9s** — while the
+> *incremental* build after a one-line edit had been taking **2m24s** on the bloated tree. The cold
+> build was nearly 3x faster than the incremental one it replaced.
+
+Measured effect on `engine-rs` (this is *after* fixes 1–3 were already in):
+
+| | before clean | after clean |
+|---|---|---|
+| Per-task tripwire (`--lib --workspace`, after an edit) | 1m17s | **6.4s** |
+| Full suite, cold from scratch | — | **54s** (48.9s build + 2.2s run) |
+| Full suite, steady state | 2.9s | 2.8s |
+| `target/` size | 40GB | **1.7GB** |
+| Disk free | 141GB | **179GB** |
+
+`cargo clean` itself took 3m20s — almost all of it deleting 930k files. Budget for that once.
+
+**Make it routine.** There is no cargo-native GC, so this needs a human or a cron habit: clean when
+`target/` passes a few GB, or after any long-running branch/rebase-heavy stretch. `cargo-sweep`
+(`cargo sweep --time 15`) automates the time-based version if you want it hands-off. On a machine
+running scheduled builds (see `scripts/routine.sh`), fold it into the routine.
+
+**Caveat on generalizing:** the exact multiplier depends on how bloated the tree got. The
+directional finding — *a large stale `target/` makes incremental builds slower than cold ones* — is
+what to carry forward, not the specific 12x.
+
 ## 5. Fix 4 — `[profile.dev]` link-time settings
 
 ```toml
@@ -210,9 +259,11 @@ matters more.
   bails. You would trade ~30 minutes of gate for a much worse tail.
 - **Don't reach for `fastCommand` first.** It buys speed by accepting a weaker per-task signal. Fix
   the link cost first — it is a bigger win and costs no signal at all.
-- **Don't drop `clippy` from the tripwire reflexively.** Measure it. In `engine-rs` it was ~22s
-  against a 1m17s tripwire, and it caught real issues mid-task (`derivable_impls`) that would
-  otherwise have piled up for the end review to fix blind.
+- **Don't drop `clippy` from the tripwire reflexively.** Measure it, and re-measure after the other
+  fixes — the balance shifts. In `engine-rs` clippy went from ~13% of a 3m10s tripwire to ~75% of a
+  26s one, purely because everything around it got faster. It still earns its place: 19s is cheap,
+  and it catches real issues mid-task (`derivable_impls`) that would otherwise reach the end review
+  as a blind pile. Revisit only if it becomes the thing you actually wait on.
 - **Don't assume; measure.** Both `sccache` and "tests are slow" were confident, plausible, and
   wrong. Every number in this doc came from a command, not an intuition.
 
@@ -229,4 +280,5 @@ matters more.
 - [ ] `PreToolUse` hook denying `cargo test`
 - [ ] No `sccache` in `.cargo/config.toml`
 - [ ] `validation_commands` set on docs-only / config-only tasks at `/generate-tasks` time
+- [ ] `du -sh target` — clean it when it passes a few GB (no cargo-native GC exists)
 - [ ] Re-measure the section-1 numbers once the repo has ~10 integration tests
