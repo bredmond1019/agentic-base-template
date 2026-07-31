@@ -3,9 +3,30 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-31T10:41:00Z
+**Last updated:** 2026-07-31T13:55:57Z
 
 ---
+
+## [2026-07-31]
+
+### Distributed the harness pull (D53 + validation_commands) to every scaffolded repo
+
+- **What:** Ran `/sync-all` (regenerated `.agents/skills/` from `.claude/commands/` for base-template,
+  the workspace root, and all five sub-brain tiers; reconciled global `~/.claude/commands/` and
+  `~/.gemini/config/skills/`) and committed the result in both the brain root and base-template.
+  Then ran `scripts/sync_downstream_harness.py --apply` to pull `commands/generate-tasks.md`,
+  `commands/README.md`, `commands/close-out.md`, `workflows/sdlc-flow.js`, and `workflows/sdlc-task.js`
+  (the D53 code-review drop plus the new per-task `validation_commands` override in `sdlc-flow.js`'s
+  `ENUMERATE_SCHEMA`/`runTests`) into all 16 eligible downstream repos, then committed the change in
+  each of the 15 that track `.claude/` in git (`rag-engine-rs` gitignores it by design and was
+  skipped). Also added a `carryover[]` entry to `orchestrator`'s `planning/state.json` flagging that
+  its independent Python `SDLC_FLOW` workflow declares `validation_commands` on `SDLCTask` but never
+  reads it, unlike the JS engine's new override path.
+- **Why:** A harness fix landing only in `base-template` isn't fixed anywhere real work happens —
+  `/sync-all` and `/sync-downstream-harness` are the two distribution steps (skills/commands vs. the
+  `.claude/workflows/*.js` engines) that make a change here actually reach every consumer.
+- **Refs:** [D53](planning/decisions/D53-drop-close-out-code-review.md),
+  [D48](planning/decisions/D48-downstream-harness-sync-script.md)
 
 ## [2026-07-30]
 
