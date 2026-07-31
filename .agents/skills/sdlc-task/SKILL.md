@@ -42,17 +42,17 @@ description: >
    A triage MAJOR / immediate-bail reason breaks straight out (does NOT burn the
    remaining attempts); the run stops and reports for human pickup.
 
- STATE (committed — NOT gitignored — at planning/<spec>/sdlc/)
-   sdlc-task-state.json   the authoritative run index (per-task summary/issues/
-                          fixes/commit + the Block-A `tokens` block). Committed in the
-                          worktree under --worktree; in place it is written uncommitted
-                          each task (cat-visible for crash inspection) and swept into
-                          ONE final `chore:` commit at the end.
+ STATE (NOT gitignored, but deliberately never committed — at planning/<spec>/sdlc/)
+   sdlc-task-state.json   the authoritative run index (per-task summary/issues/fixes/commit +
+                          the Block-A `tokens` block). Written to disk after every task and
+                          again at the end (cat-visible for crash inspection); read back off
+                          disk only, by --resume — never out of git — so it is disk-only, never
+                          committed (D46: planning/ may be a vaulted symlink into the brain repo,
+                          where a plain `git add planning/...` fails).
 
  COMMIT STRATEGY
    feat: implement <stem>         implement agent (per task)
    fix:  fix pass P for <stem>    fix agent (per pass)
-   chore: sdlc-task state — <…>   state-writer (committed writes)
    chore: sdlc-task bookkeep — <…>  bookkeep close-out (on a passing run)
 
  MODEL TIERING (the token lever — see the MODEL map below)
@@ -86,6 +86,8 @@ rung, not the full pipeline):
      D18 amendment log — recommend the user run `/log-work` for that.
 4. **Finish**: report the branch (and worktree path under `--worktree`), and remind the user to run
    `/log-work` for the narrative log entry.
+
+
 
 
 

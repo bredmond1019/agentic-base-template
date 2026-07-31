@@ -213,3 +213,4 @@ If `--merge-branch` was passed:
 
 - `planning/harness.json` — validation suite (checks + gating flags)
 - `planning/status.md` — current focus (to scope coverage check to recent work)
+
