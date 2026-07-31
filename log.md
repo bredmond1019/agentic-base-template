@@ -3,9 +3,62 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-29T00:00:00Z
+**Last updated:** 2026-07-31T10:41:00Z
 
 ---
+
+## [2026-07-30]
+
+### D53 — dropped the `/close-out` code-review step
+
+- **What:** Removed `Step 2.5` and the `--no-review` / `--review-level <level>` flags from
+  `.claude/commands/close-out.md`, regenerated the `.agents/skills/close-out/SKILL.md` mirror from
+  it, and updated both `.claude/commands/README.md` surfaces (the summary-table row and the catalog
+  entry). Edits touched Variables, Examples, the Execution Model command list, the Step 0
+  argument-stripping list, the Step 2.5 block itself, and the Step 4 handoff-note strip list. The
+  README catalog entry now states outright that code review is not part of the pipeline. Authored
+  [D53](planning/decisions/D53-drop-close-out-code-review.md) superseding the code-review half of
+  D49 and added its index row. Grep-clean of `no-review` / `review-level` / `Step 2.5` outside this
+  log's own historical entries.
+- **Why:** `/code-review` is user-triggered and separately billed — an agent cannot launch it from
+  inside another slash command. Step 2.5 therefore either silently no-oped or invited the model to
+  improvise a stand-in review carrying none of `/code-review`'s guarantees. A gate that cannot fire
+  is worse than no gate: it reports confidence it never earned. D49's `--clean-worktree` half is
+  untouched.
+- **Refs:** `planning/decisions/D53-drop-close-out-code-review.md`. Propagation via
+  `/sync-downstream-harness` + `/sync-global-commands` still outstanding.
+
+### BT.ticket.trim-state-writer-roundtrips task 5 — invariants verified by audit; an `updated_at` freeze found and ticketed
+
+- **What:** Closed out task 5's verification half without starting a throwaway run. Audited the 39
+  state files already in `core/_planning/*/*/sdlc/` — 28 from runs that started after `3beac11`, i.e.
+  already on the trimmed engines, across `engine-rs`, `bastion`, `bastion-web`, `mev` (all four
+  confirmed to carry `cachedStartedAt`). **Verified:** all 39 parse and the post-change set adds no
+  engine key the pre-change set lacks; `started_at` preservation holds (27/28 runs show it well
+  behind `updated_at`, median span 48.9 min, max ~2.7 days across multiple `--resume` processes);
+  D46 disk-only holds in practice (zero state-file commits since 07-27 in engine-rs/bastion-web/
+  bastion); `node --check` clean on all four engines and the D46 prohibition text intact. Then
+  sampled two **live** runs (`bastiel/6.A-market-abstraction-config`, `engine-rs/EN.6.B-email-adapter`)
+  read-only through to `done`, capturing 16 distinct state writes: `updated_at` advanced strictly
+  monotonically in both — no freeze reproduced, but at a ~7% per-run rate two clean runs prove
+  nothing (P(zero) ≈ 0.86), and it is recorded that way. **Found:** `updated_at` intermittently
+  freezes at `started_at` on later writes — `bastion/11.S-last-touched-board-dto` (7 tasks, 0.0 min
+  span) and `bastion/ticket-enrich-block-authored-status` (4 tasks, 0.4 min) against 9–3986 min for
+  every other run. Wrote `planning/ticket-state-write-updated-at-freeze/` (tasks.md + tasks.json, 5
+  tasks) and registered `BT.ticket.state-write-updated-at-freeze` in `state.json` (Tickets, wave 27,
+  origin the trim ticket). **Still open:** the before/after timing number.
+- **Why:** Task 5 was the last thing standing between `BT.ticket.trim-state-writer-roundtrips` and
+  done, and its measurement is the explicit go/no-go gate on
+  `BT.ticket.fold-state-write-into-test-agent`. An artifact audit beat a fresh run on sample size
+  (28 runs vs 1) for every invariant except the timing, which turned out not to be recoverable from
+  disk at all: `worklog.md` carries no timestamps and `state:*` uses plain `agent()` rather than
+  `tracedAgent()`, so no duration was ever recorded. A file-mtime proxy was tried twice and
+  **abandoned twice** — on historical artifacts (the vault is tracked inside the brain repo, whose
+  merge commits rewrite mtimes) and again on live runs (files were rewritten in bursts every ≤8 s
+  while `updated_at` held constant, so the "lag" tracked an unidentified rewriter, not the writer).
+  Recorded as the `state-file-mtime-is-not-a-clock` carryover so it is not attempted a third time.
+- **Refs:** `planning/ticket-trim-state-writer-roundtrips/tasks.md` (Notes + Amendment Log),
+  `planning/ticket-state-write-updated-at-freeze/`, `planning/state.json` `carryover[]`.
 
 ## [2026-07-29]
 
