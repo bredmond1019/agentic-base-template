@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Pull base-template's harness (.claude/commands/*.md flat + .claude/workflows/) into every
-downstream repo that has already been scaffolded from it.
+"""Pull base-template's harness (.claude/commands/*.md flat + .claude/workflows/) AND the brain's
+tracked git hooks (hooks/) into every downstream repo that has already been scaffolded from
+base-template.
 
 Downstream repos do not auto-sync by design (see base-template/CLAUDE.md, "The update loop").
 This script automates the previously-manual "update loop" documented in
@@ -8,18 +9,36 @@ base-template/docs/using-the-template.md: copy changed harness files, never dele
 added on its own (project-specific commands survive), and stamp planning/.template-version so
 every repo's drift from base-template is visible at a glance.
 
-What gets synced (base-template -> target), for every file that exists in base-template:
-  - .claude/commands/*.md          (flat root only - NOT .claude/commands/brain/, which is
-                                     brain-only reference content, never propagated downstream)
-  - .claude/workflows/*.js         (the SDLC engines)
-  - .claude/workflows/*.json       (e.g. harness.schema.json - the check schema the engines
-                                     validate planning/harness.json against; mechanism, not policy)
-  - .claude/workflows/templates/*.md
+What gets synced, for every file that exists at its source, into the same relative path in the
+target repo:
+  - from base-template/.claude/ (base-template -> target):
+      - commands/*.md               (flat root only - NOT commands/brain/, which is
+                                       brain-only reference content, never propagated downstream)
+      - workflows/*.js               (the SDLC engines)
+      - workflows/*.json             (e.g. harness.schema.json - the check schema the engines
+                                       validate planning/harness.json against; mechanism, not policy)
+      - workflows/templates/*.md
+  - from the brain's hooks/ (brain root -> target's hooks/, widened by the validate-brain
+    push-gate chore, deliberate):
+      - pre-push                     (the validate-brain drift gate)
+      - test_pre_push.sh             (its self-contained regression test)
+      - README.md                    (hook documentation)
+    hooks/validate-baseline.json is deliberately EXCLUDED — the baseline is corpus-wide and
+    singular (validate-brain always resolves the brain root and validates the entire corpus
+    regardless of cwd), so it lives in HQ only and every repo's synced pre-push hook reads it
+    read-only from the brain root it resolves at push time. Distributing a copy per repo would
+    let it drift out of sync with the one that actually governs the gate.
 
 What never gets touched:
-  - Any file in the target that doesn't exist in base-template (a repo's own customizations,
+  - Any file in the target that doesn't exist at its source (a repo's own customizations,
     e.g. bastion's .claude/commands/feature.md) - this script only ever adds/updates, never deletes.
   - planning/, CLAUDE.md, harness.json, or anything else that is project fact, not mechanism.
+
+Note: copying hooks/pre-push into a repo is inert until that repo's git is actually pointed at
+it. This script prints a per-repo notice (and the exact fix) whenever it syncs a hook into a
+repo whose `core.hooksPath` is not already set to `hooks` - see the printed report below.
+Running `git config core.hooksPath hooks` in each repo is a deliberate, separate, manual step
+(not part of this script, and not part of this chore's acceptance either).
 
 Usage:
   python3 scripts/sync_downstream_harness.py                     # dry run, all eligible repos
@@ -97,8 +116,9 @@ def discover_targets(brain_root: Path, base_template_root: Path) -> list[RepoTar
 
 @dataclass
 class FileDiff:
-    rel_path: str  # relative to .claude/
+    rel_path: str  # relative to the file's source root (either .claude/ or hooks/)
     status: str  # "new" | "changed"
+    dest_prefix: str = ".claude"  # ".claude" or "hooks" - which target subtree this belongs to
 
 
 @dataclass
@@ -106,10 +126,11 @@ class RepoReport:
     target: RepoTarget
     diffs: list[FileDiff] = field(default_factory=list)
     error: str | None = None
+    hooks_path_unset: bool = False  # target's core.hooksPath is not "hooks" (see hook_files())
 
 
 def harness_files(root: Path) -> list[Path]:
-    """The exact file set this script owns, relative to `root`."""
+    """The exact base-template harness file set this script owns, relative to `root/.claude`."""
     files: list[Path] = []
     commands_dir = root / ".claude" / "commands"
     if commands_dir.is_dir():
@@ -124,7 +145,34 @@ def harness_files(root: Path) -> list[Path]:
     return files
 
 
-def diff_repo(base_template_root: Path, target: RepoTarget) -> RepoReport:
+# The brain hooks/ files this script distributes downstream. Explicitly enumerated (not a glob
+# over hooks/) so a new file dropped into the brain's hooks/ directory for HQ-only reasons is
+# never accidentally propagated - each addition here is a deliberate widening. Notably excludes
+# hooks/validate-baseline.json (see module docstring: the baseline is corpus-wide and HQ-only).
+HOOK_FILENAMES: list[str] = ["pre-push", "test_pre_push.sh", "README.md"]
+
+
+def hook_files(brain_root: Path) -> list[Path]:
+    """The tracked brain hook files this script owns, relative to `brain_root/hooks`."""
+    hooks_dir = brain_root / "hooks"
+    if not hooks_dir.is_dir():
+        return []
+    return [hooks_dir / name for name in HOOK_FILENAMES if (hooks_dir / name).is_file()]
+
+
+def repo_hooks_path(repo_path: Path) -> str | None:
+    """The target repo's configured `core.hooksPath`, or None if unset/unreadable."""
+    result = subprocess.run(
+        ["git", "config", "--get", "core.hooksPath"],
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+    )
+    value = result.stdout.strip()
+    return value or None
+
+
+def diff_repo(base_template_root: Path, brain_root: Path, target: RepoTarget) -> RepoReport:
     report = RepoReport(target=target)
     if not (target.repo_path / ".claude").is_dir():
         report.error = "no .claude/ directory"
@@ -134,16 +182,32 @@ def diff_repo(base_template_root: Path, target: RepoTarget) -> RepoReport:
         rel = src.relative_to(base_template_root / ".claude")
         dst = target.repo_path / ".claude" / rel
         if not dst.exists():
-            report.diffs.append(FileDiff(rel_path=str(rel), status="new"))
+            report.diffs.append(FileDiff(rel_path=str(rel), status="new", dest_prefix=".claude"))
         elif not filecmp.cmp(src, dst, shallow=False):
-            report.diffs.append(FileDiff(rel_path=str(rel), status="changed"))
+            report.diffs.append(FileDiff(rel_path=str(rel), status="changed", dest_prefix=".claude"))
+
+    hooks_diffs: list[FileDiff] = []
+    for src in hook_files(brain_root):
+        rel = src.relative_to(brain_root / "hooks")
+        dst = target.repo_path / "hooks" / rel
+        if not dst.exists():
+            hooks_diffs.append(FileDiff(rel_path=str(rel), status="new", dest_prefix="hooks"))
+        elif not filecmp.cmp(src, dst, shallow=False):
+            hooks_diffs.append(FileDiff(rel_path=str(rel), status="changed", dest_prefix="hooks"))
+    report.diffs.extend(hooks_diffs)
+
+    if hooks_diffs and (target.repo_path / ".git").exists():
+        configured = repo_hooks_path(target.repo_path)
+        report.hooks_path_unset = configured != "hooks"
+
     return report
 
 
-def apply_repo(base_template_root: Path, report: RepoReport) -> None:
+def apply_repo(base_template_root: Path, brain_root: Path, report: RepoReport) -> None:
     for d in report.diffs:
-        src = base_template_root / ".claude" / d.rel_path
-        dst = report.target.repo_path / ".claude" / d.rel_path
+        src_root = base_template_root / ".claude" if d.dest_prefix == ".claude" else brain_root / "hooks"
+        src = src_root / d.rel_path
+        dst = report.target.repo_path / d.dest_prefix / d.rel_path
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
 
@@ -227,7 +291,7 @@ def main() -> None:
 
     total_changed = 0
     for target in targets:
-        report = diff_repo(base_template_root, target)
+        report = diff_repo(base_template_root, brain_root, target)
         if report.error:
             print(f"[{target.slug}] SKIPPED — {report.error}")
             continue
@@ -237,11 +301,18 @@ def main() -> None:
 
         print(f"[{target.slug}] {len(report.diffs)} file(s) {'to sync' if not args.apply else 'synced'}:")
         for d in report.diffs:
-            print(f"    {d.status:>7}  {d.rel_path}")
+            print(f"    {d.status:>7}  {d.dest_prefix}/{d.rel_path}")
         total_changed += len(report.diffs)
 
+        if report.hooks_path_unset:
+            print(
+                f"    NOTICE: {target.slug}'s core.hooksPath is not set to 'hooks' — the synced "
+                f"pre-push gate will not run until you enable it. Run:"
+            )
+            print(f"        (cd {target.repo_path} && git config core.hooksPath hooks)")
+
         if args.apply:
-            apply_repo(base_template_root, report)
+            apply_repo(base_template_root, brain_root, report)
             update_template_version(target, commit_hash, args.message)
             print(f"    -> planning/.template-version updated (commit {commit_hash[:12]})")
 
