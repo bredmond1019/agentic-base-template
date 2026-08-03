@@ -6,7 +6,7 @@ doc_id: rust-sdlc-iteration-speed
 layer: [factory, engine]
 status: active
 keywords: [rust, cargo, nextest, link time, sdlc, iteration speed, sccache, cargo clean]
-related: [harness-json, using-the-template, d57-rust-sdlc-iteration-speed]
+related: [harness-json, using-the-template, brain:d57-rust-sdlc-iteration-speed]
 ---
 
 # Rust SDLC Iteration Speed
