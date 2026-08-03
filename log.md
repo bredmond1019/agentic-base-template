@@ -3,9 +3,33 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-31T13:55:57Z
+**Last updated:** 2026-08-03T00:00:00Z
 
 ---
+
+## [2026-08-03]
+
+### Logged three wave-28 tickets forwarded from `core/orchestrator`, plus a field-evidence amendment
+
+- **What:** `core/orchestrator` filed three new tickets directly into this repo's ticket vault —
+  `BT.ticket.triage-verify-pre-existing-claims` (I36's diagnostic half: triage must not assert a
+  failure is pre-existing without verifying it), `BT.ticket.gate-skip-count-regression` (I37: a new
+  `harness.schema.json` check kind so the gate fails when tests stop running, not only when they
+  fail), and `BT.ticket.worktree-env-file-copy` (I35, patch-tier: worktree setup must copy every
+  gitignored env file, not just the root pair) — all registered wave 28, `open`, with full specs
+  (`tasks.md` + `tasks.json`, 3 tasks each) and listed in `planning/index.md`. Rather than filing a
+  fourth ticket, `core/orchestrator` also amended the existing
+  `BT.ticket.init-worktree-symlink-repair` (wave 23) with field evidence from a live session
+  (2026-08-02, `core/orchestrator` session 12, issue I36): a **tracked** symlink defeats the repair
+  entirely, and any repair should verify the link resolves instead of assuming the write stuck. All
+  four items were already fully filed when reviewed this session; this entry only records that the
+  hand-off happened, since it was never logged.
+- **Why:** The tickets and amendment landed directly in `state.json` / the planning vault without a
+  corresponding `log.md` entry, so the hand-off was invisible to session-recap and would have looked
+  like unexplained pre-existing backlog to a future session.
+- **Refs:** `planning/ticket-triage-verify-pre-existing-claims/`,
+  `planning/ticket-gate-skip-count-regression/`, `planning/ticket-worktree-env-file-copy/`,
+  `planning/ticket-init-worktree-symlink-repair/` (Amendment Log).
 
 ## [2026-07-31]
 
@@ -1945,7 +1969,7 @@ letter tripped the gate's test-stage check (overridden downstream by review, so 
 rather than a hard block, and never actually caught an emoji).
 
 Fix: double the backslashes in the source (`\\U0001F300`) so JS renders `\U0001F300` and Python's raw
-string sees the correct unicode ranges. Verified: post-fix the class matches real emoji (🚀, ✨) and
+string sees the correct unicode ranges. Verified: post-fix the class matches real emoji characters and
 NOT `Task` / `Heading 3`. Applied in `sdlc-task.js` and `sdlc-run.js` (the two engines with the gate;
 `sdlc-block` delegates). Swept both engines for sibling `\b \d \w \s \U` single-backslash escapes
 inside template-literal strings — none found (the only other matches are legit JS regex literals).
