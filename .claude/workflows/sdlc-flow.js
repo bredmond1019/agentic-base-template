@@ -292,7 +292,9 @@ const TRIAGE_SCHEMA = {
     class:               { type: 'string', enum: ['RETRYABLE', 'MAJOR'] },
     reason:              { type: 'string', description: 'One sentence: why retryable (transient/changed/progressing) or major (one of the immediate-bail reasons, stuck, or structural)' },
     bailReason:          { type: 'string', description: 'When class=MAJOR: a short human-readable reason for the draft-PR handoff; empty when RETRYABLE' },
-    sameFailureAsBefore: { type: 'boolean', description: 'true if the SAME failure as the previous attempt (no progress)' }
+    sameFailureAsBefore: { type: 'boolean', description: 'true if the SAME failure as the previous attempt (no progress)' },
+    evidence:            { type: 'string', description: 'What was actually OBSERVED, quoting the failing check output. No causal claims.' },
+    baseStateChecked:    { type: 'boolean', description: 'true only if the failing check was actually re-run against the base state (main working tree or the task base commit). false means any claim about the base state is a hypothesis.' }
   }
 }
 
