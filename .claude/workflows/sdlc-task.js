@@ -687,8 +687,7 @@ ${resumeMode ? `  RESUME — reuse the existing worktree for this spec if presen
         git -C trees/${baseBranchName} sparse-checkout init --cone
         git -C trees/${baseBranchName} sparse-checkout set $(git ls-tree HEAD --name-only -d | tr '\\n' ' ')
         git -C trees/${baseBranchName} checkout
-        if [ -f .env ]; then cp .env trees/${baseBranchName}/.env; fi
-        if [ -f .env.local ]; then cp .env.local trees/${baseBranchName}/.env.local; fi
+        git ls-files --others --ignored --exclude-standard -- . | grep -E '(^|/)\\.env(\\.[^/]*)?$' | grep -Ev '(^|/)(node_modules|\\.venv|venv|trees|vendor)/' | while IFS= read -r f; do dest="trees/${baseBranchName}/$f"; if [ ! -f "$dest" ]; then mkdir -p "$(dirname "$dest")"; cp "$f" "$dest"; echo "ENV_COPIED: $f"; fi; done
       branchName="${baseBranchName}", wasCreated=false. Skip to STEP 2c.
     - Neither exists → fall through and create a fresh worktree as normal.
 ` : ''}  STEP 2 — Find a free worktree name. Start with candidate "${baseBranchName}"; for each candidate run:
@@ -704,9 +703,15 @@ ${resumeMode ? `  RESUME — reuse the existing worktree for this spec if presen
     d. # Cone ALL tracked top-level directories — stack-agnostic, no project-layout assumptions (D5/P5).
        git -C trees/[branchName] sparse-checkout set $(git ls-tree HEAD --name-only -d | tr '\\n' ' ')
     e. git -C trees/[branchName] checkout
-    f. if [ -f .env ]; then cp .env trees/[branchName]/.env; fi
-    g. if [ -f .env.local ]; then cp .env.local trees/[branchName]/.env.local; fi
-    h. git -C trees/[branchName] commit --allow-empty -m "chore: init worktree [branchName]"
+    f. Discover and copy EVERY gitignored env-shaped file (.env, .env.local, .env.* in any
+       directory) from repoRoot into trees/[branchName], preserving each file's path relative to
+       the repo root (creating parent directories as needed — so app/.env lands at
+       trees/[branchName]/app/.env). Only files git actually ignores; exclude node_modules/,
+       .venv/, venv/, trees/, and vendor/; never overwrite a file that already exists in the
+       worktree. Run:
+         git ls-files --others --ignored --exclude-standard -- . | grep -E '(^|/)\.env(\.[^/]*)?$' | grep -Ev '(^|/)(node_modules|\.venv|venv|trees|vendor)/' | while IFS= read -r f; do dest="trees/[branchName]/$f"; if [ ! -f "$dest" ]; then mkdir -p "$(dirname "$dest")"; cp "$f" "$dest"; echo "ENV_COPIED: $f"; fi; done
+       Record the list of "ENV_COPIED:" lines — report them in STEP 4.
+    g. git -C trees/[branchName] commit --allow-empty -m "chore: init worktree [branchName]"
     Set wasCreated=true.
 
   STEP 2c — Fix the planning/ symlink for the worktree (run from the MAIN repo root, for ALL worktree
