@@ -74,7 +74,7 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
    ```bash
    git ls-files --others --ignored --exclude-standard -- . | grep -E '(^|/)\.env(\.[^/]*)?$' | grep -Ev '(^|/)(node_modules|\.venv|venv|trees|vendor)/' | while IFS= read -r f; do dest="trees/<worktreeName>/$f"; if [ ! -f "$dest" ]; then mkdir -p "$(dirname "$dest")"; cp "$f" "$dest"; echo "ENV_COPIED: $f"; fi; done
    ```
-   Record the `ENV_COPIED:` lines printed above — report them in step 12 below, so a run missing
+   Record the `ENV_COPIED:` lines printed above — report them in step 13 below, so a run missing
    config says so at setup time instead of surfacing later as a confusing downstream failure (e.g.
    a fallback database connection producing "column does not exist" errors).
 
@@ -83,15 +83,39 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
     git -C trees/<worktreeName> commit --allow-empty -m "chore: init worktree <worktreeName>"
     ```
 
-11. **Verify — run these and display the output:**
+11. **Repair the `planning/` symlink** (run from the MAIN repo root). In brain-vaulted repos
+    (D46) the main repo's `planning` is a **relative** symlink into a vault (e.g.
+    `planning -> ../_planning/<repo>`). `git worktree add` copies that link verbatim, but the
+    worktree sits at a different depth, so the relative path no longer resolves from there — an
+    agent hitting the dangling link tends to delete it and write a real `planning/` dir in its
+    place, silently forking planning state away from the vault. Point the worktree's `planning/`
+    at the same real vault via an **absolute** symlink instead (gitignored, so it is never
+    committed or merged). This mirrors `sdlc-flow.js` STEP 3.5 / `sdlc-task.js` STEP 2c:
+    ```bash
+    if [ -L planning ]; then
+      TARGET="$(python3 -c "import os; print(os.path.realpath('planning'))")"
+      rm -f trees/<worktreeName>/planning
+      ln -s "$TARGET" trees/<worktreeName>/planning
+      echo "PLANNING_SYMLINK_FIXED -> $TARGET"
+    else
+      echo "PLANNING_REAL_DIR (no symlink fix needed)"
+    fi
+    ```
+    If `planning` is a real tracked directory (non-vaulted repo), the sparse-checkout already
+    populated it — the `else` branch above fires and nothing further is needed. Re-running this
+    step against an already-repaired worktree is a safe no-op: `planning` in the main repo root is
+    still the same symlink, so the same absolute target is recomputed and re-linked.
+
+12. **Verify — run these and display the output:**
     ```bash
     git worktree list
     git -C trees/<worktreeName> sparse-checkout list
     ls trees/<worktreeName>/
     git -C trees/<worktreeName> log --oneline -1
+    ls trees/<worktreeName>/planning/ >/dev/null 2>&1 && echo "PLANNING_OK"
     ```
 
-12. **Report success** and print next-step instructions, including the env files seeded in step 9
+13. **Report success** and print next-step instructions, including the env files seeded in step 9
     (or a note that none were found) and the worktree's actual path:
     ```
     Worktree '<worktreeName>' ready at trees/<worktreeName>/
@@ -123,5 +147,10 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
 - Every gitignored env-shaped file under the repo (`.env`, `.env.local`, `.env.*`, at any depth)
   is gitignored and must be copied manually (step 9) — not just the root pair, since some
   projects keep config below the root (e.g. `app/.env`).
+- **`planning/` symlink repair (step 11) only applies to brain-vaulted repos** (D46) — repos
+  where `planning` is a symlink into `../_planning/<repo>`. In a non-vaulted repo `planning` is a
+  real tracked directory and the step is a documented no-op. This keeps parity with the same
+  repair the SDLC engines perform (`sdlc-flow.js` STEP 3.5, `sdlc-task.js` STEP 2c) so a
+  manually created worktree behaves identically to a pipeline-created one.
 - All `git commit` calls inside the pipeline will commit to branch `<worktreeName>`, not `main`, because git detects the worktree context automatically.
 - When the pipeline finishes, run `/clean-worktree` from the main repo session to merge the branch and clean up.
