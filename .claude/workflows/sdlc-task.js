@@ -265,7 +265,9 @@ const TRIAGE_SCHEMA = {
     class:               { type: 'string', enum: ['RETRYABLE', 'MAJOR'] },
     reason:              { type: 'string', description: 'One sentence: why retryable (transient/changed/progressing) or major (an immediate-bail reason, stuck, or structural)' },
     bailReason:          { type: 'string', description: 'When class=MAJOR: a short human-readable reason for the handoff; empty when RETRYABLE' },
-    sameFailureAsBefore: { type: 'boolean', description: 'true if the SAME failure as the previous attempt (no progress)' }
+    sameFailureAsBefore: { type: 'boolean', description: 'true if the SAME failure as the previous attempt (no progress)' },
+    evidence:            { type: 'string', description: 'What was actually OBSERVED, quoting the failing check output. No causal claims.' },
+    baseStateChecked:    { type: 'boolean', description: 'true only if the failing check was actually re-run against the base state (main working tree or the task base commit). false means any claim about the base state is a hypothesis.' }
   }
 }
 
@@ -987,12 +989,29 @@ IMMEDIATE-BAIL reasons — if the failure is ANY of these, class=MAJOR and put a
 bailReason describing which one and where:
 ${BAIL_REASONS}
 
+This does NOT widen the bail set above — it only constrains what you may ASSERT once you bail.
+Before writing any bailReason that claims a failure PRE-DATES this task / exists "at baseline" / is
+"unrelated to this task's scope": you MUST first re-run ONLY the failing check against the base state
+(the main working tree, or the task's base commit). If you do so, set baseStateChecked=true and put
+the actual result in evidence. If you cannot re-run it in this run's context, set baseStateChecked=false
+and phrase the claim explicitly as a HYPOTHESIS ("possibly pre-existing; NOT verified against base"),
+never as observed fact.
+Self-inflicted-environment caution: harness-created workspace state (git worktree, sparse-checkout,
+copied .env files, repaired planning/ symlinks) is a CANDIDATE CAUSE, not a fixed backdrop. Identical
+failure before and after the change is NOT evidence of pre-existence when both states share the same
+possibly-broken environment.
+This changes only the wording/evidence of bailReason — bailing on IMMEDIATE-BAIL reason #3
+(environment/credential/auth/network) stays correct and fast, "when unsure, BAIL" stays, and no
+additional retry attempts are introduced by this rule.
+
 Otherwise:
   RETRYABLE — transient/infra (agent died, flaky), OR the failure CHANGED from the previous attempt
               (it is making progress and a bounded fix can plausibly close it).
   MAJOR     — the SAME failure again with no progress, OR structural (one of the bail reasons above).
 
-Return via StructuredOutput: class, reason, bailReason (empty when RETRYABLE), sameFailureAsBefore.
+Return via StructuredOutput: class, reason, bailReason (empty when RETRYABLE), sameFailureAsBefore,
+evidence (what was actually OBSERVED, quoting output — no causal claims), baseStateChecked (true only
+if the failing check was actually re-run against the base state).
 ${sameContext ? `(Previous attempt context for the same-failure check: ${sameContext})` : ''}
 `, withModel({ label: `triage:${context}:${attempt}`, schema: TRIAGE_SCHEMA, phase: 'Tasks' }, MODEL.triage))
 }

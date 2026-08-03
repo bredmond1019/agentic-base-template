@@ -9,6 +9,41 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [2026-08-03]
 
+### `BT.ticket.triage-verify-pre-existing-claims` shipped — triage can no longer assert an unverified pre-existing/baseline claim
+
+- **What:** Ran `/sdlc-flow ticket-triage-verify-pre-existing-claims` end to end (3 tasks, review PASS,
+  docs patched). Task 1 added two new fields to `TRIAGE_SCHEMA` in both `sdlc-task.js` and
+  `sdlc-flow.js` — `evidence` (string, observed output only) and `baseStateChecked` (boolean) —
+  inserted verbatim-identical (same key order, same descriptions) alongside the unchanged
+  `class`/`reason`/`bailReason`/`sameFailureAsBefore` fields. Task 2 inserted a new rule into both
+  engines' `triage()` prompt bodies, placed immediately after the `BAIL_REASONS` list and before the
+  RETRYABLE/MAJOR classification block: before triage may claim a failure predates the current task
+  (a "pre-existing"/"at baseline" assertion), it must first re-run **only the failing check** against
+  base state, or else phrase the claim as an explicit hypothesis rather than observed fact; a
+  harness-created workspace (worktree, sparse checkout, copied env files, repaired symlinks) is named
+  as a candidate cause, not a fixed backdrop, since an identical failure before and after a change is
+  not evidence of pre-existence when the environment is shared between the two states. The
+  `StructuredOutput` line in both files was extended to enumerate `evidence` and `baseStateChecked` so
+  the prompt actually instructs the agent to populate the new schema fields. Task 3 verified no drift
+  between the two engines' `TRIAGE_SCHEMA`/`BAIL_REASONS`/prompt bodies after tasks 1–2 and confirmed
+  `node --check` on both engines plus the `harness.schema.json` parse. Review verdict PASS with no
+  findings.
+- **Why:** Bailing on an environment fault is correct and stays unchanged (`BAIL_REASONS` #3), but the
+  *diagnosis* triage writes into `bailReason` was previously unconstrained — the agent could describe a
+  self-inflicted environment fault as "pre-existing … at baseline, unrelated to this task" without ever
+  checking, because a broken shared environment fails identically before and after the task's edits.
+  The observed incident (`core/orchestrator` session 12, issue I36) sent the operator hunting for a
+  missing fixture and inherited test debt, neither of which existed, while the real cause — a reverting
+  `planning/` symlink introduced by the harness itself — sat one `ls -l` away.
+- **Decisions:** Constrained the assertion, not the bail — no new retry attempts for environment faults,
+  `BAIL_REASONS` #3 and "when unsure, BAIL" untouched. Preferred a cheap re-run-the-failing-check
+  verification over a bare disclaimer, per the ticket's design decision 2. Separated observation from
+  inference in the schema via the new `evidence` field rather than overloading `bailReason`. The new
+  prompt block was inserted verbatim identically in both engines despite their pre-existing
+  engine-specific differences (`extraBailReasons` spread, "worktree root" vs "run root" wording), to
+  keep the duplicated `triage()` stages behaviorally equivalent per the ticket's drift-prevention
+  requirement.
+
 ### `BT.ticket.gate-skip-count-regression` shipped — the gate now fails when tests stop running, not only when they fail
 
 - **What:** Ran `/sdlc-flow ticket-gate-skip-count-regression` end to end (3 tasks, review PASS, docs
