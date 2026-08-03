@@ -184,6 +184,7 @@ const SETUP_SCHEMA = {
     blockStatus:    { type: 'string', description: "This spec's Status in status.md (title-case), or 'Unknown'" },
     specThin:       { type: 'boolean', description: 'D19: true on a fresh (non-resume) run with a structurally-valid but substantively-thin spec; false on resume or a healthy spec.' },
     thinReason:     { type: 'string', description: 'D19: the specific thin-spec failures when specThin; empty string otherwise.' },
+    envFilesCopied: { type: 'array', items: { type: 'string' }, description: '--worktree only: repo-root-relative paths of every gitignored env-shaped file seeded into the worktree (from ENV_COPIED: lines); empty array if none existed to copy.' },
     notes:          { type: 'string' }
   }
 }
@@ -751,12 +752,19 @@ STEP 4 — Report pipeline-start inputs (run these from runDir):
        - The '## Acceptance Criteria' section has no real '- ' bullet (empty, or only a template seed) → thin.
      Do NOT flag bare 'TODO'/'TBD' prose, do NOT treat '<...>' as a token (legitimate in 'Vec<T>', globs),
      never flag the Amendment Log seed '_No amendments yet._'. Else specThin=false, thinReason="".
-
+${useWorktree ? `  d. Env files seeded — collect the "ENV_COPIED: <path>" lines printed during worktree setup
+     (STEP 2b step f, or the RESUME re-attach path) into envFilesCopied (one path per entry; empty
+     array if none printed — that means no gitignored env-shaped file exists in this repo, not that
+     the copy failed silently). Report this list; a run missing config should say so at setup time
+     rather than surface later as a confusing downstream failure (e.g. a fallback DB connection).
+     Note: the worktree's path is derived from the SPEC SLUG (trees/${baseBranchName}), not any
+     program/block ID — anything discovering it externally must use \`git worktree list\`, not guess.
+` : ''}
 STEP 5 — Capture the emoji-gate diff base — the HEAD short sha as it stands NOW, before any task commit:
   cd <runDir> && git rev-parse --short HEAD     (store as baseSha)
 
 Return your result using the StructuredOutput tool:
-  runDir, branchName, baseSha, wasCreated, specFileExists, blockStatus, specThin, thinReason, notes.
+  runDir, branchName, baseSha, wasCreated, specFileExists, blockStatus, specThin, thinReason,${useWorktree ? ' envFilesCopied,' : ''} notes.
 `, withModel({ label: 'setup', schema: SETUP_SCHEMA, phase: 'Setup' }, MODEL.setup))
 
 if (!setupResult) {
@@ -767,6 +775,13 @@ const { runDir, branchName, baseSha } = setupResult
 state.branch = branchName
 state.worktree_path = useWorktree ? runDir : ''
 log(`Run root: ${runDir} | branch: ${branchName} | base: ${baseSha}`)
+if (useWorktree) {
+  const envFilesCopied = setupResult.envFilesCopied || []
+  log(envFilesCopied.length
+    ? `Env files copied into worktree: ${envFilesCopied.join(', ')}`
+    : 'Env files copied into worktree: none found')
+  log(`Worktree path derives from the spec slug (trees/${branchName}), not any block ID — use "git worktree list" to locate it, never guess.`)
+}
 
 if (!setupResult.specFileExists) {
   log(`Spec file ${specFile} not found. /sdlc-task expects an authored spec.`)

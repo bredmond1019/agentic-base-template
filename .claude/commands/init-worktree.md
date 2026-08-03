@@ -64,11 +64,19 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
    without naming any one stack's layout. Root-level files (`CLAUDE.md`, manifests/lockfiles,
    build/config files, etc.) are included automatically by cone mode.
 
-9. **Copy local env files if present** (both are gitignored and must be copied manually):
+9. **Discover and copy EVERY gitignored env-shaped file** (`.env`, `.env.local`, `.env.*` in any
+   directory — config commonly lives below the repo root, e.g. `app/.env`, not just at root).
+   Preserve each file's path relative to the repo root (creating parent directories as needed —
+   so `app/.env` lands at `trees/<worktreeName>/app/.env`). Only copy files git actually ignores;
+   exclude `node_modules/`, `.venv/`, `venv/`, `trees/`, and `vendor/`; never overwrite a file that
+   already exists in the worktree — a copy step that pulls in an unexpected file is a worse
+   failure than a missing one:
    ```bash
-   if [ -f .env ]; then cp .env trees/<worktreeName>/.env; echo "Copied .env"; else echo ".env not found — skipping"; fi
-   if [ -f .env.local ]; then cp .env.local trees/<worktreeName>/.env.local; echo "Copied .env.local"; else echo ".env.local not found — skipping"; fi
+   git ls-files --others --ignored --exclude-standard -- . | grep -E '(^|/)\.env(\.[^/]*)?$' | grep -Ev '(^|/)(node_modules|\.venv|venv|trees|vendor)/' | while IFS= read -r f; do dest="trees/<worktreeName>/$f"; if [ ! -f "$dest" ]; then mkdir -p "$(dirname "$dest")"; cp "$f" "$dest"; echo "ENV_COPIED: $f"; fi; done
    ```
+   Record the `ENV_COPIED:` lines printed above — report them in step 12 below, so a run missing
+   config says so at setup time instead of surfacing later as a confusing downstream failure (e.g.
+   a fallback database connection producing "column does not exist" errors).
 
 10. **Create initial empty commit to establish the branch head:**
     ```bash
@@ -83,9 +91,13 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
     git -C trees/<worktreeName> log --oneline -1
     ```
 
-12. **Report success** and print next-step instructions:
+12. **Report success** and print next-step instructions, including the env files seeded in step 9
+    (or a note that none were found) and the worktree's actual path:
     ```
     Worktree '<worktreeName>' ready at trees/<worktreeName>/
+
+    Env files copied:
+      <one line per ENV_COPIED: entry from step 9, e.g. "app/.env" — or "none found" if empty>
 
     To run the SDLC pipeline in isolation:
       1. Open a new Claude Code session with working directory set to:
@@ -94,6 +106,9 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
 
     Note: install the project's dependencies in the worktree before any build/test runs:
       cd trees/<worktreeName> && <install command per project>   (dependencies are NOT shared across worktrees)
+
+    Note: the worktree path is derived from the spec slug (<worktreeName>), not any block ID —
+    if you need to locate it from outside this session, use `git worktree list` rather than guess.
 
     When the pipeline is done, return to the main repo session and run:
       /clean-worktree <original-args>
@@ -105,6 +120,8 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
 - `.claude/` is included so all commands and workflows resolve correctly when the CWD is the worktree.
 - Root-level files are included automatically by cone mode — no need to list them explicitly.
 - **Dependencies are not part of the checkout and are not shared between worktrees.** Install the project's dependencies inside the worktree before running its validation suite. (`/sdlc-task` handles this itself; only matters for a manual session.)
-- `.env` / `.env.local` are gitignored and must be copied manually (step 9).
+- Every gitignored env-shaped file under the repo (`.env`, `.env.local`, `.env.*`, at any depth)
+  is gitignored and must be copied manually (step 9) — not just the root pair, since some
+  projects keep config below the root (e.g. `app/.env`).
 - All `git commit` calls inside the pipeline will commit to branch `<worktreeName>`, not `main`, because git detects the worktree context automatically.
 - When the pipeline finishes, run `/clean-worktree` from the main repo session to merge the branch and clean up.

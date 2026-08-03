@@ -194,6 +194,7 @@ const SETUP_SCHEMA = {
     specThin:       { type: 'boolean', description: 'D19: true ONLY on a fresh run (wasCreated && specFileExists) with a structurally-valid but substantively-thin spec. false on resume or a healthy spec.' },
     thinReason:     { type: 'string', description: 'D19: the specific thin-spec failures when specThin; empty string otherwise.' },
     setupError:     { type: 'string', description: 'Non-empty when setup could not proceed safely (e.g. branch mode aborted on a dirty working tree). The engine aborts and reports this. Empty string on success.' },
+    envFilesCopied: { type: 'array', items: { type: 'string' }, description: '--worktree only: repo-root-relative paths of every gitignored env-shaped file seeded into the worktree (from ENV_COPIED: lines); empty array if none existed to copy, or in branch mode.' },
     notes:          { type: 'string' }
   }
 }
@@ -902,7 +903,14 @@ STEP 6 — Report pipeline-start inputs (run these from the live checkout):
        - The '## Acceptance Criteria' section has no real '- ' bullet (empty, or only a template seed) → thin.
      Do NOT flag bare 'TODO'/'TBD' prose, do NOT treat '<...>' as a token (legitimate in 'Vec<T>', globs),
      never flag the Amendment Log seed '_No amendments yet._'. Else specThin=false, thinReason="".
-
+${useWorktree ? `  d. Env files seeded — collect the "ENV_COPIED: <path>" lines printed during worktree setup
+     (STEP 3 step f, or the RESUME re-attach path) into envFilesCopied (one path per entry; empty
+     array if none printed — that means no gitignored env-shaped file exists in this repo, not that
+     the copy failed silently). Report this list; a run missing config should say so at setup time
+     rather than surface later as a confusing downstream failure (e.g. a fallback DB connection).
+     Note: the worktree's path is derived from the SPEC SLUG (trees/${baseBranchName}), not any
+     program/block ID — anything discovering it externally must use \`git worktree list\`, not guess.
+` : ''}
 Set setupError="" unless STEP 3 aborted (branch mode, dirty tree). Return your result using the StructuredOutput tool.
 `, withModel({ label: 'setup', schema: SETUP_SCHEMA, phase: 'Setup' }, MODEL.worktreeSetup))
 
@@ -918,6 +926,13 @@ const { branchName, worktreePath } = setupResult
 state.branch = branchName
 state.worktree_path = worktreePath
 log(`${useWorktree ? 'Worktree' : 'Branch'} ready: ${worktreePath} (branch: ${branchName})`)
+if (useWorktree) {
+  const envFilesCopied = setupResult.envFilesCopied || []
+  log(envFilesCopied.length
+    ? `Env files copied into worktree: ${envFilesCopied.join(', ')}`
+    : 'Env files copied into worktree: none found')
+  log(`Worktree path derives from the spec slug (trees/${branchName}), not any block ID — use "git worktree list" to locate it, never guess.`)
+}
 
 // D19 — thin-spec guard for a fresh run.
 if (setupResult.specThin) {
