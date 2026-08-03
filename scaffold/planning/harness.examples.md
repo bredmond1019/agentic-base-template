@@ -131,6 +131,15 @@ only carries the interpretation. `kind` defaults to `"command"`, so mix plain an
         "countPattern": "[0-9]+ tests? collected",
         "failOn": "decrease"
       },
+      {
+        "kind": "skip-count-regression",
+        "name": "pytest-skips",
+        "purpose": "Skipped-test count must not RISE vs the run-start baseline (catches coverage silently switching off, e.g. a stopped container degrading tests to skips instead of failures)",
+        "gates": true,
+        "baselineCommand": "uv run pytest -q -rs 2>&1 | grep -c '^SKIPPED'",
+        "command": "uv run pytest -q -rs 2>&1 | grep -c '^SKIPPED'",
+        "reasonCommand": "uv run pytest -q -rs 2>&1 | grep '^SKIPPED' | sed -E 's/^SKIPPED \\[[0-9]+\\] //' | sort | uniq -c | sort -rn | head -1"
+      },
       { "name": "pytest", "command": "uv run pytest", "purpose": "Full test suite — AUTHORITATIVE for verdict", "gates": true }
     ]
   },
@@ -152,6 +161,25 @@ only carries the interpretation. `kind` defaults to `"command"`, so mix plain an
 - **`count-delta`** — `command` runs, the first integer on the line matching `countPattern` is the
   count, and it is compared against the previous task's recorded count. `failOn: "decrease"` fails on a
   drop; `"zero-or-decrease"` also fails when it does not grow. Task 1 (no prior count) is SKIPPED.
+- **`skip-count-regression`** — `baselineCommand` runs once at **run start** (worktree/task
+  creation) and is stored as a bare-integer artifact, exactly like `baseline-diff`'s snapshot but a
+  count instead of a JSON array; at gate time `command` runs again and the check fails **only when
+  the current count exceeds the baseline** — never on a nonzero absolute count, since most suites
+  legitimately skip some tests always. This catches the case `count-delta` cannot: a test that
+  converts from *passed* to *skipped* still collects, so the collection count does not move, but it
+  stopped running. When the check is about to fail, the optional `reasonCommand` runs and its first
+  line is folded into the failure message as the dominant skip reason (e.g. "Docker is unavailable")
+  so the message names *what* stopped running, not only *how many*. The count command is entirely
+  stack-supplied — pytest, cargo, and vitest all report skips differently:
+  - **pytest**: `pytest -q -rs 2>&1 | grep -c '^SKIPPED'` (shown in the profile above); dominant
+    reason via `... | grep '^SKIPPED' | sed -E 's/^SKIPPED \[[0-9]+\] //' | sort | uniq -c | sort -rn | head -1`.
+  - **cargo** (`cargo test` / `cargo nextest run`): `cargo test 2>&1 | grep -oE '[0-9]+ ignored' | grep -oE '[0-9]+'`
+    (`cargo nextest run` prints `Summary [...] N skipped` — use `grep -oE '[0-9]+ skipped' | grep -oE '[0-9]+'`
+    instead). `cargo test`/`nextest` do not report per-test ignore reasons cheaply, so `reasonCommand`
+    is typically omitted for this stack.
+  - **vitest**: `vitest run --reporter=json 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d).numPendingTests||0))"`
+    (the JSON reporter's `numPendingTests` counts `.skip`/`.todo`); a dominant-reason command is
+    usually not worth it here since Vitest skips carry no runner-reported reason string.
 - **`warning-scan`** — `command` runs and its **exit code gates as usual**; additionally every
   `warningPatterns` match is recorded. With `gates: false` matches are advisory WARNs; with
   `gates: true` a match also fails the check.
