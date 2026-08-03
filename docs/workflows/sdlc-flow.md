@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [sdlc-flow, branch mode, worktree, PR, test-fix loop, end-review, SDLC engine, planning-vault, D46]
-related: [base-template-workflows-index, sdlc-block, D30-sdlc-flow-engine, D31-committed-authoritative-state, D33-pr-based-wrap-up, ticket-vault-aware-state-commits]
+related: [base-template-workflows-index, sdlc-block, D30-sdlc-flow-engine, D31-committed-authoritative-state, D33-pr-based-wrap-up]
 ---
 
 # `/sdlc-flow` — single-branch, PR-terminating SDLC engine

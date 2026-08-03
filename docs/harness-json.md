@@ -80,7 +80,7 @@ verdict. Use `gates: false` for advisory checks you want to run but not block on
 
 #### Check `kind`s
 
-`kind` defaults to `"command"` (a plain exit-code gate — the table above). Four richer kinds let a
+`kind` defaults to `"command"` (a plain exit-code gate — the table above). Five richer kinds let a
 suite express more than "run a command" while keeping every stack-specific command/pattern in this
 file (the engine only carries the interpretation). ¹`command` is required for every kind except
 `forbidden-pattern-scan` (which uses `rules[]` instead).
@@ -91,6 +91,7 @@ file (the engine only carries the interpretation). ¹`command` is required for e
 | `count-delta` | `countPattern`, `failOn` | Extracts an integer (first number on the line matching `countPattern`) and fails when it regresses vs the previous task. `failOn`: `decrease` or `zero-or-decrease`. Task 1 → SKIPPED. |
 | `warning-scan` | `warningPatterns[]` | Runs `command` (its **exit code gates**), then records matches of the patterns in its output — advisory WARN when `gates:false`, also-failing when `gates:true`. |
 | `forbidden-pattern-scan` | `rules[]` of `{id, pattern, paths?, allowlistPattern?}` | Source greps that must find nothing; any match is a violation. |
+| `skip-count-regression` | `command`, `baselineCommand`, `reasonCommand?` | Captures a baseline skip count at worktree creation (`baselineCommand`, bare integer); at gate time re-runs `command` and fails only when the current skip count **exceeds** the baseline. `reasonCommand` (optional) runs only when the check is about to fail, to surface the dominant skip reason in the failure message. Supported identically (no degradation) in both `/sdlc-task` and `/sdlc-flow`. |
 
 > **`count-delta` caveat:** this check degrades to a plain exit-code gate in both `/sdlc-task`
 > and `/sdlc-flow`. The cross-task regression comparison (`failOn: decrease`/`zero-or-decrease`)
@@ -99,7 +100,7 @@ file (the engine only carries the interpretation). ¹`command` is required for e
 > with a per-task prior-task report to compare against).
 
 See `planning/harness.examples.md` (the Python "rich checks" profile) for a worked example of all
-four, and [D6](../planning/decisions/D6-harness-richer-checks.md) for the rationale.
+five, and [D6](../planning/decisions/D6-harness-richer-checks.md) for the rationale.
 
 ### `uiTest` object
 

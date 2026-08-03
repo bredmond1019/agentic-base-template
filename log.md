@@ -3,9 +3,67 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-07-31T13:55:57Z
+**Last updated:** 2026-08-03T00:00:00Z
 
 ---
+
+## [2026-08-03]
+
+### `BT.ticket.gate-skip-count-regression` shipped — the gate now fails when tests stop running, not only when they fail
+
+- **What:** Ran `/sdlc-flow ticket-gate-skip-count-regression` end to end (3 tasks, review PASS, docs
+  patched). Task 1 added a new opt-in `skip-count-regression` check kind to `harness.schema.json`,
+  modeled closely on the existing `baseline-diff` kind: it captures a baseline skip count at run start
+  (`baselineCommand`) and fails the gate only when the current count (`command`) *rises* above it,
+  plus an optional `reasonCommand` (fired only when the check is about to fail) to surface the
+  dominant skip reason instead of a bare number. Task 2 ported identical rendering + gate-time
+  evaluation into both `sdlc-task.js` and `sdlc-flow.js`, including a shared pure
+  `skipCountRegressionResult(baselineCount, currentCount, dominantReason)` delta function (mirrored
+  verbatim in both engines, per the ticket's "testable without running a suite" requirement) and a
+  new baseline-artifact convention (`<reportsDir>/<slug>-skip-baseline.txt`, bare integer — distinct
+  from `baseline-diff`'s JSON-array `-baseline.json` file since the payload shape differs). Task 3
+  added a configured Python/pytest example (`pytest -q -rs | grep -c '^SKIPPED'`) to the rich-checks
+  profile in `scaffold/planning/harness.examples.md` plus documented cargo/nextest and vitest count
+  commands for stacks that don't get a full worked example. Schema stays valid Draft-7; every existing
+  example profile and this repo's own `harness.json` still validate unchanged (opt-in, zero behavior
+  change for anyone not adopting the new kind). Review verdict PASS with no findings.
+- **Why:** A pass→skip conversion is invisible to every prior check — "no failures" holds and the
+  collect-count guard holds too (skipped tests are still *collected*) — so a suite can silently lose
+  its entire integration surface (the triggering incident: 46 pgvector tests in `core/orchestrator`
+  stopped running when a container daemon was down, and nothing caught it). This closes that blind
+  spot as an opt-in, stack-agnostic check.
+- **Decisions:** Reused `baseline-diff`'s capture-at-start/compare-at-gate plumbing rather than
+  inventing a second mechanism; fails on a *rise* in skips (not any nonzero count) to avoid noise on
+  legitimately conditional suites; the count command is fully config-supplied, no runner hardcoded.
+  `skipCountRegressionResult()` was verified manually (`node -e`) rather than wired into an automated
+  JS test runner, since neither engine script has one and no sibling check kind does either — recorded
+  as a spec amendment rather than silently deferred.
+- **Refs:** `planning/ticket-gate-skip-count-regression/` (tasks.md Amendment Log has the two task-2
+  deviations); `.claude/workflows/harness.schema.json`, `.claude/workflows/sdlc-task.js`,
+  `.claude/workflows/sdlc-flow.js`, `scaffold/planning/harness.examples.md`, `docs/harness-json.md`.
+  Downstream propagation via `/sync-downstream-harness` is explicitly out of scope per the spec (D5).
+
+### Logged three wave-28 tickets forwarded from `core/orchestrator`, plus a field-evidence amendment
+
+- **What:** `core/orchestrator` filed three new tickets directly into this repo's ticket vault —
+  `BT.ticket.triage-verify-pre-existing-claims` (I36's diagnostic half: triage must not assert a
+  failure is pre-existing without verifying it), `BT.ticket.gate-skip-count-regression` (I37: a new
+  `harness.schema.json` check kind so the gate fails when tests stop running, not only when they
+  fail), and `BT.ticket.worktree-env-file-copy` (I35, patch-tier: worktree setup must copy every
+  gitignored env file, not just the root pair) — all registered wave 28, `open`, with full specs
+  (`tasks.md` + `tasks.json`, 3 tasks each) and listed in `planning/index.md`. Rather than filing a
+  fourth ticket, `core/orchestrator` also amended the existing
+  `BT.ticket.init-worktree-symlink-repair` (wave 23) with field evidence from a live session
+  (2026-08-02, `core/orchestrator` session 12, issue I36): a **tracked** symlink defeats the repair
+  entirely, and any repair should verify the link resolves instead of assuming the write stuck. All
+  four items were already fully filed when reviewed this session; this entry only records that the
+  hand-off happened, since it was never logged.
+- **Why:** The tickets and amendment landed directly in `state.json` / the planning vault without a
+  corresponding `log.md` entry, so the hand-off was invisible to session-recap and would have looked
+  like unexplained pre-existing backlog to a future session.
+- **Refs:** `planning/ticket-triage-verify-pre-existing-claims/`,
+  `planning/ticket-gate-skip-count-regression/`, `planning/ticket-worktree-env-file-copy/`,
+  `planning/ticket-init-worktree-symlink-repair/` (Amendment Log).
 
 ## [2026-07-31]
 
@@ -1945,7 +2003,7 @@ letter tripped the gate's test-stage check (overridden downstream by review, so 
 rather than a hard block, and never actually caught an emoji).
 
 Fix: double the backslashes in the source (`\\U0001F300`) so JS renders `\U0001F300` and Python's raw
-string sees the correct unicode ranges. Verified: post-fix the class matches real emoji (🚀, ✨) and
+string sees the correct unicode ranges. Verified: post-fix the class matches real emoji characters and
 NOT `Task` / `Heading 3`. Applied in `sdlc-task.js` and `sdlc-run.js` (the two engines with the gate;
 `sdlc-block` delegates). Swept both engines for sibling `\b \d \w \s \U` single-backslash escapes
 inside template-literal strings — none found (the only other matches are legit JS regex literals).

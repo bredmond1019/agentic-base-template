@@ -18,25 +18,29 @@ Spawn a subagent (Agent tool) to execute all steps below; pass the resolved targ
 ### Step 1 — Scan Planning Subfolders
 
 3. For each target repository path (e.g. `core/mev/planning/` or root `planning/`):
-   - Scan all top-level subdirectories inside the `planning/` folder.
-   - Ignore directories named `archive`, `artifacts`, `decisions`, or `archive-report`.
+   - **CRITICAL: Follow symlinks during directory scanning (`find -L` or `os.walk(..., followlinks=True)`).** Leaf repositories' `planning/` directories are symlinks into `_planning/` vaults (`core/_planning/<repo>`, etc.). Skipping symlinks will omit sub-project planning folders.
+   - Scan all top-level subdirectories inside every discovered `planning/` folder.
+   - Ignore metadata/system directories named `archive`, `artifacts`, `decisions`, `archive-report`, `sdlc`, `.playwright-cli`, or worktree paths (`trees/*`).
    - For each directory, inspect for:
-     - `tasks.json`: Check Pydantic/JSON statuses. If `"status"` is `"done"`, `"closed"`, or `"PASS"`, or if all items in `tasks[]` are marked complete, mark tasks as complete.
-     - `tasks.md`: Count checked checkboxes (`- [x]`) vs unchecked ones (`- [ ]`). If there are unchecked checkboxes, the tasks are **not** complete.
-     - `plan.md` / `notes.md` / `tasks.md`: Parse the YAML frontmatter to extract `status` and `title`.
+     - `tasks.json`: Check statuses. If `"status"` is `"done"`, `"closed"`, or `"PASS"`, or if all items in `tasks[]` are marked complete, mark tasks as complete.
+     - `tasks.md`: Count checked checkboxes (`- [x]`) vs unchecked ones (`- [ ]`). If there are unchecked checkboxes, mark tasks as incomplete unless block is closed in `state.json` or frontmatter.
+     - `plan.md` / `notes.md` / `tasks.md`: Parse YAML frontmatter to extract `status` and `title`. If frontmatter `status` is `closed`, `done`, or `completed`, mark block as complete.
 
 ### Step 2 — Cross-Reference with state.json and Master Plans
 
-4. Load the local `state.json` for the corresponding repository/tier.
-5. Extract the state of all blocks in the tracks and focus lists.
+4. Load all `state.json` files for the corresponding repositories/tiers across `BRAIN_ROOT`.
+5. Extract the state of all blocks across tracks and focus lists.
 6. Match each planning subfolder name to its block ID:
-   - Normalize names by lowercasing and removing punctuation (hyphens, dots, underscores).
+   - Perform **flexible / substring matching**: folder names like `EN.3.D-check-selection-parity` match block ID `EN.3.D`; `ticket-vault-aware-state-commits` matches block ID `BT.ticket.vault-aware-state-commits`.
+   - Normalize names by lowercasing and stripping non-alphanumeric characters.
    - If the block status in `state.json` is `"closed"`, `"complete"`, `"done"`, or `"PASS"`, the state is **complete**.
 7. If a master plan (such as `master-plan.md` or `plan.md` wave tables) exists in the parent tier:
    - Verify if all blocks associated with the planning directory are marked as completed.
-8. Classify directories as **Archive Candidates** only if:
+8. Classify directories as **Archive Candidates** if:
    - They correspond to a closed block in `state.json` / master plans.
-   - **OR** their local tasks (`tasks.json` or `tasks.md` checklists) are 100% complete and they have no active references as NOW/NEXT in the `status.md` Operating Board.
+   - **OR** their frontmatter status is `closed`/`done`/`completed`.
+   - **OR** their local tasks (`tasks.json` or `tasks.md` checklists) are 100% complete.
+   - **AND** they have no active references as `NOW` or `NEXT` in the `status.md` Operating Board.
 
 ### Step 3 — Write the Report
 
