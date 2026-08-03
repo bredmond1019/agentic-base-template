@@ -9,6 +9,40 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [2026-08-03]
 
+### `BT.ticket.gate-skip-count-regression` shipped — the gate now fails when tests stop running, not only when they fail
+
+- **What:** Ran `/sdlc-flow ticket-gate-skip-count-regression` end to end (3 tasks, review PASS, docs
+  patched). Task 1 added a new opt-in `skip-count-regression` check kind to `harness.schema.json`,
+  modeled closely on the existing `baseline-diff` kind: it captures a baseline skip count at run start
+  (`baselineCommand`) and fails the gate only when the current count (`command`) *rises* above it,
+  plus an optional `reasonCommand` (fired only when the check is about to fail) to surface the
+  dominant skip reason instead of a bare number. Task 2 ported identical rendering + gate-time
+  evaluation into both `sdlc-task.js` and `sdlc-flow.js`, including a shared pure
+  `skipCountRegressionResult(baselineCount, currentCount, dominantReason)` delta function (mirrored
+  verbatim in both engines, per the ticket's "testable without running a suite" requirement) and a
+  new baseline-artifact convention (`<reportsDir>/<slug>-skip-baseline.txt`, bare integer — distinct
+  from `baseline-diff`'s JSON-array `-baseline.json` file since the payload shape differs). Task 3
+  added a configured Python/pytest example (`pytest -q -rs | grep -c '^SKIPPED'`) to the rich-checks
+  profile in `scaffold/planning/harness.examples.md` plus documented cargo/nextest and vitest count
+  commands for stacks that don't get a full worked example. Schema stays valid Draft-7; every existing
+  example profile and this repo's own `harness.json` still validate unchanged (opt-in, zero behavior
+  change for anyone not adopting the new kind). Review verdict PASS with no findings.
+- **Why:** A pass→skip conversion is invisible to every prior check — "no failures" holds and the
+  collect-count guard holds too (skipped tests are still *collected*) — so a suite can silently lose
+  its entire integration surface (the triggering incident: 46 pgvector tests in `core/orchestrator`
+  stopped running when a container daemon was down, and nothing caught it). This closes that blind
+  spot as an opt-in, stack-agnostic check.
+- **Decisions:** Reused `baseline-diff`'s capture-at-start/compare-at-gate plumbing rather than
+  inventing a second mechanism; fails on a *rise* in skips (not any nonzero count) to avoid noise on
+  legitimately conditional suites; the count command is fully config-supplied, no runner hardcoded.
+  `skipCountRegressionResult()` was verified manually (`node -e`) rather than wired into an automated
+  JS test runner, since neither engine script has one and no sibling check kind does either — recorded
+  as a spec amendment rather than silently deferred.
+- **Refs:** `planning/ticket-gate-skip-count-regression/` (tasks.md Amendment Log has the two task-2
+  deviations); `.claude/workflows/harness.schema.json`, `.claude/workflows/sdlc-task.js`,
+  `.claude/workflows/sdlc-flow.js`, `scaffold/planning/harness.examples.md`, `docs/harness-json.md`.
+  Downstream propagation via `/sync-downstream-harness` is explicitly out of scope per the spec (D5).
+
 ### Logged three wave-28 tickets forwarded from `core/orchestrator`, plus a field-evidence amendment
 
 - **What:** `core/orchestrator` filed three new tickets directly into this repo's ticket vault —
