@@ -162,7 +162,13 @@ def discover_targets(brain_root: Path, base_template_root: Path) -> list[RepoTar
 @dataclass
 class FileDiff:
     rel_path: str  # relative to the file's source root (either .claude/ or hooks/)
-    status: str  # "new" | "changed"
+    status: str  # "new" | "changed" | "stale-safe" | "stale-conflict"
+    # "new"/"changed": present at source, add/update as before.
+    # "stale-safe": this script wrote it before (recorded in the manifest) but source no longer
+    #   ships it, and its on-disk content still matches the recorded hash - safe to delete.
+    # "stale-conflict": same as stale-safe, but the on-disk content has diverged from the
+    #   recorded hash (the repo locally modified it after receiving it) - never delete, report
+    #   as a conflict for the operator to resolve by hand instead.
     dest_prefix: str = ".claude"  # ".claude" or "hooks" - which target subtree this belongs to
 
 
@@ -244,6 +250,32 @@ def diff_repo(base_template_root: Path, brain_root: Path, target: RepoTarget) ->
     if hooks_diffs and (target.repo_path / ".git").exists():
         configured = repo_hooks_path(target.repo_path)
         report.hooks_path_unset = configured != "hooks"
+
+    # Stale detection: paths this script wrote in a prior run (recorded in the manifest) that the
+    # current source set no longer ships. Diff the manifest's path set against the CURRENT
+    # source-derived path set (not the "new"/"changed" diffs above, which only cover paths that
+    # differ - a manifest path that's unchanged at source must not be treated as stale).
+    manifest = load_manifest(target.repo_path)
+    current_keys: set[str] = set()
+    for src in harness_files(base_template_root):
+        rel = src.relative_to(base_template_root / ".claude")
+        current_keys.add(f".claude/{rel}")
+    for src in hook_files(brain_root):
+        rel = src.relative_to(brain_root / "hooks")
+        current_keys.add(f"hooks/{rel}")
+
+    for key, recorded_hash in manifest.get("files", {}).items():
+        if key in current_keys:
+            continue
+        dest_prefix, _, rel = key.partition("/")
+        dst = target.repo_path / dest_prefix / rel
+        if not dst.is_file():
+            # Nothing on disk to delete; it'll simply be dropped from the next manifest.
+            continue
+        if hash_file(dst) == recorded_hash:
+            report.diffs.append(FileDiff(rel_path=rel, status="stale-safe", dest_prefix=dest_prefix))
+        else:
+            report.diffs.append(FileDiff(rel_path=rel, status="stale-conflict", dest_prefix=dest_prefix))
 
     return report
 
