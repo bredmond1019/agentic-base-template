@@ -3,11 +3,35 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-04T00:45:00Z
+**Last updated:** 2026-08-04T16:53:14Z
 
 ---
 
 ## [2026-08-04]
+
+### Closed the clippy blind gate (D55) and found the lane it does not reach
+
+- **What:** `BT.ticket.all-targets-clippy-gate` shipped, all 7 tasks. **[D55](planning/decisions/D55-all-targets-clippy-placement.md)**
+  puts `cargo clippy --all-targets -- -D warnings` in the shipped Rust profile's authoritative
+  `command` and demotes the narrow lib+bins form to `fastCommand`, on a measured `engine-rs` delta
+  of **+6.72s warm (~3.3x, ~26% of D57's 26s tripwire)**. Applied to `harness.examples.md`,
+  `docs/harness-json.md`, `.claude/commands/test.md`, `.agents/skills/test/SKILL.md` and the D57
+  playbook. Verifying D55 then surfaced a larger defect, now specced as
+  `BT.ticket.sdlc-task-has-no-authoritative-gate` (wave 34): **`/sdlc-task` never runs any check's
+  authoritative `command` and never runs any `perTask: false` check at all** — `testDepth` defaults
+  to `fast` (`sdlc-task.js:1005`), applies to every task including the last (L1322), substitutes
+  `fastCommand` (L622), filters out `perTask: false` (L525), and bookkeep runs no tests. Seven live
+  repos each have at least one gating check the lane cannot run: `build` in all seven, plus the
+  integration half of the test suite in `bastion`/`bella`/`engine-rs`/`mev`.
+- **Why:** `mev` and `okf-core` both shipped almost-all-test-code blocks green on 2026-08-03 — the
+  lint gate was structurally incapable of seeing the diff. The naive fix collided with D57, which
+  had just tuned that same tripwire and left clippy in it at ~75% of its cost, so the ticket was
+  written to force a measurement rather than a flag swap. The follow-up matters more than the
+  original: `/ticket` and `/chore` route to `/sdlc-task` by default, so the blind lane is exactly
+  where the bug was found — two blind spots (lint can't see tests, tests don't run integration)
+  stacked in one engine.
+- **Refs:** `planning/ticket-all-targets-clippy-gate/` (+ `measurement.md`), `planning/decisions/D55-all-targets-clippy-placement.md`,
+  `planning/ticket-sdlc-task-has-no-authoritative-gate/`, brain `docs/decisions/D57-rust-sdlc-iteration-speed.md`
 
 ### The brain root became an engines-only sync target (D54)
 
