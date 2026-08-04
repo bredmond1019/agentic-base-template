@@ -1,0 +1,13 @@
+name: ci
+
+# base-template's own caller — invokes the node-docs reusable gate workflow on
+# push and pull_request. This is the first end-to-end proof of the
+# reusable-workflow shape before it fans out to the other 7 eligible repos.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gate:
+    uses: ./.github/workflows/gate-node-docs.yml
