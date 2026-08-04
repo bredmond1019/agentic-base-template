@@ -28,8 +28,8 @@ on:
         type: string
         default: "cargo nextest run --workspace"
         required: false
-      sibling-repo:
-        description: "owner/repo of a sibling repo a workspace member path-depends on (e.g. engine-rs's `claude-code-rs = { path = \"../claude-code-rs\" }`), checked out one level above this repo's own checkout. Empty (default) skips this step."
+      sibling-repos:
+        description: "Newline-separated owner/repo list of sibling repos a workspace member path-depends on (e.g. bastion's `mev = { path = \"../mev\" }`), each checked out one level above this repo's own checkout. Empty (default) skips this step."
         type: string
         default: ""
         required: false
@@ -41,20 +41,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Compute sibling checkout path
-        if: ${{ inputs.sibling-repo != '' }}
-        id: sibling
-        run: echo "path=../$(basename ${{ inputs.sibling-repo }})" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout sibling repo (path dependency)
-        if: ${{ inputs.sibling-repo != '' }}
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.sibling-repo }}
-          path: ${{ steps.sibling.outputs.path }}
-          # actions/checkout resolves `path` relative to $GITHUB_WORKSPACE; a leading `../` lands
-          # the sibling one level up, next to this repo's own checkout — matching the path-dependency
-          # convention (`../<repo>`) that expects both repos checked out as siblings.
+      - name: Checkout sibling repos (path dependencies)
+        if: ${{ inputs.sibling-repos != '' }}
+        env:
+          SIBLING_REPOS: ${{ inputs.sibling-repos }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # actions/checkout's `path` input resolves relative to $GITHUB_WORKSPACE; a leading `../`
+          # lands each sibling one level up, next to this repo's own checkout — matching the
+          # path-dependency convention (`../<repo>`) that expects siblings checked out side by side.
+          while IFS= read -r repo; do
+            [ -z "$repo" ] && continue
+            name="$(basename "$repo")"
+            echo "::group::Checkout sibling $repo -> ../$name"
+            gh repo clone "$repo" "../$name" -- --depth 1
+            echo "::endgroup::"
+          done <<< "$SIBLING_REPOS"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
