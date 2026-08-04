@@ -280,13 +280,41 @@ def diff_repo(base_template_root: Path, brain_root: Path, target: RepoTarget) ->
     return report
 
 
-def apply_repo(base_template_root: Path, brain_root: Path, report: RepoReport) -> None:
+def apply_repo(base_template_root: Path, brain_root: Path, report: RepoReport, version: str) -> None:
+    """Write every 'new'/'changed' diff, delete every 'stale-safe' diff (never 'stale-conflict'),
+    then write the updated content-hash manifest reflecting the post-apply state of every
+    currently-source-tracked path. 'stale-conflict' paths are left untouched on disk and dropped
+    from the manifest so they stop being managed going forward - the operator resolves them by
+    hand."""
     for d in report.diffs:
+        if d.status == "stale-conflict":
+            continue
+        dst = report.target.repo_path / d.dest_prefix / d.rel_path
+        if d.status == "stale-safe":
+            dst.unlink(missing_ok=True)
+            continue
         src_root = base_template_root / ".claude" if d.dest_prefix == ".claude" else brain_root / "hooks"
         src = src_root / d.rel_path
-        dst = report.target.repo_path / d.dest_prefix / d.rel_path
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
+
+    # Recompute the manifest's files dict from scratch: every path in the CURRENT source set (not
+    # just the ones that had a diff this run - unchanged files must stay recorded too), hashed from
+    # its now-current on-disk content in the target repo. stale-conflict paths are intentionally
+    # omitted (see docstring).
+    files: dict[str, str] = {}
+    for src in harness_files(base_template_root):
+        rel = src.relative_to(base_template_root / ".claude")
+        dst = report.target.repo_path / ".claude" / rel
+        if dst.is_file():
+            files[f".claude/{rel}"] = hash_file(dst)
+    for src in hook_files(brain_root):
+        rel = src.relative_to(brain_root / "hooks")
+        dst = report.target.repo_path / "hooks" / rel
+        if dst.is_file():
+            files[f"hooks/{rel}"] = hash_file(dst)
+
+    write_manifest(report.target.repo_path, version, files)
 
 
 def base_template_head_hash(base_template_root: Path) -> str:
@@ -389,7 +417,7 @@ def main() -> None:
             print(f"        (cd {target.repo_path} && git config core.hooksPath hooks)")
 
         if args.apply:
-            apply_repo(base_template_root, brain_root, report)
+            apply_repo(base_template_root, brain_root, report, commit_hash)
             update_template_version(target, commit_hash, args.message)
             print(f"    -> planning/.template-version updated (commit {commit_hash[:12]})")
 
