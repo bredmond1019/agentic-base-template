@@ -88,4 +88,5 @@ populated as repos are wired up in later tasks of this block.
 
 | Repo | Deviation | Reason |
 |---|---|---|
-| _none yet_ | | |
+| `orchestrator` | not exercised with `act`; verified with `actionlint` only | `act --dryrun` cannot resolve the reusable `gate-python-uv.yml` reference until `base-template`'s CI workflows are pushed to `origin/main` (that push happens in a later task of this block) — confirmed by running `act --dryrun` locally, which fails with "no such file or directory" fetching the un-pushed reusable workflow from the remote. |
+| `bastion-ui` | not exercised with `act`; verified with `actionlint` only | Same un-pushed-reusable-workflow gap as `orchestrator`, compounded by Flutter under `act` being unreliable in general (Docker-based act runs don't replicate the Flutter SDK toolchain well) — a real hosted run is expected to be the first true green signal for this repo. |
