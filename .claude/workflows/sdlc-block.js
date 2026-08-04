@@ -855,6 +855,9 @@ tasksFile="${blockTasks}", taskCount, commitHash, notes.
 // returned worktreePath).
 async function runBlockFlow(slug) {
   log(`Block ${slug}: running /sdlc-flow --no-pr --worktree...`)
+  // sdlc-block.js has no renderCheckList() of its own — it delegates ALL per-block verification to
+  // this child /sdlc-flow run, so the unconditional engine-parse (node --check) gate on any touched
+  // .claude/workflows/*.js file is already covered by sdlc-flow.js's own renderCheckList().
   const r = await workflow('sdlc-flow', `${slug} --no-pr --worktree`)
   return r
 }
