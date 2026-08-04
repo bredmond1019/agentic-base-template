@@ -223,7 +223,7 @@ Copy the profile that matches your stack into `planning/harness.json`.
   "validation": {
     "checks": [
       { "name": "fmt",    "command": "cargo fmt --check",           "purpose": "Format gate", "gates": true },
-      { "name": "clippy", "command": "cargo clippy -- -D warnings", "purpose": "Lint gate",   "gates": true },
+      { "name": "clippy", "command": "cargo clippy --all-targets -- -D warnings", "fastCommand": "cargo clippy -- -D warnings", "purpose": "Lint gate — end-of-flow review sees test/bench targets too", "gates": true },
       { "name": "test",   "command": "cargo test",                  "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true },
       { "name": "build",  "command": "cargo build --release",       "purpose": "Build gate",  "gates": true }
     ]
