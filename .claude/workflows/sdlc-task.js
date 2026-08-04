@@ -697,8 +697,34 @@ let cachedStartedAt = null
 // commit it at all — removing the commit removes the git verb the agent was getting wrong.
 async function writeTaskState(label, { cwd }) {
   state.tokens = buildTokensBlock()   // Block A — refresh the token roll-up before persisting
-  const stateJson = JSON.stringify(state, null, 2)
   const firstWrite = cachedStartedAt === null
+  // On later writes, started_at is already known (cachedStartedAt) — splice it into the
+  // serialized object BEFORE JSON.stringify, immediately after "branch", so the agent is
+  // handed a JSON blob that already carries the correct value and only has to insert
+  // "updated_at". This removes the two-value ambiguity that let the agent stamp both keys
+  // from the cached literal (see ticket-state-write-updated-at-freeze). On a first write the
+  // object is serialized exactly as before — the agent still derives started_at from STEP 1's
+  // `cat` output.
+  const stateJson = firstWrite
+    ? JSON.stringify(state, null, 2)
+    : JSON.stringify((() => {
+        const entries = Object.entries(state)
+        const branchIdx = entries.findIndex(([k]) => k === 'branch')
+        entries.splice(branchIdx + 1, 0, ['started_at', cachedStartedAt])
+        return Object.fromEntries(entries)
+      })(), null, 2)
+  const stepTwoText = firstWrite
+    ? `STEP 2 — write ${stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
+  "started_at" (preserved or NOW, per STEP 1) and "updated_at" (NOW) right after "branch". Valid JSON only
+  (double quotes, no trailing commas, no markdown fences). The object to write (verbatim except for
+  adding those two timestamp keys):
+${stateJson}`
+    : `STEP 2 — write ${stateFile} with EXACTLY this JSON, but inserting exactly one extra top-level
+  key: "updated_at" (NOW), right after "started_at" (already present in the object below,
+  immediately after "branch" — it was set from the value given in STEP 1). Valid JSON only
+  (double quotes, no trailing commas, no markdown fences). The object to write (verbatim except for
+  adding that one timestamp key):
+${stateJson}`
   const result = await agent(`
 You maintain the run-state for an /sdlc-task pipeline. You run from the run root. Write ONE JSON
 file to disk — do NOT run git commands, do not run checks, do not edit source, do not touch anything
@@ -715,11 +741,7 @@ ${firstWrite
   "${cachedStartedAt}". Do NOT read the existing state file and do NOT run mkdir: the directory
   already exists and an earlier write in this run already established started_at.`}
 
-STEP 2 — write ${stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
-  "started_at" (${firstWrite ? 'preserved or NOW, per STEP 1' : 'the value given in STEP 1'}) and "updated_at" (NOW) right after "branch". Valid JSON only
-  (double quotes, no trailing commas, no markdown fences). The object to write (verbatim except for
-  adding those two timestamp keys):
-${stateJson}
+${stepTwoText}
 
 Use the Write tool for the file. Do not run \`git add\`, \`git commit\`, \`git checkout\`,
 \`git switch\`, or \`git branch\` — this write is disk-only. Return via StructuredOutput: written=true
