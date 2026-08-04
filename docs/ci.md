@@ -100,6 +100,15 @@ the two repos that are still red after real hosted runs, with why, per the Task 
 genuinely cannot run hosted (or is failing for a reason unrelated to the CI wiring itself), say so
 explicitly rather than silently dropping it from the workflow.
 
+> **Update 2026-08-04 — the two red repos' callers have been removed.** `engine-rs` and
+> `orchestrator` had their `.github/workflows/ci.yml` deleted (`engine-rs` `9a84664`,
+> `orchestrator` `f025c34`) so the fleet's CI signal is unambiguously green rather than
+> permanently two-thirds red. **Neither failure was a CI-wiring bug** — both are recorded in full
+> below and remain true; the wiring is known-good and should be restored verbatim once the
+> underlying suites pass. Re-adding them is tracked as the HQ carryover
+> `ci-callers-removed-from-engine-rs-and-orchestrator`. **Hosted CI is therefore live on 6 repos,
+> not 8.**
+
 **Hosted-run results (8/8 pushed and inspected; 6/8 green):**
 
 | Repo | Result | Run |
