@@ -37,7 +37,8 @@ du -sh target target/debug/incremental
 cargo check --workspace --all-targets
 
 time cargo fmt --check                          # expect: <1s
-time cargo clippy -- -D warnings                # expect: seconds to tens of seconds
+time cargo clippy -- -D warnings                # tripwire (fastCommand) form — expect: seconds to tens of seconds
+time cargo clippy --all-targets -- -D warnings  # authoritative (command) form, end-of-flow only — see D55
 touch <the-crate-you-edit-most>/src/lib.rs
 time cargo nextest run --lib --workspace        # the per-task tripwire cost
 time cargo nextest run --workspace              # the end-gate cost
@@ -261,9 +262,18 @@ matters more.
   the link cost first — it is a bigger win and costs no signal at all.
 - **Don't drop `clippy` from the tripwire reflexively.** Measure it, and re-measure after the other
   fixes — the balance shifts. In `engine-rs` clippy went from ~13% of a 3m10s tripwire to ~75% of a
-  26s one, purely because everything around it got faster. It still earns its place: 19s is cheap,
-  and it catches real issues mid-task (`derivable_impls`) that would otherwise reach the end review
-  as a blind pile. Revisit only if it becomes the thing you actually wait on.
+  26s one, purely because everything around it got faster. It still earns its place in the tripwire:
+  it's cheap, and it catches real issues mid-task (`derivable_impls`) that would otherwise reach the
+  end review as a blind pile. **That 18.9s/~75% figure describes the narrow lib+bins form only.**
+  `cargo clippy --all-targets -- -D warnings` — needed to close the blind gate where test-only
+  blocks shipped green over real lint violations (`mev`, `okf-core`, 2026-08-03) — is a separate,
+  more expensive form: measured on `engine-rs` at ~9.61s warm vs. the narrow form's ~2.89s, a ~3.3x
+  multiplier (~6.72s / ~26% of the 26s tripwire if it replaced the narrow form outright). Per
+  [D55](file:///Users/brandon/Dev/agentic-portfolio/base-template/planning/decisions/D55-all-targets-clippy-placement.md),
+  the wide form goes in the authoritative `command` only (end-of-flow review); the narrow form
+  keeps its `fastCommand` seat in the per-task tripwire, so this bullet's original number and
+  conclusion still hold for the tripwire specifically — revisit only if the narrow form itself
+  becomes the thing you actually wait on.
 - **Don't assume; measure.** Both `sccache` and "tests are slow" were confident, plausible, and
   wrong. Every number in this doc came from a command, not an intuition.
 
@@ -274,6 +284,8 @@ matters more.
 - [ ] `brew install cargo-nextest`
 - [ ] `tests/it/main.rs` layout + `[[test]]` target from the very first integration test
 - [ ] `harness.json` `test` check: nextest in **both** `command` and `fastCommand`
+- [ ] `harness.json` `clippy` check: `--all-targets -- -D warnings` in `command`, narrow
+      `-- -D warnings` in `fastCommand` (D55)
 - [ ] `build` check: `"perTask": false`
 - [ ] `[profile.dev]` `debug = "line-tables-only"`, `split-debuginfo = "unpacked"`
 - [ ] `CLAUDE.md` standing rule: nextest, never `cargo test` + the tests/it layout
