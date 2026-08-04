@@ -7,7 +7,7 @@ layer: [factory, infra]
 project: base-template
 status: active
 keywords: [CI, GitHub Actions, reusable workflows, actionlint, act, hosted runners, harness.json]
-related: [base-template-docs-index, harness-json, D65-fleet-ci-split-by-visibility]
+related: [base-template-docs-index, harness-json, brain:D65-fleet-ci-split-by-visibility]
 ---
 
 # Hosted CI for public repos
