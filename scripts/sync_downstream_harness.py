@@ -54,6 +54,8 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+import hashlib
+import json
 import shutil
 import subprocess
 import sys
@@ -61,6 +63,49 @@ import tomllib
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+
+
+# Where the content-hash manifest lives inside each synced downstream repo, colocated with the
+# .claude/ tree it tracks (parallel in spirit to planning/.template-version). Records exactly the
+# set of paths this script has previously written plus each one's content hash, so a later run can
+# tell "this script put this here and it's unmodified, safe to remove" apart from "this repo added
+# this itself, never touch it" - see diff_repo()/apply_repo().
+MANIFEST_REL_PATH = ".claude/.harness-manifest.json"
+
+
+def hash_file(path: Path) -> str:
+    """sha256 hex digest of a file's bytes."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def load_manifest(repo_path: Path) -> dict:
+    """Read repo_path/MANIFEST_REL_PATH. Never raises - a missing or malformed manifest is
+    treated as "no prior sync recorded", not an error, since this script must remain safe to run
+    against a repo that predates the manifest's introduction."""
+    manifest_path = repo_path / MANIFEST_REL_PATH
+    default: dict = {"version": None, "generated": None, "files": {}}
+    if not manifest_path.is_file():
+        return default
+    try:
+        data = json.loads(manifest_path.read_text())
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return default
+    if not isinstance(data, dict) or not isinstance(data.get("files"), dict):
+        return default
+    return data
+
+
+def write_manifest(repo_path: Path, version: str, files: dict[str, str]) -> None:
+    """Write {"version": version, "generated": <today, ISO>, "files": files} as pretty JSON to
+    repo_path/MANIFEST_REL_PATH, creating parent dirs as needed."""
+    manifest_path = repo_path / MANIFEST_REL_PATH
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "version": version,
+        "generated": date.today().isoformat(),
+        "files": files,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
 
 def find_brain_root(start: Path) -> Path:
