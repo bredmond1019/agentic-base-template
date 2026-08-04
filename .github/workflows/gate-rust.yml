@@ -28,6 +28,11 @@ on:
         type: string
         default: "cargo nextest run --workspace"
         required: false
+      sibling-repo:
+        description: "owner/repo of a sibling repo a workspace member path-depends on (e.g. engine-rs's `claude-code-rs = { path = \"../claude-code-rs\" }`), checked out one level above this repo's own checkout. Empty (default) skips this step."
+        type: string
+        default: ""
+        required: false
 
 jobs:
   gate:
@@ -36,6 +41,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute sibling checkout path
+        if: ${{ inputs.sibling-repo != '' }}
+        id: sibling
+        run: echo "path=../$(basename ${{ inputs.sibling-repo }})" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout sibling repo (path dependency)
+        if: ${{ inputs.sibling-repo != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.sibling-repo }}
+          path: ${{ steps.sibling.outputs.path }}
+          # actions/checkout resolves `path` relative to $GITHUB_WORKSPACE; a leading `../` lands
+          # the sibling one level up, next to this repo's own checkout — matching the path-dependency
+          # convention (`../<repo>`) that expects both repos checked out as siblings.
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -43,6 +63,12 @@ jobs:
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
+
+      # Every eligible Rust repo's .cargo/config.toml sets `build.rustc-wrapper = "sccache"` for
+      # local dev speed; without the binary present the hosted runner fails every cargo invocation
+      # with "could not execute process `sccache ...`" before it even gets to fmt/clippy/test.
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Install cargo-nextest
         if: ${{ inputs.needs-nextest }}
