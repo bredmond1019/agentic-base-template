@@ -321,6 +321,7 @@ const WRAPUP_SCHEMA = {
     amendments:    { type: 'array', items: { type: 'string' }, description: 'D18 dated amendment-log lines appended to the spec (empty if none)' },
     commitHash:    { type: 'string' },
     blockStatusFlipped: { type: 'string', description: 'The state.json tracks[].blocks[].id flipped to "closed" on the branch this run, or "" if none (spec not fully done, no state.json, or block not found).' },
+    emitStateRan:  { type: 'boolean', description: 'true if `mev emit-state --write` regenerated derived surfaces on the branch itself during this in-place (non-worktree) wrap-up; false when skipped (worktree mode, or mev/brain.toml absent)' },
     notes:         { type: 'string' }
   }
 }
@@ -1607,13 +1608,16 @@ else:
       fabricate a block entry, and set blockStatusFlipped to "".
     - Validate the file is still valid JSON:
         cd ${worktreePath} && python3 -c "import json;json.load(open('planning/state.json'))"
-    - Do NOT run \`mev emit-state --write\` here. ${useWorktree
-        ? 'This is a linked git worktree, where emit-state refuses to run.'
-        : 'This run is on a feature branch, not the base branch — emit-state must run on the base, and only after the branch merges (deriving from the branch checkout would be wrong).'} The authored flip is
-      committed on the branch below (step 5); the derived surfaces regenerate on the base branch when
-      this branch merges (/clean-worktree, /merge-train, or /close-out --merge-branch run emit-state
-      after integration).
     - Set blockStatusFlipped to the block id you closed (or "" if none).
+
+2c. Regenerate derived surfaces via \`mev emit-state --write\`. Run this step whenever this wrap-up
+    stage runs at all — it is NOT conditional on "was this the last task" / full-spec completion above:
+    step 2 already edited planning/status.md regardless of whether the spec fully completed this run
+    (a task-subset run, or a bail, still leaves it changed on disk), so the derived surfaces (status.md
+    rollups, /attention boards, wave tables) need resyncing every time, not only on a full close.
+    ${useWorktree
+      ? `- Do NOT run \`mev emit-state --write\` here: this is a linked git worktree, where emit-state refuses to run. The authored edits are committed on the branch below (step 5); the derived surfaces regenerate on the base branch when this branch merges (/clean-worktree, /merge-train, or /close-out --merge-branch run emit-state after integration). Set emitStateRan=false.`
+      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \`git commit\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \`mev\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}
 
 3. Prepend a new log.md entry (newest first):
    ## [run: date +%Y-%m-%d]
@@ -1663,11 +1667,12 @@ EOF
    cd ${worktreePath} && git log --oneline -1`}
 
 Return via StructuredOutput: statusUpdated, devlogUpdated, nextFocus, amendments[], commitHash,
-blockStatusFlipped (the state.json block id closed in step 2b, or ""), notes.
+blockStatusFlipped (the state.json block id closed in step 2b, or ""), emitStateRan (step 2c), notes.
 `, withModel({ label: 'wrap-up', schema: WRAPUP_SCHEMA, phase: 'Wrap-up' }, MODEL.wrapup))
 
 if (wrapupResult?.amendments?.length) log(`Spec amendments (D18): ${wrapupResult.amendments.length} line(s) appended.`)
 if (wrapupResult?.blockStatusFlipped) log(`state.json: block "${wrapupResult.blockStatusFlipped}" → closed on the branch; derived surfaces regenerate on merge (/clean-worktree, /merge-train, or /close-out --merge-branch).`)
+log(`Derived surfaces (in-place, this wrap-up): ${wrapupResult?.emitStateRan ? 'regenerated (mev emit-state --write).' : useWorktree ? 'skipped — worktree mode; regenerate on merge.' : 'skipped (mev/brain.toml absent).'}`)
 
 // Final state write (status reflects the terminal state; PR fields filled after creation).
 state.status = bailed ? 'blocked' : 'done'
