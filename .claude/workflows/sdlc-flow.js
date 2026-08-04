@@ -266,6 +266,7 @@ const TEST_SCHEMA = {
     failCount:   { type: 'integer' },
     failedTests: { type: 'array', items: { type: 'string' } },
     failBlob:    { type: 'string', description: 'Compact failure output (failing check names + the tail of their output) for triage; empty when allPassed' },
+    stateWritten: { type: 'boolean', description: 'true if the agent ALSO persisted sdlc-flow-state.json + worklog.md this same turn (the per-task pass-path state-write fold); false/omitted when it did not (no onPass instructions given, a check failed, or the write was not attempted/completed)' },
     notes:       { type: 'string' }
   }
 }
@@ -1121,7 +1122,44 @@ function renderTaskCheckList(commands, cwd) {
   }).join('\n\n')
 }
 
-async function runTests(label, { gatingOnly, taskCommands = null }) {
+// Renders the "if allPassed, ALSO perform this exact state write, in this same turn" instruction
+// block for a passing test agent — the identical STEP 1-4 recipe writeFlowState() uses today (cat
+// for started_at preservation, Write two files, explicit no-git-commands prohibition), inlined here
+// so the fold doesn't need a follow-up dedicated state-writer agent. `onPass` is
+// { stateFile, stateJson, worklogFile, worklogEntry } — all fully computable in JS before the test
+// call is made, from the prior implement/fix stage's result.
+function renderOnPassStateWriteRecipe(onPass) {
+  return `
+IF AND ONLY IF allPassed is true above, ALSO perform this state write as part of THIS SAME turn —
+do NOT do this if any check failed (leave stateWritten unset/false in that case):
+
+STEP W1 — run this as ONE Bash call, exactly as written. Do not split it into several calls:
+  cd ${worktreePath} && mkdir -p ${blockDir}/sdlc && date -u +%Y-%m-%dT%H:%M:%SZ && { cat ${onPass.stateFile} 2>/dev/null || echo "__NO_STATE__"; }
+  The FIRST line of output is NOW. Everything after it is the existing state file, or __NO_STATE__
+  when there is none. If that file exists and has a "started_at" value, REUSE it verbatim for
+  started_at below. Otherwise started_at = NOW.
+
+STEP W2 — write ${onPass.stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
+  "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch". Valid
+  JSON only (double quotes, no trailing commas, no markdown fences). The object to write (verbatim
+  except for adding those two timestamp keys):
+${onPass.stateJson}
+
+STEP W3 — append to ${onPass.worklogFile}. If the file does not exist, first write a header line
+  "# Worklog — ${blockId}" then a blank line. Then append this section verbatim (a blank line
+  before it):
+\`\`\`
+${onPass.worklogEntry}
+\`\`\`
+
+STEP W4 — use the Write tool for both files. Do NOT run \`git add\`, \`git commit\`, \`git checkout\`,
+  \`git switch\`, or \`git branch\` — this write is disk-only, exactly like writeFlowState(). Set
+  stateWritten=true in your StructuredOutput once both files are written to disk; leave it
+  false/unset if you skipped this because a check failed.
+`
+}
+
+async function runTests(label, { gatingOnly, taskCommands = null, onPass = null }) {
   const usingOverride = Array.isArray(taskCommands) && taskCommands.length > 0
   return tracedAgent(`${W}
 You are the test agent for the /sdlc-flow pipeline. Run the project's validation checks and report.
@@ -1141,8 +1179,9 @@ emoji in markdown/docs (excluding the literal "🤖 Generated with Claude Code" 
   Inspect the changed .md files; a stray emoji in docs FAILS this gate.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
+${onPass ? renderOnPassStateWriteRecipe(onPass) : ''}
 Return via StructuredOutput: allPassed (true only if EVERY check passed), passCount, failCount,
-failedTests (names), failBlob (compact: failing check names + the tail of their output; empty when allPassed).
+failedTests (names), failBlob (compact: failing check names + the tail of their output; empty when allPassed)${onPass ? ', stateWritten (true only if you performed the additional state write above)' : ''}.
 `, withModel({ label, schema: TEST_SCHEMA, phase: 'Tasks' }, MODEL.test))
 }
 
@@ -1189,6 +1228,33 @@ ${sameContext ? `(Previous attempt context for the same-failure check: ${sameCon
 `, withModel({ label: `triage:${context}:${attempt}`, schema: TRIAGE_SCHEMA, phase: 'Tasks' }, MODEL.triage))
 }
 
+// Precompute the exact state.json + worklog.md content for the case where task `taskNum` PASSES on
+// this attempt — content that is fully known from the implement/fix stage's result (t.summary,
+// t.commit, t.files_changed, t.decisions) BEFORE the test call is even made; the test call only
+// determines whether this precomputed content actually gets used. Handed to runTests() as `onPass`
+// so a passing test agent can write it in its own turn instead of a follow-up dedicated state-writer
+// agent. Does NOT mutate the live `state`/`t` objects — this is a snapshot for the CANDIDATE outcome.
+function buildPassPayload(taskNum, t, attempt, validatedLabel) {
+  const snapshot = JSON.parse(JSON.stringify(state))
+  snapshot.tasks[String(taskNum)] = { ...t, status: 'passed', validated: validatedLabel }
+  snapshot.tokens = buildTokensBlock()
+  const worklogEntry = [
+    `## Task ${taskNum} — PASSED (${attempt} attempt${attempt === 1 ? '' : 's'})`,
+    t.summary ? `What: ${t.summary}` : '',
+    (t.issues || []).length ? `Issues hit: ${t.issues.join('; ')}` : '',
+    (t.fixes || []).length ? `Fixed via: ${t.fixes.join('; ')}` : '',
+    (t.decisions || []).length ? `Decisions: ${t.decisions.join('; ')}` : '',
+    t.commit ? `Commit: ${t.commit}` : '',
+    `Validated: ${validatedLabel}`,
+  ].filter(Boolean).join('\n')
+  return {
+    stateFile,
+    stateJson: JSON.stringify(snapshot, null, 2),
+    worklogFile,
+    worklogEntry,
+  }
+}
+
 // ================================================================
 // PHASE 2: PER-TASK LOOP (sequential, in the one shared worktree)
 // ================================================================
@@ -1213,6 +1279,7 @@ for (const taskNum of taskList) {
 
   let taskPassed = false
   let prevFailBlob = null
+  let taskStateWritten = false
 
   for (let attempt = 1; attempt <= MAX_TASK_ATTEMPTS && !bailed; attempt++) {
     t.attempts = attempt
@@ -1295,12 +1362,22 @@ Return via StructuredOutput:
     //    own `validation_commands` in tasks.json runs THOSE instead (the end review still runs the
     //    full harness suite over the integrated tree, so nothing escapes validation — this only
     //    changes what the per-task tripwire costs).
-    const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum) })
+    const passValidatedLabel = taskCommandsFor(taskNum)
+      ? 'per-task validation_commands (tasks.json override)'
+      : (testDepth === 'fast' ? 'gating checks (fast tripwire)' : 'full gating suite')
+    const passPayload = buildPassPayload(taskNum, t, attempt, passValidatedLabel)
+    const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum), onPass: passPayload })
     if (testResult && testResult.allPassed) {
-      t.validated = taskCommandsFor(taskNum)
-        ? 'per-task validation_commands (tasks.json override)'
-        : (testDepth === 'fast' ? 'gating checks (fast tripwire)' : 'full gating suite')
+      t.validated = passValidatedLabel
       taskPassed = true
+      if (testResult.stateWritten) {
+        // The folded write went straight to disk (no STATE_WRITE_SCHEMA result to read startedAt
+        // back from), so cachedStartedAt is deliberately left as-is: the next dedicated writeFlowState
+        // call (a later task, or this task's own reliability-net fallback) will just re-`cat` the file
+        // it wrote — which still correctly preserves started_at, just without the caching shortcut.
+        taskStateWritten = true
+        worklogHeaderWritten = true
+      }
       break
     }
 
@@ -1337,7 +1414,15 @@ Return via StructuredOutput:
     t.commit ? `Commit: ${t.commit}` : '',
     t.validated ? `Validated: ${t.validated}` : '',
   ].filter(Boolean).join('\n')
-  await writeFlowState(`task ${taskNum} ${t.status}`, worklogEntry, { cwd: worktreePath })
+  // Reliability net: the pass-path fold (runTests' onPass, task 1) already wrote state.json +
+  // worklog.md in the SAME turn as the passing test call when taskStateWritten is true — skip the
+  // dedicated writer in that case. Any other outcome (bail, stateWritten false/unset, testResult
+  // null) falls through to the dedicated call so no task outcome is ever left unpersisted.
+  if (!(taskPassed && taskStateWritten)) {
+    await writeFlowState(`task ${taskNum} ${t.status}`, worklogEntry, { cwd: worktreePath })
+  } else {
+    log(`Task ${taskNum}: state write folded into the passing test agent's own turn — skipped the dedicated state-writer call.`)
+  }
 
   if (bailed) break
 }
