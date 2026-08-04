@@ -138,13 +138,18 @@ def find_base_template_root(start: Path) -> Path:
 class RepoTarget:
     slug: str
     repo_path: Path  # absolute
+    engines_only: bool = False  # receive .claude/workflows/ but never .claude/commands/
 
 
 def discover_targets(brain_root: Path, base_template_root: Path) -> list[RepoTarget]:
     """Read brain.toml; a repo is an eligible sync target iff it has its own .claude/workflows/
     directory already (that's what marks it as having pulled the full SDLC-engine harness, as
     opposed to the lighter session/planning-only set some tiers get) and it isn't base-template
-    itself."""
+    itself.
+
+    The brain root (HQ) is a target but an `engines_only` one: it runs the SDLC engines while
+    authoring its own brain-specific commands. See harness_files() for why syncing commands
+    there would be destructive."""
     with (brain_root / "brain.toml").open("rb") as f:
         config = tomllib.load(f)
 
@@ -155,7 +160,13 @@ def discover_targets(brain_root: Path, base_template_root: Path) -> list[RepoTar
             continue
         if not (repo_path / ".claude" / "workflows").is_dir():
             continue
-        targets.append(RepoTarget(slug=repo["slug"], repo_path=repo_path))
+        targets.append(
+            RepoTarget(
+                slug=repo["slug"],
+                repo_path=repo_path,
+                engines_only=repo_path == brain_root.resolve(),
+            )
+        )
     return targets
 
 
@@ -180,11 +191,18 @@ class RepoReport:
     hooks_path_unset: bool = False  # target's core.hooksPath is not "hooks" (see hook_files())
 
 
-def harness_files(root: Path) -> list[Path]:
-    """The exact base-template harness file set this script owns, relative to `root/.claude`."""
+def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
+    """The exact base-template harness file set this script owns, relative to `root/.claude`.
+
+    `engines_only` drops commands/*.md from the set. It exists for the brain root (HQ), which
+    runs the SDLC engines but authors its OWN brain-specific commands: HQ's /prime, /log-work,
+    /handoff, /capture and 9 others share a filename with base-template's generic versions and
+    differ substantially (HQ's /prime is 164 lines to base-template's 55; HQ's /log-work carries
+    the cross-repo brain sync). Syncing commands into HQ would silently overwrite all twelve.
+    """
     files: list[Path] = []
     commands_dir = root / ".claude" / "commands"
-    if commands_dir.is_dir():
+    if commands_dir.is_dir() and not engines_only:
         files.extend(p for p in commands_dir.glob("*.md") if p.is_file())
     workflows_dir = root / ".claude" / "workflows"
     if workflows_dir.is_dir():
@@ -229,7 +247,7 @@ def diff_repo(base_template_root: Path, brain_root: Path, target: RepoTarget) ->
         report.error = "no .claude/ directory"
         return report
 
-    for src in harness_files(base_template_root):
+    for src in harness_files(base_template_root, target.engines_only):
         rel = src.relative_to(base_template_root / ".claude")
         dst = target.repo_path / ".claude" / rel
         if not dst.exists():
@@ -257,7 +275,7 @@ def diff_repo(base_template_root: Path, brain_root: Path, target: RepoTarget) ->
     # differ - a manifest path that's unchanged at source must not be treated as stale).
     manifest = load_manifest(target.repo_path)
     current_keys: set[str] = set()
-    for src in harness_files(base_template_root):
+    for src in harness_files(base_template_root, target.engines_only):
         rel = src.relative_to(base_template_root / ".claude")
         current_keys.add(f".claude/{rel}")
     for src in hook_files(brain_root):
@@ -303,7 +321,7 @@ def apply_repo(base_template_root: Path, brain_root: Path, report: RepoReport, v
     # its now-current on-disk content in the target repo. stale-conflict paths are intentionally
     # omitted (see docstring).
     files: dict[str, str] = {}
-    for src in harness_files(base_template_root):
+    for src in harness_files(base_template_root, report.target.engines_only):
         rel = src.relative_to(base_template_root / ".claude")
         dst = report.target.repo_path / ".claude" / rel
         if dst.is_file():

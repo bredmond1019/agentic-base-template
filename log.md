@@ -9,6 +9,27 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [2026-08-04]
 
+### The brain root became an engines-only sync target (D54)
+
+- **What:** HQ (`agentic-portfolio`) was given `.claude/workflows/` so the SDLC engines and
+  `/orchestrate` can drive its own chore blocks — it had none, which is the real reason the HQ track
+  sat at 0/10 through the `bullet-proof-software` week. Creating that directory silently made HQ an
+  eligible target for `scripts/sync_downstream_harness.py`, which also copies `commands/*.md`.
+- **The trap:** twelve command filenames exist in both trees and **all twelve differ** — `archive`,
+  `backlog-ticket`, `capture`, `commit`, `generate-master-plan`, `handoff`, `log-work`, `prime`,
+  `README`, `session-recap`, `update-state`, `wrap-up`. HQ's `/prime` is 164 lines to
+  base-template's 55; HQ's `/log-work` carries the cross-repo brain sync. The script only ever
+  adds/updates, so the clobber would never have been reported as a deletion.
+- **Fix:** `RepoTarget.engines_only`, set for the target whose `repo_path` resolves to the brain
+  root; `harness_files()` drops `commands/*.md` when it is set. Threaded through all three
+  iteration sites (diff, stale-key computation, manifest rebuild) so detection, application, and
+  manifest bookkeeping agree.
+- **Verified:** `--repo brain` dry-run reports "up to date" (0 files), while a full dry-run still
+  reports 40 files across 17 repos — the guard is selective, not a no-op.
+- **Refs:** `planning/decisions/D54-brain-root-is-an-engines-only-sync-target.md`.
+
+## [2026-08-04]
+
 ### `/orchestrate` chain — all 9 open BT.ticket state-reliability blocks closed
 
 - **What:** Ran `/orchestrate` end-to-end (`--worktree`, self-paced, no user prompts) across all 9 open
