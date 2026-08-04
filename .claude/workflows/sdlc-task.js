@@ -253,6 +253,7 @@ const TEST_SCHEMA = {
     failCount:   { type: 'integer' },
     failedTests: { type: 'array', items: { type: 'string' } },
     failBlob:    { type: 'string', description: 'Compact failure output (failing check names + the tail of their output) for triage; empty when allPassed' },
+    stateWritten: { type: 'boolean', description: 'true if the agent ALSO persisted sdlc-task-state.json this same turn (the per-task pass-path state-write fold); false/omitted when it did not (no onPass instructions given, a check failed, or the write was not attempted/completed)' },
     notes:       { type: 'string' }
   }
 }
@@ -267,7 +268,8 @@ const TRIAGE_SCHEMA = {
     bailReason:          { type: 'string', description: 'When class=MAJOR: a short human-readable reason for the handoff; empty when RETRYABLE' },
     sameFailureAsBefore: { type: 'boolean', description: 'true if the SAME failure as the previous attempt (no progress)' },
     evidence:            { type: 'string', description: 'What was actually OBSERVED, quoting the failing check output. No causal claims.' },
-    baseStateChecked:    { type: 'boolean', description: 'true only if the failing check was actually re-run against the base state (main working tree or the task base commit). false means any claim about the base state is a hypothesis.' }
+    baseStateChecked:    { type: 'boolean', description: 'true only if the failing check was actually re-run against the base state (main working tree or the task base commit). false means any claim about the base state is a hypothesis.' },
+    stateWritten:        { type: 'boolean', description: 'true if the agent ALSO persisted sdlc-task-state.json this same turn (the terminal-bail state-write fold); false/omitted when it did not (no onBail instructions given, the outcome was not terminal, or the write was not attempted/completed)' }
   }
 }
 
@@ -947,7 +949,103 @@ function renderTaskCheckList(commands, cwd) {
   }).join('\n\n')
 }
 
-async function runTests(label, { gatingOnly, taskCommands = null }) {
+// Renders the "if allPassed, ALSO perform this exact state write, in this same turn" instruction
+// block for a passing test agent — mirrors sdlc-flow.js's renderOnPassStateWriteRecipe, but this
+// engine has no worklog.md (state.json only). `onPass` is { stateFile, stateJson } — fully
+// computable in JS before the test call is made, from the prior implement/fix stage's result.
+function renderOnPassStateWriteRecipe(onPass) {
+  return `
+IF AND ONLY IF allPassed is true above, ALSO perform this state write as part of THIS SAME turn —
+do NOT do this if any check failed (leave stateWritten unset/false in that case):
+
+STEP W1 — run this as ONE Bash call, exactly as written. Do not split it into several calls:
+  cd ${runDir} && mkdir -p ${blockDir}/sdlc && date -u +%Y-%m-%dT%H:%M:%SZ && { cat ${onPass.stateFile} 2>/dev/null || echo "__NO_STATE__"; }
+  The FIRST line of output is NOW. Everything after it is the existing state file, or __NO_STATE__
+  when there is none. If that file exists and has a "started_at" value, REUSE it verbatim for
+  started_at below. Otherwise started_at = NOW.
+
+STEP W2 — write ${onPass.stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
+  "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch". Valid
+  JSON only (double quotes, no trailing commas, no markdown fences). The object to write (verbatim
+  except for adding those two timestamp keys):
+${onPass.stateJson}
+
+STEP W3 — use the Write tool for the file. Do NOT run \`git add\`, \`git commit\`, \`git checkout\`,
+  \`git switch\`, or \`git branch\` — this write is disk-only, exactly like writeTaskState(). Set
+  stateWritten=true in your StructuredOutput once the file is written to disk; leave it false/unset
+  if you skipped this because a check failed.
+`
+}
+
+// Renders the "if this triage call is terminal, ALSO perform this exact state write, in this same
+// turn" instruction block for the triage agent — mirrors sdlc-flow.js's renderBailStateWriteRecipe,
+// state.json only (no worklog.md in this engine). `onBail` is
+// { stateFile, stateJson, majorFallback, exhaustionFallback } — exhaustionFallback is null at call
+// sites that have no attempt-exhaustion bail path (mirrors the asymmetry between the NULL_RESULT
+// and test-failure call sites in the per-task loop below).
+function renderBailStateWriteRecipe(onBail, attempt, maxAttempts) {
+  const esc = s => String(s).replace(/"/g, '\\"')
+  return `
+IF AND ONLY IF your class above is MAJOR${onBail.exhaustionFallback ? `, OR this is the final attempt (attempt ${attempt} of ${maxAttempts})` : ''}, ALSO perform this state
+write as part of THIS SAME turn — do NOT do this ${onBail.exhaustionFallback ? `if class is RETRYABLE and this is NOT the final attempt` : `unless class is MAJOR`} (leave stateWritten unset/false in that case):
+
+First compute the effective bail reason (used in STEP W2 below):
+  - If your class is MAJOR: use your own bailReason field if you set a non-empty value; otherwise
+    your own reason field if non-empty; otherwise this exact fallback text: "${esc(onBail.majorFallback)}"
+${onBail.exhaustionFallback ? `  - If your class is RETRYABLE but this IS the final attempt (attempt ${attempt} of ${maxAttempts}):
+    IGNORE your own bailReason/reason and use this EXACT fallback text instead: "${esc(onBail.exhaustionFallback)}"` : ''}
+
+STEP W1 — run this as ONE Bash call, exactly as written. Do not split it into several calls:
+  cd ${runDir} && mkdir -p ${blockDir}/sdlc && date -u +%Y-%m-%dT%H:%M:%SZ && { cat ${onBail.stateFile} 2>/dev/null || echo "__NO_STATE__"; }
+  The FIRST line of output is NOW. Everything after it is the existing state file, or __NO_STATE__
+  when there is none. If that file exists and has a "started_at" value, REUSE it verbatim for
+  started_at below. Otherwise started_at = NOW.
+
+STEP W2 — write ${onBail.stateFile} with EXACTLY this JSON, but: (a) inserting two extra top-level
+  keys "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch", and
+  (b) replacing the literal placeholder string "__BAIL_REASON__" (the top-level "bail_reason" field)
+  with the effective bail reason computed above. Valid JSON only (double quotes, no trailing commas,
+  no markdown fences). The object to write (verbatim except for those substitutions):
+${onBail.stateJson}
+
+STEP W3 — use the Write tool for the file. Do NOT run \`git add\`, \`git commit\`, \`git checkout\`,
+  \`git switch\`, or \`git branch\` — this write is disk-only, exactly like writeTaskState(). Set
+  stateWritten=true in your StructuredOutput once the file is written to disk; leave it false/unset
+  if you skipped this because the outcome was not terminal.
+`
+}
+
+// Precompute the exact state.json content for the case where task `taskNum` PASSES on this
+// attempt — content that is fully known from the implement/fix stage's result (t.summary,
+// t.commit, t.files_changed, t.decisions) BEFORE the test call is even made; the test call only
+// determines whether this precomputed content actually gets used. Handed to runTests() as `onPass`
+// so a passing test agent can write it in its own turn instead of a follow-up dedicated
+// state-writer agent. Does NOT mutate the live `state`/`t` objects — this is a snapshot for the
+// CANDIDATE outcome.
+function buildPassPayload(taskNum, t, validatedLabel) {
+  const snapshot = JSON.parse(JSON.stringify(state))
+  snapshot.tasks[String(taskNum)] = { ...t, status: 'passed', validated: validatedLabel }
+  snapshot.tokens = buildTokensBlock()
+  return { stateFile, stateJson: JSON.stringify(snapshot, null, 2) }
+}
+
+// Precompute the exact state.json content for the case where THIS triage call turns out to be
+// terminal (class=MAJOR, or — only at call sites that pass exhaustionFallback — this is the final
+// allowed attempt) — content that is fully known BEFORE the triage call is made, except the
+// effective bail reason, which the triage agent itself computes as part of classifying (see
+// renderBailStateWriteRecipe). Handed to triage() as `onBail` so a terminal triage call can write
+// it in its own turn instead of a follow-up dedicated state-writer agent. Does NOT mutate the live
+// `state`/`t` objects — this is a snapshot for the CANDIDATE outcome.
+function buildBailPayload(taskNum, t, majorFallback, exhaustionFallback = null) {
+  const snapshot = JSON.parse(JSON.stringify(state))
+  snapshot.tasks[String(taskNum)] = { ...t, status: 'failed' }
+  snapshot.status = 'blocked'
+  snapshot.bail_reason = '__BAIL_REASON__'
+  snapshot.tokens = buildTokensBlock()
+  return { stateFile, stateJson: JSON.stringify(snapshot, null, 2), majorFallback, exhaustionFallback }
+}
+
+async function runTests(label, { gatingOnly, taskCommands = null, onPass = null }) {
   const usingOverride = Array.isArray(taskCommands) && taskCommands.length > 0
   return tracedAgent(`${W}
 You are the test agent for the lean /sdlc-task pipeline. Run the project's validation checks and report.
@@ -967,16 +1065,17 @@ in markdown/docs.
   Inspect the changed .md/.mdx files; a stray emoji in docs FAILS this gate.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
+${onPass ? renderOnPassStateWriteRecipe(onPass) : ''}
 Return via StructuredOutput: allPassed (true only if EVERY gating check passed and the emoji gate is
 clean), passCount, failCount, failedTests (names), failBlob (compact: failing check names + the tail of
-their output; empty when allPassed).
+their output; empty when allPassed)${onPass ? ', stateWritten (true only if you performed the additional state write above)' : ''}.
 `, withModel({ label, schema: TEST_SCHEMA, phase: 'Tasks' }, MODEL.test))
 }
 
 // ----------------------------------------------------------------
 // Triage helper — classify a failure RETRYABLE vs MAJOR.
 // ----------------------------------------------------------------
-async function triage(context, attempt, maxAttempts, failBlob, sameContext) {
+async function triage(context, attempt, maxAttempts, failBlob, sameContext, onBail = null) {
   return tracedAgent(`
 You are the failure-triage agent for an /sdlc-task run. Classify a failure so the pipeline either makes
 a bounded fix or bails to a human NOW. Bailing is cheap; a wasted retry loop is not — when unsure, BAIL.
@@ -1009,9 +1108,10 @@ Otherwise:
               (it is making progress and a bounded fix can plausibly close it).
   MAJOR     — the SAME failure again with no progress, OR structural (one of the bail reasons above).
 
+${onBail ? renderBailStateWriteRecipe(onBail, attempt, maxAttempts) : ''}
 Return via StructuredOutput: class, reason, bailReason (empty when RETRYABLE), sameFailureAsBefore,
 evidence (what was actually OBSERVED, quoting output — no causal claims), baseStateChecked (true only
-if the failing check was actually re-run against the base state).
+if the failing check was actually re-run against the base state)${onBail ? ', stateWritten (true only if you performed the additional state write above)' : ''}.
 ${sameContext ? `(Previous attempt context for the same-failure check: ${sameContext})` : ''}
 `, withModel({ label: `triage:${context}:${attempt}`, schema: TRIAGE_SCHEMA, phase: 'Tasks' }, MODEL.triage))
 }
@@ -1036,6 +1136,7 @@ for (const taskNum of taskList) {
 
   let taskPassed = false
   let prevFailBlob = null
+  let taskStateWritten = false
 
   for (let attempt = 1; attempt <= MAX_TASK_ATTEMPTS && !bailed; attempt++) {
     t.attempts = attempt
@@ -1111,8 +1212,17 @@ Return via StructuredOutput:
 
     if (!stageResult) {
       log(`Task ${taskNum} attempt ${attempt}: agent returned null.`)
-      const tr = await triage(`task ${taskNum} implement`, attempt, MAX_TASK_ATTEMPTS, 'NULL_RESULT — the agent died or returned nothing.', prevFailBlob)
-      if (tr && tr.class === 'MAJOR') { bailed = true; bailReason = tr.bailReason || tr.reason || 'agent returned null'; break }
+      // No attempt-exhaustion bail path exists at this call site today (an exhausted NULL_RESULT
+      // loop just falls out of the `for` naturally without ever setting `bailed`), so
+      // exhaustionFallback is omitted: the folded write only fires when this call classifies MAJOR.
+      const nullBailPayload = buildBailPayload(taskNum, t, 'agent returned null')
+      const tr = await triage(`task ${taskNum} implement`, attempt, MAX_TASK_ATTEMPTS, 'NULL_RESULT — the agent died or returned nothing.', prevFailBlob, nullBailPayload)
+      if (tr && tr.class === 'MAJOR') {
+        bailed = true
+        bailReason = tr.bailReason || tr.reason || 'agent returned null'
+        if (tr.stateWritten) taskStateWritten = true
+        break
+      }
       continue
     }
     if (stageResult.commit) t.commit = stageResult.commit
@@ -1122,29 +1232,49 @@ Return via StructuredOutput:
 
     // Fast test (tripwire) — gating checks only unless testDepth=full. A task declaring its own
     // `validation_commands` in tasks.json runs THOSE instead.
-    const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum) })
+    const passValidatedLabel = taskCommandsFor(taskNum)
+      ? 'per-task validation_commands (tasks.json override)'
+      : (testDepth === 'fast' ? 'gating checks (fast tripwire)' : 'full gating suite')
+    const passPayload = buildPassPayload(taskNum, t, passValidatedLabel)
+    const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum), onPass: passPayload })
     if (testResult && testResult.allPassed) {
-      t.validated = taskCommandsFor(taskNum)
-        ? 'per-task validation_commands (tasks.json override)'
-        : (testDepth === 'fast' ? 'gating checks (fast tripwire)' : 'full gating suite')
+      t.validated = passValidatedLabel
       taskPassed = true
+      if (testResult.stateWritten) {
+        // The folded write went straight to disk (no STATE_WRITE_SCHEMA result to read startedAt
+        // back from), so cachedStartedAt is deliberately left as-is: the next dedicated
+        // writeTaskState call (a later task, or this task's own reliability-net fallback, or the
+        // final run-state write) will just re-`cat` the file it wrote — which still correctly
+        // preserves started_at, just without the caching shortcut.
+        taskStateWritten = true
+      }
       break
     }
 
     // Failure → triage.
     const failBlob = (testResult && testResult.failBlob) || `Test stage failed or returned null (failCount=${testResult?.failCount ?? '?'}, failed=${(testResult?.failedTests || []).join(', ')}).`
     t.issues = [...(t.issues || []), ...((testResult?.failedTests) || [])]
-    const tr = await triage(`task ${taskNum} test`, attempt, MAX_TASK_ATTEMPTS, failBlob, prevFailBlob)
+    // This call site DOES have an attempt-exhaustion bail path (below), with its own fallback text
+    // that ignores the triage agent's own bailReason/reason entirely — pass both fallbacks through
+    // so the folded write mirrors whichever terminal path actually fires, exactly.
+    const majorFallback = `Task ${taskNum}: ${(testResult?.failedTests || []).join(', ')}`
+    const exhaustionFallback = attempt === MAX_TASK_ATTEMPTS
+      ? `Task ${taskNum} still failing after ${MAX_TASK_ATTEMPTS} attempts: ${(testResult?.failedTests || []).join(', ')}`
+      : null
+    const testBailPayload = buildBailPayload(taskNum, t, majorFallback, exhaustionFallback)
+    const tr = await triage(`task ${taskNum} test`, attempt, MAX_TASK_ATTEMPTS, failBlob, prevFailBlob, testBailPayload)
     prevFailBlob = failBlob
     if (tr && tr.class === 'MAJOR') {
       bailed = true
-      bailReason = tr.bailReason || tr.reason || `Task ${taskNum}: ${(testResult?.failedTests || []).join(', ')}`
+      bailReason = tr.bailReason || tr.reason || majorFallback
+      if (tr.stateWritten) taskStateWritten = true
       log(`Task ${taskNum}: triage → MAJOR — bailing immediately (not burning the remaining attempts). Reason: ${bailReason}`)
       break
     }
     if (attempt === MAX_TASK_ATTEMPTS) {
       bailed = true
-      bailReason = `Task ${taskNum} still failing after ${MAX_TASK_ATTEMPTS} attempts: ${(testResult?.failedTests || []).join(', ')}`
+      bailReason = exhaustionFallback
+      if (tr && tr.stateWritten) taskStateWritten = true
       log(`Task ${taskNum}: exhausted ${MAX_TASK_ATTEMPTS} attempts — bailing.`)
       break
     }
@@ -1155,7 +1285,17 @@ Return via StructuredOutput:
   // One state write per task — disk-only, never committed (see writeTaskState).
   t.status = taskPassed ? 'passed' : 'failed'
   if (bailed && !taskPassed) { state.status = 'blocked'; state.bail_reason = bailReason }
-  await writeTaskState(`task ${taskNum} ${t.status}`, { cwd: runDir })
+  // Reliability net: either the pass-path fold (runTests' onPass) or the terminal-bail fold
+  // (triage's onBail) already wrote sdlc-task-state.json in the SAME turn as the resolving
+  // test/triage call when taskStateWritten is true — skip the dedicated writer in that case.
+  // taskStateWritten is only ever set true alongside taskPassed or bailed (never both), so
+  // checking it alone is sufficient. Any other outcome (stateWritten false/unset, testResult/triage
+  // null) falls through to the dedicated call so no task outcome is ever left unpersisted.
+  if (!taskStateWritten) {
+    await writeTaskState(`task ${taskNum} ${t.status}`, { cwd: runDir })
+  } else {
+    log(`Task ${taskNum}: state write folded into the ${taskPassed ? 'passing test' : 'terminal triage'} agent's own turn — skipped the dedicated state-writer call.`)
+  }
 
   if (bailed) break
 }
