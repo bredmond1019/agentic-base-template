@@ -462,8 +462,33 @@ function refreshStateTokens() {
 // logs a warning and never aborts — the child commits/PRs remain the authoritative resume signal.
 async function writeBlockState(label) {
   refreshStateTokens()
-  const stateJson = JSON.stringify(state, null, 2)
   const firstWrite = cachedStartedAt === null
+  // On later writes, started_at is already known (cachedStartedAt) — splice it into the
+  // serialized object BEFORE JSON.stringify, immediately after "mode", so the agent is handed
+  // a JSON blob that already carries the correct value and only has to insert "updated_at".
+  // This removes the two-value ambiguity that let the agent stamp both keys from the cached
+  // literal (see ticket-state-write-updated-at-freeze). On a first write the object is
+  // serialized exactly as before — the agent still derives started_at from STEP 1's `cat`
+  // output.
+  const stateJson = firstWrite
+    ? JSON.stringify(state, null, 2)
+    : JSON.stringify((() => {
+        const entries = Object.entries(state)
+        const modeIdx = entries.findIndex(([k]) => k === 'mode')
+        entries.splice(modeIdx + 1, 0, ['started_at', cachedStartedAt])
+        return Object.fromEntries(entries)
+      })(), null, 2)
+  const stepTwoText = firstWrite
+    ? `STEP 2 — write ${stateFile} with EXACTLY this JSON, inserting two extra top-level keys "started_at"
+  (preserved or NOW, per STEP 1) and "updated_at" (NOW) right after "mode". Valid JSON only (double quotes, no
+  trailing commas, no markdown fences). The object to write (verbatim except those two keys):
+${stateJson}`
+    : `STEP 2 — write ${stateFile} with EXACTLY this JSON, inserting exactly one extra top-level
+  key: "updated_at" (NOW), right after "started_at" (already present in the object below,
+  immediately after "mode" — it was set from the value given in STEP 1). Valid JSON only
+  (double quotes, no trailing commas, no markdown fences). The object to write (verbatim except
+  for adding that one timestamp key):
+${stateJson}`
   const r = await agent(`
 You maintain the SDLC orchestrator's committed state breadcrumb. Overwrite ONE JSON file and commit it
 on the current branch — do NOT run checks, edit code, or touch anything else. You run from the MAIN repo root.
@@ -479,10 +504,7 @@ ${firstWrite
   "${cachedStartedAt}". Do NOT read the existing state file and do NOT run mkdir: the directory
   already exists and started_at is already established.`}
 
-STEP 2 — write ${stateFile} with EXACTLY this JSON, inserting two extra top-level keys "started_at"
-  (${firstWrite ? 'preserved or NOW, per STEP 1' : 'the value given in STEP 1'}) and "updated_at" (NOW) right after "mode". Valid JSON only (double quotes, no
-  trailing commas, no markdown fences). The object to write (verbatim except those two keys):
-${stateJson}
+${stepTwoText}
 
 STEP 3 — commit on the current branch (stage explicitly):
   git add ${stateFile}
