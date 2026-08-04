@@ -168,7 +168,12 @@ after each wave. Keys: `plan_file`, `base_branch`, `train_branch`, `mode`
 
 Re-run `/sdlc-block [plan-file] --resume`. The orchestrator reads
 `block-orchestration-state.json`, skips blocks whose status is `merged` or `pr-open`, and
-resumes the remaining blocks. If a child `/sdlc-flow` was mid-run, pass `--resume` to it.
+resumes the remaining blocks. This breadcrumb read is cross-checked against git: for every
+block, the orchestrator also verifies whether `${slug}-flow` is an ancestor of the train
+branch (`git merge-base --is-ancestor`) and treats a block as done if **either** the
+breadcrumb says so **or** the git check confirms it — so a stale or missing breadcrumb entry
+can't cause an already-merged block to be re-run. If a child `/sdlc-flow` was mid-run, pass
+`--resume` to it.
 
 ---
 
