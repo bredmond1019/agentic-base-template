@@ -1746,9 +1746,38 @@ PART A — Update status.md + log (code/doc changes are already committed by the
       ? `- Only proceed if you flipped the spec's status.md status to "Done" above (i.e. this was the last task). If tasks remain, leave state.json untouched and set blockStatusFlipped to "".`
       : `- The full spec is done, so proceed.`}
     - Resolve the block's canonical ID from the status.md Progress Table row you just edited (the
-      <BlockID> column, or the id that row maps to in state.json). Find that block in state.json
-      tracks[].blocks[] — search EVERY track. If found, set its "status" to "closed" (the only
-      authored close value). If NOT found, report it in notes and do NOT fabricate a block entry.
+      <BlockID> column, or the id that row maps to in state.json). This is the only part of this
+      step that stays your judgment call — the mutation itself is scripted below, not an Edit-tool
+      diff.
+    - Run ONE scripted mutation (never the Edit tool) to perform the write — substitute the id you
+      resolved for <RESOLVED_ID> (keep it as the script's sole argv, quoted):
+        python3 -c "
+import json, sys
+path = 'planning/state.json'
+bid = sys.argv[1]
+data = json.load(open(path))
+found = False
+for track in data.get('tracks', []):
+    for block in track.get('blocks', []):
+        if block.get('id') == bid:
+            block['status'] = 'closed'
+            found = True
+            break
+    if found:
+        break
+if found:
+    with open(path, 'w') as fh:
+        json.dump(data, fh, indent=2)
+        fh.write(chr(10))
+    print('FLIPPED:' + bid)
+else:
+    print('NOT_FOUND')
+" "<RESOLVED_ID>"
+      The script searches EVERY tracks[].blocks[] entry and only ever mutates the one matching
+      block's "status" field; on a miss it prints NOT_FOUND and never opens the file for writing,
+      so it stays byte-unchanged. Read the script's own stdout — do not infer success yourself: on
+      "FLIPPED:<id>" set blockStatusFlipped to that id; on "NOT_FOUND" report it in notes, do NOT
+      fabricate a block entry, and set blockStatusFlipped to "".
     - Validate the file is still valid JSON:
         python3 -c "import json;json.load(open('planning/state.json'))"
     - Then regenerate the derived surfaces from the authored graph. This run is ON MAIN (not a linked
