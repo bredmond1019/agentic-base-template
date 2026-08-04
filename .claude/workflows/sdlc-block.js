@@ -867,6 +867,23 @@ Return via StructuredOutput: exists, startedAt, blocks.
   } else {
     log('No orchestration state breadcrumb — treating as a first run.')
   }
+
+  // Independent git cross-check — runs unconditionally on every resume, regardless of what (or
+  // whether) the breadcrumb said, so a stale/missing/wrong breadcrumb entry can never cause an
+  // already-merged block to be re-launched (see ticket-sdlc-block-resume-stale-state). This can
+  // only ADD slugs to doneSlugs (OR semantics) — it never removes a slug the breadcrumb already
+  // confirmed, and a block whose branch is not an ancestor of the train branch is never marked
+  // done by this check alone.
+  const allSlugs = blocks.map(b => b.slug)
+  const gitVerified = await verifyBlocksMergedViaGit(allSlugs, trainBranch)
+  for (const { slug, mergedInGit } of gitVerified) {
+    if (!mergedInGit) continue
+    if (doneSlugs.has(slug)) continue // breadcrumb already confirmed this one
+    const newStatus = mode === 'auto-merge' ? 'merged' : 'done'
+    state.blocks[slug] = { ...state.blocks[slug], status: newStatus }
+    doneSlugs.add(slug)
+    log(`Resume: block ${slug} confirmed merged via git (breadcrumb was stale or missing).`)
+  }
 }
 
 await writeBlockState('enumerated')
