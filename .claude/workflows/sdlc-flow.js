@@ -309,6 +309,7 @@ const DOCS_SCHEMA = {
     created:  { type: 'array', items: { type: 'string' }, description: 'doc files created' },
     flagged:  { type: 'array', items: { type: 'string' }, description: 'docs flagged NEEDS_REVIEW (not edited)' },
     commitHash: { type: 'string' },
+    stateWritten: { type: 'boolean', description: 'true if the agent ALSO persisted sdlc-flow-state.json + worklog.md this same turn (the docs-phase state-write fold); false/omitted when it did not (write not attempted/completed)' },
     notes:    { type: 'string' }
   }
 }
@@ -324,6 +325,7 @@ const WRAPUP_SCHEMA = {
     commitHash:    { type: 'string' },
     blockStatusFlipped: { type: 'string', description: 'The state.json tracks[].blocks[].id flipped to "closed" on the branch this run, or "" if none (spec not fully done, no state.json, or block not found).' },
     emitStateRan:  { type: 'boolean', description: 'true if `mev emit-state --write` regenerated derived surfaces on the branch itself during this in-place (non-worktree) wrap-up; false when skipped (worktree mode, or mev/brain.toml absent)' },
+    stateWritten:  { type: 'boolean', description: 'true if the agent ALSO persisted sdlc-flow-state.json + worklog.md this same turn (the wrap-up-phase state-write fold); false/omitted when it did not (write not attempted/completed)' },
     notes:         { type: 'string' }
   }
 }
@@ -1648,6 +1650,104 @@ Return via StructuredOutput: reportFile="", success=true if applied, filesModifi
   }
 }
 
+// ----------------------------------------------------------------
+// Task 5 fold: docs-phase and wrap-up-phase state writes.
+//
+// Unlike the per-task pass/bail folds (tasks 1-2), Docs and Wrap-up each run EXACTLY ONCE and
+// UNCONDITIONALLY when reached (no pass/fail branching) — today's code always calls writeFlowState
+// once, right after each agent returns, regardless of outcome. So there is no "only if X" gate in
+// either recipe below; the instruction is simply "also do this, in this same turn, after your other
+// steps." Research finding (ticket Notes has the full writeup): safe to fold both, because (a) the
+// run-state file (stateFile) is deliberately NEVER committed by any agent (see writeFlowState's own
+// comment above) — it lives under planning/<blockId>/sdlc/, so it never collides with either
+// agent's own git commit step (docs' doc-file commit; wrap-up's vault-aware status.md/state.json
+// commit), and (b) --resume only reads stateFile at the TOP of a fresh run, long after either phase
+// would have finished writing it — moving the write from "a follow-up agent spawn" to "the last
+// step of the same agent's turn" changes nothing about what's on disk by the time any reader looks.
+// ----------------------------------------------------------------
+
+// Docs: the state JSON is known in JS EXCEPT the "docs" field (what got patched/created is only
+// known to the agent itself, from its own steps 3-4) -- so the payload carries a placeholder object
+// there, mirroring the bail_reason placeholder substitution triage() already uses for onBail.
+function buildDocsStatePayload() {
+  const snapshot = JSON.parse(JSON.stringify(state))
+  snapshot.docs = { changed: '__DOCS_CHANGED__', created: '__DOCS_CREATED__' }
+  snapshot.tokens = buildTokensBlock()
+  return { stateFile, stateJson: JSON.stringify(snapshot, null, 2), worklogFile }
+}
+
+function renderDocsStateWriteRecipe(onDone) {
+  return `
+AFTER completing steps 1-5 above, in THIS SAME turn, ALSO perform this state write:
+
+STEP W1 — run this as ONE Bash call, exactly as written. Do not split it into several calls:
+  cd ${worktreePath} && mkdir -p ${blockDir}/sdlc && date -u +%Y-%m-%dT%H:%M:%SZ && { cat ${onDone.stateFile} 2>/dev/null || echo "__NO_STATE__"; }
+  The FIRST line of output is NOW. Everything after it is the existing state file, or __NO_STATE__
+  when there is none. If that file exists and has a "started_at" value, REUSE it verbatim for
+  started_at below. Otherwise started_at = NOW.
+
+STEP W2 — write ${onDone.stateFile} with EXACTLY this JSON, but: (a) inserting two extra top-level
+  keys "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch", and
+  (b) replacing the placeholder top-level "docs" object — currently
+  {"changed": "__DOCS_CHANGED__", "created": "__DOCS_CREATED__"} — with the doc files you ACTUALLY
+  patched in step 3 (changed[], [] if the "nothing needed changing" branch applied) and created in
+  step 2b's BOOTSTRAP MODE (created[], [] otherwise). Valid JSON only (double quotes, no trailing
+  commas, no markdown fences). The object to write (verbatim except for those substitutions):
+${onDone.stateJson}
+
+STEP W3 — append to ${onDone.worklogFile}. If the file does not exist, first write a header line
+  "# Worklog — ${blockId}" then a blank line. Then append a section formatted exactly like this
+  (a blank line before it) — "changed"/"created" are the SAME lists you just substituted into
+  STEP W2, comma-joined; use "none" if changed is empty; omit the "| Created: ..." clause entirely
+  if created is empty:
+  ## Docs
+  Patched: <changed, comma-joined, or "none">[ | Created: <created, comma-joined>]
+
+STEP W4 — use the Write tool for both files. Do NOT run \`git add\`, \`git commit\`, \`git checkout\`,
+  \`git switch\`, or \`git branch\` — this write is disk-only, exactly like writeFlowState(). Set
+  stateWritten=true in your StructuredOutput once both files are written to disk.
+`
+}
+
+// Wrap-up: the state JSON is FULLY known in JS before this call (state.status derives from
+// bailed/finalVerdict, both already resolved by the time Phase 5 starts) -- no placeholder needed
+// there. Only the worklog entry's "Next: ..." line depends on the agent's own nextFocus.
+function buildWrapupStatePayload() {
+  state.status = bailed ? 'blocked' : 'done'
+  state.tokens = buildTokensBlock()
+  const snapshot = JSON.parse(JSON.stringify(state))
+  return { stateFile, stateJson: JSON.stringify(snapshot, null, 2), worklogFile }
+}
+
+function renderWrapupStateWriteRecipe(onDone) {
+  return `
+AFTER completing steps 1-5 above, in THIS SAME turn, ALSO perform this state write:
+
+STEP W1 — run this as ONE Bash call, exactly as written. Do not split it into several calls:
+  cd ${worktreePath} && mkdir -p ${blockDir}/sdlc && date -u +%Y-%m-%dT%H:%M:%SZ && { cat ${onDone.stateFile} 2>/dev/null || echo "__NO_STATE__"; }
+  The FIRST line of output is NOW. Everything after it is the existing state file, or __NO_STATE__
+  when there is none. If that file exists and has a "started_at" value, REUSE it verbatim for
+  started_at below. Otherwise started_at = NOW.
+
+STEP W2 — write ${onDone.stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
+  "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch". Valid
+  JSON only (double quotes, no trailing commas, no markdown fences). The object to write (verbatim
+  except for adding those two timestamp keys):
+${onDone.stateJson}
+
+STEP W3 — append to ${onDone.worklogFile}. If the file does not exist, first write a header line
+  "# Worklog — ${blockId}" then a blank line. Then append a section formatted exactly like this
+  (a blank line before it), with <next> replaced by your own nextFocus value from step 2 above (or
+  "(see status.md)" if you did not set one):
+  ## Wrap-up — ${finalVerdict}
+  Next: <next>
+
+STEP W4 — use the Write tool for both files. Do NOT run \`git add\`, \`git commit\`, \`git checkout\`,
+  \`git switch\`, or \`git branch\` — this write is disk-only, exactly like writeFlowState(). Set
+  stateWritten=true in your StructuredOutput once both files are written to disk.
+`
+}
+
 // ================================================================
 // PHASE 4: DOCS — surgical /update-docs --patch (gated on PASS)
 // ================================================================
@@ -1656,6 +1756,7 @@ if (!bailed && finalVerdict === 'PASS') {
   state.status = 'docs'
   log('Running docs patch (/update-docs --patch over the changed surface)...')
 
+  const docsStatePayload = buildDocsStatePayload()
   const docResult = await tracedAgent(`${W}
 You are the documentation agent for the /sdlc-flow pipeline — a surgical /update-docs --patch over only
 the surface this run changed. All Bash from the worktree root.
@@ -1695,8 +1796,9 @@ EOF
 )"
      cd ${worktreePath} && git log --oneline -1
    If nothing needed changing, make no commit and report success=true with empty changed/created.
-
-Return via StructuredOutput: success, changed[], created[], flagged[], commitHash, notes.
+${renderDocsStateWriteRecipe(docsStatePayload)}
+Return via StructuredOutput: success, changed[], created[], flagged[], commitHash, stateWritten (true
+only if you performed the additional state write above), notes.
 `, withModel({ label: 'docs', schema: DOCS_SCHEMA, phase: 'Docs' }, MODEL.docs))
 
   if (docResult) {
@@ -1706,7 +1808,14 @@ Return via StructuredOutput: success, changed[], created[], flagged[], commitHas
   } else {
     log('Docs agent returned null — continuing to wrap-up.')
   }
-  await writeFlowState('docs', `## Docs\nPatched: ${(state.docs.changed || []).join(', ') || 'none'}${(state.docs.created || []).length ? ` | Created: ${state.docs.created.join(', ')}` : ''}`, { cwd: worktreePath })
+  // Reliability net: skip the dedicated writer only when the docs agent itself reports the folded
+  // write succeeded; a null result or stateWritten=false falls through so this phase's outcome is
+  // never left unpersisted.
+  if (docResult && docResult.stateWritten) {
+    log('Docs: state write folded into the docs agent\'s own turn — skipped the dedicated state-writer call.')
+  } else {
+    await writeFlowState('docs', `## Docs\nPatched: ${(state.docs.changed || []).join(', ') || 'none'}${(state.docs.created || []).length ? ` | Created: ${state.docs.created.join(', ')}` : ''}`, { cwd: worktreePath })
+  }
 }
 
 // ================================================================
@@ -1731,6 +1840,7 @@ log(`Wrap-up. Verdict: ${finalVerdict} | passed ${passedTasks.length}/${taskList
 // stay staged and committed in the invoking repo exactly as before. detectPlanningVault() resolves
 // which case applies.
 const vault = await detectPlanningVault(worktreePath)
+const wrapupStatePayload = buildWrapupStatePayload()
 const wrapupResult = await tracedAgent(`${W}
 You are the wrap-up agent for an /sdlc-flow run. Write the human-facing status/log + the D18 amendment log
 ON THIS BRANCH (the PR will carry them), then commit. All Bash from the worktree root.
@@ -1855,9 +1965,10 @@ chore: wrap up ${stem}
 EOF
 )"
    cd ${worktreePath} && git log --oneline -1`}
-
+${renderWrapupStateWriteRecipe(wrapupStatePayload)}
 Return via StructuredOutput: statusUpdated, devlogUpdated, nextFocus, amendments[], commitHash,
-blockStatusFlipped (the state.json block id closed in step 2b, or ""), emitStateRan (step 2c), notes.
+blockStatusFlipped (the state.json block id closed in step 2b, or ""), emitStateRan (step 2c),
+stateWritten (true only if you performed the additional state write above), notes.
 `, withModel({ label: 'wrap-up', schema: WRAPUP_SCHEMA, phase: 'Wrap-up' }, MODEL.wrapup))
 
 if (wrapupResult?.amendments?.length) log(`Spec amendments (D18): ${wrapupResult.amendments.length} line(s) appended.`)
@@ -1865,8 +1976,16 @@ if (wrapupResult?.blockStatusFlipped) log(`state.json: block "${wrapupResult.blo
 log(`Derived surfaces (in-place, this wrap-up): ${wrapupResult?.emitStateRan ? 'regenerated (mev emit-state --write).' : useWorktree ? 'skipped — worktree mode; regenerate on merge.' : 'skipped (mev/brain.toml absent).'}`)
 
 // Final state write (status reflects the terminal state; PR fields filled after creation).
-state.status = bailed ? 'blocked' : 'done'
-await writeFlowState(`wrap-up (${finalVerdict})`, `## Wrap-up — ${finalVerdict}\nNext: ${wrapupResult?.nextFocus || '(see status.md)'}`, { cwd: worktreePath })
+// state.status was already set by buildWrapupStatePayload() above, before the agent call, so the
+// folded write (when it happened) persisted the correct terminal status.
+// Reliability net: skip the dedicated writer only when the wrap-up agent itself reports the folded
+// write succeeded; a null result or stateWritten=false falls through so wrap-up's outcome is never
+// left unpersisted.
+if (wrapupResult && wrapupResult.stateWritten) {
+  log('Wrap-up: state write folded into the wrap-up agent\'s own turn — skipped the dedicated state-writer call.')
+} else {
+  await writeFlowState(`wrap-up (${finalVerdict})`, `## Wrap-up — ${finalVerdict}\nNext: ${wrapupResult?.nextFocus || '(see status.md)'}`, { cwd: worktreePath })
+}
 
 // ----------------------------------------------------------------
 // PR creation (the terminal step) — default: open a PR and STOP.
