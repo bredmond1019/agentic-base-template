@@ -226,6 +226,21 @@ const ENUMERATE_SCHEMA = {
         }
       }
     },
+    // Hardcoded engine-parse gate — mechanism, not project policy (see renderCheckList). Captures,
+    // per task, ONLY the entries of that task's "files" array that live under .claude/workflows/ —
+    // never the full files[] list. Omit tasks with no such path.
+    engineFiles: {
+      type: 'array',
+      description: "One entry per task whose 'files' array includes at least one path under .claude/workflows/. 'files' holds ONLY the matching .claude/workflows/ paths (not the task's full files[] list). Omit tasks with no such path.",
+      items: {
+        type: 'object',
+        required: ['taskId', 'files'],
+        properties: {
+          taskId: { type: 'integer' },
+          files:  { type: 'array', items: { type: 'string' } }
+        }
+      }
+    },
     notes:    { type: 'string' }
   }
 }
@@ -561,23 +576,42 @@ function skipCountRegressionResult(baselineCount, currentCount, dominantReason) 
   return { regressed, message }
 }
 
+// Hardcoded, project-agnostic parse-time safety gate (mechanism, not policy — see CLAUDE.md standing
+// rule 1). Independent of harness.json/spec checks: any .claude/workflows/ file this task's own
+// tasks.json `files[]` names gets an unconditional `node --check`, in BOTH the fast-tripwire and
+// full-suite render paths, even when the project ships no harness.json at all. No-op (renders '')
+// when the task touches no such file — never emits a check with no target.
+function renderEngineParseChecks(files, cd, startIndex) {
+  if (!files || !files.length) return ''
+  return files.map((f, i) => {
+    const n = startIndex + i
+    return `CHECK ${n} — engine-parse-safety (hardcoded parse-time gate on modified SDLC engine file — mechanism, unconditional on harness.json) [GATING — a failure here blocks the verdict]:
+  ${cd}node --check ${f}
+  echo "CHECK${n}_EXIT:$?"`
+  }).join('\n\n')
+}
+
 // Render the inner project-validation check list for a Test stage. When gatingOnly is true (the fast
 // per-task tripwire), emit only the checks with gates:true; the end-review runs the FULL suite. When
 // the config is absent (or carries no checks), fall back to the spec's `## Validation Commands` — the
-// engine ships NO stack defaults. Handles all D6 check kinds.
-function renderCheckList(cfg, { gatingOnly = false, cwd } = {}) {
+// engine ships NO stack defaults. Handles all D6 check kinds. `engineFiles` (the .claude/workflows/
+// paths in scope for this render, if any) is additive on top of everything below — see
+// renderEngineParseChecks.
+function renderCheckList(cfg, { gatingOnly = false, cwd, engineFiles = [] } = {}) {
   let checks = cfg?.validation?.checks ?? []
   if (gatingOnly) checks = checks.filter(c => c.gates && c.perTask !== false)
   const cd = cwd ? `cd ${cwd} && ` : ''
   if (!checks.length) {
-    return `The project ships no matching \`planning/harness.json\` validation ${gatingOnly ? 'GATING ' : ''}checks, so derive the checks from the spec instead:
+    const fallback = `The project ships no matching \`planning/harness.json\` validation ${gatingOnly ? 'GATING ' : ''}checks, so derive the checks from the spec instead:
   - Read the spec's optional "## Validation Commands" section.
   - Run each command it lists, IN ORDER (prefix each Bash call with: ${cd}). Each command is one check —
     record its name, the command, passed (true iff exit code 0), and the output on failure.
   - If the spec has no "## Validation Commands" section, run no project checks — record a single
     informational row (name "no_validation_suite", passed true) noting the project declared none.`
+    const engineChecks = renderEngineParseChecks(engineFiles, cd, 1)
+    return engineChecks ? `${fallback}\n\n${engineChecks}` : fallback
   }
-  return checks.map((c, i) => {
+  const rendered = checks.map((c, i) => {
     const n = i + 1
     const kind = c.kind || 'command'
     const slug = (c.name || `check${n}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -667,6 +701,8 @@ ${ruleLines}
   ${cd}${cmd}
   echo "CHECK${n}_EXIT:$?"`
   }).join('\n\n')
+  const engineChecks = renderEngineParseChecks(engineFiles, cd, checks.length + 1)
+  return engineChecks ? `${rendered}\n\n${engineChecks}` : rendered
 }
 
 // Snapshot baseline artifacts for any baseline-diff / skip-count-regression checks before the first
@@ -1024,7 +1060,12 @@ STEP 3 — Per-task validation overrides. For each task whose "validation_comman
   "validation_commands" is absent, null, or [] — those fall back to the project-wide harness checks.
   Copy the command strings VERBATIM; do not normalize, reorder, or invent commands.
 
-Return via StructuredOutput: hasTasks, allTasks (integers in order), taskChecks, notes.
+STEP 4 — Engine-parse gate scan. For each task, look at its "files" array. If ANY entry is a path
+  under .claude/workflows/ (e.g. ".claude/workflows/sdlc-task.js"), add {taskId, files} to
+  engineFiles, where files is ONLY the matching .claude/workflows/ path(s) from that task (never the
+  task's other files). Skip every task whose "files" has no such path.
+
+Return via StructuredOutput: hasTasks, allTasks (integers in order), taskChecks, engineFiles, notes.
 `, withModel({ label: 'enumerate', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
 
 if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
@@ -1049,6 +1090,19 @@ const taskCheckMap = new Map(
 function taskCommandsFor(taskNum) { return taskCheckMap.get(taskNum) || null }
 if (taskCheckMap.size) {
   log(`Per-task validation overrides (tasks.json validation_commands): ${[...taskCheckMap.keys()].sort((a, b) => a - b).join(', ')} — these tasks skip the project-wide harness tripwire.`)
+}
+
+// Hardcoded engine-parse gate (mechanism, not project policy — see renderCheckList). Per-task
+// .claude/workflows/ paths from tasks.json's own "files" array, captured at enumerate-time so the
+// gate is unconditional on harness.json and independent of whatever project checks apply.
+const taskEngineFilesMap = new Map(
+  (enumResult.engineFiles || [])
+    .filter(ef => ef && Number.isInteger(ef.taskId) && Array.isArray(ef.files) && ef.files.length)
+    .map(ef => [ef.taskId, ef.files])
+)
+function engineFilesFor(taskNum) { return taskEngineFilesMap.get(taskNum) || [] }
+if (taskEngineFilesMap.size) {
+  log(`Engine-parse gate (hardcoded, unconditional): task(s) touching .claude/workflows/ → ${[...taskEngineFilesMap.keys()].sort((a, b) => a - b).join(', ')}.`)
 }
 
 // Resume: load the committed state.json to skip already-passed tasks. Also seeds the in-memory
@@ -1162,7 +1216,7 @@ STEP W4 — use the Write tool for both files. Do NOT run \`git add\`, \`git com
 `
 }
 
-async function runTests(label, { gatingOnly, taskCommands = null, onPass = null }) {
+async function runTests(label, { gatingOnly, taskCommands = null, onPass = null, engineFiles = [] }) {
   const usingOverride = Array.isArray(taskCommands) && taskCommands.length > 0
   return tracedAgent(`${W}
 You are the test agent for the /sdlc-flow pipeline. Run the project's validation checks and report.
@@ -1174,7 +1228,7 @@ checks. All Bash calls run from the worktree root (prefix each with: cd ${worktr
 
 ${usingOverride
     ? renderTaskCheckList(taskCommands, worktreePath)
-    : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath })}
+    : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath, engineFiles })}
 
 Then run the universal emoji gate (a harness rule, always): scan the files changed on this branch for
 emoji in markdown/docs (excluding the literal "🤖 Generated with Claude Code" PR footer if present).
@@ -1461,7 +1515,7 @@ Return via StructuredOutput:
       ? 'per-task validation_commands (tasks.json override)'
       : (testDepth === 'fast' ? 'gating checks (fast tripwire)' : 'full gating suite')
     const passPayload = buildPassPayload(taskNum, t, attempt, passValidatedLabel)
-    const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum), onPass: passPayload })
+    const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum), onPass: passPayload, engineFiles: engineFilesFor(taskNum) })
     if (testResult && testResult.allPassed) {
       t.validated = passValidatedLabel
       taskPassed = true
@@ -1579,7 +1633,7 @@ but it does NOT replace verifying the criteria against the code:
 3. Run the FRESH AUTHORITATIVE checks (this determines the verdict — NOT the per-task tripwire):
    Re-run the FULL gating suite below in order. A fresh failure of any GATING check ALWAYS prevents PASS.
 
-${renderCheckList(harnessCfg, { gatingOnly: false, cwd: worktreePath })}
+${renderCheckList(harnessCfg, { gatingOnly: false, cwd: worktreePath, engineFiles: [...new Set(taskList.flatMap(n => engineFilesFor(n)))] })}
 
    Plus the universal emoji gate: scan changed .md files for stray emoji (the literal
    "🤖 Generated with Claude Code" footer is allowed only in a PR body, not in docs).
