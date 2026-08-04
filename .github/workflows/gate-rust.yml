@@ -1,0 +1,66 @@
+name: gate-rust
+
+# Reusable Rust gate workflow — mirrors a Rust repo's planning/harness.json checks
+# in declared order: fmt, clippy, test, build. Callers pass their own clippy args
+# and runner OS; `needs-nextest` lets a repo (e.g. engine-rs) opt into
+# `cargo nextest run` instead of plain `cargo test`.
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: "Runner label (e.g. ubuntu-latest, macos-latest)"
+        type: string
+        default: ubuntu-latest
+        required: false
+      needs-nextest:
+        description: "Install cargo-nextest and use it for the test gate"
+        type: boolean
+        default: false
+        required: false
+      clippy-args:
+        description: "Args passed to `cargo clippy` after the crate selection, e.g. `-- -D warnings` or `--all-targets -- -D warnings`"
+        type: string
+        default: "-- -D warnings"
+        required: false
+      test-command:
+        description: "Command used for the test gate when needs-nextest is true"
+        type: string
+        default: "cargo nextest run --workspace"
+        required: false
+
+jobs:
+  gate:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        if: ${{ inputs.needs-nextest }}
+        uses: taiki-e/install-action@nextest
+
+      - name: fmt
+        run: cargo fmt --check
+
+      - name: clippy
+        run: cargo clippy ${{ inputs.clippy-args }}
+
+      - name: test (nextest)
+        if: ${{ inputs.needs-nextest }}
+        run: ${{ inputs.test-command }}
+
+      - name: test (cargo test)
+        if: ${{ !inputs.needs-nextest }}
+        run: cargo test
+
+      - name: build
+        run: cargo build --release
