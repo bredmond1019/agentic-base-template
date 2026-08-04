@@ -18,6 +18,17 @@ target repo:
       - workflows/*.json             (e.g. harness.schema.json - the check schema the engines
                                        validate planning/harness.json against; mechanism, not policy)
       - workflows/templates/*.md
+  - from base-template/.agents/skills/ (base-template -> target's .agents/skills/), one slug at a
+    time via AGENT_SKILL_SLUGS (explicit, like HOOK_FILENAMES - not a directory glob, so a new
+    skill dropped in base-template's .agents/skills/ isn't silently propagated before it's been
+    reviewed):
+      - <slug>/SKILL.md              the manual-replication guide a shell-less agent (Gemini/
+                                       Antigravity - no `claude` CLI access) follows to reproduce
+                                       the matching .claude/workflows/<slug>.js engine by hand.
+                                       Mechanism, not project fact - synced to EVERY target
+                                       including the brain root (never gated by engines_only, same
+                                       as workflows/*.js: these mirror the engine, they are not a
+                                       brain-specific command like commands/*.md).
   - from the brain's hooks/ (brain root -> target's hooks/, widened by the validate-brain
     push-gate chore, deliberate):
       - pre-push                     (the validate-brain drift gate)
@@ -229,6 +240,28 @@ def hook_files(brain_root: Path) -> list[Path]:
     return [hooks_dir / name for name in HOOK_FILENAMES if (hooks_dir / name).is_file()]
 
 
+# The .agents/skills/<slug>/SKILL.md guides this script distributes downstream. Explicitly
+# enumerated (not a glob over .agents/skills/) so a skill added to base-template for reasons
+# unrelated to the SDLC engines (or one that hasn't been reviewed against its matching .js the way
+# sdlc-task/sdlc-flow were in the 2026-08 audit) is never accidentally propagated - widen this
+# deliberately, per-slug, once a guide has actually been checked. sdlc-run/sdlc-block are NOT yet
+# in this list - their SKILL.md guides predate that audit and have not been verified.
+AGENT_SKILL_SLUGS: list[str] = ["sdlc-task", "sdlc-flow"]
+
+
+def agent_skill_files(root: Path) -> list[Path]:
+    """The tracked .agents/skills/<slug>/SKILL.md files this script owns, relative to
+    `root/.agents`."""
+    skills_dir = root / ".agents" / "skills"
+    if not skills_dir.is_dir():
+        return []
+    return [
+        skills_dir / slug / "SKILL.md"
+        for slug in AGENT_SKILL_SLUGS
+        if (skills_dir / slug / "SKILL.md").is_file()
+    ]
+
+
 def repo_hooks_path(repo_path: Path) -> str | None:
     """The target repo's configured `core.hooksPath`, or None if unset/unreadable."""
     result = subprocess.run(
@@ -255,6 +288,16 @@ def diff_repo(base_template_root: Path, brain_root: Path, target: RepoTarget) ->
         elif not filecmp.cmp(src, dst, shallow=False):
             report.diffs.append(FileDiff(rel_path=str(rel), status="changed", dest_prefix=".claude"))
 
+    skill_diffs: list[FileDiff] = []
+    for src in agent_skill_files(base_template_root):
+        rel = src.relative_to(base_template_root / ".agents")
+        dst = target.repo_path / ".agents" / rel
+        if not dst.exists():
+            skill_diffs.append(FileDiff(rel_path=str(rel), status="new", dest_prefix=".agents"))
+        elif not filecmp.cmp(src, dst, shallow=False):
+            skill_diffs.append(FileDiff(rel_path=str(rel), status="changed", dest_prefix=".agents"))
+    report.diffs.extend(skill_diffs)
+
     hooks_diffs: list[FileDiff] = []
     for src in hook_files(brain_root):
         rel = src.relative_to(brain_root / "hooks")
@@ -278,6 +321,9 @@ def diff_repo(base_template_root: Path, brain_root: Path, target: RepoTarget) ->
     for src in harness_files(base_template_root, target.engines_only):
         rel = src.relative_to(base_template_root / ".claude")
         current_keys.add(f".claude/{rel}")
+    for src in agent_skill_files(base_template_root):
+        rel = src.relative_to(base_template_root / ".agents")
+        current_keys.add(f".agents/{rel}")
     for src in hook_files(brain_root):
         rel = src.relative_to(brain_root / "hooks")
         current_keys.add(f"hooks/{rel}")
@@ -311,7 +357,11 @@ def apply_repo(base_template_root: Path, brain_root: Path, report: RepoReport, v
         if d.status == "stale-safe":
             dst.unlink(missing_ok=True)
             continue
-        src_root = base_template_root / ".claude" if d.dest_prefix == ".claude" else brain_root / "hooks"
+        src_root = {
+            ".claude": base_template_root / ".claude",
+            ".agents": base_template_root / ".agents",
+            "hooks": brain_root / "hooks",
+        }[d.dest_prefix]
         src = src_root / d.rel_path
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
@@ -326,6 +376,11 @@ def apply_repo(base_template_root: Path, brain_root: Path, report: RepoReport, v
         dst = report.target.repo_path / ".claude" / rel
         if dst.is_file():
             files[f".claude/{rel}"] = hash_file(dst)
+    for src in agent_skill_files(base_template_root):
+        rel = src.relative_to(base_template_root / ".agents")
+        dst = report.target.repo_path / ".agents" / rel
+        if dst.is_file():
+            files[f".agents/{rel}"] = hash_file(dst)
     for src in hook_files(brain_root):
         rel = src.relative_to(brain_root / "hooks")
         dst = report.target.repo_path / "hooks" / rel

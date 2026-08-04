@@ -44,6 +44,25 @@ When a discovery in a downstream project improves the harness:
    `core/orchestrator`'s `SDLC_FLOW` workflow (`app/schemas/sdlc_schema.py`) — it's a second,
    independently-implemented consumer of the same contract (see
    `core/orchestrator/docs/sdlc-flow-workflow.md`) that this script does not touch.
+6. **If the change touched `.claude/workflows/sdlc-task.js` or `sdlc-flow.js` behaviorally**
+   (new flag, changed default, new pipeline stage, changed commit convention, changed state-file
+   contract — not a comment-only or token-tiering tweak), also review the matching
+   `.agents/skills/sdlc-task/SKILL.md` / `sdlc-flow/SKILL.md`. These are the manual-replication
+   guides a shell-less agent (e.g. Gemini, which cannot invoke the `claude` CLI or run the `.js`
+   directly) follows step-by-step to reproduce the same pipeline. They do **not** auto-sync from
+   the `.js`, and true semantic verification needs an agent to actually read both side by side
+   (the adversarial-verify pattern used for the 2026-08 rewrite: one agent per engine rewrites the
+   guide, a stronger model then re-checks the highest-stakes sections against source with line
+   citations) — drift here is silent until it corrupts a real run (a stale worktree-default or a
+   missed D46 vault-commit rule can misfire git state in a vaulted repo, not just look wrong).
+   `planning/harness.json`'s `skill-guide-sync` check (`scripts/check_skill_sync.py`) is a
+   mechanical tripwire, not a substitute for that: it hashes the highest-risk translated-into-prose
+   regions of each engine (isolation/branch-naming, triage/bail taxonomy, D46 vault-commit routing)
+   and fails the moment any of them changes without the manifest being re-stamped. A failure there
+   means "go re-verify the guide," not "the guide is wrong." After re-verifying (and fixing, if
+   needed), re-stamp with `python3 scripts/check_skill_sync.py --update` and commit the manifest
+   alongside the SKILL.md change — never run `--update` without having actually re-checked the
+   section first, or the tripwire becomes decorative.
 
 Downstream projects **do not auto-sync** — pulling is still a deliberate, reviewed step (the
 script never commits for you) — but it is no longer a fully manual copy-paste; `/sync-downstream-

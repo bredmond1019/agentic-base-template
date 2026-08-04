@@ -1,0 +1,32 @@
+{
+  ".claude/workflows/sdlc-task.js::isolation-and-branch-naming": {
+    "hash": "0b1f6528bbf7964831bf82888eb3de2c3e0b4f32ede7f71b18c13a5f183e3fbf",
+    "lines": "768-874",
+    "skill_md": ".agents/skills/sdlc-task/SKILL.md"
+  },
+  ".claude/workflows/sdlc-task.js::triage-bail-taxonomy": {
+    "hash": "64915b759b39a77997380f9fb8447b2af733e541bdbfbf4c05ad79b3788bfce8",
+    "lines": "1012-1199",
+    "skill_md": ".agents/skills/sdlc-task/SKILL.md"
+  },
+  ".claude/workflows/sdlc-task.js::bookkeep-vault-commit": {
+    "hash": "46f178d2d0ba21244022a52abb837538571c0f4b3031b857be3d7e422908dfbf",
+    "lines": "1393-1511",
+    "skill_md": ".agents/skills/sdlc-task/SKILL.md"
+  },
+  ".claude/workflows/sdlc-flow.js::isolation-and-branch-naming": {
+    "hash": "631f8d2e1e3fc40b6148c553054dea13428e87d82768766c3c1ebb2191d72078",
+    "lines": "860-1027",
+    "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
+  },
+  ".claude/workflows/sdlc-flow.js::triage-bail-taxonomy": {
+    "hash": "b69a11024a6a9e486098791be3f119e9122944b82ad739c00c65fdd9b4562c6c",
+    "lines": "1187-1398",
+    "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
+  },
+  ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
+    "hash": "fdc5ef517b0ceca434947f3ece0c654ac5c4026b58cc49b3922df592071be569",
+    "lines": "1906-2060",
+    "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
+  }
+}
