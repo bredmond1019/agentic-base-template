@@ -1,0 +1,41 @@
+name: gate-flutter
+
+# Reusable Flutter (Dart) gate workflow — mirrors a Flutter repo's
+# planning/harness.json gated checks in declared order: dart format check,
+# flutter analyze, then `flutter test --exclude-tags e2e`. The e2e-tagged
+# suite (gates: false in harness.json) is deliberately excluded here: it
+# spawns a real `bastion serve` subprocess and needs a built bastion binary,
+# so it is run manually, not as an automated CI gate.
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: "Runner label (e.g. ubuntu-latest)"
+        type: string
+        default: ubuntu-latest
+        required: false
+
+jobs:
+  gate:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: format
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: analyze
+        run: flutter analyze
+
+      - name: test
+        run: flutter test --exclude-tags e2e

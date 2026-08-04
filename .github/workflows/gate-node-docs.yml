@@ -1,0 +1,40 @@
+name: gate-node-docs
+
+# Reusable node-docs gate workflow — mirrors base-template's own
+# planning/harness.json gated checks in declared order: syntax-check the four
+# SDLC engines with `node --check`, then the D54 sync-guard test suite.
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: "Runner label (e.g. ubuntu-latest)"
+        type: string
+        default: ubuntu-latest
+        required: false
+
+jobs:
+  gate:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: engines-parse
+        run: |
+          for f in .claude/workflows/sdlc-run.js .claude/workflows/sdlc-task.js .claude/workflows/sdlc-flow.js .claude/workflows/sdlc-block.js; do
+            node --check "$f" || exit 1
+          done
+
+      - name: sync-guard-tests
+        run: python3 scripts/test_sync_downstream_harness.py

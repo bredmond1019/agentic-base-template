@@ -1,0 +1,78 @@
+name: gate-python-uv
+
+# Reusable Python (uv) gate workflow — mirrors orchestrator's 7 gated
+# planning/harness.json checks in declared order: the CLAUDE.md standing-rules
+# pattern scan, the two `database` import probes, ruff, pylint,
+# `pytest --collect-only`, and pytest. The two advisory (gates: false) import
+# checks in harness.json (app-import, worker-import) are intentionally not
+# mirrored here — CI gates only on what harness.json gates on.
+#
+# The db-session/db-repository import probes run from the app/ subdir, matching
+# harness.json's `cd app && ...` form; the rest run from the repo root.
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: "Runner label (e.g. ubuntu-latest)"
+        type: string
+        default: ubuntu-latest
+        required: false
+
+jobs:
+  gate:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: standing-rules (CLAUDE.md pattern scan)
+        run: |
+          set -e
+          fail=0
+
+          check() {
+            id="$1"; pattern="$2"; paths="$3"; allow="$4"
+            # shellcheck disable=SC2086
+            matches=$(grep -rnE "$pattern" $paths 2>/dev/null || true)
+            if [ -n "$allow" ] && [ -n "$matches" ]; then
+              matches=$(printf '%s\n' "$matches" | grep -vE "$allow" || true)
+            fi
+            if [ -n "$matches" ]; then
+              echo "FAIL[$id]:"
+              printf '%s\n' "$matches"
+              fail=1
+            fi
+          }
+
+          check "f-string-in-logging" 'logging\.[a-z]+\(.*f["'"'"']' "--include=*.py app" ""
+          check "open-without-encoding" 'open\(' "--include=*.py app" 'encoding=|#|\.open\('
+          check "param-named-id" 'def [a-zA-Z_]+\([^)]*\bid\b' "--include=*.py app" 'obj_id|record_id|node_id|workflow_id|task_id|invalid'
+
+          exit $fail
+
+      - name: db-session-import
+        run: cd app && uv run python -c 'import database.session'
+
+      - name: db-repository-import
+        run: cd app && uv run python -c 'import database.repository'
+
+      - name: ruff (net-new-lint)
+        run: uv run python -m ruff check app/ tests/
+
+      - name: pylint
+        run: uv run python -m pylint app/
+
+      - name: pytest-count (collect-only)
+        run: uv run python -m pytest --collect-only -q
+
+      - name: pytest
+        run: uv run python -m pytest
