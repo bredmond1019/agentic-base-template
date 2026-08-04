@@ -1249,11 +1249,17 @@ else:
      set blockStatusFlipped to that id; on "NOT_FOUND" report it in notes, do NOT fabricate a block
      entry, and set blockStatusFlipped to "".
    - Validate: cd ${runDir} && python3 -c "import json;json.load(open('planning/state.json'))"
+
+5. Regenerate derived surfaces via \`mev emit-state --write\`. Run this step whenever this bookkeep
+   stage runs at all — it is NOT conditional on "Block done" above: step 2/3 already edited
+   ${specFile}/planning/status.md regardless of whether the block closed this run, so the derived
+   surfaces (status.md rollups, /attention boards, wave tables) need resyncing every time, not only on
+   a full block close.
    ${useWorktree
      ? `- Do NOT run \`mev emit-state --write\`: this is a linked git worktree, where emit-state refuses to run. The derived surfaces regenerate on MAIN when the branch merges (/clean-worktree or /merge-train). Set emitStateRan=false.`
-     : `- Then regenerate derived surfaces (this run is IN PLACE on main, so emit-state is safe): cd ${runDir} && mev emit-state --write . If \`mev\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}
+     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \`mev\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}
 
-5. Commit your edits (stage explicitly — never git add -A). NEVER run git checkout, git switch, or git
+6. Commit your edits (stage explicitly — never git add -A). NEVER run git checkout, git switch, or git
    branch outside this repo's own root (${runDir})${vault.vaulted ? ` or the vault's own root (${vault.planningPath})` : ''} —
    if a git add fails, report the failure in notes; do not relocate the commit to make it succeed.
 ${vault.vaulted ? `
