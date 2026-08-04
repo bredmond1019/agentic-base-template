@@ -1217,9 +1217,37 @@ Target:
    graph — leaving it stale poisons every derived surface, because \`mev emit-state\` reads this field
    and NEVER infers completion from status.md.
    - Resolve the block's canonical ID from the status.md Progress Table row (the <BlockID> column, or
-     the id that row maps to in state.json). Find that block in state.json tracks[].blocks[] — search
-     EVERY track. If found, set its "status" to "closed". If NOT found, report it in notes and do NOT
-     fabricate a block entry. Set blockStatusFlipped to the id you closed (or "").
+     the id that row maps to in state.json). This is the only part of this step that stays your
+     judgment call — the mutation itself is scripted below, not an Edit-tool diff.
+   - Run ONE scripted mutation (never the Edit tool) to perform the write — substitute the id you
+     resolved for <RESOLVED_ID> (keep it as the script's sole argv, quoted):
+     cd ${runDir} && python3 -c "
+import json, sys
+path = 'planning/state.json'
+bid = sys.argv[1]
+data = json.load(open(path))
+found = False
+for track in data.get('tracks', []):
+    for block in track.get('blocks', []):
+        if block.get('id') == bid:
+            block['status'] = 'closed'
+            found = True
+            break
+    if found:
+        break
+if found:
+    with open(path, 'w') as fh:
+        json.dump(data, fh, indent=2)
+        fh.write(chr(10))
+    print('FLIPPED:' + bid)
+else:
+    print('NOT_FOUND')
+" "<RESOLVED_ID>"
+     The script searches EVERY tracks[].blocks[] entry and only ever mutates the one matching block's
+     "status" field; on a miss it prints NOT_FOUND and never opens the file for writing, so it stays
+     byte-unchanged. Read the script's own stdout — do not infer success yourself: on "FLIPPED:<id>"
+     set blockStatusFlipped to that id; on "NOT_FOUND" report it in notes, do NOT fabricate a block
+     entry, and set blockStatusFlipped to "".
    - Validate: cd ${runDir} && python3 -c "import json;json.load(open('planning/state.json'))"
    ${useWorktree
      ? `- Do NOT run \`mev emit-state --write\`: this is a linked git worktree, where emit-state refuses to run. The derived surfaces regenerate on MAIN when the branch merges (/clean-worktree or /merge-train). Set emitStateRan=false.`
