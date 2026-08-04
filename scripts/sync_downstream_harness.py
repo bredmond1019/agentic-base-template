@@ -404,10 +404,24 @@ def main() -> None:
             print(f"[{target.slug}] up to date")
             continue
 
-        print(f"[{target.slug}] {len(report.diffs)} file(s) {'to sync' if not args.apply else 'synced'}:")
-        for d in report.diffs:
-            print(f"    {d.status:>7}  {d.dest_prefix}/{d.rel_path}")
-        total_changed += len(report.diffs)
+        actionable = [d for d in report.diffs if d.status != "stale-conflict"]
+        conflicts = [d for d in report.diffs if d.status == "stale-conflict"]
+
+        if actionable:
+            print(f"[{target.slug}] {len(actionable)} file(s) {'to sync' if not args.apply else 'synced'}:")
+            for d in actionable:
+                label = "removed" if d.status == "stale-safe" else d.status
+                print(f"    {label:>7}  {d.dest_prefix}/{d.rel_path}")
+            total_changed += len(actionable)
+        else:
+            print(f"[{target.slug}] 0 file(s) to sync (all pending diffs are conflicts):")
+
+        if conflicts:
+            conflict_paths = ", ".join(f"{d.dest_prefix}/{d.rel_path}" for d in conflicts)
+            print(
+                f"    NOTICE: {len(conflicts)} file(s) base-template no longer ships were locally "
+                f"modified in {target.slug} and were NOT deleted — resolve by hand: {conflict_paths}"
+            )
 
         if report.hooks_path_unset:
             print(
