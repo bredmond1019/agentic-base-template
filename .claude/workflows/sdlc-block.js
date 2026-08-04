@@ -279,7 +279,7 @@ const STATE_LOAD_SCHEMA = {
     blocks:    { type: 'object',  description: 'the per-block status map (slug -> {status,...}), or {} when absent', additionalProperties: true }
   }
 }
-const STATE_WRITE_SCHEMA = { type: 'object', required: ['written'], properties: { written: { type: 'boolean' }, startedAt: { type: 'string', description: 'the started_at value used in this write (preserved from the existing file, or newly stamped)' }, commitHash: { type: 'string' } } }
+const STATE_WRITE_SCHEMA = { type: 'object', required: ['written'], properties: { written: { type: 'boolean' }, startedAt: { type: 'string', description: 'the started_at value used in this write (preserved from the existing file, or newly stamped)' }, updatedAt: { type: 'string', description: 'the updated_at value written in this write' }, commitHash: { type: 'string' } } }
 
 // Learned from the first successful state write of this process — or, on --resume, seeded from the
 // load-state agent below, which already reads started_at back. Later writes are handed it as a
@@ -512,11 +512,17 @@ STEP 3 — commit on the current branch (stage explicitly):
   git log --oneline -1
 
 Use the Write tool for the file. Return via StructuredOutput: written=true on success, startedAt set to
-the started_at value you used, and commitHash from the final git log line (empty string if nothing was
-committed).
+the started_at value you used, updatedAt set to the updated_at value you used, and commitHash from the
+final git log line (empty string if nothing was committed).
 `, { label: `state:${label}`, schema: STATE_WRITE_SCHEMA, model: 'haiku' })
   if (r && r.startedAt) cachedStartedAt = r.startedAt
   if (!r || !r.written) log(`(state) could not persist orchestration state for "${label}" — continuing`)
+  // Freeze-detection guard (non-fatal): on a later write, updated_at should never equal
+  // started_at — that is the exact signature of the prompt ambiguity this ticket fixes. Warn
+  // only; never throw, retry, or touch cachedStartedAt / disk content.
+  if (!firstWrite && r && r.updatedAt && r.updatedAt === r.startedAt) {
+    log(`state:${label} WARNING updated_at froze at started_at (${r.updatedAt}) — see ticket-state-write-updated-at-freeze`)
+  }
 }
 
 // Flip ONE block's authored status in this repo's planning/state.json (the graph /start-block,

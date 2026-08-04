@@ -294,6 +294,7 @@ const STATE_WRITE_SCHEMA = {
   properties: {
     written:   { type: 'boolean', description: 'true if sdlc-task-state.json was written to disk' },
     startedAt: { type: 'string',  description: 'the started_at value used in this write (preserved from the existing file, or newly stamped)' },
+    updatedAt: { type: 'string',  description: 'the updated_at value written in this write' },
     notes:     { type: 'string' }
   }
 }
@@ -745,11 +746,18 @@ ${stepTwoText}
 
 Use the Write tool for the file. Do not run \`git add\`, \`git commit\`, \`git checkout\`,
 \`git switch\`, or \`git branch\` — this write is disk-only. Return via StructuredOutput: written=true
-once the file is written to disk, and startedAt set to the started_at value you used.
+once the file is written to disk, startedAt set to the started_at value you used, and updatedAt set
+to the updated_at value you used.
 `, withModel({ label: `state:${label}`, schema: STATE_WRITE_SCHEMA }, MODEL.stateWriter))
   if (result && result.startedAt) cachedStartedAt = result.startedAt
   if (!result || !result.written) {
     log(`(state) could not persist task state for "${label}" — continuing`)
+  }
+  // Freeze-detection guard (non-fatal): on a later write, updated_at should never equal
+  // started_at — that is the exact signature of the prompt ambiguity this ticket fixes. Warn
+  // only; never throw, retry, or touch cachedStartedAt / disk content.
+  if (!firstWrite && result && result.updatedAt && result.updatedAt === result.startedAt) {
+    log(`state:${label} WARNING updated_at froze at started_at (${result.updatedAt}) — see ticket-state-write-updated-at-freeze`)
   }
   return result
 }

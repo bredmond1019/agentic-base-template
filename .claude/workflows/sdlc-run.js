@@ -651,6 +651,7 @@ const STATE_WRITE_SCHEMA = {
   properties: {
     written: { type: 'boolean', description: 'true if the state file was written successfully' },
     startedAt: { type: 'string', description: 'the started_at value used in this write (preserved from the existing file, or newly stamped)' },
+    updatedAt: { type: 'string', description: 'the updated_at value written in this write' },
     stateFile: { type: 'string' },
     notes: { type: 'string' }
   }
@@ -707,9 +708,18 @@ insert the "tokens" object verbatim as given:
 }
 
 Use the Write tool to write ${stateFile}. Do NOT git add or commit. Then return via StructuredOutput
-(written=true on success, and startedAt set to the started_at value you used).
+(written=true on success, startedAt set to the started_at value you used, and updatedAt set to the
+updated_at value you used).
 `, withModel({ label: `state:${phaseName}${failed ? ':failed' : ''}`, schema: STATE_WRITE_SCHEMA }, MODEL.scout))
   if (result && result.startedAt) cachedStartedAt = result.startedAt
+  // Freeze-detection guard (non-fatal): on a later write, updated_at should never equal
+  // started_at — that is the exact signature of the prompt ambiguity this ticket fixes (though
+  // this template already inlines started_at as a literal, so the ambiguity does not apply here;
+  // the guard is kept for parity/observability). Warn only; never throw, retry, or touch
+  // cachedStartedAt / disk content.
+  if (!firstWrite && result && result.updatedAt && result.updatedAt === result.startedAt) {
+    log(`state:${phaseName}${failed ? ':failed' : ''} WARNING updated_at froze at started_at (${result.updatedAt}) — see ticket-state-write-updated-at-freeze`)
+  }
   if (!result || !result.written) {
     log(`(state) could not persist run state for "${phaseName}"${failed ? ' (failure record)' : ''} — continuing`)
   }
