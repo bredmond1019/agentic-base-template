@@ -216,6 +216,7 @@ const WRAPUP_SCHEMA = {
     commitHash:         { type: 'string' },
     amendments:         { type: 'array', items: { type: 'string' }, description: 'D18: the dated amendment-log lines appended to the spec for genuine deviations this run (empty array if none).' },
     blockStatusFlipped: { type: 'string', description: 'The state.json tracks[].blocks[].id flipped to "closed" this run, or "" if none flipped (spec not fully done, no state.json, or block not found).' },
+    emitStateRan:       { type: 'boolean', description: 'true if `mev emit-state --write` regenerated derived surfaces this run; false when skipped (mev/brain.toml absent).' },
     notes:              { type: 'string' }
   }
 }
@@ -1780,12 +1781,18 @@ else:
       fabricate a block entry, and set blockStatusFlipped to "".
     - Validate the file is still valid JSON:
         python3 -c "import json;json.load(open('planning/state.json'))"
-    - Then regenerate the derived surfaces from the authored graph. This run is ON MAIN (not a linked
-      worktree), so emit-state is safe here:
-        mev emit-state --write
-      If \`mev\` or brain.toml is absent (a standalone repo), skip this command silently — the
-      state.json flip still stands. Do NOT hand-reimplement focus/rollup/wave-table derivation.
     - Set blockStatusFlipped to the block id you closed (or "" if none).
+
+5c. Regenerate derived surfaces via \`mev emit-state --write\`. Run this step whenever PART A ran at
+    all — it is NOT conditional on step 5b's block-status flip or on "was this the last task" above:
+    step 5 already edited planning/status.md regardless of whether the spec fully completed this run
+    (a task-subset run still leaves it changed on disk), so the derived surfaces (status.md rollups,
+    /attention boards, wave tables) need resyncing every time, not only on a full close. This run is
+    ON MAIN (not a linked worktree), so emit-state is safe here:
+        mev emit-state --write
+      If \`mev\` or brain.toml is absent (a standalone repo), skip this command silently and set
+      emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup/wave-table
+      derivation.
 
 6. Append a new entry to log.md (prepend at the TOP, newest entries first):
 
@@ -1886,6 +1893,7 @@ Return your result using the StructuredOutput tool:
   commitHash: the 7-character short hash from git log --oneline -1
   amendments: the dated amendment-log lines you appended to the spec in PART A.5 (empty array if none)
   blockStatusFlipped: the state.json block id you flipped to "closed" in PART A step 5b (or "" if none)
+  emitStateRan: whether \`mev emit-state --write\` ran in PART A step 5c
   notes: any follow-up items (settled decisions to add to planning/decisions/, NEEDS_REVIEW doc flags)
 `, withModel({ label: 'wrap-up', schema: WRAPUP_SCHEMA, phase: 'Wrap-up' }, MODEL.wrapup))
 
@@ -1893,7 +1901,8 @@ if (wrapupResult) {
   stageResults.push({ stage: 'wrap-up', ...wrapupResult, success: wrapupResult.statusUpdated && wrapupResult.devlogUpdated })
   if (wrapupResult.notes) log(`Decisions to log: ${wrapupResult.notes}`)
   if (wrapupResult.amendments?.length) log(`Spec amendments (D18): ${wrapupResult.amendments.length} line(s) appended to ${specFile}`)
-  if (wrapupResult.blockStatusFlipped) log(`state.json: block "${wrapupResult.blockStatusFlipped}" → closed; derived surfaces regenerated (mev emit-state --write).`)
+  if (wrapupResult.blockStatusFlipped) log(`state.json: block "${wrapupResult.blockStatusFlipped}" → closed.`)
+  log(`Derived surfaces: ${wrapupResult.emitStateRan ? 'regenerated (mev emit-state --write).' : 'skipped (mev/brain.toml absent).'}`)
   log(`Committed: ${wrapupResult.commitMessage}`)
   log(`Workflow report: ${wrapupResult.workflowReportFile}`)
 } else {
