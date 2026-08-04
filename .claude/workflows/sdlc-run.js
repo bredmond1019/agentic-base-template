@@ -428,16 +428,32 @@ Return your findings using the StructuredOutput tool.
   return result.config
 }
 
+// Hardcoded, project-agnostic parse-time safety gate (mechanism, not policy — see CLAUDE.md standing
+// rule 1). Independent of harness.json/spec checks: any .claude/workflows/ file among the files
+// touched by this run gets an unconditional `node --check`. No-op (renders '') when none match —
+// never emits a check with no target.
+function renderEngineParseChecks(files, startIndex) {
+  if (!files || !files.length) return ''
+  return files.map((f, i) => {
+    const n = startIndex + i
+    return `CHECK ${n} — engine-parse-safety (hardcoded parse-time gate on modified SDLC engine file — mechanism, unconditional on harness.json) [GATING — a failure here blocks the review verdict]:
+  node --check ${f}
+  echo "CHECK${n}_EXIT:$?"`
+  }).join('\n\n')
+}
+
 // Render the inner project-validation check list for the Test stage from harness config.
 // Returns the numbered CHECK blocks the agent runs before the universal emoji gate. When the
 // config is absent (or carries no checks), returns instructions to fall back to the spec's
 // optional `## Validation Commands` section — the engine ships NO stack defaults.
 // Handles all D6 check kinds: command (default), baseline-diff, count-delta, warning-scan,
-// forbidden-pattern-scan. changedPaths is reserved for the deferred conditionalChecks feature.
+// forbidden-pattern-scan. changedPaths (files touched by implement/fix so far this run) feeds the
+// hardcoded engine-parse gate below — additive on top of everything else, unconditional on cfg.
 function renderCheckList(cfg, { changedPaths } = {}) {
   const checks = cfg?.validation?.checks ?? []
+  const engineFiles = (changedPaths || []).filter(p => p.startsWith('.claude/workflows/'))
   if (!checks.length) {
-    return `The project ships no \`planning/harness.json\` validation suite, so derive the checks
+    const fallback = `The project ships no \`planning/harness.json\` validation suite, so derive the checks
 from the spec instead:
   - Read the spec's optional "## Validation Commands" section.
   - Run each command it lists, IN ORDER. Each command is one check — record test_name (a short
@@ -446,8 +462,10 @@ from the spec instead:
   - If the spec has no "## Validation Commands" section, run no project checks — record a single
     informational row (test_name "no_validation_suite", passed true, empty error) noting the
     project declared no validation suite. Then run the universal emoji gate below.`
+    const engineChecks = renderEngineParseChecks(engineFiles, 1)
+    return engineChecks ? `${fallback}\n\n${engineChecks}` : fallback
   }
-  return checks.map((c, i) => {
+  const rendered = checks.map((c, i) => {
     const n = i + 1
     const kind = c.kind || 'command'
     const slug = (c.name || `check${n}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -551,6 +569,8 @@ ${ruleLines}
   ${c.command}
   echo "CHECK${n}_EXIT:$?"`
   }).join('\n\n')
+  const engineChecks = renderEngineParseChecks(engineFiles, checks.length + 1)
+  return engineChecks ? `${rendered}\n\n${engineChecks}` : rendered
 }
 
 // Snapshot baseline artifacts for any `baseline-diff` checks before implement, so the Test stage
@@ -1221,6 +1241,11 @@ Return your result using the StructuredOutput tool:
     phase('Test')
     log('Running the project validation suite...')
 
+    // Hardcoded engine-parse gate (mechanism, not project policy — see renderCheckList). Union of
+    // every file the implement/fix stages reported as modified so far this run, filtered inside
+    // renderCheckList to .claude/workflows/ paths — unconditional on harness.json.
+    const changedPaths = [...new Set(stageResults.flatMap(r => r.filesModified || []))]
+
     const testResult = await tracedAgent(`
 You are the test agent for the SDLC pipeline. Run the project's validation suite and write a test report.
 
@@ -1235,7 +1260,7 @@ Target:
 Run EVERY check below IN ORDER using the Bash tool. Capture the full output (stdout + stderr) for
 each. Run from the repo root.
 
-${renderCheckList(harnessCfg)}
+${renderCheckList(harnessCfg, { changedPaths })}
 
 For each check record:
   test_name: descriptive name
