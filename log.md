@@ -3,9 +3,66 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-03T00:00:00Z
+**Last updated:** 2026-08-04T00:45:00Z
 
 ---
+
+## [2026-08-04]
+
+### `/orchestrate` chain — all 9 open BT.ticket state-reliability blocks closed
+
+- **What:** Ran `/orchestrate` end-to-end (`--worktree`, self-paced, no user prompts) across all 9 open
+  `BT.ticket.*` blocks: `sdlc-state-write-reliability`, `auto-emit-state-after-sdlc`,
+  `trim-state-writer-roundtrips`, `fold-state-write-into-test-agent`, `sdlc-engine-parse-gate`,
+  `harness-content-hash-manifest`, `state-write-updated-at-freeze`, `sdlc-block-resume-stale-state`,
+  `per-task-fast-checks`. All 9 closed; every engine `node --check` clean; `mev validate-brain
+  --state` reports 0 errors after the full chain. Four of the nine had no spec yet
+  (`sdlc-state-write-reliability`, `auto-emit-state-after-sdlc`, `sdlc-engine-parse-gate`,
+  `harness-content-hash-manifest`) — authored all four as `/ticket`-shaped specs from the rich `note`
+  fields already captured in `planning/state.json` at backlog-promotion time (this repo's actual
+  convention for `BT.ticket.*` blocks; `/generate-tasks` targets `master-plan.md` phase/block
+  sections, which doesn't apply to standalone tickets).
+  Key fixes shipped: (1) replaced the free-form, model-authored Edit-tool JSON surgery for flipping a
+  `state.json` block's `status` to `"closed"` with one deterministic scripted `python3` mutation, in
+  all three terminal-stage engines (`sdlc-task.js`, `sdlc-flow.js`, `sdlc-run.js`) — block-id
+  *resolution* stays agent prose, only the JSON *mutation* is now scripted; (2) decoupled each
+  engine's `mev emit-state --write` trigger from full block completion, so a partial/task-subset run
+  — which already edits `status.md`/`tasks.md` — resyncs derived surfaces too, instead of only a
+  full block close doing so; (3) added a hardcoded, project-agnostic `node --check` gate over any
+  `.claude/workflows/*.js` file a task's diff touches, in `renderCheckList()` across all three
+  engines that render checks directly (plus a confirmed, documented delegation finding for
+  `sdlc-block.js`) — closes the exact gap that let two real parse-time breaks land undetected in a
+  downstream repo (wild-trail-photo commits `0d82648`, `59d217a`), since that project's own
+  `harness.json` had no reason to check the harness's own JS; (4) ported a `qm`-style content-hash
+  manifest into `scripts/sync_downstream_harness.py` (`stale-safe` unmodified-since-last-sync →
+  delete, `stale-conflict` locally-modified → never delete, report instead), closing the "removed
+  harness files never get cleaned up downstream" gap. Two blocks
+  (`trim-state-writer-roundtrips`, `per-task-fast-checks`) turned out to already be implemented
+  inline before this run (confirmed by grep before launching each engine) — their pipeline runs were
+  clean no-ops (zero implement commits) that formally closed them with a real validation pass on
+  record, resolving a "task 5/task N outstanding" note each had been carrying.
+- **Why:** These 9 blocks were the queued next work on the state-reliability/fleet-integrity thread —
+  the state graph is the authoritative plan surface every board, `/attention`, and staleness clock
+  reads from, so a writer that silently fails to update it (or derived surfaces that go stale between
+  writes) corrupts what the whole fleet trusts. Run via `/orchestrate <9 ids> --worktree`, "finish
+  until completed, answer your own questions with your strongest recommendation, keep a running tab
+  of issues/decisions" — a fully self-paced session goal.
+- **Issues found + repaired during the run:** a bookkeep stage (Haiku, cheap model) copy-pasted BLOCK
+  1's description verbatim into `status.md`'s "Current focus" under BLOCK 2's heading (code and
+  `state.json` were correct; only the prose was wrong) — repaired by hand. One pre-existing spec
+  (`ticket-fold-state-write-into-test-agent/tasks.json`) has a task-id gap (no `4`; jumps `3→5→6`)
+  predating this session, with no Amendment Log entry explaining it — cosmetic, not a correctness
+  issue, left as-is (all declared tasks passed, `dependsOn` ids all resolve).
+- **Explicitly declined:** building `mev`-binary-freshness detection into the harness for
+  `auto-emit-state-after-sdlc` — would require a hardcoded path to `core/mev`'s source repo, which
+  violates this repo's own project-agnosticism standing rule (`.claude/` ships mechanism, never
+  project facts). Logged as a needed follow-up ticket to file against the `mev` repo instead (`mev
+  --version` currently carries no build provenance to assert freshness against).
+- **Refs:** `planning/ticket-sdlc-state-write-reliability/`, `planning/ticket-auto-emit-state-after-sdlc/`,
+  `planning/ticket-trim-state-writer-roundtrips/`, `planning/ticket-fold-state-write-into-test-agent/`,
+  `planning/ticket-sdlc-engine-parse-gate/`, `planning/ticket-harness-content-hash-manifest/`,
+  `planning/ticket-state-write-updated-at-freeze/`, `planning/ticket-sdlc-block-resume-stale-state/`,
+  `planning/ticket-per-task-fast-checks/`.
 
 ## [2026-08-03]
 
