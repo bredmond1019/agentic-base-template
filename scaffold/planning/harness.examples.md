@@ -36,7 +36,7 @@ projects that have a dev server to smoke-test.
   "validation": {
     "checks": [
       { "name": "fmt",    "command": "cargo fmt --check",             "purpose": "Format gate", "gates": true },
-      { "name": "clippy", "command": "cargo clippy -- -D warnings",   "purpose": "Lint gate",   "gates": true },
+      { "name": "clippy", "command": "cargo clippy --all-targets -- -D warnings", "fastCommand": "cargo clippy -- -D warnings", "purpose": "Lint gate — end-of-flow review sees test/bench targets too", "gates": true },
       { "name": "test",   "command": "cargo nextest run --workspace", "fastCommand": "cargo nextest run --lib --workspace", "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true },
       { "name": "build",  "command": "cargo build --release",         "purpose": "Build gate",  "gates": true, "perTask": false }
     ]
@@ -51,6 +51,16 @@ projects that have a dev server to smoke-test.
 > the three fixes that mattered (one integration-test binary, nextest, no sccache) are worth far
 > more than any change to the check list. `cargo-nextest` is assumed above (`brew install
 > cargo-nextest`); drop back to `cargo test` only if it is genuinely unavailable.
+
+> **Clippy is split between `command` and `fastCommand` on purpose.** The narrow
+> `cargo clippy -- -D warnings` (lib + bins only) never lints test/bench targets — a block that is
+> almost entirely test code can ship green with real lint violations. The authoritative `command`
+> widens to `--all-targets` so the end-of-flow review always sees test/bench lint; `fastCommand`
+> keeps the narrow, cheaper form for the per-task tripwire so `--all-targets`'s ~3.3x warm-time
+> cost (measured on `engine-rs`) doesn't get paid on every task. See
+> [D55](../../planning/decisions/D55-all-targets-clippy-placement.md) and
+> [rust-sdlc-iteration-speed.md](../../docs/rust-sdlc-iteration-speed.md) section 7 for the
+> measurement and reasoning behind this split.
 
 ## Python / FastAPI + pydantic — no web UI to smoke-test
 
