@@ -1,0 +1,226 @@
+# brain.toml — the portable definition of this brain (a future client gets their own)
+
+[vocab]
+layer = ["brain", "engine", "factory", "console", "surface", "infra", "business", "content", "meta"]
+status = ["active", "draft", "deprecated", "superseded", "archived"]
+
+[crawl]
+# `_planning` — the per-tier vault container (`<tier>/_planning/<slug>/`) that holds the REAL
+# bytes of each sub-repo's planning/, symlinked back as `<repo>/planning`. Pruned from the
+# brain-root walk so the vault is not collected under the wrong (tier) scope; the mev corpus
+# crawler re-collects it under the owning-repo scope via a manifest-driven per-root walk that
+# follows the symlink. Keep in sync with index_brain.py's skip handling.
+skip_dirs = ["target", "node_modules", ".git", ".claude", ".agent", ".repo-backups", "archive", "venv", ".venv", "sdlc", "_planning"]
+
+[[repos]]
+slug = "brain"
+prefix = "HQ"
+tier = "_root"
+repo_path = "."
+status_file = "planning/status.md"
+cache_doc = "README.md"
+heading = "Company Brain"
+
+[[repos]]
+slug = "core"
+prefix = "CR"
+tier = "_root"
+repo_path = "core"
+status_file = "core/planning/status.md"
+cache_doc = "core/index.md"
+heading = "core Sub-Brain"
+
+[[repos]]
+slug = "orchestrator"
+prefix = "OR"
+tier = "core"
+repo_path = "core/orchestrator"
+status_file = "core/orchestrator/planning/status.md"
+cache_doc = "core/docs/projects/orchestrator.md"
+heading = "orchestrator"
+
+[[repos]]
+slug = "mev"
+prefix = "MV"
+tier = "core"
+repo_path = "core/mev"
+status_file = "core/mev/planning/status.md"
+cache_doc = "core/docs/projects/mev.md"
+heading = "mev"
+
+[[repos]]
+slug = "bastion"
+prefix = "BA"
+tier = "core"
+repo_path = "core/bastion"
+status_file = "core/bastion/planning/status.md"
+cache_doc = "core/docs/projects/bastion.md"
+heading = "bastion"
+
+[[repos]]
+slug = "okf-core"
+prefix = "OK"
+tier = "core"
+repo_path = "core/okf-core"
+status_file = "core/okf-core/planning/status.md"
+cache_doc = "core/docs/projects/okf-core.md"
+heading = "okf-core"
+
+[[repos]]
+slug = "bastion-ui"
+prefix = "BU"
+tier = "core"
+repo_path = "core/bastion-ui"
+status_file = "core/bastion-ui/planning/status.md"
+cache_doc = "core/docs/projects/bastion-ui.md"
+heading = "bastion-ui"
+
+[[repos]]
+slug = "bella"
+prefix = "BE"
+tier = "core"
+repo_path = "core/bella"
+status_file = "core/bella/planning/status.md"
+cache_doc = "core/docs/projects/bella.md"
+heading = "bella"
+
+[[repos]]
+slug = "engine-rs"
+prefix = "EN"
+tier = "core"
+repo_path = "core/engine-rs"
+status_file = "core/engine-rs/planning/status.md"
+cache_doc = "core/docs/projects/engine-rs.md"
+heading = "engine-rs"
+
+[[repos]]
+slug = "claude-code-rs"
+prefix = "CC"
+tier = "core"
+repo_path = "core/claude-code-rs"
+status_file = "core/claude-code-rs/planning/status.md"
+cache_doc = "core/docs/projects/claude-code-rs.md"
+heading = "claude-code-rs"
+
+[[repos]]
+slug = "bastion-web"
+prefix = "BW"
+tier = "core"
+repo_path = "core/bastion-web"
+status_file = "core/bastion-web/planning/status.md"
+cache_doc = "core/docs/projects/bastion-web.md"
+heading = "bastion-web"
+
+[[repos]]
+slug = "rag-engine-rs"
+prefix = "RE"
+tier = "portfolio"
+repo_path = "portfolio/rag-engine-rs"
+status_file = "portfolio/rag-engine-rs/planning/status.md"
+cache_doc = "portfolio/docs/projects/rag-engine-rs.md"
+heading = "rag-engine-rs"
+
+[[repos]]
+slug = "amistad"
+prefix = "AM"
+tier = "side"
+repo_path = "side/amistad"
+status_file = "side/amistad/planning/status.md"
+cache_doc = "side/docs/projects/amistad.md"
+heading = "amistad"
+
+[[repos]]
+slug = "price-scout"
+prefix = "PS"
+tier = "side"
+repo_path = "side/price-scout"
+status_file = "side/price-scout/planning/status.md"
+cache_doc = "side/docs/projects/price-scout.md"
+heading = "price-scout"
+
+[[repos]]
+slug = "learn-ai"
+prefix = "LA"
+tier = "_root"
+repo_path = "learn-ai"
+status_file = "learn-ai/planning/status.md"
+cache_doc = "docs/projects/learn-ai.md"
+heading = "learn-ai"
+
+[[repos]]
+slug = "base-template"
+prefix = "BT"
+tier = "_root"
+repo_path = "base-template"
+status_file = "base-template/planning/status.md"
+cache_doc = "docs/projects/base-template.md"
+heading = "base-template"
+
+[[repos]]
+slug = "brazilianportugui"
+prefix = "BP"
+tier = "client"
+repo_path = "client/brazilianportugui"
+status_file = "client/brazilianportugui/planning/status.md"
+cache_doc = "client/docs/projects/brazilianportugui.md"
+heading = "brazilianportugui"
+
+[[repos]]
+slug = "wild-trail-photo"
+prefix = "WT"
+tier = "client"
+repo_path = "client/wild-trail-photo"
+status_file = "client/wild-trail-photo/planning/status.md"
+cache_doc = "client/docs/projects/wild-trail-photo.md"
+heading = "wild-trail-photo"
+
+# --- Tier-root self-entries (one per tier container, mirroring `core` above). ---
+# These make each tier's index.md a cache doc `mev emit-state` can drive, and close the
+# `tier-roots-not-self-registered-in-brain-toml` gap so `/log-work` works from a tier root.
+
+[[repos]]
+slug = "portfolio"
+prefix = "PF"
+tier = "_root"
+repo_path = "portfolio"
+status_file = "portfolio/planning/status.md"
+cache_doc = "portfolio/index.md"
+heading = "portfolio Sub-Brain"
+
+[[repos]]
+slug = "side"
+prefix = "SD"
+tier = "_root"
+repo_path = "side"
+status_file = "side/planning/status.md"
+cache_doc = "side/index.md"
+heading = "side Sub-Brain"
+
+[[repos]]
+slug = "client"
+prefix = "CL"
+tier = "_root"
+repo_path = "client"
+status_file = "client/planning/status.md"
+cache_doc = "client/index.md"
+heading = "client Sub-Brain"
+
+# --- Business sub-brain (now a container tier — its first code child is `bastiel`). ---
+
+[[repos]]
+slug = "business"
+prefix = "BZ"
+tier = "_root"
+repo_path = "business"
+status_file = "business/planning/status.md"
+cache_doc = "business/index.md"
+heading = "business Sub-Brain"
+
+[[repos]]
+slug = "bastiel"
+prefix = "BL"
+tier = "business"
+repo_path = "business/bastiel"
+status_file = "business/bastiel/planning/status.md"
+cache_doc = "business/docs/projects/bastiel.md"
+heading = "bastiel"

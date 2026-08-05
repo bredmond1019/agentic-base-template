@@ -40,13 +40,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout HQ for brain fixtures
+      - name: Checkout base-template for brain fixtures
+        uses: actions/checkout@v4
+        with:
+          repository: bredmond1019/agentic-base-template
+          path: ../agentic-base-template
+
+      - name: Link HQ fixtures for tests
         run: |
-          echo "::group::Checkout HQ -> ../agentic-portfolio"
-          env GH_TOKEN=${{ github.token }} gh repo clone bredmond1019/agentic-portfolio ../agentic-portfolio -- --depth 1
-          echo "::endgroup::"
-          ln -s agentic-portfolio/brain.toml ../brain.toml
-          ln -s agentic-portfolio/planning ../planning
+          ln -s agentic-base-template/.github/mock-brain-fixtures/brain.toml ../brain.toml
+          mkdir -p ../planning
+          cp agentic-base-template/.github/mock-brain-fixtures/retrieval-golden-set.yaml ../planning/retrieval-golden-set.yaml
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
