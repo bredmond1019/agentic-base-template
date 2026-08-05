@@ -22,10 +22,31 @@ on:
 jobs:
   gate:
     runs-on: ${{ inputs.runs-on }}
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout HQ for brain fixtures
+        run: |
+          echo "::group::Checkout HQ -> ../agentic-portfolio"
+          env GH_TOKEN=${{ github.token }} gh repo clone bredmond1019/agentic-portfolio ../agentic-portfolio -- --depth 1
+          echo "::endgroup::"
+          ln -s agentic-portfolio/brain.toml ../brain.toml
+          ln -s agentic-portfolio/planning ../planning
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
