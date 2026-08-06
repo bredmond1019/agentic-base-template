@@ -7,13 +7,14 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [sdlc-task, lean engine, implement test commit, worktree, patch ladder, D38]
-related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch-ladder]
+related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch-ladder, D56-sdlc-task-authoritative-reconcile]
 ---
 
 # `/sdlc-task` — lean single-unit SDLC engine
 
 The fast path for **one small unit of behavior-changing work**. Runs
-`implement → fast-test → triage → fix (≤3 attempts, Opus on the final) → commit`,
+`implement → fast-test → triage → fix (≤3 attempts, Opus on the final) → commit → terminal
+authoritative reconcile ([D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md))`,
 either in-place on the current branch (default) or in an isolated worktree (`--worktree`).
 
 Think of it as the middle rung of the pipeline ladder — more ceremony than `/patch` (real test
@@ -52,7 +53,9 @@ flowchart TD
     Test -- "FAIL" --> Triage{"Triage<br/><i>sonnet</i>"}
     Triage -- "RETRYABLE (≤ 3 attempts)" --> Fix["Fix<br/><i>sonnet → opus on final attempt</i>"] --> Test
     Triage -- "stuck / exhausted" --> Commit
-    Commit -- "full spec passed" --> Bookkeep["Bookkeep close-out<br/><i>haiku — tasks.md + status.md + state.json flip</i>"]
+    Commit -- "full spec passed" --> Reconcile["Terminal reconcile (D56)<br/><i>haiku — re-runs authoritative form of every substituted<br/>fastCommand check + every perTask:false check, once</i>"]
+    Reconcile -- "PASS" --> Bookkeep["Bookkeep close-out<br/><i>haiku — tasks.md + status.md + state.json flip</i>"]
+    Reconcile -- "FAIL" --> ReconcileFailed(["status: reconcile_failed<br/><i>bookkeep skipped; block NOT flipped to done</i>"])
 
     classDef gate fill:#3b0764,stroke:#a78bfa,color:#e5e7eb;
     class Triage gate;
@@ -66,7 +69,8 @@ flowchart TD
 | **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. Stuck → commit the current state as `FAIL` and exit. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **Commit + state** | haiku | Writes `sdlc-task-state.json` (per-task status + token usage) and commits all work + state. In-place: one final `chore:` commit. `--worktree`: one commit per phase write (throwaway branch, applied at merge). |
-| **Bookkeep close-out** | haiku | Runs only on a full, fully-passing spec run (never on a partial task range or a bail). Marks `tasks.md` tasks done, flips the `status.md` Progress row to `Done`, and flips `planning/state.json`'s block status to `"closed"`. In-place: also runs `mev emit-state --write`. `--worktree`: skips `emit-state` (unsafe in a linked worktree) — derived surfaces regenerate when `/clean-worktree` lands the branch. Writes no prose `log.md` entry — run `/log-work` for the narrative. ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)) |
+| **Terminal reconcile** ([D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md)) | haiku | Runs once, after every task has passed on a full spec run, before bookkeep. See [Terminal authoritative reconcile](#terminal-authoritative-reconcile-d56) below. |
+| **Bookkeep close-out** | haiku | Runs only on a full, fully-passing spec run **whose terminal reconcile also passed** (never on a partial task range, a bail, or a `reconcile_failed` run). Marks `tasks.md` tasks done, flips the `status.md` Progress row to `Done`, and flips `planning/state.json`'s block status to `"closed"`. In-place: also runs `mev emit-state --write`. `--worktree`: skips `emit-state` (unsafe in a linked worktree) — derived surfaces regenerate when `/clean-worktree` lands the branch. Writes no prose `log.md` entry — run `/log-work` for the narrative. ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)) |
 
 ### The retry loop
 
@@ -74,6 +78,67 @@ flowchart TD
 (up to **3 total attempts**). The final fix attempt escalates to `opus`. After 3 failures or a
 stuck triage verdict, the engine commits the current state and exits cleanly with a `FAIL`
 status.
+
+---
+
+## Terminal authoritative reconcile (D56)
+
+`/sdlc-task`'s per-task fast tripwire always runs with `gatingOnly: true` — it runs a check's
+`fastCommand` instead of its authoritative `command` when the two differ, and it drops
+`perTask: false` gating checks from the per-task loop entirely (they're meant to run once per
+spec, not once per task). Before [D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md),
+nothing in the engine ever ran those authoritative forms — not at the end, not on the last task,
+not in bookkeep. `/sdlc-task` is `/ticket` and `/chore`'s default lane, so any `harness.json`
+check that leans on a narrow `fastCommand` (e.g. [D55](../../planning/decisions/D55-all-targets-clippy-placement.md)'s
+`cargo clippy --all-targets` placement) or a `perTask: false` build/integration check shipped with
+that coverage silently invisible in this lane.
+
+**When it runs.** Once, after the last task in a **full** spec run passes its per-task tripwire
+(`testDepth === 'fast'`) and before bookkeep. It does **not** run on a partial task-subset run
+(`/sdlc-task <slug> 1`) — the existing `fullRun` guard gates it, unchanged. It does not run under
+`--test-depth full` either, since every per-task check already ran its authoritative `command` in
+that mode — reconciling again would be a pure double-run.
+
+**What it covers.** Only the checks the per-task loop actually skipped or substituted, reusing
+`sdlc-flow.js`'s existing `renderCheckList(cfg, { gatingOnly: false, ... })` idiom rather than a
+second one:
+- every `gates: true` check whose `fastCommand` differs from `command` — reconciled with its
+  authoritative `command`;
+- every `gates: true, perTask: false` check — reconciled once (it never ran per-task at all).
+
+Checks with no `fastCommand` are **not** re-run — they already ran their authoritative `command`
+on every per-task tripwire, so reconciling them again would add cost for zero new coverage. A
+project whose `harness.json` has no `fastCommand`/`perTask: false` checks pays zero added cost —
+the reconcile's filtered check list is empty and the step is skipped with a log line.
+
+**What it costs.** Measured on real repos (see
+[`measurement.md`](../../planning/ticket-sdlc-task-has-no-authoritative-gate/measurement.md) and
+[D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md)'s cost table): well under
+2% of a typical spec's total wall-clock on both repos where a full number could be obtained
+(≈0.4% on `bella`, ≤1.8% even on `engine-rs`'s incomplete worst-known measurement). There is no
+flag or `harness.json` knob to disable it — D56 made it default-on and unconditional, on the
+reasoning that a default-off knob is how this exact blind gate happened in the first place, and
+that the measured cost does not justify protecting a per-spec budget.
+
+**Failure path.** `/sdlc-task`'s fix loop is per-task and is already finished by the time the
+reconcile runs, so a failing reconcile is never retried against a fix attempt. Instead:
+1. The engine writes a distinct terminal status, `"reconcile_failed"`, to `sdlc-task-state.json`,
+   with the raw failing command output preserved for the operator.
+2. Bookkeep's done-path is **skipped entirely** — `tasks.md` is not marked done, the
+   `status.md` Progress row is not flipped, and `planning/state.json`'s block status is not
+   flipped to `"closed"`. The block is left in-progress with the failure surfaced.
+3. All per-task commits already made stand — code is not reverted; only the "the spec is
+   finished" claim is withheld.
+4. To recover: fix the surfaced failure, then either re-run `/sdlc-task <slug> --resume` (every
+   task is already `"passed"` in state, so it re-runs *only* the reconcile, not the whole task
+   loop) or drive the fix manually with `/fix`.
+
+Anything that reads `sdlc-task-state.json`'s `status` field (dashboards, `/status`,
+`mev emit-state`) must treat `"reconcile_failed"` as a distinct non-terminal-success state — never
+folded into `"done"` or an ordinary per-task `"bailed"`.
+
+See [D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md) for the full design
+rationale, the rejected alternatives, and the measured cost tables.
 
 ---
 
