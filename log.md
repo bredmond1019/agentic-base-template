@@ -3,11 +3,31 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-06T20:05:00Z
+**Last updated:** 2026-08-06T20:40:00Z
 
 ---
 
 ## [2026-08-06]
+
+### D56 terminal authoritative reconcile — landed, then synced to all 17 repos
+
+- **What:** `BT.ticket.sdlc-task-has-no-authoritative-gate` closed (6/6 tasks,
+  `/sdlc-task --worktree`). `sdlc-task.js` gained a narrow terminal reconcile before bookkeep;
+  a failing one bails to a new terminal status `reconcile_failed` and never closes the block.
+  Then `/sync-downstream-harness --apply` — 130 files across 17 repos, committed per repo with
+  explicit pathspecs, carrying the reconcile plus this session's `/orchestrate` +
+  `/begin-orchestration` rule additions and the previously-unsynced D67 `/prime` + `/session-recap`
+  warm-memory step.
+- **Why:** the lean lane never ran any check's authoritative form — `fastCommand` was substituted
+  and `perTask:false` checks were dropped, so seven live repos each had a gating check that could
+  not execute there. D55 assumed an end-of-flow review backstopped this; `/sdlc-task` has no
+  review. A fix living only in `base-template` fixes nothing, hence the same-session sync.
+- **Refs:** [D56](planning/decisions/D56-sdlc-task-authoritative-reconcile.md),
+  `planning/ticket-sdlc-task-has-no-authoritative-gate/measurement.md`,
+  `planning/orchestration-run/notes.md`.
+- **Found, not fixed:** a `tasks.json` task-level `validation_commands` array *replaces* rather
+  than augments the harness check list — same invisibility class, uncovered by D56, carryover
+  `tasks-json-validation-commands-replaces-harness-checks`.
 
 ### Orchestration runs keep a notes file, and resolve their own ordinary decisions
 
