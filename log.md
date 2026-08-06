@@ -3,11 +3,38 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-06T14:20:00Z
+**Last updated:** 2026-08-06T20:05:00Z
 
 ---
 
 ## [2026-08-06]
+
+### Orchestration runs keep a notes file, and resolve their own ordinary decisions
+
+- **What:** `/orchestrate` gained standing rules **9** and **10**; `/begin-orchestration`'s "four
+  rules" became **six**, with the matching pair. Rule 9/5 requires a per-repo
+  `planning/orchestration-run/notes.md` — an append-only running tab of defects found in passing,
+  deferred fixes, cross-lane blockers, traps re-confirmed, and anything the roadmap got wrong, each
+  item statused `OPEN`/`DONE`/`HELD`/`WONTFIX`. Rule 10/6 says to resolve ordinary ambiguities
+  inline (imperfect spec slugs, which `--from` plan file, whether a surfaced defect is in scope,
+  merge conflicts) and **write the call and its reasoning into that file** — while listing what
+  still must stop and be reported (bailed blocks, blocks that genuinely disagree, `BROKEN
+  DOWNSTREAM`, operator gates, unresolvable slugs). Both commands' commit ordering, Final report,
+  and Files sections were updated to match.
+- **Why:** the lane log is the *cross-lane* channel and is deliberately one line per block, so
+  everything else a run surfaces died in the session transcript. The C1 substrate run produced four
+  findings worth keeping (a `tasks.json validation_commands` override that silently replaces the
+  whole harness check list, a four-way bookkeep prose drift, deferred downstream propagation, an
+  unmeasurable `engine-rs`) and none had a home. The decision half is the same problem from the
+  other side: a chain that halts at every ambiguity is useless, but an undocumented call is
+  indistinguishable from a mistake to the next agent.
+- **Files:** `.claude/commands/orchestrate.md`, `.claude/commands/begin-orchestration.md`.
+- **Propagation:** these are prompt-only commands — no engine `.js` touched, so no
+  `skill-guide-sync` implications and no `.agents/skills/` mirror exists for either. Reaches other
+  repos via `/sync-downstream-harness` and the local install via `/sync-global-commands`; both
+  deferred until the fleet is quiet (three lanes were live).
+- **Dogfooded the same session:** `planning/orchestration-run/notes.md` created for the
+  `demand-ready` substrate lane, with the C1 findings and five inline decisions recorded.
 
 ### /prime and /session-recap read warm memory under a size budget (brain D67)
 
