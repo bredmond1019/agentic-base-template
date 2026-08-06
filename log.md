@@ -3,9 +3,42 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-04T16:53:14Z
+**Last updated:** 2026-08-06T14:20:00Z
 
 ---
+
+## [2026-08-06]
+
+### /prime and /session-recap read warm memory under a size budget (brain D67)
+
+- **What:** Both session-start commands — in `.claude/commands/` (leaf repos) and
+  `.claude/commands/brain/` (tier sub-brains) — gained a warm-memory step: `wc -w
+  planning/knowledge.md planning/memory.md`, then **≤ 2,500 words combined → read both in full**,
+  **over → read only the `### ` topic list** and open a named section on request. Both commands
+  also gained a `Warm Memory` output line, and `session-recap.md`'s blanket *"do not run any
+  commands"* is now scoped to the read-only probes (`wc -w`, `grep '^### '`) rather than being
+  silently contradicted by the new step.
+- **Why:** D35 has been promoting distilled residue into `knowledge.md`/`memory.md` since June and
+  **no session-start command has ever read them** — verified across `/prime`, `/session-recap`,
+  `/briefing`, `/next`, `/status`, `/weekly-plan`. Because `planning/archive/` is out of the brain
+  corpus, those files are the only retrieval path back to archived plans, so unread they are
+  effectively deleted. Loading them wholesale is not viable on context cost; the budget is the
+  compromise, and it is generous because **18 of 25 repos are under 5,000 words** — most never had
+  a retrieval problem, only a command that never looked.
+- **The explicit non-decision:** these commands **must not call `syn recall`**. At session start
+  there is no question yet, and the brain-side measurement behind D67 is that documents which
+  summarize the corpus *outrank* the corpus (`recall@10` 1.0000 → 0.8824 after 351 distilled
+  entries were indexed). Making warm memory more findable makes retrieval worse; scoped retrieval
+  belongs in the commands that *start* work, where a real query seed exists.
+- **Known gap:** the over-budget branch only pays off once a repo's warm files carry `### `
+  headings. In the brain fleet `bastion`, `engine-rs` and `mev` currently have **zero**, so their
+  TOC renders empty — the sub-sectioning pass is tracked brain-side, not here.
+- **No ADR here:** the decision is brain-scoped
+  (`agentic-portfolio/docs/decisions/D67-warm-memory-retrieval-shape.md`); this repo is
+  implementing it, not deciding it. Per the brain's standing rule 8, a decision irrelevant to
+  someone working only in this repo does not belong in `planning/decisions/`.
+- **Not yet synced downstream.** `/sync-brain-commands` (tiers) and `/sync-downstream-harness`
+  (leaf repos) still need to run — that writes into ~23 repos and is a deliberate, reviewed step.
 
 ## [2026-08-04]
 

@@ -30,7 +30,14 @@ Use this at the start of a brain session instead of the heavier `/prime`.
    `clears_when` is unresolved) — durable constraints, known-issues, env caveats, and deferred
    follow-ons. Skip silently if the file or array is absent.
 
-4. Output the briefing in this exact format — keep it under 250 words:
+4. **Warm memory — by budget, never by reflex** (brain decision **D67**). Run
+   `wc -w planning/knowledge.md planning/memory.md` and branch on the **combined** count:
+   **≤ 2,500 words** → read both in full; **over** → read only the topic list
+   (`grep '^### ' planning/knowledge.md planning/memory.md`). These are D35-distilled entries —
+   the only retrieval path back to archived plans once `planning/archive/` leaves the corpus.
+   Never call `syn recall` here: at session start there is no question yet. Skip if absent.
+
+5. Output the briefing in this exact format — keep it under 250 words:
 
 ---
 
@@ -44,6 +51,10 @@ Use this at the start of a brain session instead of the heavier `/prime`.
 <One line per active `carryover[]` entry: `slug` (`kind`) — gist. Omit this section entirely if there
 are none. Flag any `kind: env` caveat that gates the next action (e.g. "rebuild binary first").>
 
+## Warm Memory
+<One line. Under budget: the distilled facts bearing on the current focus. Over budget:
+`N words across M topics — headings only` plus the topics nearest the focus. Omit if absent.>
+
 ## Next Action
 <Single line: the exact command or action to take next.>
 Example: `/draft-post "Builder's Arc PT-BR"` or `/log-work <desc>` or `/sdlc-run planning/…`
@@ -51,7 +62,8 @@ If nothing is queued: `Run /prime for full cross-project orientation.`
 
 ---
 
-Do not read any source code files. Do not run any commands. This is read-only.
+Do not read any source code files. This is read-only: the only commands permitted are the
+read-only warm-memory probes (`wc -w`, `grep '^### '`) and the `ls` in step 0.
 
 ## Context / Files to Read
 
@@ -59,3 +71,5 @@ Do not read any source code files. Do not run any commands. This is read-only.
 - `log.md` (last 3 dated sections)
 - `planning/status.md`
 - `planning/state.json` (the `carryover[]` array, if present)
+- `planning/knowledge.md` + `planning/memory.md` — **under the warm-memory budget** (D67),
+  never both in full when the combined `wc -w` exceeds 2,500 words

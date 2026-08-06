@@ -48,6 +48,13 @@ Check if `brain.toml` exists in the current directory:
    - `README.md` — project index and quick status
    - `CLAUDE.md` — standing rules and structure
    - `planning/status.md` — Operating Board (NOW/NEXT/BLOCKED)
+   - **Warm memory — by budget, never by reflex** (brain decision **D67**). Run
+     `wc -w planning/knowledge.md planning/memory.md` and branch on the **combined** count:
+     **≤ 2,500 words** → read both in full; **over** → read only the topic list
+     (`grep '^### ' planning/knowledge.md planning/memory.md`) and say
+     *"warm memory: N words across M topics — headings only; ask to open a section."*
+     Never call Synapse (`syn recall`) here — at session start there is no question yet, and a
+     digest that ranks above its own sources makes retrieval worse. Skip silently if absent.
    - `planning/state.json` — the `carryover[]` array (durable constraints, known-issues, env caveats,
      and not-yet-ticketed deferred follow-ons that must survive across handoffs). Skip if absent.
 
@@ -66,6 +73,7 @@ Check if `brain.toml` exists in the current directory:
        - `<repo-slug>`: <repo status/updates from the rollup table/cache card>
    - **`_root` repos** — one sentence each from the cache cards.
    - **Carryover** — active `carryover[]` entries (slug, kind, one-line gist).
+   - **Warm memory** — the distilled facts bearing on the current focus, or `N words across M topics — headings only` when over budget.
    - **Standing rules** — key items from CLAUDE.md.
 
 ---
@@ -80,6 +88,13 @@ Check if `brain.toml` exists in the current directory:
    - `CLAUDE.md` — this tier's standing rules (inheriting company-brain rules)
    - `index.md` — sub-brain index
    - `planning/status.md` — the tier rollup (generated per-repo table + Momentum)
+   - **Warm memory — by budget, never by reflex** (brain decision **D67**). Run
+     `wc -w planning/knowledge.md planning/memory.md` and branch on the **combined** count:
+     **≤ 2,500 words** → read both in full; **over** → read only the topic list
+     (`grep '^### ' planning/knowledge.md planning/memory.md`) and say
+     *"warm memory: N words across M topics — headings only; ask to open a section."*
+     Never call Synapse (`syn recall`) here — at session start there is no question yet, and a
+     digest that ranks above its own sources makes retrieval worse. Skip silently if absent.
    - `planning/state.json` — the `carryover[]` array. Skip if absent.
 
 3. Read per-repo cache cards: Read `docs/projects/index.md`, then each `docs/projects/<slug>.md` cache card for the repos in this tier.
@@ -92,6 +107,7 @@ Check if `brain.toml` exists in the current directory:
    - **Operating Board** — current focus + Momentum from `planning/status.md`.
    - **Repos in this tier** — one line each from the cache cards.
    - **Carryover** — active `carryover[]` entries (slug, kind, one-line gist).
+   - **Warm memory** — the distilled facts bearing on the current focus, or `N words across M topics — headings only` when over budget.
    - **Standing rules** — key items from CLAUDE.md.
 
 ---
@@ -104,6 +120,7 @@ Check if `brain.toml` exists in the current directory:
   - `CLAUDE.md`
   - `planning/status.md`
   - `planning/state.json` (if present)
+  - `planning/knowledge.md` + `planning/memory.md` — **under the warm-memory budget** (D67)
   - `<tier>/planning/status.md` (for each tier, if exists)
   - Each `cache_doc` from `brain.toml` where `tier == "_root"` and `slug != "brain"`
   - Drill-down: matching repo's `status_file` from `brain.toml`
@@ -113,6 +130,7 @@ Check if `brain.toml` exists in the current directory:
   - `index.md`
   - `planning/status.md`
   - `planning/state.json` (if present)
+  - `planning/knowledge.md` + `planning/memory.md` — **under the warm-memory budget** (D67)
   - `docs/projects/index.md` + each `docs/projects/<slug>.md`
   - Optional: `../brain.toml`
   - Drill-down: `<slug>/planning/status.md`
