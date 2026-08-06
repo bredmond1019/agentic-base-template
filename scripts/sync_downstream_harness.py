@@ -41,8 +41,15 @@ target repo:
     let it drift out of sync with the one that actually governs the gate.
 
 What never gets touched:
-  - Any file in the target that doesn't exist at its source (a repo's own customizations,
-    e.g. bastion's .claude/commands/feature.md) - this script only ever adds/updates, never deletes.
+  - Any file in the target that this script never wrote (a repo's own customizations, e.g.
+    bastion's .claude/commands/feature.md). Those are invisible to it and are never touched.
+  - Any file it DID write that the repo has since modified locally ("stale-conflict") - reported
+    for the operator to resolve by hand, never deleted.
+
+  It DOES delete one narrow class: a file this script wrote, recorded in the manifest, that the
+  source no longer ships and whose on-disk content still matches the recorded hash
+  ("stale-safe" - see FileDiff below). That is what makes a rename in base-template propagate as
+  a rename rather than leaving a duplicate command in all 16 repos.
   - planning/, CLAUDE.md, harness.json, or anything else that is project fact, not mechanism.
 
 Note: copying hooks/pre-push into a repo is inert until that repo's git is actually pointed at
