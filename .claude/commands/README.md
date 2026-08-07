@@ -31,7 +31,7 @@ All commands live directly in `.claude/commands/` — no subdirectories (except 
   wrap-up.md        update-state.md  next.md
 
   breakdown.md      chore.md         generate-master-plan.md  generate-tasks.md
-  plan.md           ticket.md
+  generate-roadmap.md  plan.md       ticket.md
 
   close-out.md      conditional_docs.md  document.md      fix.md
   implement.md      patch.md             process-tasks.md review-PR.md
@@ -52,7 +52,7 @@ All commands live directly in `.claude/commands/` — no subdirectories (except 
 |---|---|
 | Session | `/prime`, `/session-recap`, `/status`, `/next`, `/handoff`, `/wrap-up`, `/log-work`, `/archive`, `/capture` |
 | State | `/update-state` — how to safely edit `planning/state.json` per `state-schema.md` |
-| Planning | `/generate-master-plan`, `/generate-tasks`, `/plan`, `/ticket`, `/chore`, `/breakdown` |
+| Planning | `/generate-roadmap`, `/generate-master-plan`, `/generate-tasks`, `/plan`, `/ticket`, `/chore`, `/breakdown` |
 | SDLC | `/implement`, `/test`, `/fix`, `/patch`, `/document`, `/update-docs`, `/conditional_docs`, `/process-tasks`, `/update-task`, `/review-task`, `/review-workflow`, `/review-PR`, `/close-out` |
 | Git | `/commit`, `/init-worktree`, `/clean-worktree`, `/start-block`, `/merge-train` |
 | E2E | `/test_auth_gate`, `/test_crud_api`, `/test_error_handling`, `/test_ui_form` |
@@ -348,6 +348,20 @@ it are `Done`), and returns a status table. Read-only.
 ---
 
 ## Phase 1 — Plan
+
+### `/generate-roadmap <slug> [--from <path> ...] [--supersedes <path>]`
+Authors the two things `/begin-orchestration` consumes: a **roadmap document** and one
+`lane-<name>.txt` chain file per lane. A roadmap is a *concurrency plan* — an assignment of work to
+parallel `/orchestrate` sessions that cannot step on each other. Encodes the rules that have cost
+real runs: the lane unit is the **repo, never the wave** (engines are serial inside a repo, so a
+repo holding 10 blocks is the critical path regardless of scheduling); **at most two heavy-gate
+repos concurrently**, read from each `harness.json` rather than memory; `base-template` lands early
+in a worktree with propagation **deferred** to an operator gate; ★ blocks must be registered in
+`state.json` in a hard **Wave 0** or the lane cannot resolve them; the generated `epic-sequence`
+region is the only status surface and no wave table may be authored beside it; and the **Definition
+of Done must be written as observations with commands, not as blocks closed** — the failure that
+left a previous roadmap 30/53 closed with an undeployed demo and an unverified funnel. Authors only;
+never runs `/orchestrate`. Sits above `/generate-master-plan`, which scopes to one repo.
 
 ### `/generate-master-plan`
 Authors (or revises) `planning/master-plan.md` — the roadmap source of truth — as a sequence of
