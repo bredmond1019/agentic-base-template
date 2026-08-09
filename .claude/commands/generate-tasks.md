@@ -98,6 +98,12 @@ $ARGUMENTS — one of two input modes:
      pattern. `tasks.md` still carries the prose (Goal, Context Pointers, Acceptance Criteria,
      Validation Commands, Notes, Amendment Log) but the Step-by-Step Tasks section in it is just a
      one-line pointer at the JSON file, not the task list itself.
+   - **This command's `--from` mode is one of two derivation surfaces that both author `tasks.json`
+     from a `tasks.md`/block source — the other is each engine's own D16 preflight.** `sdlc-task.js`,
+     `sdlc-flow.js`, and `sdlc-run.js` now derive `tasks.json` from an existing `tasks.md` themselves
+     (rather than aborting with "No tasks.json (D16)") when a spec ships prose-only, using the same
+     author-a-fresh-decomposition discipline this step describes — they are a recovery backstop for
+     an already-written spec, not a substitute for running this command up front.
 
 7. Create the directory `planning/<spec-slug>/` if it does not exist, then write **both**
    `planning/<spec-slug>/tasks.md` (prose) and `planning/<spec-slug>/tasks.json` (task list) using

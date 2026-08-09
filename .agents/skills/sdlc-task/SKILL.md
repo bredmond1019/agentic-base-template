@@ -218,10 +218,21 @@ not persist between calls.
 
 1. **D16 preflight lint.** Read `<tasksJsonFile>`. It MUST parse as a **non-empty bare JSON array** of
    task objects (each with at least `task_id`; matches the SDLCTask shape, not wrapped in an object).
-   If it's missing, invalid, or an empty array: **abort** — `ABORTED (D16)`, tell the user to run
-   `/generate-tasks <blockId>` to author `tasks.json`, commit, then re-run. **Never infer the task
-   count or structure from `tasks.md` prose** — `tasks.json` is the only source of truth for what
-   tasks exist.
+   If it's missing, invalid, or an empty array: **before aborting, check the D16 derive-from-tasks.md
+   fallback.** If `<specFile>` (`tasks.md`) exists and carries a `## Step-by-Step Tasks` /
+   `## Step by Step Tasks` section with at least one numbered step, author a FRESH D45-shaped
+   `tasks.json` from that decomposition plus the spec's Acceptance Criteria / Validation Commands
+   (a real decomposition, never a verbatim copy of the prose, never the superseded D44
+   `{"tasks": [...]}` wrapper — bare array, 1-indexed integer `task_id`, `description` a single
+   string, `max_attempts: 3`, never author `status`/`attempt_count`), write it, and commit it on the
+   current branch with an explicit pathspec (`git add <tasksJsonFile>`,
+   `git commit -m "chore: derive tasks.json from tasks.md (D16 fallback)"`). Log a distinct line —
+   `Derived tasks.json from tasks.md (D16 derive-from-tasks.md fallback) — <N> task(s), commit
+   <hash>.` — so a derived spec is distinguishable from an authored one, then re-run this lint.
+   **Only if `tasks.md` is also missing, or has no derivable step content, abort** —
+   `ABORTED (D16)`, tell the user to run `/generate-tasks <blockId>` to author `tasks.json`, commit,
+   then re-run. Deriving from an authored `tasks.md` is not guessing the task structure; fabricating
+   one from nothing is what D16 still refuses to do.
    - `allTasks` = every `task_id`, in array order.
    - **Per-task validation override**: for each task whose `validation_commands` is a non-empty array,
      remember `{taskId, validationCommands}` — this task's test stage runs ONLY these commands,
