@@ -74,6 +74,24 @@ flowchart TD
   review/document/wrap-up agents. Pairs with `/chore` and `/ticket`.
 - `/sdlc-run` is the **sequential workhorse** when you don't need isolation or a PR.
 
+### Decomposition differs by engine: disjoint files vs. compilable boundaries
+
+`/generate-tasks` decomposes a block **before** the consuming engine is chosen, so it applies one of
+two mutually-exclusive rules depending on which engine will run the spec:
+
+- **`/sdlc-block`** runs each task as its own pipeline in parallel worktrees that merge independently
+  — so tasks must own **disjoint files**; an undeclared overlap escalates the whole block at merge.
+- **`/sdlc-flow` and `/sdlc-task`** run every task sequentially on one branch/worktree with no
+  inter-task merge step, but gate the project's checks after **every single task** — so **every task
+  boundary must leave the gating suite passing** (for a compiled/type-checked stack, the repo must
+  compile at every boundary). A change that cannot be split without an intermediate non-compiling
+  task — e.g. a renamed public type and every call site — lands in **one** task instead, even if that
+  means merging tasks that would otherwise be file-disjoint.
+
+The full rule, its precedence, and the escape hatches (`additiveFiles`, `dependsOn`) live in
+[`generate-tasks.md`](../../.claude/commands/generate-tasks.md) — see its step 6 — rather than being
+restated here.
+
 ---
 
 ## Shared concepts (true for all engines)
