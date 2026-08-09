@@ -256,6 +256,22 @@ const ENUMERATE_SCHEMA = {
   }
 }
 
+// D16 derive-from-tasks.md fallback — see the abort below. Mirrors sdlc-block.js's ensureTasks()
+// generator and /generate-tasks' --from mode: read the spec's authored step decomposition and
+// write a fresh D45-shaped tasks.json from it (never a verbatim copy of the prose, never the
+// superseded D44 {"tasks": [...]} wrapper).
+const DERIVE_SCHEMA = {
+  type: 'object',
+  required: ['derivable', 'written'],
+  properties: {
+    derivable:  { type: 'boolean', description: 'true iff tasks.md exists and carries a numbered step decomposition to derive from' },
+    written:    { type: 'boolean', description: 'true iff a D45-shaped tasks.json (bare array, integer task_id, single-string description, no status/attempt_count) was written and committed' },
+    commitHash: { type: 'string' },
+    taskCount:  { type: 'integer' },
+    notes:      { type: 'string' }
+  }
+}
+
 const STATE_LOAD_SCHEMA = {
   type: 'object',
   required: ['exists'],
@@ -344,6 +360,7 @@ const BOOKKEEP_SCHEMA = {
 const MODEL = {
   setup:       'haiku',    // scripted git: locate the repo root, or follow the worktree free-name recipe
   enumerate:   'haiku',    // read + parse tasks.json's task list — a fixed procedure
+  derive:      'opus',     // D16 fallback: author a fresh tasks.json from tasks.md's step list — real judgment, mirrors sdlc-block.js's ensureTasks() generator
   stateLoad:   'haiku',    // read + parse one JSON file (resume only)
   implement:   'sonnet',   // writes code/content + tests against a scoped task
   fix:         'sonnet',   // targeted fixes; failures escalate, never silently ship
@@ -936,7 +953,7 @@ Run all build/test/validation from the run root; relative paths (planning/...) r
 // ================================================================
 phase('Plan')
 
-const enumResult = await tracedAgent(`${W}
+const ENUMERATE_PROMPT = `${W}
 You enumerate the tasks defined in a spec's tasks.json. Do NOT modify anything.
 
 STEP 1 — read the task list:
@@ -957,10 +974,52 @@ STEP 4 — Engine-parse gate scan. For each task, look at its "files" array. If 
   task's other files). Skip every task whose "files" has no such path.
 
 Return via StructuredOutput: hasTasks, allTasks (integers in order), taskChecks, engineFiles, notes.
-`, withModel({ label: 'enumerate', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
+`
+
+let enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
 
 if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
-  // D16 preflight lint — refuse to guess the task structure.
+  // D16 derive-from-tasks.md fallback — before refusing, check whether the spec's authored
+  // tasks.md carries a derivable step decomposition. Mirrors sdlc-block.js's ensureTasks()
+  // generator and /generate-tasks' --from mode: author a FRESH decomposition from tasks.md (never
+  // a verbatim copy of its prose). Deriving from an authored tasks.md is not guessing the task
+  // structure — D16 exists to refuse fabricating one out of nothing, which the abort below still does.
+  const deriveResult = await tracedAgent(`${W}
+You are the D16 recovery generator for one lean-engine spec. ${tasksJsonFile} is missing, invalid, or
+empty; ${specFile} (tasks.md) may still carry a usable step decomposition. Do NOT implement anything.
+
+STEP 1 — check for a derivable source:
+  cd ${runDir} && cat ${specFile} 2>/dev/null || echo "NO_TASKS_MD"
+
+STEP 2 — If tasks.md is missing, or has no "## Step-by-Step Tasks" / "## Step by Step Tasks"
+  section with at least one numbered step, set derivable=false, written=false, and STOP — do not
+  write anything.
+
+STEP 3 — Otherwise, author a FRESH decomposed ${tasksJsonFile} from tasks.md's step list plus its
+  Acceptance Criteria / Validation Commands sections (mirrors /generate-tasks' --from mode: a real
+  decomposition, not a verbatim copy of the prose). Write it as valid JSON: a BARE ARRAY (D45 shape —
+  NOT the superseded D44 {"tasks": [...]} wrapper), each entry shaped { task_id, title, description,
+  acceptance_criteria, validation_commands, max_attempts, files, dependsOn } — task_id is a 1-indexed
+  integer in dependency order with no gaps, description is a single string, max_attempts is 3, and
+  you must NEVER author a "status" or "attempt_count" key (those are engine-owned). Each task names
+  the concrete file(s) it owns in "files" so tasks stay disjoint.
+
+STEP 4 — Commit it on the current branch with an explicit pathspec:
+  git add ${tasksJsonFile}
+  git commit -m "chore: derive tasks.json from tasks.md (D16 fallback)"
+  git log --oneline -1   (capture the short hash)
+
+Return via StructuredOutput: derivable, written, commitHash, taskCount, notes.
+`, withModel({ label: 'derive-tasks-json', schema: DERIVE_SCHEMA, phase: 'Plan' }, MODEL.derive))
+
+  if (deriveResult?.derivable && deriveResult?.written) {
+    log(`Derived tasks.json from tasks.md (D16 derive-from-tasks.md fallback) — ${deriveResult.taskCount || '?'} task(s), commit ${deriveResult.commitHash || 'unknown'}.`)
+    enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate-post-derive', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
+  }
+}
+
+if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
+  // D16 preflight lint — refuse to guess the task structure when nothing was derivable either.
   log(`ABORTED (D16) — ${tasksJsonFile} is missing, invalid, or is an empty array.`)
   log(`Fix: run /generate-tasks ${blockId} to author tasks.json (see the spec template), commit, then re-run.`)
   return { error: 'No tasks.json (D16)', blockId, specFile: tasksJsonFile }

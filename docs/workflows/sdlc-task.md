@@ -81,6 +81,31 @@ status.
 
 ---
 
+## D16 preflight — derive, then abort
+
+The Plan stage's [D16](../../planning/decisions/D16-preflight-task-structure-lint.md) lint
+enumerates tasks from `tasks.json`, not `tasks.md` — every downstream stage (fast test, triage,
+fix, commit) walks that array. The preflight is **derive-then-abort**, not a bare abort:
+
+1. **Enumerate.** Parse `planning/<spec>/tasks.json`. If it's a non-empty bare array, proceed
+   normally.
+2. **Derive.** If `tasks.json` is missing, invalid, or empty but `tasks.md` carries a usable step
+   decomposition, an `opus` recovery generator authors a fresh [D45](../../planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md)-shaped
+   `tasks.json` from it (bare array, integer `task_id`, single-string `description`, no `status`/
+   `attempt_count` — never a verbatim copy of the prose), writes it, and commits it
+   (`chore: derive tasks.json from tasks.md (D16 fallback)`). Enumerate then re-runs against the
+   derived file.
+3. **Abort.** Only when nothing was derivable either — no `tasks.md`, or a `tasks.md` with no
+   extractable step structure — does the engine log `ABORTED (D16) — <path> is missing, invalid,
+   or is an empty array.` and return without touching the tree. D16 exists to refuse *guessing* a
+   task structure out of nothing; deriving from an authored `tasks.md` is not guessing, so the
+   abort survives only the genuinely underivable case.
+
+`/sdlc-flow` runs the identical derive-then-abort preflight — see
+[its Enumerate stage](./sdlc-flow.md#pipeline).
+
+---
+
 ## Terminal authoritative reconcile (D56)
 
 `/sdlc-task`'s per-task fast tripwire always runs with `gatingOnly: true` — it runs a check's

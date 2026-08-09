@@ -897,6 +897,12 @@ const badSet = new Set()   // escalated OR poisoned block indices
 // missing, an inline agent mirrors /generate-tasks (the runtime cannot invoke a slash command) —
 // reading the block's section out of the plan file, so this works for master-plan.md AND a /plan
 // output path alike.
+//
+// This is the reference implementation for the D16 derive-from-tasks.md fallback: sdlc-task.js,
+// sdlc-flow.js and sdlc-run.js each carry the identical fallback (same D45 shape, same
+// "Derived tasks.json from tasks.md" log line) for the case where their own D16 preflight finds
+// tasks.md but not tasks.json — this generator predates and models that behaviour, it does not
+// duplicate it.
 async function ensureTasks(slug, blk) {
   const blockTasks = `planning/${slug}/tasks.md`
   const blockTasksJson = `planning/${slug}/tasks.json`

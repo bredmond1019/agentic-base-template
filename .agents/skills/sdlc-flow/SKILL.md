@@ -188,9 +188,21 @@ Everything below runs from the main repo root first.
 1. Read `<tasksJsonFile>`. It is a **bare JSON array** of task objects (not wrapped in an object),
    matching the SDLCTask schema — each has at least `task_id`, and may carry `files[]` and
    `validation_commands[]`.
-2. **D16 preflight lint**: if the file is missing, invalid JSON, or an empty array, **abort** — instruct
-   running `/generate-tasks <spec-slug>` to author it, commit, then re-run. Never guess the task
-   structure.
+2. **D16 preflight lint**: if the file is missing, invalid JSON, or an empty array, **before
+   aborting, check the D16 derive-from-tasks.md fallback.** If `<specFile>` (`tasks.md`) exists and
+   carries a `## Step-by-Step Tasks` / `## Step by Step Tasks` section with at least one numbered
+   step, author a FRESH D45-shaped `tasks.json` from that decomposition plus the spec's Acceptance
+   Criteria / Validation Commands (a real decomposition, never a verbatim copy of the prose, never
+   the superseded D44 `{"tasks": [...]}` wrapper — bare array, 1-indexed integer `task_id`,
+   `description` a single string, `max_attempts: 3`, never author `status`/`attempt_count`), write
+   it, and commit it on the current branch with an explicit pathspec (`git add <tasksJsonFile>`,
+   `git commit -m "chore: derive tasks.json from tasks.md (D16 fallback)"`). Log a distinct line —
+   `Derived tasks.json from tasks.md (D16 derive-from-tasks.md fallback) — <N> task(s), commit
+   <hash>.` — so a derived spec is distinguishable from an authored one, then re-run this lint.
+   **Only if `tasks.md` is also missing, or has no derivable step content, abort** — instruct
+   running `/generate-tasks <spec-slug>` to author it, commit, then re-run. Deriving from an
+   authored `tasks.md` is not guessing the task structure; fabricating one from nothing is what D16
+   still refuses to do.
 3. Collect `allTasks` = every `task_id`, in array order. If a task range/selection was given, filter to
    it; otherwise use every task. This is `taskList`.
 4. Per-task validation overrides: for each task whose `validation_commands` is a non-empty array, note
@@ -224,8 +236,8 @@ Everything below runs from the main repo root first.
      engine ships no stack defaults. If the spec has no such section either, run no project checks.
    - Always, in addition to whatever checks above: scan changed `.md` files (`git diff --name-only
      <prBase>..HEAD`) for stray emoji — this "universal emoji gate" always runs, project-agnostic. The
-     literal `🤖 Generated with Claude Code` PR-footer line is the one exception, and only inside a PR
-     body, never inside docs.
+     literal robot-emoji `Generated with Claude Code` PR-footer line is the one exception, and only
+     inside a PR body, never inside docs.
    - For any `baseline-diff` / `skip-count-regression` check with a `baselineCommand`: snapshot a
      baseline once, before task 1, if one doesn't already exist on disk (resume-safe — never overwrite
      an existing baseline).
