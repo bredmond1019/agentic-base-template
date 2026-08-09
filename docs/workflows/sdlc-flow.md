@@ -102,7 +102,7 @@ flowchart TD
 | Stage | Model | What it does |
 |---|---|---|
 | **Setup** | haiku | Creates (or re-attaches on `--resume`) the `<spec>-flow` branch for the whole spec. **Branch mode (default):** `git checkout -b` in the main tree (aborts on a dirty tree). **`--worktree`:** an isolated git worktree applying the D5/P5 cone-all-tracked-dirs recipe. Checks for unfilled tokens (D19 thin-spec guard) on a fresh run. |
-| **Enumerate** | haiku | Reads `tasks.md` for `### N.` task headings (D16 preflight lint — refuses to run if none found). On `--resume`, reads the on-disk (uncommitted) `sdlc-flow-state.json` to identify already-passed tasks and skip them. |
+| **Enumerate** | haiku | Reads `tasks.json` for its task entries (D16 preflight lint). If `tasks.json` is missing/invalid/empty but `tasks.md` has a derivable step list, derives a fresh D45-shaped `tasks.json` and commits it before re-enumerating; refuses to run only when nothing is derivable either — see [D16 preflight — derive, then abort](#d16-preflight--derive-then-abort) below. On `--resume`, reads the on-disk (uncommitted) `sdlc-flow-state.json` to identify already-passed tasks and skip them. |
 | **update-task** | haiku | Marks the current task in-progress in `tasks.md` (surgical checkbox edit). Disk-only, like the state-writer — neither commits. |
 | **Implement** | sonnet | Executes task N against the spec (and `breakdown.md` if present). Runs the D8 completeness self-check before committing `feat:`. |
 | **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` (the per-task tripwire). Falls back to the spec's `## Validation Commands` if no config. Also runs the universal emoji gate on changed markdown. |
@@ -125,6 +125,28 @@ escalates to `opus`. Exhausting the attempt cap also bails.
 `end-review →` **PASS: docs** or **FAIL/PARTIAL (localized): review fix → end-review** (up to
 **2 fix passes**, `opus` on the last). A broad or structural finding from triage skips the fix loop
 and bails straight to wrap-up (draft PR).
+
+---
+
+## D16 preflight — derive, then abort
+
+The Enumerate stage's [D16](../../planning/decisions/D16-preflight-task-structure-lint.md) lint
+walks `tasks.json`, not raw `tasks.md` prose — every downstream stage (implement, fast test,
+triage, fix, review) enumerates from that array. The preflight is derive-then-abort:
+
+1. **Enumerate.** Parse `planning/<spec>/tasks.json`. If it's a non-empty bare array, proceed.
+2. **Derive.** If `tasks.json` is missing, invalid, or empty but `tasks.md` carries a usable step
+   decomposition, an `opus` recovery generator authors a fresh
+   [D45](../../planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md)-shaped
+   `tasks.json` from it (bare array, integer `task_id`, single-string `description`, no `status`/
+   `attempt_count` — never a verbatim copy of the prose), writes and commits it, then re-enumerates.
+3. **Abort.** Only when nothing is derivable either does the engine log
+   `ABORTED (D16) — <path> is missing, invalid, or is an empty array.` and stop before touching the
+   tree. D16 exists to refuse guessing a task structure out of nothing; deriving from an authored
+   `tasks.md` is not guessing, so the abort survives only the genuinely underivable case.
+
+`/sdlc-task` runs the identical derive-then-abort preflight — see
+[its Pipeline stage](./sdlc-task.md#pipeline).
 
 ---
 
