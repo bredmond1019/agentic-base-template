@@ -5,7 +5,7 @@ description: Why agent-driven Rust pipelines get slow (linking and a rotten targ
 doc_id: rust-sdlc-iteration-speed
 layer: [factory, engine]
 status: active
-keywords: [rust, cargo, nextest, link time, sdlc, iteration speed, sccache, cargo clean]
+keywords: [rust, cargo, nextest, link time, sdlc, iteration speed, sccache]
 related: [harness-json, using-the-template, brain:d57-rust-sdlc-iteration-speed]
 ---
 

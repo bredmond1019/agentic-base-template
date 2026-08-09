@@ -6,7 +6,7 @@ doc_id: sdlc-flow
 layer: [factory]
 project: base-template
 status: active
-keywords: [sdlc-flow, branch mode, worktree, PR, test-fix loop, end-review, SDLC engine, planning-vault, D46]
+keywords: [sdlc-flow, branch mode, worktree, PR, test-fix loop, end-review, D46]
 related: [base-template-workflows-index, sdlc-block, D30-sdlc-flow-engine, D31-committed-authoritative-state, D33-pr-based-wrap-up]
 ---
 
