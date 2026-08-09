@@ -236,8 +236,8 @@ Everything below runs from the main repo root first.
      engine ships no stack defaults. If the spec has no such section either, run no project checks.
    - Always, in addition to whatever checks above: scan changed `.md` files (`git diff --name-only
      <prBase>..HEAD`) for stray emoji — this "universal emoji gate" always runs, project-agnostic. The
-     literal `🤖 Generated with Claude Code` PR-footer line is the one exception, and only inside a PR
-     body, never inside docs.
+     literal robot-emoji `Generated with Claude Code` PR-footer line is the one exception, and only
+     inside a PR body, never inside docs.
    - For any `baseline-diff` / `skip-count-regression` check with a `baselineCommand`: snapshot a
      baseline once, before task 1, if one doesn't already exist on disk (resume-safe — never overwrite
      an existing baseline).
