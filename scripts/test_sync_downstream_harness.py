@@ -40,6 +40,10 @@ class EnginesOnlyGuard(unittest.TestCase):
         _write(self.bt / "scripts" / "sync_downstream_harness.py", "# anchor\n")
         _write(self.bt / ".claude" / "commands" / "prime.md", "base-template's generic prime\n")
         _write(self.bt / ".claude" / "commands" / "log-work.md", "base-template's generic log-work\n")
+        _write(
+            self.bt / ".claude" / "commands" / "generate-roadmap.md",
+            "authors a roadmap spanning repos; HQ-only, single-copy\n",
+        )
         _write(self.bt / ".claude" / "workflows" / "sdlc-task.js", "// engine\n")
         _write(self.bt / ".claude" / "workflows" / "harness.schema.json", "{}\n")
         _write(self.bt / ".claude" / "workflows" / "templates" / "t.md", "template\n")
@@ -91,6 +95,23 @@ class EnginesOnlyGuard(unittest.TestCase):
     def test_harness_files_includes_commands_by_default(self):
         names = {p.name for p in sync.harness_files(self.bt)}
         self.assertIn("prime.md", names)
+
+    def test_harness_files_excludes_generate_roadmap_for_any_target(self):
+        """generate-roadmap.md is HQ-only by nature (Step 1A: 'this command runs at HQ') and
+        stays single-copy at base-template — excluded regardless of engines_only, unlike
+        prime.md/log-work.md which sync everywhere except the brain root."""
+        self.assertNotIn(
+            "generate-roadmap.md", {p.name for p in sync.harness_files(self.bt, engines_only=False)}
+        )
+        self.assertNotIn(
+            "generate-roadmap.md", {p.name for p in sync.harness_files(self.bt, engines_only=True)}
+        )
+
+    def test_diff_reports_no_generate_roadmap_for_a_leaf_repo(self):
+        report = sync.diff_repo(self.bt.resolve(), self.leaf.resolve(), self._targets()["leaf"])
+        self.assertIsNone(report.error)
+        rel_paths = [d.rel_path for d in report.diffs]
+        self.assertNotIn("commands/generate-roadmap.md", rel_paths)
 
     def test_diff_reports_no_command_changes_for_the_brain_root(self):
         """The end-to-end guarantee: HQ's differing commands never appear as a diff."""

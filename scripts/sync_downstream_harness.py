@@ -209,6 +209,15 @@ class RepoReport:
     hooks_path_unset: bool = False  # target's core.hooksPath is not "hooks" (see hook_files())
 
 
+# Commands that never sync downstream, to any target, regardless of engines_only. Explicitly
+# enumerated (not a glob exclusion) so a new HQ-only command is a deliberate addition here, not an
+# accidental one. generate-roadmap.md authors a roadmap SPANNING repos and its own Step 1A requires
+# running from BRAIN_ROOT ("This command runs at HQ") - it has no meaning inside a single leaf repo,
+# so it stays single-copy at base-template rather than fanning out to all 17 (see
+# planning/ticket-generate-roadmap-command/review.md, Task 3 decision).
+EXCLUDED_COMMAND_FILENAMES: set[str] = {"generate-roadmap.md"}
+
+
 def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
     """The exact base-template harness file set this script owns, relative to `root/.claude`.
 
@@ -217,11 +226,18 @@ def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
     /handoff, /capture and 9 others share a filename with base-template's generic versions and
     differ substantially (HQ's /prime is 164 lines to base-template's 55; HQ's /log-work carries
     the cross-repo brain sync). Syncing commands into HQ would silently overwrite all twelve.
+
+    Separately, `EXCLUDED_COMMAND_FILENAMES` drops specific commands from every target regardless
+    of `engines_only` - for commands that are HQ-only by nature rather than by target.
     """
     files: list[Path] = []
     commands_dir = root / ".claude" / "commands"
     if commands_dir.is_dir() and not engines_only:
-        files.extend(p for p in commands_dir.glob("*.md") if p.is_file())
+        files.extend(
+            p
+            for p in commands_dir.glob("*.md")
+            if p.is_file() and p.name not in EXCLUDED_COMMAND_FILENAMES
+        )
     workflows_dir = root / ".claude" / "workflows"
     if workflows_dir.is_dir():
         files.extend(p for p in workflows_dir.glob("*.js") if p.is_file())
