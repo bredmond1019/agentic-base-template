@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [data contract, run-state, status vocabulary, reconcile_failed, sdlc-task-state, sdlc-flow-state, block-orchestration-state, consumers]
-related: [base-template-workflows-sdlc-task, D56-sdlc-task-authoritative-reconcile, ticket-d56-reconcile-failed-consumers]
+related: [sdlc-task, D56-sdlc-task-authoritative-reconcile, ticket-d56-reconcile-failed-consumers]
 ---
 
 # SDLC run-state data contract — terminal status vocabulary
