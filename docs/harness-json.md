@@ -324,7 +324,7 @@ project policy, so they are not config fields in the current schema:
 
 | Behavior | Why hardcoded |
 |---|---|
-| **No emoji in docs** | Universal harness rule — every project applies it |
+| **No emoji in docs** | Universal harness rule — every project applies it. **Diff-scoped**: the gate parses `git diff -U0` and judges only lines *added* in the run's range (`+++`/`---` diff headers are never treated as content, a pure rename has no added lines and passes, a brand-new file's added lines are its whole content). A file with pre-existing emoji outside the diff never fails a change that didn't touch those lines — this is what lets the gate ratchet instead of blocking on legacy footprint. See `.claude/workflows/sdlc-block.js`, `.claude/commands/test.md`, `.claude/workflows/sdlc-task.js`, and `.claude/workflows/sdlc-flow.js` for the four sites (the latter two also exempt the literal `Generated with Claude Code` PR-footer). |
 | **Parallel port = `port + taskNumber`** | One valid behavior; a knob with one value is noise |
 
 ## Deferred fields (not yet built)

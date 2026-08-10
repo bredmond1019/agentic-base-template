@@ -34,7 +34,9 @@ project-specific *policy* from `planning/harness.json`. This means:
 - Every validation command, route, and UI-test config lives in the project's
   `planning/harness.json`, not in the engine code.
 - Universal rules (no emoji in docs, parallel port = `port + taskNumber`) stay hardcoded in
-  the engine because they apply to every project, making them mechanism, not policy.
+  the engine because they apply to every project, making them mechanism, not policy. The emoji
+  gate is diff-scoped: it judges only lines added in the run's diff, never a whole changed file,
+  so pre-existing emoji in a legacy file never fails a change that didn't touch those lines.
 
 See [harness-json.md](harness-json.md) for the config format and all three stack profiles.
 
@@ -87,7 +89,7 @@ retry loops                               whether a UI-test stage exists
 report formats                            dev server command + ready signal
 "run the validation suite"                port number and smoke routes
 "run the UI smoke check"                  stack label (informational)
-emoji gate (universal)
+emoji gate (universal, diff-scoped — added lines only)
 port = port + taskNumber (universal)
 ```
 

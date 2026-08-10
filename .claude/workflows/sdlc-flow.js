@@ -1396,10 +1396,37 @@ ${usingOverride
     ? renderTaskCheckList(taskCommands, worktreePath)
     : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath, engineFiles })}
 
-Then run the universal emoji gate (a harness rule, always): scan the files changed on this branch for
-emoji in markdown/docs (excluding the literal "🤖 Generated with Claude Code" PR footer if present).
-  cd ${worktreePath} && git diff --name-only ${prBase}..HEAD
-  Inspect the changed .md files; a stray emoji in docs FAILS this gate.
+Then run the universal emoji gate (a harness rule, always) — DIFF-SCOPED: it judges only lines
+ADDED on this branch, never a whole changed file, so a legacy file's pre-existing emoji does not
+fail a diff that never touched it (the literal "🤖 Generated with Claude Code" PR footer is exempt
+— it lives in the PR body, not a file, but the check exempts the phrase defensively too):
+  cd ${worktreePath} && python3 - <<'PYEOF'
+import subprocess, re, sys
+EMOJI = re.compile(r'[\\U0001F300-\\U0001FAFF\\U00002600-\\U000027BF]')
+FOOTER = 'Generated with Claude Code'
+diff = subprocess.run(['git','diff','-M','-U0','${prBase}..HEAD','--','*.md','*.mdx'], capture_output=True, text=True).stdout.splitlines()
+hits = []
+cur_file = None
+cur_line = None
+for line in diff:
+    if line.startswith('diff --git '):
+        cur_file = None; cur_line = None
+    elif line.startswith('+++ '):
+        p = line[4:]
+        cur_file = None if p == '/dev/null' else (p[2:] if p.startswith('b/') else p)
+    elif line.startswith('@@'):
+        m = re.match(r'@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@', line)
+        cur_line = int(m.group(1)) if m else None
+    elif cur_file and cur_line is not None and line.startswith('+') and not line.startswith('+++'):
+        content = line[1:]
+        if EMOJI.search(content) and FOOTER not in content:
+            hits.append(f'{cur_file}:{cur_line}: {content.rstrip()[:100]}')
+        cur_line += 1
+if hits:
+    print('EMOJI CHECK FAIL:'); [print(h) for h in hits[:25]]; sys.exit(1)
+print('EMOJI CHECK: OK'); sys.exit(0)
+PYEOF
+  A stray emoji ADDED in docs FAILS this gate.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
 ${onPass ? renderOnPassStateWriteRecipe(onPass) : ''}
@@ -1865,8 +1892,11 @@ but it does NOT replace verifying the criteria against the code:
 
 ${renderCheckList(harnessCfg, { gatingOnly: false, cwd: worktreePath, engineFiles: [...new Set(taskList.flatMap(n => engineFilesFor(n)))] })}
 
-   Plus the universal emoji gate: scan changed .md files for stray emoji (the literal
-   "🤖 Generated with Claude Code" footer is allowed only in a PR body, not in docs).
+   Plus the universal emoji gate, DIFF-SCOPED to ${prBase}..HEAD (only lines ADDED across the
+   branch are judged, never a whole changed file — same script as the per-task gate above, same
+   base): run it again here as the fresh authoritative check (the literal
+   "🤖 Generated with Claude Code" footer is allowed only in a PR body, not in docs; the check
+   exempts the phrase defensively too).
 
 4. For each acceptance criterion, read the relevant source and mark MET / PARTIAL / NOT_MET. Also check
    CLAUDE.md standing-rule compliance (a violation is a failing criterion) and IDENTITY INTEGRITY (flag

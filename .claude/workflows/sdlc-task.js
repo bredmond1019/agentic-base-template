@@ -1274,10 +1274,37 @@ ${usingOverride
     ? renderTaskCheckList(taskCommands, runDir)
     : renderCheckList(harnessCfg, { gatingOnly, cwd: runDir, engineFiles })}
 
-Then run the universal emoji gate (a harness rule, always): scan the files changed by THIS run for emoji
-in markdown/docs.
-  cd ${runDir} && git diff --name-only ${baseSha}..HEAD
-  Inspect the changed .md/.mdx files; a stray emoji in docs FAILS this gate.
+Then run the universal emoji gate (a harness rule, always) — DIFF-SCOPED: it judges only lines
+ADDED by this task, never a whole changed file, so a legacy file's pre-existing emoji does not fail
+a diff that never touched it:
+  cd ${runDir} && python3 - <<'PYEOF'
+import subprocess, re, sys
+EMOJI = re.compile(r'[\\U0001F300-\\U0001FAFF\\U00002600-\\U000027BF]')
+FOOTER = 'Generated with Claude Code'
+diff = subprocess.run(['git','diff','-M','-U0','${baseSha}..HEAD','--','*.md','*.mdx'], capture_output=True, text=True).stdout.splitlines()
+hits = []
+cur_file = None
+cur_line = None
+for line in diff:
+    if line.startswith('diff --git '):
+        cur_file = None; cur_line = None
+    elif line.startswith('+++ '):
+        p = line[4:]
+        cur_file = None if p == '/dev/null' else (p[2:] if p.startswith('b/') else p)
+    elif line.startswith('@@'):
+        m = re.match(r'@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@', line)
+        cur_line = int(m.group(1)) if m else None
+    elif cur_file and cur_line is not None and line.startswith('+') and not line.startswith('+++'):
+        content = line[1:]
+        if EMOJI.search(content) and FOOTER not in content:
+            hits.append(f'{cur_file}:{cur_line}: {content.rstrip()[:100]}')
+        cur_line += 1
+if hits:
+    print('EMOJI CHECK FAIL:'); [print(h) for h in hits[:25]]; sys.exit(1)
+print('EMOJI CHECK: OK'); sys.exit(0)
+PYEOF
+  A stray emoji ADDED in docs FAILS this gate; a pre-existing emoji in a file this task did not
+  touch a line of does not.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
 ${onPass ? renderOnPassStateWriteRecipe(onPass) : ''}
