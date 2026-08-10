@@ -3,7 +3,36 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-06T20:40:00Z
+**Last updated:** 2026-08-10T05:20:00Z
+
+---
+
+## [2026-08-10]
+
+### close-the-loop C1 — six engine-debt blocks closed, D57-D60 filed, two reopened after passing green
+
+- **What:** Blocks 2-7 of the `close-the-loop` C1 lane closed and merged via `/sdlc-task --worktree`.
+  `/generate-tasks`' disjoint-ownership rule scoped to `/sdlc-block` with a compilable-boundary
+  constraint outranking it (**D58**); `/sdlc-flow`'s PR stage given a three-way `prOutcome` with
+  engine-side `gh pr view` verification and a `stranded` field (**D59**); both sequential engines
+  made vault-aware, with all five vault-commit sites scoped by explicit pathspec (**D60**); all four
+  bookkeep state-write defects repaired (a one-field `state.json` edit went from a 26-line diff to a
+  2-line one); the universal emoji gate moved from whole-file to added-line scoping at all four
+  sites, with a new 9-test gating check; and `/close-out` taught to resolve its diff base from
+  evidence instead of the literal `main`, refusing loudly rather than reporting a vacuous clean over
+  zero files. The repo went from 5 to 6 gating checks. **D57** (orchestration-run artifact contract)
+  filed from its draft, plus five new harness-debt tickets.
+- **Why:** The lane opened on a bail — block 2 hit `No tasks.json (D16)` because block 1's
+  derive-from-`tasks.md` fallback looks for a step section only `/generate-tasks` emits, so it fires
+  on zero of the nine real prose-only specs. The specs were decomposed by hand instead. Two blocks
+  then closed 6/6 green while failing an acceptance criterion — block 3 shipped `gh pr view --head`,
+  an invalid flag that exits 1 unconditionally so `--auto-merge` could never fire, and block 4
+  shipped a vault commit with no pathspec that would have swept concurrent lanes' staged work. Both
+  were caught only by a verification task the spec forced to produce observed evidence, because none
+  of the harness gates can execute an external CLI or a second git repo. That produced the session's
+  main authoring lesson, now a ticket: an acceptance criterion nothing can execute is not gated, it
+  is just written down.
+- **Refs:** `planning/orchestration-run/notes.md`, `planning/handoff.md`, D57-D60.
 
 ---
 
