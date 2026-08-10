@@ -257,11 +257,35 @@ operator nothing. Naming, frontmatter, and lifecycle follow
 `planning/decisions/D57-orchestration-run-artifact-contract.md`; do not restate that contract
 here.
 
+## Standing operator convention
+
+This is the universal end-of-run convention every program used to re-author for itself in a
+per-program `orchestrate-prompt.md` (`close-the-loop`'s and `carryover-improvements`' copies were
+near-duplicates of each other, pasted by the operator because neither command knew they existed).
+**It lives here now, once, and nowhere else — `/generate-roadmap` must stop being a place this
+convention gets authored per-program.** A program-specific rule (a repo's own "no `blocking:
+bool`"-style constraint) still belongs in that program's lane file; only the universal shape below
+moves here.
+
+At the end of every lane, alongside the report and `review.md`:
+
+- **Order every lingering item P0–P3 per `planning/decisions/D43-cross-domain-priority-graph.md`
+  (cite it by doc_id).** Do not restate or paraphrase its rubric here — the priority a lane assigns
+  comes from reading D43 fresh each time, not from a copy of its definition drifting in this file.
+- **Name the owning repo for each lingering item.** Most of a repo's carryover belongs to
+  `base-template` or HQ, not the repo the lane just ran in — a per-repo file that skips this always
+  accumulates other repos' work.
+- **For any lingering item this repo owns, write its next step into `handoff.md`**, ordered by a
+  mix of priority (per D43) and quick-wins, so a fresh session can pick it up without replaying
+  this lane's context.
+- **Close the lane with a terminal `/close-out`.**
+
 ## Files
 
 - Reads: the roadmap, the lane file, `planning/state.json`, `planning/harness.json`, `brain.toml`
-- Writes: the lane log (append-only), `planning/orchestration-run/notes.md` (append-only), plus
-  whatever `/orchestrate` and the engines write
+- Writes: the lane log (append-only), `planning/orchestration-run/notes.md` (append-only),
+  `handoff.md` (per the standing operator convention above), plus whatever `/orchestrate` and the
+  engines write
 - Never writes: a roadmap's `<!-- BEGIN generated:* -->` regions
 
 ## Example
