@@ -70,7 +70,7 @@ flowchart TD
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **Commit + state** | haiku | Writes `sdlc-task-state.json` (per-task status + token usage) and commits all work + state. In-place: one final `chore:` commit. `--worktree`: one commit per phase write (throwaway branch, applied at merge). |
 | **Terminal reconcile** ([D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md)) | haiku | Runs once, after every task has passed on a full spec run, before bookkeep. See [Terminal authoritative reconcile](#terminal-authoritative-reconcile-d56) below. |
-| **Bookkeep close-out** | haiku | Runs only on a full, fully-passing spec run **whose terminal reconcile also passed** (never on a partial task range, a bail, or a `reconcile_failed` run). Marks `tasks.md` tasks done, flips the `status.md` Progress row to `Done`, and flips `planning/state.json`'s block status to `"closed"`. In-place: also runs `mev emit-state --write`. `--worktree`: skips `emit-state` (unsafe in a linked worktree) — derived surfaces regenerate when `/clean-worktree` lands the branch. Writes no prose `log.md` entry — run `/log-work` for the narrative. ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)) |
+| **Bookkeep close-out** | haiku | Runs only on a full, fully-passing spec run **whose terminal reconcile also passed** (never on a partial task range, a bail, or a `reconcile_failed` run). Marks `tasks.md` tasks done using the spec's **cumulative** completed-task count (this run's passes reconciled with every prior run's, never this run's slice alone), appends (never rewrites) a "Current focus" line in `status.md` — see [Bookkeep's `status.md` and `focus.next` rules](#bookkeeps-statusmd-and-focusnext-rules) below — and flips `planning/state.json`'s block status to `"closed"`. In-place: also runs `mev emit-state --write`, which re-derives `focus.next`. `--worktree`: skips `emit-state` (unsafe in a linked worktree) — `focus.next` stays **deferred**, still pointing at the pre-close state, until `/clean-worktree` (or an equivalent merge step) lands the branch and runs `mev emit-state --write`; the engine's own log line says so explicitly rather than leaving it silently stale. Writes no prose `log.md` entry — run `/log-work` for the narrative. ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)) |
 
 ### The retry loop
 
@@ -164,6 +164,38 @@ folded into `"done"` or an ordinary per-task `"bailed"`.
 
 See [D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md) for the full design
 rationale, the rejected alternatives, and the measured cost tables.
+
+---
+
+## Bookkeep's `status.md` and `focus.next` rules
+
+Bookkeep's `status.md` edit is **append-only** narrative, not a section rewrite. It adds exactly
+one new line under "Current focus" recording this run's outcome — the previous block's narrative
+line(s) must survive the edit **verbatim**. The one exception: if an existing line already refers
+to *this same spec* by name (e.g. left over from an earlier partial run of the same spec), that one
+line may be replaced in place — never any other line, and never the whole section. This exists
+because `status.md` is accumulated human-facing history (tens of KB in a mature repo); a full-section
+replacement silently destroys everything a prior block recorded.
+
+The completed-task count bookkeep writes (both into `tasks.md`'s markers and into the `status.md`
+line above) is always the spec's **cumulative** total — every task marked done across every run of
+this spec so far, not just this run's `passedTasks` slice. On a spec resumed after a partial run
+(e.g. `/sdlc-task <slug> 1` followed later by `/sdlc-task <slug> 2`), the count reported after the
+second run reads the true "N of M" total, not "1 of M" for whichever slice ran last. A partial
+task-range run still leaves the block open regardless of what the count reads — the `fullRun` guard
+that gates `blockDone` is unaffected by this.
+
+`planning/state.json`'s top-level `focus` object (`focus.next` in particular) is derived, not
+bookkeep's to hand-edit — it's recomputed by `mev emit-state --write`. **In-place** runs execute
+that command as part of bookkeep, so `focus.next` is current by the time the run finishes.
+**`--worktree` runs skip it** (running `mev emit-state --write` from inside a linked worktree is
+unsafe), so `focus.next` is left pointing at the pre-close state after the branch's own commits —
+this is a deliberate deferral, not a bug, and the engine's own log line states it explicitly
+(`"focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree or
+/merge-train runs mev emit-state --write."`) rather than silently leaving it stale. Since
+`--worktree` is the default mode for isolated `/sdlc-task` runs, treat a freshly-merged worktree
+branch's `focus.next` as stale until the merge step (`/clean-worktree` or `/merge-train`) has run
+`mev emit-state --write` on the base.
 
 ---
 
