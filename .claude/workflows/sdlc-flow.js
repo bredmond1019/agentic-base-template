@@ -1656,11 +1656,13 @@ ${vault.vaulted ? `
     your own paths, and do not checkout/switch/branch inside it (stay on whatever branch it is
     already on). For each such file, let <relpath> be the part of its path AFTER "planning/":
       cd ${worktreePath} && git -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
-    Then, once every such path is staged, commit them all in one commit:
-      cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+    Then, once every such path is staged, commit ONLY those paths — pass them explicitly to `git commit`
+    itself (not merely to `git add`), so a sibling lane's unrelated pre-staged files are never swept
+    into this commit even if they happen to already be staged:
+      cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
 EOF
-)"
+)" -- <relpath1> <relpath2> ...
       cd ${worktreePath} && git -C ${vault.planningPath} log --oneline -1
     If NOTHING you wrote this attempt lives under planning/, skip this step entirely — do not run any
     vault command. If a vault add/commit fails, report it PLAINLY in notes; never paper over it, and
@@ -2085,10 +2087,12 @@ ${vault.vaulted ? `
    it there too, through the real path, deriving the exact set from changed[]/created[] (never a fixed
    list): for each such path, let <relpath> be the part after "planning/":
      cd ${worktreePath} && git -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
-     cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+     Then commit ONLY those paths — pass them explicitly to `git commit` itself (not merely to
+     `git add`), so a sibling lane's unrelated pre-staged files are never swept into this commit:
+     cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 docs: update docs for ${blockId} (vault)
 EOF
-)"
+)" -- <relpath1> <relpath2> ...
      cd ${worktreePath} && git -C ${vault.planningPath} log --oneline -1
    NEVER git add -A, git add ., git reset, or git stash against the vault repo, and never checkout/
    switch/branch inside it. If nothing you patched/created lives under planning/, skip this entirely.
@@ -2250,10 +2254,13 @@ ${vault.vaulted ? `
    Do NOT cd into it and do NOT checkout/switch/branch there:
    cd ${worktreePath} && git -C ${vault.planningPath} add ${vault.planningPath}/status.md
    cd ${worktreePath} && git -C ${vault.planningPath} add ${vault.planningPath}/state.json 2>/dev/null || true
-   cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+   Then commit ONLY those two paths — pass them explicitly to \`git commit\` itself (not merely to
+   \`git add\`), so anything a sibling lane already had staged in this same vault repo is left staged
+   and untouched by this commit:
+   cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet -- ${vault.planningPath}/status.md ${vault.planningPath}/state.json || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 chore: wrap up ${stem}
 EOF
-)"
+)" -- ${vault.planningPath}/status.md ${vault.planningPath}/state.json
    cd ${worktreePath} && git -C ${vault.planningPath} log --oneline -1
 
    Repo-local files stay staged and committed in THIS repo, on this branch, as before:

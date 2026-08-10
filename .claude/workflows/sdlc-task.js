@@ -1427,11 +1427,13 @@ ${vault.vaulted ? `
     your own paths, and do not checkout/switch/branch inside it (stay on whatever branch it is
     already on). For each such file, let <relpath> be the part of its path AFTER "planning/":
       cd ${runDir} && git -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
-    Then, once every such path is staged, commit them all in one commit:
-      cd ${runDir} && git -C ${vault.planningPath} diff --cached --quiet || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+    Then, once every such path is staged, commit ONLY those paths — pass them explicitly to `git commit`
+    itself (not merely to `git add`), so a sibling lane's unrelated pre-staged files are never swept
+    into this commit even if they happen to already be staged:
+      cd ${runDir} && git -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
 EOF
-)"
+)" -- <relpath1> <relpath2> ...
       cd ${runDir} && git -C ${vault.planningPath} log --oneline -1
     If NOTHING you wrote this attempt lives under planning/, skip this step entirely — do not run any
     vault command. If a vault add/commit fails, report it PLAINLY in notes; never paper over it, and
@@ -1766,10 +1768,13 @@ ${vault.vaulted ? `
    cd ${runDir} && git -C ${vault.planningPath} add ${vault.planningPath}/${blockId}/tasks.md 2>/dev/null || true
    cd ${runDir} && git -C ${vault.planningPath} add ${vault.planningPath}/status.md
    cd ${runDir} && git -C ${vault.planningPath} add ${vault.planningPath}/state.json 2>/dev/null || true
-   cd ${runDir} && git -C ${vault.planningPath} diff --cached --quiet || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+   Then commit ONLY these three paths — pass them explicitly to \`git commit\` itself (not merely to
+   \`git add\`), so anything a sibling lane already had staged in this same vault repo is left staged
+   and untouched by this commit:
+   cd ${runDir} && git -C ${vault.planningPath} diff --cached --quiet -- ${vault.planningPath}/${blockId}/tasks.md ${vault.planningPath}/status.md ${vault.planningPath}/state.json || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 chore: sdlc-task bookkeep — ${blockId}
 EOF
-)"
+)" -- ${vault.planningPath}/${blockId}/tasks.md ${vault.planningPath}/status.md ${vault.planningPath}/state.json
    cd ${runDir} && git -C ${vault.planningPath} log --oneline -1` : `
    planning/ is a plain directory here (not vaulted) — everything commits together as before:
    cd ${runDir} && git add ${specFile} planning/status.md
