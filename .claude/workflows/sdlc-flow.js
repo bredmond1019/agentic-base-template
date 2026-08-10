@@ -1683,8 +1683,8 @@ ${vault.vaulted ? `
     your own paths, and do not checkout/switch/branch inside it (stay on whatever branch it is
     already on). For each such file, let <relpath> be the part of its path AFTER "planning/":
       cd ${worktreePath} && git -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
-    Then, once every such path is staged, commit ONLY those paths — pass them explicitly to `git commit`
-    itself (not merely to `git add`), so a sibling lane's unrelated pre-staged files are never swept
+    Then, once every such path is staged, commit ONLY those paths — pass them explicitly to \`git commit\`
+    itself (not merely to \`git add\`), so a sibling lane's unrelated pre-staged files are never swept
     into this commit even if they happen to already be staged:
       cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
@@ -2117,8 +2117,8 @@ ${vault.vaulted ? `
    it there too, through the real path, deriving the exact set from changed[]/created[] (never a fixed
    list): for each such path, let <relpath> be the part after "planning/":
      cd ${worktreePath} && git -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
-     Then commit ONLY those paths — pass them explicitly to `git commit` itself (not merely to
-     `git add`), so a sibling lane's unrelated pre-staged files are never swept into this commit:
+     Then commit ONLY those paths — pass them explicitly to \`git commit\` itself (not merely to
+     \`git add\`), so a sibling lane's unrelated pre-staged files are never swept into this commit:
      cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 docs: update docs for ${blockId} (vault)
 EOF

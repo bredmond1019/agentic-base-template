@@ -1454,8 +1454,8 @@ ${vault.vaulted ? `
     your own paths, and do not checkout/switch/branch inside it (stay on whatever branch it is
     already on). For each such file, let <relpath> be the part of its path AFTER "planning/":
       cd ${runDir} && git -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
-    Then, once every such path is staged, commit ONLY those paths — pass them explicitly to `git commit`
-    itself (not merely to `git add`), so a sibling lane's unrelated pre-staged files are never swept
+    Then, once every such path is staged, commit ONLY those paths — pass them explicitly to \`git commit\`
+    itself (not merely to \`git add\`), so a sibling lane's unrelated pre-staged files are never swept
     into this commit even if they happen to already be staged:
       cd ${runDir} && git -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
