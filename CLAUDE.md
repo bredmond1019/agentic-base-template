@@ -99,6 +99,17 @@ customizations are never touched) — keep changes here additive and well-docume
    Adding a file to a directory requires updating that directory's `index.md` — propagate up
    the chain as needed (e.g. a new `docs/workflows/` file → update `docs/workflows/index.md`
    and `docs/index.md` if the scope changes).
+6. **Prose backticks inside an engine's agent-prompt template must be escaped as `` \` ``.**
+   The prompts in `.claude/workflows/sdlc-*.js` are template literals, so a bare backtick around
+   a command (`` `git commit` ``) *terminates the template* and the following word is parsed as
+   code. **`node --check` on the whole file does not catch this** — stray backticks pair up on
+   adjacent lines, file-level parity survives, and the file compiles while the template boundaries
+   silently shift. That is not hypothetical: it shipped in four places, rendered `engines-parse`
+   green for a full session, and silently removed `sdlc-task` and `sdlc-flow` from the Workflow and
+   Skill registries (misdiagnosed at the time as a stale launcher cache). The gating
+   `prompt-template-parse` check (`scripts/check_prompt_templates.py`) parses each prompt region
+   *in isolation*, which is what actually detects it. If it fails, fix the escaping — never
+   re-baseline it, and do not conclude from a green `node --check` that a prompt is intact.
 
 <!-- BEGIN:response-style -->
 ## Response Style

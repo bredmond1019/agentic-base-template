@@ -3,11 +3,50 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-10T05:20:00Z
+**Last updated:** 2026-08-10T09:40:00Z
 
 ---
 
 ## [2026-08-10]
+
+### close-the-loop C1 — registry outage root-caused, block 8 closed, prompt-template gate added, P7 sync executed
+
+**The registry outage was not a launcher cache.** `sdlc-task` and `sdlc-flow` were missing from the
+Workflow/Skill registries because both carried **bare backticks in agent-prompt prose** added by D60
+("pass them explicitly to `git commit`..."). A bare backtick terminates the template literal. Three
+of D60's five vault-commit sites shipped that way; `sdlc-block` and `sdlc-run` never received the
+sentence, which is exactly why they kept registering. Fixed in `441bd26`.
+
+**Whole-file `node --check` cannot see this class.** The stray backticks pair on adjacent lines, so
+file-level parity survives and the file compiles while template boundaries shift. `engines-parse` —
+this repo's only build gate — returned green for a full session over broken engines. Proven by
+differential region parse: 3/3 enclosing templates failed pre-fix, 0/3 post-fix.
+
+**New gating check: `prompt-template-parse`** (`scripts/check_prompt_templates.py` +
+`test_check_prompt_templates.py`). Extracts each of the 60 prompt templates across the four engines
+and parses it *alone*. Validated both directions — it flags all three D60 sites at `441bd26~1`, and
+on the current tree it found a **fourth, previously unknown** site: `sdlc-flow.js:2418-2419` in the
+`pr-verify` prompt, where D59's own fix wrapped `--head` and `gh pr list` in bare backticks. So the
+commit that repaired `prOutcome` shipped a corrupted explanation of itself. Repo went 6 -> 8 gating
+checks. New standing rule 6 in `CLAUDE.md`.
+
+**Block 8 (`BT.ticket.d56-reconcile-failed-consumers`) closed and merged** (`08e0488`). It first
+bailed on `skill-guide-sync` with a **wrong root cause** — it reproduced the failure on `main` and
+called it pre-existing, but `main` already carried this session's fix inside the hashed anchor.
+Re-verified `SKILL.md:306-308` against the engine (verbatim identical — the guide was already right)
+before re-stamping.
+
+**It then closed 5/5 with two unmet ACs** — the third instance of the pattern. Its ACs require
+registering two tickets in `core/mev` and `core/bastion` `state.json`; its task 3 forbade writing
+there. The engine validates tasks, not AC/task coherence, so nothing flagged the contradiction.
+Registered on operator instruction (`8283461f`) — and the hand-off document's proposed entries were
+themselves schema-invalid (`origin` as a string; `okf-core`'s `TrackBlock.origin` is a typed
+`Origin{type,slug}`), the same shape that red-gated every repo's push last session.
+
+**P7 sync executed** — 262 files across 17 repos, committed per repo. D54 guard held (HQ got 6
+engine/skill files, no `commands/`). Engines now parse in 17/17 repos with zero bare backticks
+fleet-wide.
+
 
 ### close-the-loop C1 — six engine-debt blocks closed, D57-D60 filed, two reopened after passing green
 
