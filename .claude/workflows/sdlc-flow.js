@@ -2415,8 +2415,8 @@ Return via StructuredOutput: outcome, url, number, draft=${isDraft}, pushed, ghP
 You independently verify whether a PR exists for a branch. Do NOT trust any other agent's report of
 whether a PR was created — only trust what this command actually returns.
    cd ${worktreePath} && gh pr view ${branchName} --json number,url,state 2>&1; echo "EXIT:$?"
-   The branch MUST be passed as the POSITIONAL argument, exactly as above — do NOT use `--head
-   ${branchName}`. `--head` is a `gh pr list`-only flag; `gh pr view --head <branch>` fails with
+   The branch MUST be passed as the POSITIONAL argument, exactly as above — do NOT use \`--head
+   ${branchName}\`. \`--head\` is a \`gh pr list\`-only flag; \`gh pr view --head <branch>\` fails with
    "unknown flag: --head" and exits 1 before it even looks anything up, which makes every genuinely
    created PR misreport as absent. Run the command exactly as written above.
 Read the literal number after "EXIT:" as the process exit code — do not infer success from output text.
