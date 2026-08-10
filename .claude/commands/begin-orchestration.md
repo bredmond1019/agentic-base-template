@@ -151,6 +151,15 @@ Each has already cost a real run in this fleet.
    spec, no gate, no state write and no review, and the chain's own verification will still look
    fine, so nothing catches it.
 
+   **Two authoring-time rules for any spec or OKF frontmatter `/generate-tasks` (or you, editing
+   one by hand) produces** — generalized from a lane that hit both the same day: a `related:`
+   target must resolve to a real `doc_id` on a document that has actually been crawled, never a
+   carryover slug or an invented id — one bad edge red-gates the whole corpus for every concurrent
+   lane when `--graph` gates, not just the authoring one. And a `validation_command` must be
+   scoped to the task's own changes, never the whole working tree (e.g. never a
+   working-tree-wide `git diff | grep` guard) — it can never pass in a shared index with
+   concurrent lanes and bails the block on an unrelated lane's uncommitted files.
+
 2. **Commit after every `mev` command and every roadmap or plan edit**, before launching the next
    engine. Sibling lanes read those files; an uncommitted state change is invisible to them and gets
    clobbered.
@@ -238,6 +247,15 @@ snapshot and the graph is the fact.
 
 Everything in that report should already be in `planning/orchestration-run/notes.md` (rule 5). The
 report is the summary; the notes file is the record that survives the session.
+
+**A terminal `planning/orchestration-run/review.md` is required, not optional.** It is a
+plain-English summary of what this lane changed plus the hand-verification recipes an operator
+would run to confirm it. Every recipe in it must have been **executed at least once by this lane
+before the file is written**, and the file must say so explicitly — a recipe that was only
+authored, never run, reads as verification while being a guess, which is worse than handing the
+operator nothing. Naming, frontmatter, and lifecycle follow
+`planning/decisions/D57-orchestration-run-artifact-contract.md`; do not restate that contract
+here.
 
 ## Files
 

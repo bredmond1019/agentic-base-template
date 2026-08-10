@@ -171,6 +171,15 @@ If `planning/<spec-slug>/tasks.md` is missing for block 1, run **`/generate-task
 Run **`/breakdown planning/<spec-slug>/tasks.md`** *only* when it flagged that spec. Never break
 down on your own judgment — an unnecessary breakdown multiplies engine runs for no benefit.
 
+**Two authoring-time rules for any spec or OKF frontmatter this step produces or edits** —
+generalized from a lane that hit both in one day: a `related:` target must resolve to a real
+`doc_id` on a document that has actually been crawled, never a carryover slug or an invented id
+— an unresolved edge red-gates the whole corpus for every concurrent lane when `--graph` gates,
+not just the authoring one. And a `validation_command` must be scoped to the task's own changes,
+never the whole working tree (e.g. never a working-tree-wide `git diff | grep` guard) — a
+tree-wide guard can never pass in a shared index with concurrent lanes and bails the block on an
+unrelated lane's uncommitted files.
+
 ### 5. Decide engine and isolation
 
 **Engine** — take `/generate-tasks`' recommendation unless you have a concrete reason not to:
@@ -366,6 +375,14 @@ Then explicitly:
 - **Open items** the run surfaced but did not fix, as recorded in the notes file (defects found in
   passing, deferred propagation, anything needing its own ticket).
 - **The remaining chain** if you stopped early — as a paste-ready `/orchestrate` invocation.
+- A **terminal `planning/orchestration-run/review.md`** — required, not optional. It is a
+  plain-English summary of what this chain changed plus the hand-verification recipes an operator
+  would run to confirm it. Every recipe in it must have been **executed at least once by this
+  session before the file is written**, and the file must say so explicitly (e.g. "ran, output:
+  ...") — an authored-but-unrun recipe reads as verification while being a guess, which is worse
+  than no recipe at all. Naming, frontmatter, and lifecycle follow
+  `planning/decisions/D57-orchestration-run-artifact-contract.md`; do not restate that contract
+  here.
 - A reminder to run **`/log-work`**: `sdlc-task`'s bookkeep is deliberately lean and writes no
   `log.md` entry, so a chain of tasks leaves no narrative history without it.
 
