@@ -212,6 +212,38 @@ dropped, it goes in the cut list with a reason — that is a different row, and 
 Real result of running this check on its first roadmap: four items had silently fallen out, two of
 them operator infrastructure jobs that had been collapsed into a single link.
 
+**The reverse crosswalk — check it too, it is a different failure.** The check above catches
+sources dropped on the way in. It says nothing about the opposite direction: a lane file naming a
+block that *this roadmap's own document never mentions*. That happened for real —
+`carryover-improvements` filed two blocks and told a sibling roadmap's lane to run them first;
+`close-the-loop`'s `roadmap.md` never names either, so its own crosswalk read clean while the
+attribution was already broken in both directions (the filing roadmap's consolidation finds no
+record of them either, since they landed in someone else's lane log). Verify it mechanically,
+alongside the forward check:
+
+```bash
+for id in $(grep -vE '^\s*#|^\s*$' lane-*.txt); do
+  grep -q -- "$id" roadmap.md || echo "UNDOCUMENTED $id (in $(grep -l -- "$id" lane-*.txt))"
+done
+```
+
+A block a lane file names but this roadmap's document never mentions is a bug **unless** it is a
+deliberately **adopted** block — see the next section, which is the one legitimate reason this
+check can flag something and not be a defect.
+
+**Cross-roadmap block adoption is a supported pattern, not a mistake.** Placing a block from
+roadmap A into roadmap B's lane file is how a program with only one or two blocks in a repo avoids
+standing up a whole lane of its own for that repo — the lane already exists on a sibling roadmap
+that is running now. When a lane file adopts a block this way:
+
+- The lane file **must** carry an `# ORIGIN: <path to the owning roadmap>` comment immediately
+  above the adopted block ID, naming the roadmap whose outcomes and Wave 0 actually cover it.
+- This roadmap's own document should say so too — in the lane table's notes column, or the cut
+  list, whichever is true — so a reader of *this* roadmap is not left thinking the block is unowned.
+- The reverse-crosswalk check above should treat any block ID with an `# ORIGIN:` comment as
+  resolved, not undocumented, and its consolidation belongs to the roadmap the comment names, not
+  to this one.
+
 **Definition of done must be written as observations.** Not "block X closed" — a block closes when
 its spec is satisfied, which is not the same as the capability working. Prefer a command and its
 expected output:
@@ -271,6 +303,10 @@ execution rather than at planning time:
   that cannot resolve a spec improvises one.
 - **The traps that have cost a real run in that repo.** Not general advice; specific, cited, and
   ideally with the failure it caused.
+- **`# ORIGIN: <roadmap path>` above any adopted block** — a block ID that belongs to a *different*
+  roadmap's outcomes and Wave 0, placed in this lane only because the lane already exists here. See
+  "Cross-roadmap block adoption" above. Every block ID a lane file names either appears in this
+  roadmap's own document or carries this comment; there is no third option.
 
 A lane file covering several repos uses section markers and says **"take only your repo's section"**
 at the top — the reader stops and asks if it cannot tell which section is its own.
@@ -303,6 +339,9 @@ Then check by hand:
 - [ ] Every operator gate names the block it gates, in both the operator table and the lane file.
 - [ ] **The crosswalk check above runs clean** — every ref in every `--from` source appears in the
       roadmap or a lane file, or has a cut-list row.
+- [ ] **The reverse crosswalk check also runs clean** — every block ID named in a lane file appears
+      in this roadmap's own document, or carries an `# ORIGIN:` comment naming the roadmap that
+      does mention it (cross-roadmap adoption).
 - [ ] **No multi-step operator sequence is collapsed into a single link.** A runbook referenced as
       one row loses its steps. Break it out; two of its items probably touch live traffic.
 - [ ] Every Definition-of-done item is an observation with a command, not a block ID.
