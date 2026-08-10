@@ -261,6 +261,25 @@ For `attempt = 1..3` (stop early on pass or bail):
    **Commit** (stage files explicitly by name — never `git add -A`/`git add .`):
    - Implement (attempt 1): `feat: implement <spec-slug>-task<N>`
    - Fix (attempt > 1, this is "fix pass P" where P = attempt − 1): `fix: fix pass <P> for <spec-slug>-task<N>`
+   - **Vault-aware commit (D46 — if planning/ is a vaulted symlink)**: If this attempt created or edited ANY file 
+     under planning/ (i.e., it belongs in filesModified with a "planning/" prefix), you MUST ALSO stage and commit it 
+     through the real vault path — derive the exact set from what you actually wrote, never a fixed list of filenames. 
+     NEVER git add -A, git add ., git reset, or git stash against the vault repo — another session may have unrelated 
+     work staged there right now; touch ONLY your own paths, and do not checkout/switch/branch inside it. For each such file, 
+     let <relpath> be the part of its path AFTER "planning/":
+     ```
+     git -C <vault.planningPath> add <vault.planningPath>/<relpath>
+     git -C <vault.planningPath> diff --cached --quiet || git -C <vault.planningPath> commit -m "$(cat <<'EOF'
+     fix: fix pass <P> for <spec-slug>-task<N> (vault)
+     EOF
+     )"
+     git -C <vault.planningPath> log --oneline -1
+     ```
+     If NOTHING you wrote this attempt lives under planning/, skip this step entirely — do not run any vault command.
+   - **Vault-commit verification (D46 amendment)**: After a vault commit step (if it ran), the engine independently 
+     re-verifies that every vault-relative path is actually COMMITTED in the vault repo (tracked with no staged or unstaged diff). 
+     A vault-commit failure surfaces exactly like a test failure: the task is never marked passed on this attempt; triage 
+     decides whether to RETRYABLE (fix and try again, ≤3 times) or MAJOR (bail to a human right now).
 2. **Fast test.** Run the checks resolved in Phase 2 step 4/7 for this task: if this task declared its
    own `validation_commands`, run ONLY those; otherwise run the gating-only subset when `testDepth ==
    fast`, or the full suite when `testDepth == full`. Always also run the universal emoji gate, and the
@@ -355,6 +374,22 @@ would never reach here either — Docs only ever runs after a clean `PASS`.
    editing it directly.
 5. Commit (stage explicitly) only if something was patched or created:
    **`docs: update docs for <spec-slug>`**. If nothing needed changing, make no commit.
+   - **Vault-aware docs commit (D46 — if planning/ is a vaulted symlink, AND you patched/created docs under planning/)**: 
+     If the changed[] or created[] lists contain any path starting with "planning/", that path is a vaulted symlink pointing 
+     to a brain-owned vault repository (e.g. agentic-portfolio HQ). Its bytes live at a DIFFERENT git repo, invisible to the 
+     commit you just made. For each such path, let <relpath> be the part after "planning/", then stage and commit it through 
+     the real vault path (never git add -A, git add ., git reset, or git stash against the vault; touch only your own paths):
+     ```
+     git -C <vault.planningPath> add <vault.planningPath>/<relpath>
+     git -C <vault.planningPath> diff --cached --quiet || git -C <vault.planningPath> commit -m "docs: update docs for <spec-slug> (vault)"
+     git -C <vault.planningPath> log --oneline -1
+     ```
+     If nothing in changed[]/created[] lives under planning/, skip this step entirely.
+   - **Vault-commit verification (D46 amendment)**: After a vault docs-commit step (if it ran), the engine independently 
+     re-verifies that every vault-relative path in changed[]/created[] is actually COMMITTED in the vault repo (tracked with 
+     no staged or unstaged diff). A vault-commit failure here flips docResult.success=false and appends VAULT_COMMIT_INCOMPLETE 
+     to notes. The docs phase is non-gating for the pipeline, so this only makes the failure loud in state/logs rather than 
+     silent — docs can fail and wrap-up still runs.
 6. Persist state to disk (same disk-only rule as Phase 3/6).
 
 ### 6. Phase: Wrap-up — status/log/state, then PR, then optional auto-merge
