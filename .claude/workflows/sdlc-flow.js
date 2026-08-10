@@ -137,6 +137,56 @@ resolved absolute path from the second line).
   return result
 }
 
+// Vault-aware task commits (extends D46): the per-task implement/fix stage and the docs stage below
+// are instructed to stage + commit any planning/ paths they wrote THROUGH the vault repo (git -C
+// <vault.planningPath>), reusing detectPlanningVault's real path exactly like the wrap-up recipe
+// already does — never a second detection idiom. But that instruction is self-reported: this
+// ticket's amendment log recorded a live run where a stage returned a perfectly valid commitHash
+// that covered ONLY the source half of a task, with the vault half silently uncommitted. So a valid
+// commitHash proves nothing about the vault half, and this check never keys on it — it independently
+// re-verifies, for every filesModified path that resolves under the vault, that the path is BOTH
+// tracked and free of any staged/unstaged diff in the vault repo (i.e. actually landed in a commit
+// there), via a cheap Haiku agent turn rather than trusting the implementer's own report.
+const VAULT_VERIFY_SCHEMA = {
+  type: 'object',
+  required: ['allCommitted'],
+  properties: {
+    allCommitted:     { type: 'boolean', description: 'true iff every given path is tracked in the vault repo with no staged/unstaged diff' },
+    uncommittedPaths: { type: 'array', items: { type: 'string' }, description: 'the subset (vault-relative) that failed either check' },
+    notes:            { type: 'string' }
+  }
+}
+async function verifyVaultCommit(runDir, vault, vaultRelPaths) {
+  if (!vault.vaulted || !vaultRelPaths.length) return { allCommitted: true, uncommittedPaths: [] }
+  const result = await agent(`
+Independently verify that these paths are FULLY COMMITTED in the vault repo at ${vault.planningPath}
+(tracked, AND no staged or unstaged diff) — do not take anyone's word for it, re-check directly.
+Paths (relative to ${vault.planningPath}):
+${vaultRelPaths.map(p => `  ${p}`).join('\n')}
+Run exactly these Bash calls (from ${runDir}):
+  cd ${runDir} && git -C ${vault.planningPath} status --porcelain -- ${vaultRelPaths.map(p => JSON.stringify(p)).join(' ')}
+  cd ${runDir} && git -C ${vault.planningPath} ls-files --error-unmatch -- ${vaultRelPaths.map(p => JSON.stringify(p)).join(' ')}
+A path is COMMITTED only if it produces NO line in the status --porcelain output AND the ls-files
+--error-unmatch call exits 0 for it (nonzero/"did not match" means untracked or missing — NOT committed).
+Return via StructuredOutput: allCommitted (true only if every path passed both checks),
+uncommittedPaths (the vault-relative paths that failed either check; empty array if all committed),
+notes (what you actually observed).
+`, { label: 'verify-vault-commit', schema: VAULT_VERIFY_SCHEMA, model: 'haiku' })
+  if (!result) return { allCommitted: false, uncommittedPaths: vaultRelPaths, notes: 'verification agent returned null' }
+  return result
+}
+
+// Given a stage's self-reported filesModified (repo-root-relative) and a resolved vault, return the
+// vault-relative subset (the part of the path after "planning/") that needs an independent
+// vault-commit check. Derived from what the stage ACTUALLY wrote — never a hard-coded filename list.
+function vaultRelPathsFrom(filesModified, vault) {
+  if (!vault.vaulted || !Array.isArray(filesModified)) return []
+  return filesModified
+    .filter(f => typeof f === 'string' && (f === 'planning' || f.startsWith('planning/')))
+    .map(f => f.slice('planning/'.length))
+    .filter(Boolean)
+}
+
 const autoMergeFlag = hasFlag('--auto-merge')
 const noPr          = hasFlag('--no-pr')
 const resumeMode    = hasFlag('--resume')
@@ -1515,6 +1565,11 @@ function buildPassPayload(taskNum, t, attempt, validatedLabel) {
 // ================================================================
 phase('Tasks')
 
+// D46 + vault-aware task commits: resolve ONCE for the whole run and reuse everywhere below (the
+// per-task commit step, the docs stage, and the wrap-up stage) — never re-detect per task/stage, and
+// never a second detection idiom.
+const vault = await detectPlanningVault(worktreePath)
+
 let bailed = false
 let bailReason = null
 
@@ -1591,15 +1646,35 @@ ${isFix ? `fix: fix pass ${attempt - 1} for ${stem}` : `feat: implement ${stem}`
 EOF
 )"
    Run: cd ${worktreePath} && git log --oneline -1   (capture the short hash)
-
+${vault.vaulted ? `
+7b. planning/ is a vaulted symlink (D46) — its bytes live at ${vault.planningPath}, a DIFFERENT git
+    repo, invisible to the commit you just made in step 7. If this attempt created or edited ANY file
+    under planning/ (i.e. it belongs in filesModified with a "planning/" prefix), you MUST ALSO stage
+    and commit it there, through the real path — derive the exact set from what you actually wrote,
+    never a fixed list of filenames. NEVER git add -A, git add ., git reset, or git stash against the
+    vault repo — another lane's session may have unrelated work staged there right now; touch ONLY
+    your own paths, and do not checkout/switch/branch inside it (stay on whatever branch it is
+    already on). For each such file, let <relpath> be the part of its path AFTER "planning/":
+      cd ${worktreePath} && git -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
+    Then, once every such path is staged, commit them all in one commit:
+      cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
+EOF
+)"
+      cd ${worktreePath} && git -C ${vault.planningPath} log --oneline -1
+    If NOTHING you wrote this attempt lives under planning/, skip this step entirely — do not run any
+    vault command. If a vault add/commit fails, report it PLAINLY in notes; never paper over it, and
+    never "repair" it by committing on a different branch inside the vault.
+` : ''}
 Return via StructuredOutput:
   reportFile: ""   (flow keeps state in state.json, not per-stage reports)
   success: true if the work completed and the spec validation passed
-  filesModified: every source file you created or modified this attempt
-  commitHash: the 7-char short hash (empty string if no commit was made)
+  filesModified: every file you created or modified this attempt — including any under planning/
+    (do NOT omit vault-side files just because they commit through a different repo)
+  commitHash: the 7-char short hash of THIS repo's commit (empty string if no commit was made here)
   summary: one line — what this task now does
   decisions: any non-obvious choices (empty array if none)
-  notes: one-line status
+  notes: one-line status${vault.vaulted ? ' — mention explicitly whether a vault commit (step 7b) happened and, if so, its outcome' : ''}
 `, withModel({ label: `${isFix ? 'fix' : 'implement'}-${taskNum}-${attempt}`, schema: STAGE_SCHEMA, phase: 'Tasks' }, isFix ? fixModel : MODEL.implement))
 
     if (!stageResult) {
@@ -1622,6 +1697,43 @@ Return via StructuredOutput:
     if (stageResult.summary) t.summary = stageResult.summary
     if (Array.isArray(stageResult.filesModified)) t.files_changed = [...new Set([...(t.files_changed || []), ...stageResult.filesModified])]
     if (Array.isArray(stageResult.decisions) && stageResult.decisions.length) t.decisions = [...(t.decisions || []), ...stageResult.decisions]
+
+    // 2b. Vault-commit verification — independent of the stage's self-report. A non-empty commitHash
+    // proves nothing about the vault half (observed live: one run's commitHash was valid and covered
+    // only the source half, with the vault edit silently uncommitted — see this ticket's amendment
+    // log). So this ALWAYS re-derives the vault-relevant subset from filesModified and re-checks it
+    // directly, rather than trusting anything the stage reported. A failure here surfaces exactly
+    // like a test failure: the task is never marked passed on this attempt.
+    const vaultRelPaths = vaultRelPathsFrom(stageResult.filesModified, vault)
+    if (vaultRelPaths.length) {
+      const vaultVerify = await verifyVaultCommit(worktreePath, vault, vaultRelPaths)
+      if (!vaultVerify.allCommitted) {
+        const uncommitted = (vaultVerify.uncommittedPaths && vaultVerify.uncommittedPaths.length) ? vaultVerify.uncommittedPaths : vaultRelPaths
+        log(`Task ${taskNum} attempt ${attempt}: vault commit incomplete — not committed in ${vault.planningPath}: ${uncommitted.join(', ')}.`)
+        const vaultFailBlob = `VAULT_COMMIT_INCOMPLETE — planning/ path(s) not committed in the vault repo (${vault.planningPath}): ${uncommitted.join(', ')}. ${vaultVerify.notes || ''}`.trim()
+        t.issues = [...(t.issues || []), 'vault commit incomplete']
+        const vaultBailPayload = buildBailPayload(taskNum, t, attempt, `Task ${taskNum}: vault commit incomplete — ${uncommitted.join(', ')}`)
+        const tr = await triage(`task ${taskNum} vault-commit`, attempt, MAX_TASK_ATTEMPTS, vaultFailBlob, prevFailBlob, vaultBailPayload)
+        prevFailBlob = vaultFailBlob
+        if (tr && tr.class === 'MAJOR') {
+          bailed = true
+          bailReason = tr.bailReason || tr.reason || vaultFailBlob
+          if (tr.stateWritten) taskStateWritten = true
+          log(`Task ${taskNum}: triage → MAJOR on vault-commit failure — bailing immediately.`)
+          break
+        }
+        if (attempt === MAX_TASK_ATTEMPTS) {
+          bailed = true
+          bailReason = `Task ${taskNum} still failing to commit vault paths after ${MAX_TASK_ATTEMPTS} attempts: ${uncommitted.join(', ')}`
+          if (tr && tr.stateWritten) taskStateWritten = true
+          log(`Task ${taskNum}: exhausted ${MAX_TASK_ATTEMPTS} attempts on a vault-commit failure — bailing to wrap-up.`)
+          break
+        }
+        if (tr) t.fixes = [...(t.fixes || []), tr.reason]
+        log(`Task ${taskNum}: triage → RETRYABLE on vault-commit failure — fix pass ${attempt}/${MAX_TASK_ATTEMPTS - 1}. ${tr?.reason || ''}`)
+        continue
+      }
+    }
 
     // 3. Fast test (tripwire) — gating checks only unless testDepth=full. A task that declares its
     //    own `validation_commands` in tasks.json runs THOSE instead (the end review still runs the
@@ -1966,6 +2078,21 @@ EOF
 )"
      cd ${worktreePath} && git log --oneline -1
    If nothing needed changing, make no commit and report success=true with empty changed/created.
+${vault.vaulted ? `
+   This step almost never touches planning/ (docs live under docs/), but if it genuinely did — e.g. a
+   patched/created doc path in changed[]/created[] above starts with "planning/" — that path is a
+   vaulted symlink (D46), a DIFFERENT git repo, invisible to the commit you just made. Stage + commit
+   it there too, through the real path, deriving the exact set from changed[]/created[] (never a fixed
+   list): for each such path, let <relpath> be the part after "planning/":
+     cd ${worktreePath} && git -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
+     cd ${worktreePath} && git -C ${vault.planningPath} diff --cached --quiet || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+docs: update docs for ${blockId} (vault)
+EOF
+)"
+     cd ${worktreePath} && git -C ${vault.planningPath} log --oneline -1
+   NEVER git add -A, git add ., git reset, or git stash against the vault repo, and never checkout/
+   switch/branch inside it. If nothing you patched/created lives under planning/, skip this entirely.
+` : ''}
 ${renderDocsStateWriteRecipe(docsStatePayload)}
 Return via StructuredOutput: success, changed[], created[], flagged[], commitHash, stateWritten (true
 only if you performed the additional state write above), notes.
@@ -1975,6 +2102,18 @@ only if you performed the additional state write above), notes.
     state.docs.changed = docResult.changed || []
     state.docs.created = docResult.created || []
     log(`Docs: ${(docResult.changed || []).length} patched, ${(docResult.created || []).length} created${(docResult.flagged || []).length ? `, ${docResult.flagged.length} flagged NEEDS_REVIEW` : ''}`)
+    // Same independent vault-commit verification as the per-task loop — a docs-agent self-report of
+    // success/commitHash proves nothing about a planning/ path landing committed in the vault repo.
+    const docsVaultRelPaths = vaultRelPathsFrom([...(docResult.changed || []), ...(docResult.created || [])], vault)
+    if (docsVaultRelPaths.length) {
+      const docsVaultVerify = await verifyVaultCommit(worktreePath, vault, docsVaultRelPaths)
+      if (!docsVaultVerify.allCommitted) {
+        const uncommitted = (docsVaultVerify.uncommittedPaths && docsVaultVerify.uncommittedPaths.length) ? docsVaultVerify.uncommittedPaths : docsVaultRelPaths
+        log(`Docs: vault commit incomplete — not committed in ${vault.planningPath}: ${uncommitted.join(', ')}. Treating docs phase as failed.`)
+        docResult.success = false
+        docResult.notes = `${docResult.notes ? docResult.notes + ' | ' : ''}VAULT_COMMIT_INCOMPLETE: ${uncommitted.join(', ')} — ${docsVaultVerify.notes || ''}`.trim()
+      }
+    }
   } else {
     log('Docs agent returned null — continuing to wrap-up.')
   }
@@ -2007,9 +2146,8 @@ log(`Wrap-up. Verdict: ${finalVerdict} | passed ${passedTasks.length}/${taskList
 // link"), and the wrong repair is to checkout/commit inside the vault. The right behaviour is to
 // stage+commit the vaulted files THROUGH their real path via `git -C <vault>`, on whatever branch
 // the vault repo is already on, with no checkout at all — while repo-local files (log.md, the spec)
-// stay staged and committed in the invoking repo exactly as before. detectPlanningVault() resolves
-// which case applies.
-const vault = await detectPlanningVault(worktreePath)
+// stay staged and committed in the invoking repo exactly as before. `vault` was already resolved
+// once, before the per-task loop, and is reused here (never a second detectPlanningVault() call).
 const wrapupStatePayload = buildWrapupStatePayload()
 const wrapupResult = await tracedAgent(`${W}
 You are the wrap-up agent for an /sdlc-flow run. Write the human-facing status/log + the D18 amendment log
