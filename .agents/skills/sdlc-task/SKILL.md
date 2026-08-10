@@ -303,12 +303,14 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
        ```
        git -C <vault.planningPath> add <vault.planningPath>/<relpath>
        ```
-     Then, once every such path is staged, commit them all in one commit:
+     Then, once every such path is staged, commit ONLY those paths — pass them explicitly to `git commit`
+     itself (not merely to `git add`), so a sibling lane's unrelated pre-staged files are never swept
+     into this commit even if they happen to already be staged:
        ```
-       git -C <vault.planningPath> diff --cached --quiet || git -C <vault.planningPath> commit -m "$(cat <<'EOF'
+       git -C <vault.planningPath> diff --cached --quiet -- <relpath1> <relpath2> ... || git -C <vault.planningPath> commit -m "$(cat <<'EOF'
      fix: fix pass <attempt-1> for <stem> (vault)
      EOF
-     )"
+     )" -- <relpath1> <relpath2> ...
        git -C <vault.planningPath> log --oneline -1
        ```
      If NOTHING you wrote this attempt lives under planning/, skip this step entirely — do not run any
@@ -495,10 +497,13 @@ Skip this entire step if the run bailed OR Step 3.5 set `reconcileFailed = true`
      git -C <vaultRealPath> add <vaultRealPath>/<blockId>/tasks.md 2>/dev/null || true
      git -C <vaultRealPath> add <vaultRealPath>/status.md
      git -C <vaultRealPath> add <vaultRealPath>/state.json 2>/dev/null || true
-     git -C <vaultRealPath> diff --cached --quiet || git -C <vaultRealPath> commit -m "$(cat <<'EOF'
+     Then commit ONLY these three paths — pass them explicitly to `git commit` itself (not merely to
+     `git add`), so anything a sibling lane already had staged in this same vault repo is left staged
+     and untouched by this commit:
+     git -C <vaultRealPath> diff --cached --quiet -- <vaultRealPath>/<blockId>/tasks.md <vaultRealPath>/status.md <vaultRealPath>/state.json || git -C <vaultRealPath> commit -m "$(cat <<'EOF'
      chore: sdlc-task bookkeep — <blockId>
      EOF
-     )"
+     )" -- <vaultRealPath>/<blockId>/tasks.md <vaultRealPath>/status.md <vaultRealPath>/state.json
      git -C <vaultRealPath> log --oneline -1
      ```
      This must be a clean, targeted commit of just those files' changes — not a broader checkout or

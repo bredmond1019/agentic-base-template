@@ -269,10 +269,15 @@ For `attempt = 1..3` (stop early on pass or bail):
      let <relpath> be the part of its path AFTER "planning/":
      ```
      git -C <vault.planningPath> add <vault.planningPath>/<relpath>
-     git -C <vault.planningPath> diff --cached --quiet || git -C <vault.planningPath> commit -m "$(cat <<'EOF'
+     ```
+     Then, once every such path is staged, commit ONLY those paths — pass them explicitly to `git commit`
+     itself (not merely to `git add`), so a sibling lane's unrelated pre-staged files are never swept
+     into this commit even if they happen to already be staged:
+     ```
+     git -C <vault.planningPath> diff --cached --quiet -- <relpath1> <relpath2> ... || git -C <vault.planningPath> commit -m "$(cat <<'EOF'
      fix: fix pass <P> for <spec-slug>-task<N> (vault)
      EOF
-     )"
+     )" -- <relpath1> <relpath2> ...
      git -C <vault.planningPath> log --oneline -1
      ```
      If NOTHING you wrote this attempt lives under planning/, skip this step entirely — do not run any vault command.
@@ -381,7 +386,11 @@ would never reach here either — Docs only ever runs after a clean `PASS`.
      the real vault path (never git add -A, git add ., git reset, or git stash against the vault; touch only your own paths):
      ```
      git -C <vault.planningPath> add <vault.planningPath>/<relpath>
-     git -C <vault.planningPath> diff --cached --quiet || git -C <vault.planningPath> commit -m "docs: update docs for <spec-slug> (vault)"
+     ```
+     Then commit ONLY those paths — pass them explicitly to `git commit` itself (not merely to `git add`), so anything a sibling
+     lane already had staged in this same vault repo is left staged and untouched by this commit:
+     ```
+     git -C <vault.planningPath> diff --cached --quiet -- <relpath1> <relpath2> ... || git -C <vault.planningPath> commit -m "docs: update docs for <spec-slug> (vault)" -- <relpath1> <relpath2> ...
      git -C <vault.planningPath> log --oneline -1
      ```
      If nothing in changed[]/created[] lives under planning/, skip this step entirely.
@@ -485,7 +494,10 @@ fails, report it — do not relocate the commit to force it to succeed.
   ```
   git -C <vaultRealPath> add <vaultRealPath>/status.md
   git -C <vaultRealPath> add <vaultRealPath>/state.json 2>/dev/null || true
-  git -C <vaultRealPath> diff --cached --quiet || git -C <vaultRealPath> commit -m "chore: wrap up <spec-slug>"
+  Then commit ONLY those two paths — pass them explicitly to `git commit` itself (not merely to
+  `git add`), so anything a sibling lane already had staged in this same vault repo is left staged
+  and untouched by this commit:
+  git -C <vaultRealPath> diff --cached --quiet -- <vaultRealPath>/status.md <vaultRealPath>/state.json || git -C <vaultRealPath> commit -m "chore: wrap up <spec-slug>" -- <vaultRealPath>/status.md <vaultRealPath>/state.json
   ```
   and, as a **separate commit**, the repo-local files, in this repo, on this branch:
   ```

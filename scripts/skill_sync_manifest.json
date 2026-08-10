@@ -10,7 +10,7 @@
     "skill_md": ".agents/skills/sdlc-task/SKILL.md"
   },
   ".claude/workflows/sdlc-task.js::bookkeep-vault-commit": {
-    "hash": "98f633d0afda7b228b65cc1dada5f73827351ecbc1286c0bd093d32f17cf03d5",
+    "hash": "c2fc52062e247ca6b565d949f42581270875ee788529e8b900e1ce6f14416aae",
     "lines": "1393-1511",
     "skill_md": ".agents/skills/sdlc-task/SKILL.md"
   },
@@ -25,7 +25,7 @@
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   },
   ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
-    "hash": "a494d54f4f05f7a78b1cfbccac50109a0ba51f11b1f5f7734ee26907fd621e14",
+    "hash": "8176145ab85f58d5409ac49f1ab381ce261b83f6e1439424241be5525aa154d5",
     "lines": "1933-2087",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   }
