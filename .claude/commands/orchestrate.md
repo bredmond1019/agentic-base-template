@@ -214,11 +214,23 @@ Use `--worktree` when:
 `--worktree` / `--no-worktree` on the command line overrides all of the above **except those two** —
 if a flag contradicts the table, stop and report rather than running a chain whose gates cannot pass.
 
-**Concurrency across sessions is not managed by this command.** Rule 3 governs one repo; nothing
-stops four sessions launching `playwright` and `next build` simultaneously. When several lanes run at
-once, keep at most **two heavy-gate repos** (Next/Playwright builds) live concurrently and put the
-rest on cheap-gate repos. Today that is a human decision — the run's roadmap should say which repos
-are heavy.
+**Concurrency across sessions is enforced mechanically, not by human memory.** Rule 3 governs one
+repo; nothing stops four sessions launching `playwright` and `next build` simultaneously on their
+own. `scripts/fleet_concurrency_check.py` lives in the `base-template` checkout (the fleet's shared
+harness source, typically a sibling directory at the brain root, e.g. `../base-template` — resolve
+its actual path for this machine rather than assuming). Before starting a heavy repo
+(browser/production-build checks — determine this by reading the target repo's own
+`planning/harness.json`, never from memory:
+`python3 <path-to-base-template>/scripts/fleet_concurrency_check.py is-heavy --repo-path <target-repo>`),
+register it:
+`python3 <path-to-base-template>/scripts/fleet_concurrency_check.py register --repo <name>`.
+Exit code `3` (or `"allowed": false` in the JSON output) means the fleet is already at capacity
+(`MAX_HEAVY_LANES = 2`) — put this repo on a cheap-gate block instead, or wait. Release the slot
+when the heavy repo's chain finishes: `... release --repo <name>`. A stale entry (a killed lane, or
+one past the TTL) expires automatically on the next registration, so a dead lane never blocks the
+fleet permanently. If the lock store itself is unavailable (no brain root found, unwritable), the
+script reports `"degraded": true, "allowed": true` — same as today's unenforced-prose behavior, not
+a new way to fail. See `planning/decisions/D61-fleet-concurrency-enforcement.md` for the full design.
 
 ### 6. Launch the engine — do not wait idly
 Invoke the workflow **in this session**:

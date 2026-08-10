@@ -114,10 +114,20 @@ plan on it"); this step is its equivalent for isolation decisions and carryovers
 
 **At most two heavy-gate repos may run concurrently** — anything whose `planning/harness.json` gates
 include a browser or full production build (Playwright, `next build`). Determine whether this repo
-is heavy by reading its `harness.json`, not by memory.
+is heavy mechanically, never by memory:
+`python3 <path-to-base-template>/scripts/fleet_concurrency_check.py is-heavy --repo-path <this-repo>`
+(exit 0 = heavy).
 
-Nothing enforces this. If this repo is heavy, say so and ask before starting; the operator knows
-what else is live.
+**This is enforced, not prose-only.** If this repo is heavy, register before starting:
+`python3 <path-to-base-template>/scripts/fleet_concurrency_check.py register --repo <this-repo-name>`.
+Exit code `3` (`"allowed": false`) means the fleet is already at capacity (two heavy repos live) —
+stop and report rather than starting a third; wait or swap in a cheap-gate block instead. Release
+the slot once this repo's chain finishes:
+`... release --repo <this-repo-name>`. A lane killed mid-run does not block the fleet forever — its
+entry expires automatically (dead process, or past a fixed TTL) on the next registration. If the
+lock store itself is unavailable, the script degrades to `"allowed": true, "degraded": true` — the
+same advisory behavior this replaces, never a hard failure. Full design:
+`planning/decisions/D61-fleet-concurrency-enforcement.md` (in `base-template`).
 
 ## Step 4 — Confirm
 
