@@ -291,9 +291,43 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
      ```
      (fix pass: `fix: fix pass <attempt-1> for <stem>`, e.g. attempt 2's fix commit reads
      `fix: fix pass 1 for <stem>`.) Capture the short hash via `git log --oneline -1`.
+   - **Vault-aware commit (D46 — if planning/ is a vaulted symlink)**: Planning/ is a relative symlink pointing to
+     a brain-owned vault repository (e.g., agentic-portfolio HQ). Its bytes live at a DIFFERENT git repo,
+     invisible to the commit made above. If this attempt created or edited ANY file under planning/
+     (i.e., it belongs in filesModified with a "planning/" prefix), you MUST ALSO stage and commit it
+     through the real vault path — derive the exact set from what you actually wrote, never a fixed list
+     of filenames. NEVER run git add -A, git add ., git reset, or git stash against the vault repo —
+     another session may have unrelated work staged there right now; touch ONLY your own paths, and
+     do not checkout/switch/branch inside it (stay on whatever branch it is already on). For each such file,
+     let <relpath> be the part of its path AFTER "planning/":
+       ```
+       git -C <vault.planningPath> add <vault.planningPath>/<relpath>
+       ```
+     Then, once every such path is staged, commit ONLY those paths — pass them explicitly to `git commit`
+     itself (not merely to `git add`), so a sibling lane's unrelated pre-staged files are never swept
+     into this commit even if they happen to already be staged:
+       ```
+       git -C <vault.planningPath> diff --cached --quiet -- <relpath1> <relpath2> ... || git -C <vault.planningPath> commit -m "$(cat <<'EOF'
+     fix: fix pass <attempt-1> for <stem> (vault)
+     EOF
+     )" -- <relpath1> <relpath2> ...
+       git -C <vault.planningPath> log --oneline -1
+       ```
+     If NOTHING you wrote this attempt lives under planning/, skip this step entirely — do not run any
+     vault command. If a vault add/commit fails, report it PLAINLY in notes; never paper over it, and
+     never "repair" it by committing on a different branch inside the vault.
+     **NOTE**: If planning/ is a plain tracked directory (not vaulted), skip this step entirely — the commit
+     above already covered everything.
    - If the implement/fix agent step produced nothing usable (a dead/empty turn): treat this exactly
      like a test failure below (triage it as `NULL_RESULT — the agent died or returned nothing`) —
      do NOT silently retry without triaging.
+   - **Vault-commit verification (D46 amendment)**: After a vault commit step (if it ran), the engine independently
+     re-verifies that every vault-relative path is actually COMMITTED in the vault repo (tracked with no staged
+     or unstaged diff). This is not about trusting the stage output — a valid commitHash proves nothing about
+     the vault half (observed live: one run returned a valid commitHash that covered only the source half, with
+     the vault edit silently uncommitted). A vault-commit failure surfaces exactly like a test failure: the task
+     is never marked passed on this attempt; triage decides whether to RETRYABLE (fix and try again, ≤3 times)
+     or MAJOR (bail to a human right now).
    - **Test step** — run ONLY the applicable check set, never invent checks:
      - If this task declared its own `validation_commands` override (Step 2.1): run exactly those
        commands, each one gating.
@@ -463,10 +497,13 @@ Skip this entire step if the run bailed OR Step 3.5 set `reconcileFailed = true`
      git -C <vaultRealPath> add <vaultRealPath>/<blockId>/tasks.md 2>/dev/null || true
      git -C <vaultRealPath> add <vaultRealPath>/status.md
      git -C <vaultRealPath> add <vaultRealPath>/state.json 2>/dev/null || true
-     git -C <vaultRealPath> diff --cached --quiet || git -C <vaultRealPath> commit -m "$(cat <<'EOF'
+     Then commit ONLY these three paths — pass them explicitly to `git commit` itself (not merely to
+     `git add`), so anything a sibling lane already had staged in this same vault repo is left staged
+     and untouched by this commit:
+     git -C <vaultRealPath> diff --cached --quiet -- <vaultRealPath>/<blockId>/tasks.md <vaultRealPath>/status.md <vaultRealPath>/state.json || git -C <vaultRealPath> commit -m "$(cat <<'EOF'
      chore: sdlc-task bookkeep — <blockId>
      EOF
-     )"
+     )" -- <vaultRealPath>/<blockId>/tasks.md <vaultRealPath>/status.md <vaultRealPath>/state.json
      git -C <vaultRealPath> log --oneline -1
      ```
      This must be a clean, targeted commit of just those files' changes — not a broader checkout or

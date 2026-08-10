@@ -6,8 +6,8 @@ doc_id: sdlc-task
 layer: [factory]
 project: base-template
 status: active
-keywords: [sdlc-task, lean engine, implement test commit, worktree, patch ladder, D38]
-related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch-ladder, D56-sdlc-task-authoritative-reconcile]
+keywords: [sdlc-task, lean engine, implement test commit, worktree, patch ladder, D38, planning vault, D46]
+related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch-ladder, D56-sdlc-task-authoritative-reconcile, D46-tasks-json-propagation-and-state-pointer]
 ---
 
 # `/sdlc-task` — lean single-unit SDLC engine
@@ -188,6 +188,50 @@ applied at `/clean-worktree` merge time.
 
 > **Token roll-up note:** `tokens.total` covers substantive stages (implement, test, fix).
 > Cheap Haiku helper agents are excluded. See [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md).
+
+---
+
+## Vaulted `planning/` writes in the per-task loop
+
+In a brain-vaulted repo, `planning/` is a relative symlink into a separate git repo — the vault —
+so a plain `git add planning/...` from `${runDir}` fails with "pathspec is beyond a symbolic link"
+(D46). Before this reached the per-task loop, only the bookkeep close-out knew how to work around
+that: a task's own `planning/` writes (an ADR, a `measurement.md`, an edit to another spec's
+`tasks.md`) went uncommitted at step 7's commit, invisible from the repo root, and the run still
+reported PASS because the downstream harness checks observe **disk** state, not **index** state.
+
+`detectPlanningVault(runDir)` now resolves the vault **once**, before the task loop starts, and
+every stage below (the per-task commit, bookkeep) reuses that single resolved `vault` — never a
+second detection call. The per-task loop then does two things, both driven off `filesModified`
+rather than a fixed list of filenames:
+
+- **Step 7b, after every implement/fix attempt.** If anything the attempt wrote lives under
+  `planning/`, the agent stages and commits it through the real path
+  (`git -C <vault.planningPath> add <vault.planningPath>/<relpath>`, then one
+  `git -C <vault.planningPath> commit`) — deriving the exact set from what it actually wrote. It
+  never issues `git add -A`, `git add .`, `git reset`, or `git stash` against the vault, and never
+  checks out/switches/branches inside it, so a sibling lane's staged work already sitting in the
+  vault repo is left staged and untouched. If nothing it wrote lives under `planning/`, it skips
+  the step entirely.
+- **Independent re-verification — never trust the self-report.** A live run of this ticket's own
+  chain returned a perfectly valid `commitHash` that covered only the *source* half of a task, with
+  the `planning/` half silently uncommitted; a non-empty hash proves nothing about the vault half.
+  So after every attempt, the engine re-derives the vault-relevant subset of `filesModified` itself
+  and hands it to a small Haiku agent that checks, directly against the vault repo, that each path
+  is both tracked (`git -C <vault> ls-files --error-unmatch`) and free of any staged/unstaged diff
+  (`git -C <vault> status --porcelain`) — i.e. actually landed in a commit there.
+
+A failed or incomplete vault commit is fed through the same triage path as any other test
+failure — `RETRYABLE` gets another fix attempt, a `MAJOR` verdict or attempt-exhaustion bails — so
+the task is never reported passed while a `planning/` path it wrote sits uncommitted in the vault.
+This is layered on top of, not a replacement for, the bookkeep close-out's own vault recipe (three
+hard-coded paths: the spec's `tasks.md`, `status.md`, `state.json`) — both stages resolve the vault
+through the same `detectPlanningVault` call and stage through the same `git -C <vault>` idiom, but
+bookkeep still targets only its three bookkeeping files while the per-task loop covers whatever
+`planning/` paths the task itself wrote.
+
+When `planning/` is a real tracked directory (a non-vaulted repo), `vault.vaulted` is `false`, none
+of the above fires, and everything commits together in the repo's own index exactly as before.
 
 ---
 
