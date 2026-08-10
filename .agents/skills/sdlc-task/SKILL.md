@@ -353,8 +353,11 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
        - `forbidden-pattern-scan`: for every `rules[]` entry, grep `pattern` over `paths` (optionally
          minus an `allowlistPattern`); the check passes only if EVERY rule is clean.
      - **Always additionally run the emoji-gate** (a harness rule, unconditional — not read from
-       `harness.json`): diff `git diff --name-only <baseSha>..HEAD`, inspect every changed
-       `.md`/`.mdx` file, and fail the check on any stray emoji in docs.
+       `harness.json`): DIFF-SCOPED — it judges only lines **added** by this task, never a whole
+       changed file, so a legacy file's pre-existing emoji does not fail a diff that never touched
+       it. Run `git diff -M -U0 <baseSha>..HEAD -- '*.md' '*.mdx'` and scan only `+` content lines
+       (never the `+++`/`---` header lines) for emoji; a pure rename with no added content lines
+       passes, a brand-new file with an emoji fails (its added lines are its whole content).
      - The task PASSES this attempt only if every gating check passed AND the emoji gate is clean.
    - **On pass**: mark the task `passed`, record which check set validated it, and stop the attempt
      loop for this task (do not run further attempts).

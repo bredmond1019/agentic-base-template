@@ -234,10 +234,14 @@ Everything below runs from the main repo root first.
      every check regardless of `gates`/`perTask`. **If `harness.json` is absent, or carries no matching
      checks: fall back to running the spec's own `## Validation Commands` section, in order** — the
      engine ships no stack defaults. If the spec has no such section either, run no project checks.
-   - Always, in addition to whatever checks above: scan changed `.md` files (`git diff --name-only
-     <prBase>..HEAD`) for stray emoji — this "universal emoji gate" always runs, project-agnostic. The
-     literal robot-emoji `Generated with Claude Code` PR-footer line is the one exception, and only
-     inside a PR body, never inside docs.
+   - Always, in addition to whatever checks above: this "universal emoji gate" always runs,
+     project-agnostic, and is DIFF-SCOPED — it judges only lines **added** on this branch, never a
+     whole changed file, so a legacy file's pre-existing emoji does not fail a diff that never
+     touched it. Run `git diff -M -U0 <prBase>..HEAD -- '*.md' '*.mdx'` and scan only `+` content
+     lines (never the `+++`/`---` header lines) for emoji; a pure rename with no added content
+     lines passes, a brand-new file with an emoji fails. The literal robot-emoji
+     `Generated with Claude Code` PR-footer line is the one exception, and only inside a PR body,
+     never inside docs.
    - For any `baseline-diff` / `skip-count-regression` check with a `baselineCommand`: snapshot a
      baseline once, before task 1, if one doesn't already exist on disk (resume-safe — never overwrite
      an existing baseline).
