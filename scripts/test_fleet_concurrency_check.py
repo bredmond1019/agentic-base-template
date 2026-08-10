@@ -20,12 +20,36 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 _MODULE_PATH = Path(__file__).resolve().parent / "fleet_concurrency_check.py"
 _spec = importlib.util.spec_from_file_location("fleet_concurrency_check", _MODULE_PATH)
 fcc = importlib.util.module_from_spec(_spec)
 sys.modules["fleet_concurrency_check"] = fcc
 _spec.loader.exec_module(fcc)
+
+# The tests below stand in for "another lane's process" with synthetic pids derived from
+# os.getpid() (e.g. os.getpid() + 1) - values that do not correspond to a real running process.
+# `_pid_running` (used by the stale-entry sweep) checks liveness via `os.kill(pid, 0)`, which is
+# genuinely non-deterministic for made-up pids: whether that number happens to belong to some
+# unrelated process already running on the machine depends on the OS's pid-allocation state at
+# test time, not on anything the test controls. That flakiness previously surfaced as synthetic
+# "still active" lanes being swept as stale mid-test (e.g. `repo-b` vanishing from `active`,
+# a refused registration being wrongly allowed, or the CLI's exit code not reflecting a refusal),
+# purely as a function of which pids happened to be in use on the host at the moment the suite
+# ran. Only pid 999999 is ever used in this file to mean "a definitely-dead process" (see
+# StaleEntryExpiry below); every other pid used here is meant to represent a still-running lane.
+# Patching `_pid_running` module-wide removes the dependency on real OS process state entirely,
+# while preserving every test's actual intent.
+_pid_running_patch = mock.patch.object(fcc, "_pid_running", side_effect=lambda pid: pid != 999999)
+
+
+def setUpModule() -> None:
+    _pid_running_patch.start()
+
+
+def tearDownModule() -> None:
+    _pid_running_patch.stop()
 
 
 class TwoLanesOk(unittest.TestCase):
