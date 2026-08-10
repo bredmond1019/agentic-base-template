@@ -282,6 +282,10 @@ so there is no `chore: flow state` commit in this list.
 | `docs: update docs for <spec>` | docs | After PASS verdict |
 | `chore: wrap up <spec>` | wrap-up | Final commit before PR — vault-aware, see below |
 
+> A task or the docs stage that also writes a `planning/` path produces a **second** commit, on the
+> vault repo's own branch, alongside its listed commit above — see "Per-task loop and docs stage"
+> below. It is not a `<spec>-flow` branch commit and does not appear in `git log` for this repo.
+
 ---
 
 ## Vaulted planning directories (D46)
@@ -290,24 +294,62 @@ Under D46, a brain-vaulted sub-repo's `planning/` is a relative symlink into a b
 repo (e.g. `planning -> ../_planning/<repo>`), not a real tracked directory. `git add planning/...`
 against that path fails with `fatal: pathspec 'planning/...' is beyond a symbolic link` — git refuses
 to stage through a symlink boundary. The rule this engine follows wherever it needs to persist a
-tracked `planning/`-prefixed file (`planning/status.md`, `planning/state.json` at wrap-up):
+tracked `planning/`-prefixed file:
 
 - **Never** issue a `git add` (or `git commit`) whose pathspec begins with `planning/`.
 - Resolve the symlink first — `fs.lstatSync('planning').isSymbolicLink()` +
-  `fs.realpathSync('planning')` — to get the vault's real, absolute path.
+  `fs.realpathSync('planning')` — to get the vault's real, absolute path. `detectPlanningVault
+  (worktreePath)` runs **once**, before the per-task loop starts, and every stage below (per-task
+  commit, docs, wrap-up) reuses that single resolved `vault` — never a second detection call.
 - Stage and commit the vaulted files **through that real path**, via `git -C <vault> add <absolute
   path>` and `git -C <vault> commit`, on whatever branch the vault repo is already on.
-- **Never** `git checkout`, `git switch`, or `git branch` inside the vault — the wrap-up prompt
-  states this prohibition explicitly. The commit lands wherever the vault repo currently sits; the
-  engine does not move it there.
+- **Never** `git checkout`, `git switch`, or `git branch` inside the vault, and never `git add -A`,
+  `git add .`, `git reset`, or `git stash` against it — the prompts state this prohibition
+  explicitly at every call site. Only the paths a stage actually wrote are touched, so a sibling
+  lane's unrelated staged work already sitting in the vault repo is left staged and untouched. The
+  commit lands wherever the vault repo currently sits; the engine does not move it there.
 - Repo-local files that are not behind the symlink (`log.md`, the spec file) keep committing
   normally, in the invoking repo, on the run's own branch — exactly as before.
 
-When `planning/` is a real tracked directory (non-vaulted repo), none of the above applies and
-everything commits together in one commit as it always has.
+When `planning/` is a real tracked directory (non-vaulted repo), `vault.vaulted` is `false`, none
+of the above fires, and everything commits together in one commit as it always has.
 
 This is why an uncommitted working tree in a vaulted repo can still show untouched `planning/` bytes
 after a run: those bytes were staged and committed in the vault repo, not here.
+
+### Per-task loop and docs stage — vault-aware, and independently re-verified
+
+Before this ticket, vault-awareness existed only at wrap-up — a task's own `planning/` writes (an
+ADR, a `measurement.md`, an amendment to another spec's `tasks.md`) went uncommitted in the
+per-task commit at step 7, invisible from the repo root, and the run still reported success because
+the harness checks that ran afterward observe **disk** state, not **index** state.
+
+The per-task loop and the docs stage now carry the same D46 idiom the wrap-up stage already used,
+with one addition:
+
+- **Step 7b, after every implement/fix attempt.** If anything the attempt wrote lives under
+  `planning/` (i.e. it appears in `filesModified` with a `planning/` prefix), the agent stages and
+  commits it through `git -C <vault.planningPath>`, deriving the exact path set from what it
+  actually wrote — never a fixed filename list, and only when `vault.vaulted` is true. If nothing it
+  wrote lives under `planning/`, it skips the step entirely; no vault command runs. The docs stage
+  carries the identical instruction for any patched/created doc path starting with `planning/`
+  (rare — most docs live under `docs/`).
+- **Independent re-verification — never trust the self-report.** A live run of this ticket's own
+  chain produced a stage that returned a perfectly valid `commitHash` covering only the *source*
+  half of a task, with the `planning/` half silently uncommitted; a non-empty hash proves nothing
+  about the vault half. So after every attempt (and after the docs stage), the engine re-derives the
+  vault-relevant subset of `filesModified` itself and hands it to a small Haiku agent that
+  independently checks, directly against the vault repo, that each path is both tracked
+  (`git -C <vault> ls-files --error-unmatch`) and free of any staged/unstaged diff
+  (`git -C <vault> status --porcelain`) — i.e. actually landed in a commit there.
+- **A failed or incomplete vault commit is a failure, not a footnote.** In the per-task loop it is
+  fed through the same triage path as any other test failure — `RETRYABLE` gets another fix
+  attempt, `MAJOR` or attempt-exhaustion bails — so the task is never reported passed while a
+  `planning/` path it wrote sits uncommitted. In the docs stage, an incomplete vault commit flips
+  `docResult.success` to `false` and records `VAULT_COMMIT_INCOMPLETE` in `docResult.notes`.
+- This layers on top of, not a replacement for, the wrap-up recipe below (three hard-coded
+  bookkeeping paths — the spec file, `status.md`, `state.json`); the per-task loop instead covers
+  whatever arbitrary `planning/` paths the task itself wrote, through the same idiom.
 
 ---
 
