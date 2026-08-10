@@ -63,7 +63,7 @@ Engine: [`.claude/workflows/sdlc-flow.js`](../../.claude/workflows/sdlc-flow.js)
 | `<spec-slug>` | **Required.** The spec directory name — drives every `planning/<spec-slug>/…` path. | — |
 | `[range]` | Optional task selection as the 2nd positional token or via `--tasks`. Forms: `1-7`, `1,3,5`, `1-3,7`, `5`. | all tasks |
 | `--tasks <range>` | Equivalent to the positional range. | — |
-| `--auto-merge` | After a clean PASS, merge the PR, delete the branch (tear down the worktree too under `--worktree`), and run `mev emit-state --write` on the base. Only fires on a non-draft PR with a PASS verdict — never on bail. | off |
+| `--auto-merge` | After a clean PASS, merge the PR, delete the branch (tear down the worktree too under `--worktree`), and run `mev emit-state --write` on the base. Only fires on a non-draft PR with a PASS verdict and an independently-verified `prOutcome === 'created'` — never on bail. See [PR-stage outcome vocabulary](#pr-stage-outcome-vocabulary). | off |
 | `--no-pr` | Stop after wrap-up; leave the branch for a manual PR (or `/close-out --merge-branch`). | off (create PR) |
 | `--worktree` | Run in an isolated sparse-checkout worktree under `trees/<spec>-flow/` instead of a plain branch in the main tree. Needed for concurrent runs (e.g. `/sdlc-block` children). | off (plain branch) |
 | `--resume` | Re-attach the existing branch/worktree and skip tasks whose `state.json` status is `passed`. | off |
@@ -112,7 +112,7 @@ flowchart TD
 | **Review fix** | sonnet | Bounded fix for localized end-review findings. Escalates to `opus` on the final pass. A broad or structural finding bails instead (triage decision). |
 | **Docs patch** | sonnet | Surgical `--patch` of affected doc files. **Hard-gated on a PASS verdict.** Skipped entirely on bail. |
 | **Wrap-up** | sonnet | Updates `status.md` + appends the `log.md` entry + writes D18 Amendment-Log entries — all **on the flow branch** (so they ride in the PR and merge atomically with the code). On a fully-done block, also flips `planning/state.json`'s block status to `"closed"` on the branch. It does **not** run `mev emit-state --write` in either mode (a worktree refuses it; a plain feature branch is not the base) — derived surfaces regenerate on the base when the branch merges via `/clean-worktree`, `/merge-train`, or `/close-out --merge-branch` ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md), [D51](../../planning/decisions/D51-sdlc-flow-branch-default.md)). |
-| **PR** | sonnet | Pushes the branch and runs `gh pr create --base <prBase>`. Builds the PR body from the on-disk (uncommitted) `state.json` (per-task summary, verdict, open items). Opens a **draft** PR on bail. Degrades gracefully when `gh` is absent — prints the branch name and the exact commands. |
+| **PR** | sonnet | Pushes the branch and runs `gh pr create --base <prBase>`. Builds the PR body from the on-disk (uncommitted) `state.json` (per-task summary, verdict, open items). Opens a **draft** PR on bail. Degrades gracefully when `gh` is absent — prints the branch name and the exact commands. Reports one of three `prOutcome` values (`'created'`/`'impossible'`/`'failed'`), which the engine then independently re-verifies via its own `gh pr view` rather than trusting on faith — see [PR-stage outcome vocabulary](#pr-stage-outcome-vocabulary). |
 
 ### Per-task retry loop
 
@@ -125,6 +125,42 @@ escalates to `opus`. Exhausting the attempt cap also bails.
 `end-review →` **PASS: docs** or **FAIL/PARTIAL (localized): review fix → end-review** (up to
 **2 fix passes**, `opus` on the last). A broad or structural finding from triage skips the fix loop
 and bails straight to wrap-up (draft PR).
+
+---
+
+## PR-stage outcome vocabulary
+
+The PR stage used to return a single self-reported `created` boolean, which the engine trusted on
+faith. A run that finished every task and passed end-review could still come back
+`{ pr: null, merged: false }` with no non-zero signal, indistinguishable from a genuinely
+non-PR run — eight occurrences across four repos before the fix. See
+`planning/decisions/` for the ADR covering this outcome vocabulary.
+
+The PR-create agent now reports one of three `prOutcome` values, and the engine **independently
+re-verifies** the claim with its own `gh pr view` on the branch (reading its exit code, not
+swallowing it with `|| true`) rather than trusting the self-report alone:
+
+| `prOutcome` | Meaning | Is this a failure? |
+|---|---|---|
+| `'impossible'` | No `gh` CLI, or no git remote (`GH_ABSENT` / `NO_REMOTE`). The branch is left intact with manual instructions printed. | **No** — this is the deliberate standalone-repo degradation path. It must keep working with no PR, no failure. |
+| `'failed'` | A PR was attempted — `git push` or `gh pr create` errored, or the engine's own `gh pr view` re-verification could not confirm a PR exists — and the branch is left intact for a manual PR. | **Yes.** Surfaced via `stranded: true` in the return (see below). |
+| `'created'` | A PR exists and the engine independently confirmed it via `gh pr view`, not just the agent's self-report. | No. |
+
+The return object exposes this as:
+
+- **`prOutcome`** — one of the three values above.
+- **`pr`** — `{ url, number, draft }` when `prOutcome === 'created'`; `null` otherwise (unchanged
+  shape, now driven by a verified outcome instead of a trusted boolean).
+- **`merged`** — `true` only when `--auto-merge` ran and the merge succeeded. The `--auto-merge`
+  guard now checks `prOutcome === 'created'` (not the old `created` flag) alongside `!bailed`,
+  `finalVerdict === 'PASS'`, and `!draft`.
+- **`stranded`** — `true` iff `prOutcome === 'failed'`. This is the one field a chain driver
+  (`/orchestrate` step 7) must check alongside `bailed`: a `stranded: true` run did not bail, but
+  its work is not safely landed anywhere the next block can build on, and the chain must not treat
+  it as a clean completion. `prOutcome === 'impossible'` is deliberately **not** `stranded`.
+
+A bailed run is unaffected by this vocabulary — it still produces a **draft** PR (when possible)
+and is never merged, regardless of `prOutcome`.
 
 ---
 

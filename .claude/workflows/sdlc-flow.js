@@ -361,17 +361,43 @@ const WRAPUP_SCHEMA = {
   }
 }
 
+// Outcome vocabulary (replaces the old single `created` boolean, which collapsed three distinct
+// cases into one flag the engine trusted blindly — see planning/decisions/ for the PR-stage
+// outcome vocabulary ADR):
+//   'impossible' — no gh CLI or no git remote in this environment. Correct, expected, MUST NOT
+//                  fail the run. Set only when step 2's GH_ABSENT/NO_REMOTE check fires.
+//   'failed'     — a PR was genuinely attempted (push and/or `gh pr create`) and it errored out.
+//                  Previously indistinguishable from 'impossible'; this is one of the two bugs.
+//   'created'    — the PR exists. The engine does NOT take this on faith — see the dedicated
+//                  PR_VERIFY_SCHEMA call below, which independently confirms it via `gh pr view`
+//                  rather than trusting this self-report (the other bug: the old `|| true` on the
+//                  lookup made a failed lookup indistinguishable from an absent PR).
 const PR_SCHEMA = {
   type: 'object',
-  required: ['created'],
+  required: ['outcome'],
   properties: {
-    created:   { type: 'boolean', description: 'true if a PR was created (or gh reported one already exists)' },
+    outcome:   { type: 'string', enum: ['created', 'impossible', 'failed'], description: "'impossible' = no gh/no remote (do NOT fail); 'failed' = push or gh pr create was attempted and errored; 'created' = PR exists (still independently re-verified by the engine, not trusted on its own)" },
     url:       { type: 'string', description: 'the PR URL, or "" if not created' },
     number:    { type: 'integer', description: 'the PR number, or 0 if not created' },
     draft:     { type: 'boolean', description: 'true if a draft PR (a bail handoff)' },
     pushed:    { type: 'boolean', description: 'true if the branch was pushed to the remote' },
     ghPresent: { type: 'boolean', description: 'true if the gh CLI was available' },
-    notes:     { type: 'string', description: 'when not created: the branch name + manual instructions printed for the user' }
+    notes:     { type: 'string', description: "when outcome != 'created': for 'impossible', the branch name + manual instructions; for 'failed', the actual push/gh error text so the operator can act on it" }
+  }
+}
+
+// Independent verification of PR_SCHEMA's self-reported `outcome` — a SEPARATE agent turn, so the
+// engine is not trusting the pr-create agent's own account of its own work. Reads the raw exit
+// code of `gh pr view` on the branch itself; the engine (not the agent) decides `created` from
+// that code, closing the `|| true` hole that made a failed lookup indistinguishable from "no PR".
+const PR_VERIFY_SCHEMA = {
+  type: 'object',
+  required: ['exitCode'],
+  properties: {
+    exitCode: { type: 'integer', description: 'the exact process exit code `gh pr view --json number,url,state --head <branch>` returned — 0 only if a PR was actually found' },
+    url:      { type: 'string', description: 'the PR URL if exitCode == 0, else ""' },
+    number:   { type: 'integer', description: 'the PR number if exitCode == 0, else 0' },
+    state:    { type: 'string', description: 'OPEN/MERGED/CLOSED if exitCode == 0, else ""' }
   }
 }
 
@@ -420,6 +446,7 @@ const MODEL = {
   docs:          'sonnet',   // surgical doc patches, gated on PASS
   wrapup:        'sonnet',   // human-facing status/log prose + the D18 amendment log (judgment)
   pr:            'sonnet',   // push + gh pr create with a handoff body; degrades if gh absent
+  prVerify:      'haiku',    // ONE `gh pr view` call + report its exit code — mechanical, not judgment
   merge:         'sonnet',   // --auto-merge: merge the PR + clean up + emit-state on the base
   stateWriter:   'haiku',    // stamps timestamps, writes state.json + worklog.md, commits
 }
@@ -2134,9 +2161,13 @@ if (wrapupResult && wrapupResult.stateWritten) {
 // PR creation (the terminal step) — default: open a PR and STOP.
 //   --no-pr → skip. On bail → DRAFT PR. --auto-merge → merge + clean (only on success).
 // ----------------------------------------------------------------
+const isDraft = bailed
 let prInfo = null
+let prVerify = null
+// Default outcome for the --no-pr path: nothing was attempted, so nothing failed either — this
+// is an intentional skip, not a stranded branch. See the `stranded` field on the final return.
+let prOutcome = 'impossible'
 if (!noPr) {
-  const isDraft = bailed
   const handoffTitle = bailed
     ? `[BLOCKED] ${blockId}: ${bailReason.slice(0, 60)}`
     : `${blockId}: ${passedTasks.length} task(s), review ${finalVerdict}`
@@ -2150,8 +2181,8 @@ the handoff — build it from the committed run-state.
    cd ${worktreePath} && command -v gh >/dev/null 2>&1 && echo "GH_PRESENT" || echo "GH_ABSENT"
    cd ${worktreePath} && git remote -v | head -1 || echo "NO_REMOTE"
 
-2. If GH_ABSENT or NO_REMOTE → do NOT fail. Set created=false, ghPresent=(GH_PRESENT?), pushed=false, and
-   in notes print the branch name "${branchName}" and manual instructions:
+2. If GH_ABSENT or NO_REMOTE → do NOT fail. Set outcome="impossible", ghPresent=(GH_PRESENT?),
+   pushed=false, and in notes print the branch name "${branchName}" and manual instructions:
    "Branch ${branchName} is ready. Push it and open a PR manually: git push -u origin ${branchName} && gh pr create --base ${prBase} --head ${branchName}". Then return.
 
 3. Read the run-state for the body:
@@ -2159,7 +2190,8 @@ the handoff — build it from the committed run-state.
 
 4. Push the branch:
    cd ${worktreePath} && git push -u origin ${branchName}
-   Set pushed=true on success.
+   If this command errors: set outcome="failed", pushed=false, ghPresent=true, put the ACTUAL error
+   text in notes, and return — do not attempt step 6. Otherwise set pushed=true and continue.
 
 5. Build the PR body (markdown) from the run-state:
    ## What & why
@@ -2183,18 +2215,44 @@ EOF
 <the body you built>
 EOF
 )"
-   Capture the printed PR URL. Run: cd ${worktreePath} && gh pr view --json number,url 2>/dev/null || true
-   If gh reports a PR already exists for this branch, treat created=true and capture its url/number.
+   If this errors and the error text does NOT say a PR already exists for this branch: set
+   outcome="failed", put the actual error text in notes, and return.
+   Capture the printed PR URL. Run: cd ${worktreePath} && gh pr view --json number,url 2>/dev/null
+   If create succeeded, OR gh reports a PR already exists for this branch (from the create error or
+   the view above), set outcome="created" and capture url/number from whichever call returned them.
 
-Return via StructuredOutput: created, url, number, draft=${isDraft}, pushed, ghPresent, notes.
+Return via StructuredOutput: outcome, url, number, draft=${isDraft}, pushed, ghPresent, notes.
 `, withModel({ label: 'pr-create', schema: PR_SCHEMA, phase: 'Wrap-up' }, MODEL.pr))
 
-  if (prInfo?.created) {
-    state.pr = { url: prInfo.url || null, number: prInfo.number || null }
-    log(`${prInfo.draft ? 'Draft PR' : 'PR'} opened: ${prInfo.url || '(see gh)'}${prInfo.number ? ` (#${prInfo.number})` : ''}`)
-    await writeFlowState(`pr #${prInfo.number || '?'}`, `## PR\n${prInfo.draft ? 'Draft ' : ''}${prInfo.url || ''}`, { cwd: worktreePath })
+  // Independent verification — a SEPARATE agent turn, run whenever a push/create was actually
+  // attempted (outcome != 'impossible'), regardless of what the create agent itself claimed. This
+  // is what catches case 3 (a PR that exists but was under-reported as failed) as well as
+  // confirming case 2 (a genuine failure) and any 'created' claim — the engine never takes the
+  // create agent's word for its own work.
+  if (prInfo?.outcome && prInfo.outcome !== 'impossible') {
+    prVerify = await tracedAgent(`${W}
+You independently verify whether a PR exists for a branch. Do NOT trust any other agent's report of
+whether a PR was created — only trust what this command actually returns.
+   cd ${worktreePath} && gh pr view --json number,url,state --head ${branchName} 2>&1; echo "EXIT:$?"
+Read the literal number after "EXIT:" as the process exit code — do not infer success from output text.
+If exitCode == 0, parse number/url/state from the JSON printed above it. If exitCode != 0, set
+url="", number=0, state="".
+Return via StructuredOutput: exitCode, url, number, state.
+`, withModel({ label: 'pr-verify', schema: PR_VERIFY_SCHEMA, phase: 'Wrap-up' }, MODEL.prVerify))
+  }
+
+  const verifiedPr = (prVerify && prVerify.exitCode === 0 && prVerify.number) ? prVerify : null
+  if (verifiedPr) {
+    prOutcome = 'created'
+    state.pr = { url: verifiedPr.url || prInfo?.url || null, number: verifiedPr.number || prInfo?.number || null }
+    log(`${isDraft ? 'Draft PR' : 'PR'} opened: ${state.pr.url || '(see gh)'}${state.pr.number ? ` (#${state.pr.number})` : ''}`)
+    await writeFlowState(`pr #${state.pr.number || '?'}`, `## PR\n${isDraft ? 'Draft ' : ''}${state.pr.url || ''}`, { cwd: worktreePath })
+  } else if (prInfo?.outcome === 'impossible') {
+    prOutcome = 'impossible'
+    log(`PR not possible in this environment — ${prInfo?.notes || 'gh unavailable; branch is ready for a manual PR.'}`)
   } else {
-    log(`PR not created — ${prInfo?.notes || 'gh unavailable; branch is ready for a manual PR.'}`)
+    prOutcome = 'failed'
+    log(`PR creation failed or could not be independently verified — ${prInfo?.notes || 'no usable outcome reported'}. Branch ${branchName} carries the work; open a PR manually: git push -u origin ${branchName} && gh pr create --base ${prBase} --head ${branchName}`)
   }
 } else {
   log(`--no-pr — stopping after wrap-up. Branch ${branchName} carries all commits; open a PR manually when ready.`)
@@ -2204,7 +2262,7 @@ Return via StructuredOutput: created, url, number, draft=${isDraft}, pushed, ghP
 // --auto-merge: merge the PR + clean up + regenerate derived surfaces. ONLY on a clean success (PASS, not bailed).
 // ----------------------------------------------------------------
 let mergeInfo = null
-if (autoMerge && !bailed && finalVerdict === 'PASS' && prInfo?.created && !prInfo.draft) {
+if (autoMerge && !bailed && finalVerdict === 'PASS' && prOutcome === 'created' && !isDraft) {
   log(`--auto-merge — merging the PR and cleaning up (${useWorktree ? 'worktree' : 'branch'} mode)...`)
   mergeInfo = await tracedAgent(`
 You complete an --auto-merge for an /sdlc-flow run. Merge the PR, ${useWorktree
@@ -2213,11 +2271,11 @@ You complete an --auto-merge for an /sdlc-flow run. Merge the PR, ${useWorktree
 surfaces on the base. Be careful and report honestly.
 
 Branch:   ${branchName}
-${useWorktree ? `Worktree: ${worktreePath}\n` : ''}PR:       ${prInfo.number ? '#' + prInfo.number : prInfo.url || '(look it up)'}
+${useWorktree ? `Worktree: ${worktreePath}\n` : ''}PR:       ${state.pr?.number ? '#' + state.pr.number : state.pr?.url || '(look it up)'}
 Base:     ${prBase}
 
 1. Merge the PR via gh (delete the remote branch as part of the merge):
-   gh pr merge ${prInfo.number || prInfo.url} --merge --delete-branch
+   gh pr merge ${state.pr?.number || state.pr?.url} --merge --delete-branch
    If gh errors (not mergeable, checks pending), STOP — do NOT clean up. Report merged=false + the error in notes.
 
 2. Bring local ${prBase} up to date (this also moves the working tree onto ${prBase}):
@@ -2257,13 +2315,22 @@ Return via StructuredOutput: merged, worktreeRemoved, branchDeleted, emitStateRa
     log(`Auto-merge did not complete: ${mergeInfo?.notes || 'unknown'}. ${useWorktree ? `Worktree left intact at ${worktreePath}.` : `Branch ${branchName} left intact.`}`)
   }
 } else if (autoMerge) {
-  log(`--auto-merge skipped: ${bailed ? 'run bailed' : finalVerdict !== 'PASS' ? `verdict ${finalVerdict}` : 'no PR created'}. ${useWorktree ? 'Worktree' : 'Branch'} left intact for review.`)
+  log(`--auto-merge skipped: ${bailed ? 'run bailed' : finalVerdict !== 'PASS' ? `verdict ${finalVerdict}` : `no PR created (outcome: ${prOutcome})`}. ${useWorktree ? 'Worktree' : 'Branch'} left intact for review.`)
 }
+
+// `stranded`: the one checkable signal a caller needs to tell "clean completion" apart from "the
+// PR stage was attempted and failed, or could not be independently verified" — the case that used
+// to come back indistinguishable from a completed run (pr: null, merged: false, no non-zero
+// signal). `prOutcome === 'impossible'` (no gh / no remote) is deliberately NOT stranded — that is
+// the degradation path that must keep working in a standalone repo. `bailed` runs are already
+// surfaced via the `bailed` field, so `stranded` here is specifically the un-bailed, silently-
+// incomplete case `.claude/commands/orchestrate.md` step 7 must stop the chain on.
+const stranded = prOutcome === 'failed'
 
 // ----------------------------------------------------------------
 const tokensBlock = buildTokensBlock()
 log(`Token roll-up: ${tokensBlock.total.inTokEst} inTokEst${tokensBlock.total.outTok ? ` | ${tokensBlock.total.outTok} outTok` : ''} across ${tokensBlock.stages.length} stage(s) — persisted in ${stateFile}.`)
-log(`/sdlc-flow complete. Verdict: ${finalVerdict} | tasks passed: ${passedTasks.length}/${taskList.length}${bailed ? ` | BAILED: ${bailReason}` : ''}${prInfo?.created ? ` | PR: ${prInfo.url || prInfo.number}` : ''}`)
+log(`/sdlc-flow complete. Verdict: ${finalVerdict} | tasks passed: ${passedTasks.length}/${taskList.length}${bailed ? ` | BAILED: ${bailReason}` : ''}${prOutcome === 'created' ? ` | PR: ${state.pr?.url || state.pr?.number}` : ''}${stranded ? ' | STRANDED: PR stage failed or unverified — branch left intact, chain should stop.' : ''}`)
 if (!noPr && !autoMerge) log('Next: run /close-out to verify coverage + patch docs before handing off.')
 
 return {
@@ -2278,8 +2345,17 @@ return {
   tasksPassed: passedTasks,
   review: state.review,
   docs: state.docs,
-  pr: prInfo?.created ? { url: prInfo.url, number: prInfo.number, draft: prInfo.draft } : null,
+  // prOutcome: 'created' | 'impossible' | 'failed' — see PR_SCHEMA above for the vocabulary.
+  // 'impossible' (no gh / no remote) is expected and NOT a failure. 'failed' means a PR was
+  // attempted and either errored or could not be independently verified via `gh pr view` — the
+  // engine no longer takes the pr-create agent's self-report on faith.
+  prOutcome,
+  pr: prOutcome === 'created' ? { url: state.pr?.url || null, number: state.pr?.number || null, draft: isDraft } : null,
   merged: mergeInfo?.merged || false,
+  // stranded: true iff prOutcome === 'failed' — the one field a chain driver (`/orchestrate` step 7)
+  // must check alongside `bailed` before treating this run as a clean completion. See the comment
+  // where `stranded` is computed above.
+  stranded,
   stateFile,
   worklogFile,
   tokens: tokensBlock,
