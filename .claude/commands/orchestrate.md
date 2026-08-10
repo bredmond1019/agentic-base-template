@@ -300,7 +300,7 @@ every other repo's `Cargo.toml`. For each one found:
 
 ```
 git -C <consumer> status --porcelain          # non-empty → SKIP, report SKIPPED-DIRTY
-CARGO_TARGET_DIR=$(mktemp -d) cargo test --no-run --locked \
+CARGO_TARGET_DIR=$(mktemp -d) cargo nextest run --no-run --locked \
     --manifest-path <consumer>/Cargo.toml
 ```
 
@@ -313,14 +313,27 @@ Each flag earns its place — do not simplify this away:
   interfering.
 - **dirty check first** — never blame your shared-crate change for someone else's half-written
   code; a dirty consumer is not evidence of anything.
-- **`cargo test --no-run`, never `cargo build`** — the entire `E0063` class (missing struct fields)
-  is invisible to `build`; only test code constructs the affected literals.
+- **`cargo nextest run --no-run`, never `cargo build`, never plain `cargo test`** — the entire
+  `E0063` class (missing struct fields) is invisible to `build`; only test code constructs the
+  affected literals, so a compile-only test build is still required. Plain `cargo test` is
+  **denied fleet-wide by a `PreToolUse` hook** — see `core/mev/.claude/settings.json`, which
+  matches `cargo\s+test(\s|$)` on any Bash command and returns `permissionDecision: deny` unless
+  the command contains `cargo nextest` or is prefixed `NEXTEST_POLICY_OVERRIDE=1`.
+  `cargo nextest run --no-run` compiles the same test targets and is not denied.
 
 **Report only. Never fix another lane's repo** and never run this against a repo with an active
-worktree lane of its own — a plain `cargo build`/`cargo test` in a repo mid-chain can mutate its
-`Cargo.lock` out from under that lane. If a consumer fails, add it to the final report as a new
+worktree lane of its own — a plain `cargo build`/`cargo nextest run` in a repo mid-chain can mutate
+its `Cargo.lock` out from under that lane. If a consumer fails, add it to the final report as a new
 **BROKEN DOWNSTREAM** line (repo, error class, one-line fix estimate) — do not open a fix block for
 it yourself; that is the operator's call, same as a `HELD` block.
+
+**Concurrent cargo runs in sibling repos can contaminate captured output.** Observed once during
+the audit: a `mev` build capture returned `engine-rs`'s test summary — another lane's build was
+writing to the terminal or a shared capture at the same time. A surprising result (an unexpected
+PASS or an unexpected failure class) from this step is not trustworthy on its own when other lanes
+are active concurrently. Mitigation: if the result looks surprising, re-run the capture in
+isolation (no other lane's cargo command in flight) before reporting it as **BROKEN DOWNSTREAM** or
+as a clean pass.
 
 ### 10. Re-check the next block's dependencies, then launch it
 Cheap, and it catches anything that changed outside the chain. Then return to step 6.
@@ -328,6 +341,13 @@ Cheap, and it catches anything that changed outside the chain. Then return to st
 ### 11. Repeat until the chain is done or stopped.
 
 ---
+
+## Traps
+
+- `rg`/`find` are symlink-blind and every `planning/` is a symlink into a `_planning/` vault — pass
+  `-L`. At the brain root every sub-repo is also **gitignored**, so `-L` alone still skips them all
+  — pass `-uu` too. A sweep reporting "clean" without both is not trustworthy. See
+  `begin-orchestration.md`'s Traps section for the same rule stated for that command.
 
 ## Final report
 
