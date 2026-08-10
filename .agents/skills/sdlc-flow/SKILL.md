@@ -292,8 +292,12 @@ For `attempt = 1..3` (stop early on pass or bail):
      repository on disk. The check classifies each path as `VAULT_OK` (committed under this repo's own vault),
      `BRAIN_ROOT_OK` (not in this repo's vault at all, but committed under the brain root — found by walking up to
      the nearest ancestor containing `brain.toml`), or `UNCOMMITTED` (a real failure — exists nowhere, or exists but
-     isn't committed). Only `UNCOMMITTED` fails; `BRAIN_ROOT_OK` is a legitimate cross-repo write. A vault-commit
-     failure surfaces exactly like a test failure: the task is never marked passed on this attempt; triage
+     isn't committed). **The classification runs inside a single deterministic Bash script the agent executes
+     verbatim and transcribes** — not agent-driven per-path branching; a cheap model given the branching logic as
+     prose reliably follows only the first branch and silently skips the brain-root fallback (observed live: Haiku
+     checked only the vault path for every path and never attempted the fallback, misclassifying legitimate
+     brain-root writes as failures). Only `UNCOMMITTED` fails; `BRAIN_ROOT_OK` is a legitimate cross-repo write. A
+     vault-commit failure surfaces exactly like a test failure: the task is never marked passed on this attempt; triage
      decides whether to RETRYABLE (fix and try again, ≤3 times) or MAJOR (bail to a human right now).
 2. **Fast test.** Run the checks resolved in Phase 2 step 4/7 for this task: if this task declared its
    own `validation_commands`, run ONLY those; otherwise run the gating-only subset when `testDepth ==

@@ -332,7 +332,12 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
      of three buckets: `VAULT_OK` (exists and is committed under this repo's own vault path), `BRAIN_ROOT_OK`
      (does not exist in this repo's vault at all, but exists and is committed under the brain root — found by
      walking up from the vault path to the nearest ancestor containing `brain.toml`), or `UNCOMMITTED` (exists
-     nowhere, or exists but is not committed wherever it does exist). Only `UNCOMMITTED` paths are a failure;
+     nowhere, or exists but is not committed wherever it does exist). **The classification itself runs inside a
+     single deterministic Bash script the agent executes verbatim and transcribes** — not agent-driven per-path
+     branching. A cheap model given the branching logic as prose reliably follows only the first branch and
+     silently skips the brain-root fallback for every path that isn't in this repo's own vault (observed live:
+     Haiku checked the vault path for all 6 paths and never attempted the fallback for the 4 that weren't there,
+     misclassifying legitimate brain-root writes as failures). Only `UNCOMMITTED` paths are a failure;
      `BRAIN_ROOT_OK` paths are a legitimate cross-repo write, not a vault-commit defect. A vault-commit failure
      surfaces exactly like a test failure: the task is never marked passed on this attempt; triage decides whether
      to RETRYABLE (fix and try again, ≤3 times) or MAJOR (bail to a human right now).
