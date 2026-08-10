@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [sdlc-task, lean engine, implement test commit, worktree, patch ladder, D38, planning vault, D46]
-related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch-ladder, D56-sdlc-task-authoritative-reconcile, D46-tasks-json-propagation-and-state-pointer]
+related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch-ladder, D56-sdlc-task-authoritative-reconcile, D46-tasks-json-propagation-and-state-pointer, sdlc-run-state-data-contract]
 ---
 
 # `/sdlc-task` — lean single-unit SDLC engine
@@ -160,7 +160,11 @@ reconcile runs, so a failing reconcile is never retried against a fix attempt. I
 
 Anything that reads `sdlc-task-state.json`'s `status` field (dashboards, `/status`,
 `mev emit-state`) must treat `"reconcile_failed"` as a distinct non-terminal-success state — never
-folded into `"done"` or an ordinary per-task `"bailed"`.
+folded into `"done"` or an ordinary per-task `"bailed"`. For the complete, enumerable vocabulary of
+every terminal `status` value the SDLC engines write (not just this one), what each means, and
+what a consumer must not fold it into, see
+[`docs/data-contract.md`](../data-contract.md) — that page, not this paragraph, is the surface a
+Rust or Python consumer should pin against.
 
 See [D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md) for the full design
 rationale, the rejected alternatives, and the measured cost tables.

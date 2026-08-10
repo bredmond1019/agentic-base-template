@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [docs, documentation, navigation, architecture, workflows, harness]
-related: [base-template-architecture, using-the-template, harness-json, base-template-workflows-index, base-template-ci]
+related: [base-template-architecture, using-the-template, harness-json, base-template-workflows-index, base-template-ci, sdlc-run-state-data-contract]
 ---
 
 # docs/ — base-template documentation
@@ -24,6 +24,7 @@ to understand how to use the template, not when you want to know how it is struc
 | [rust-sdlc-iteration-speed.md](rust-sdlc-iteration-speed.md) | Why agent-driven Rust pipelines get slow (linking, not testing) and the four measured fixes — one integration-test binary, nextest, no sccache, `[profile.dev]` — plus per-task `validation_commands` | An SDLC run in a Rust repo is taking tens of minutes, or you are setting up a new Rust project |
 | [ci.md](ci.md) | Hosted CI for public repos — the four reusable gate workflows, how a repo opts in, the `actionlint` → `act` → push loop, and the Deviations table | You are wiring up or debugging a public repo's `.github/workflows/ci.yml` |
 | [workflows/](workflows/index.md) | The SDLC engines (`/sdlc-run`, `/sdlc-task`, `/sdlc-block`, `/sdlc-flow`) + the manual command lifecycle — parameters, flags, mermaid flow diagrams, gates, token usage | You want to understand or run any SDLC pipeline |
+| [data-contract.md](data-contract.md) | The complete, enumerable vocabulary of terminal `status` values the SDLC engines write into their committed run-state files (`done`, `blocked`, `reconcile_failed`) — what each means and what a consumer must not fold it into | You are building or auditing a consumer (dashboard, `mev emit-state`, `bastion` status/serve surface) that reads an SDLC run-state file's `status` field |
 
 ## SDLC workflow reference
 
