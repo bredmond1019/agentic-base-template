@@ -1701,13 +1701,28 @@ Target:
 
 2. Mark the passed tasks (${passedTasks.join(', ') || 'none'}) done in ${specFile} (Edit tool): add the
    engine's task-done marker to each passed task's line if the spec uses one (e.g. a leading "[done]"),
-   mirroring how completed tasks are already marked in that file. If the spec has no such marker
-   convention, leave it and set tasksMarked=false.
+   mirroring how completed tasks are already marked in that file. NEVER remove or alter a marker
+   already present from a prior run — this run only ADDS markers for ${passedTasks.join(', ') || 'none'}.
+   If the spec has no such marker convention, leave it and set tasksMarked=false.
+   - After marking, COUNT the CUMULATIVE total: how many of the spec's tasks now carry a done marker
+     (this run's + every prior run's combined), out of the spec's total task count (${allTasks.length}).
+     This run's own tally — ${passedTasks.length} of ${taskList.length} selected this run — is only a
+     SLICE. Never use that slice alone as "how many tasks are done" anywhere you write a count; use the
+     cumulative count you just derived from the file.
 
-3. Update planning/status.md (Edit tool, surgical):
+3. Update planning/status.md (Edit tool, surgical). "Current focus" is APPEND-ONLY narrative — never
+   delete or rewrite any existing line under it; a prior block's narrative must survive this edit
+   VERBATIM. The one exception: if an existing line already refers to THIS spec ("${blockId}") by name
+   (e.g. from an earlier partial run), you may replace only that one line — never the whole section —
+   with the update below.
    ${blockDone
-     ? `- The full spec "${blockId}" is done — flip its Status to "Done" in the Progress Table and update "Current focus".`
-     : `- Keep the spec "In progress" (a task subset ran). Point "Current focus" at the next task if helpful.`}
+     ? `- The full spec "${blockId}" is done — flip its Status to "Done" in the Progress Table.
+   - Add ONE new line under "Current focus" recording that "${blockId}" is done, citing the CUMULATIVE
+     task count you derived in step 2 (e.g. "${blockId}: done (N of ${allTasks.length} tasks)") — do
+     not touch any other existing line.`
+     : `- Keep the spec "In progress" (a task subset ran). Add ONE new line under "Current focus"
+   pointing at the next task if helpful, citing the cumulative count from step 2 — do not touch any
+   other existing line.`}
    - Update "Last updated" — run: date +%Y-%m-%d
 
 4. Flip the block's AUTHORED status in planning/state.json (skip this entire step silently if the repo
@@ -1735,7 +1750,7 @@ for track in data.get('tracks', []):
         break
 if found:
     with open(path, 'w') as fh:
-        json.dump(data, fh, indent=2)
+        json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write(chr(10))
     print('FLIPPED:' + bid)
 else:
@@ -1788,7 +1803,7 @@ EOF
 Return via StructuredOutput: statusUpdated, tasksMarked, blockStatusFlipped, emitStateRan, commitHash, notes.
 `, withModel({ label: 'bookkeep', schema: BOOKKEEP_SCHEMA }, MODEL.bookkeep))
   if (bookkeepResult?.blockStatusFlipped) {
-    log(`state.json: block "${bookkeepResult.blockStatusFlipped}" → closed${bookkeepResult.emitStateRan ? '; derived surfaces regenerated (mev emit-state --write).' : useWorktree ? '; derived surfaces regenerate on merge (/clean-worktree or /merge-train).' : '.'}`)
+    log(`state.json: block "${bookkeepResult.blockStatusFlipped}" → closed${bookkeepResult.emitStateRan ? '; derived surfaces (incl. focus.next) regenerated (mev emit-state --write).' : useWorktree ? '; focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree or /merge-train runs `mev emit-state --write` on merge.' : '.'}`)
   } else if (blockDone) {
     log(`Bookkeep: no state.json block flipped (${bookkeepResult?.notes || 'no state.json, or block not found'}).`)
   }

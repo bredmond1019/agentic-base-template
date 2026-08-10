@@ -1877,7 +1877,7 @@ for track in data.get('tracks', []):
         break
 if found:
     with open(path, 'w') as fh:
-        json.dump(data, fh, indent=2)
+        json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write(chr(10))
     print('FLIPPED:' + bid)
 else:

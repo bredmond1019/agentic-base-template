@@ -2170,10 +2170,16 @@ Target:
    cd ${worktreePath} && head -40 log.md
    cd ${worktreePath} && git log --oneline -20
 
-2. Update planning/status.md (Edit tool, surgical):
+2. Update planning/status.md (Edit tool, surgical). "Current focus" is APPEND-ONLY narrative — never
+   delete or rewrite any existing line under it; a prior block's narrative must survive this edit
+   VERBATIM. The one exception: if an existing line already refers to THIS spec ("${blockId}") by name
+   (e.g. from an earlier partial run), you may replace only that one line — never the whole section —
+   with the update below.
    ${bailed
-     ? `- This run BAILED. Keep the spec status "In progress" (or "Blocked" if appropriate). Set "Current focus" to: "${blockId} — BLOCKED: ${bailReason}".`
-     : `- ${selectedTasks ? `Tasks ${taskList.join(', ')} of "${blockId}" are done.` : `Full spec "${blockId}" is done.`} ${selectedTasks ? 'If tasks remain, keep status "In progress" and point Current focus at the next task; if this was the last, flip to "Done".' : 'Flip its Status to "Done".'} Update "Current focus" accordingly.`}
+     ? `- This run BAILED. Keep the spec status "In progress" (or "Blocked" if appropriate). Add ONE
+       new line under "Current focus" (or replace this spec's own prior line, per the exception
+       above): "${blockId} — BLOCKED: ${bailReason}" — do not touch any other existing line.`
+     : `- ${selectedTasks ? `Tasks ${taskList.join(', ')} of "${blockId}" are done.` : `Full spec "${blockId}" is done.`} ${selectedTasks ? 'If tasks remain, keep status "In progress" and add a new line under Current focus pointing at the next task; if this was the last, flip to "Done".' : 'Flip its Status to "Done".'} Add ONE new line under "Current focus" recording this outcome (or replace this spec's own prior line, per the exception above) — do not touch any other existing line.`}
    - Update "Last updated" — run: date +%Y-%m-%d
 
 2b. Flip the block's AUTHORED status in planning/state.json (skip this entire step silently if the
@@ -2207,7 +2213,7 @@ for track in data.get('tracks', []):
         break
 if found:
     with open(path, 'w') as fh:
-        json.dump(data, fh, indent=2)
+        json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write(chr(10))
     print('FLIPPED:' + bid)
 else:
@@ -2287,8 +2293,8 @@ stateWritten (true only if you performed the additional state write above), note
 `, withModel({ label: 'wrap-up', schema: WRAPUP_SCHEMA, phase: 'Wrap-up' }, MODEL.wrapup))
 
 if (wrapupResult?.amendments?.length) log(`Spec amendments (D18): ${wrapupResult.amendments.length} line(s) appended.`)
-if (wrapupResult?.blockStatusFlipped) log(`state.json: block "${wrapupResult.blockStatusFlipped}" → closed on the branch; derived surfaces regenerate on merge (/clean-worktree, /merge-train, or /close-out --merge-branch).`)
-log(`Derived surfaces (in-place, this wrap-up): ${wrapupResult?.emitStateRan ? 'regenerated (mev emit-state --write).' : useWorktree ? 'skipped — worktree mode; regenerate on merge.' : 'skipped (mev/brain.toml absent).'}`)
+if (wrapupResult?.blockStatusFlipped) log(`state.json: block "${wrapupResult.blockStatusFlipped}" → closed on the branch${wrapupResult?.emitStateRan ? '; derived surfaces (incl. focus.next) regenerated (mev emit-state --write).' : '; focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree, /merge-train, or /close-out --merge-branch runs `mev emit-state --write` on merge.'}`)
+log(`Derived surfaces (in-place, this wrap-up): ${wrapupResult?.emitStateRan ? 'regenerated (mev emit-state --write).' : useWorktree ? 'skipped — worktree mode; focus.next stays stale until regenerated on merge.' : 'skipped (mev/brain.toml absent).'}`)
 
 // Final state write (status reflects the terminal state; PR fields filled after creation).
 // state.status was already set by buildWrapupStatePayload() above, before the agent call, so the
