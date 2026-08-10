@@ -137,6 +137,26 @@ contract — it uses `sdlc-flow-state.json` + `worklog.md` instead (see
    failing check forces `FAIL`/`PARTIAL` no matter how clean the code reading was. A sloppy test report
    can never ship a bug.
 
+### `/close-out`'s diff base is resolved, never hard-coded
+
+`/close-out` — the manual quality-close command every engine points to on completion (`sdlc-flow.js`,
+`sdlc-run.js`: "Next: run `/close-out` to verify coverage + patch docs before handing off") — scopes
+its universal emoji gate and its source-file coverage sweep to the **same resolved base**, never the
+literal string `main`. A hard-coded `main..HEAD` is empty by definition whenever `HEAD` **is** `main`
+— the default state after an in-place `/sdlc-task` run, a plain-branch `/sdlc-flow` run (D51), or
+right after `--auto-merge`/`--merge-branch` land — which used to report a vacuous "OK" over zero
+files instead of "nothing considered."
+
+`/close-out` now resolves the base once, before Step 1, from real evidence: an explicit `--base
+<ref>`, else `planning/harness.json`'s `flow.prBase`, else `origin/HEAD`, else a local `main` or
+`master`. If the current branch **is** the resolved base, it falls back to the enclosing merge
+commit's first parent (`HEAD^1..HEAD`) when one exists (e.g. right after `--auto-merge`); with no
+merge commit to scope from, it **refuses to run** rather than proceed with an empty file list. This
+mirrors the pattern the engines already use for their own diff scoping — `sdlc-task.js`'s committed
+`baseSha`, `sdlc-flow.js`'s configured `${prBase}`, `sdlc-block.js`'s three-dot `${baseRef}...HEAD` —
+`/close-out` is the one caller-facing command that previously had none of that context available to
+it. Full flag reference: the `/close-out` entry in [`.claude/commands/README.md`](../../.claude/commands/README.md).
+
 ### Validation is policy, not mechanism
 No engine ships stack defaults. Each project declares its validation commands (and optional UI-test
 stage) in [`planning/harness.json`](../harness-json.md). The test/review stages run exactly those

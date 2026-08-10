@@ -91,7 +91,7 @@ predictably-named output file.
 | Session Start | `/next` | Briefing on what's up next, blocked, and recommend next action based on goals | chat only |
 | Session End | `/wrap-up [note]` | Log work + commit; clean close without a handoff file | status.md, log.md, git |
 | Session End | `/handoff [note]` | Write handoff + log work + commit; hands off to a fresh session | `planning/handoff.md`, status.md, log.md, git |
-| Session End | `/close-out [--skip-coverage] [--clean-worktree] [note]` | Verify coverage → patch docs → clean worktree (opt.) → hand off; the quality-close pipeline | status.md, log.md, docs/, git |
+| Session End | `/close-out [--base <ref>] [--gap-check-only] [--skip-coverage] [--clean-worktree \| --merge-branch] [note]` | Resolve diff base (loud-fail if none) → verify coverage → patch docs → clean worktree/merge branch (opt.) → hand off; the quality-close pipeline | status.md, log.md, docs/, git |
 | Block Setup | `/start-block [name]` | Flip a spec to `In progress` in status.md | status.md |
 | **1 — Roadmap** | `/generate-master-plan [desc]` | Author the full roadmap as canonical block definitions | `planning/master-plan.md` |
 | **1 — Plan** | `/generate-tasks <name>` · `/generate-tasks --from <path>` | Write the full task spec from a master-plan block, **or** from a standalone block file (`--from`) | `planning/<name>/tasks.md` |
@@ -292,13 +292,22 @@ remaining, open questions, first command for the next agent), then invokes `/log
 `/commit`. `/prime` in the next session detects the handoff file and surfaces it first.
 Delete `planning/handoff.md` once the new session has consumed it.
 
-### `/close-out [--gap-check-only] [--skip-coverage] [--clean-worktree | --merge-branch] [note]`
-Quality-close pipeline for the end of an `sdlc-run` or `sdlc-flow` session. Runs four
-steps in sequence: **(1)** the full validation suite from `planning/harness.json` — stops
-immediately if any gating check fails; **(2)** coverage gap scan — reads changed source
-files, classifies gaps as adequate/non-blocking/blocking, writes minimal targeted tests for
-blocking gaps and re-runs the suite to confirm; **(3)** `/update-docs --patch`; **(4)**
-`/handoff` with the provided note (skips if `--gap-check-only` is set); **(5)**
+### `/close-out [--base <ref>] [--gap-check-only] [--skip-coverage] [--clean-worktree | --merge-branch] [note]`
+Quality-close pipeline for the end of an `sdlc-run` or `sdlc-flow` session. Runs **(0.5)**
+diff-base resolution before anything else: the emoji gate and the coverage sweep must scope to
+the **same** base, resolved from real evidence — an explicit `--base <ref>`, else
+`planning/harness.json`'s `flow.prBase`, else `origin/HEAD`, else a local `main`/`master` — never
+a hard-coded literal. If `HEAD` **is** the resolved base (the default state after an in-place run,
+a plain-branch run, or right after `--auto-merge`/`--merge-branch` land), a two-dot/three-dot diff
+against it is empty by definition; close-out falls back to the merge commit's first parent
+(`HEAD^1..HEAD`) when one exists, and otherwise **refuses to run** rather than report a vacuous
+clean — it names the resolved base, tells you to pass `--base <ref>`, or to run before the branch
+merges. Then runs four steps in sequence: **(1)** the full validation suite from
+`planning/harness.json` — stops immediately if any gating check fails — then the emoji gate,
+scoped to the resolved range; **(2)** coverage gap scan — reads changed source files from the
+**same** resolved range, classifies gaps as adequate/non-blocking/blocking, writes minimal
+targeted tests for blocking gaps and re-runs the suite to confirm; **(3)** `/update-docs --patch`;
+**(4)** `/handoff` with the provided note (skips if `--gap-check-only` is set); **(5)**
 `/clean-worktree` for the current branch to merge and remove the **worktree** (only when
 explicitly requested via `--clean-worktree`); **(5b)** merge the current **plain branch** into
 the base + `mev emit-state --write` (only via `--merge-branch` — the branch-mode `/sdlc-flow`
