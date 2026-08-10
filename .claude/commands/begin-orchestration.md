@@ -72,9 +72,16 @@ the roadmap resolved in C, **stop and report both.** That mismatch means the lan
 different run than the one you were told, and it is the cheapest available check that `--roadmap`
 was typed correctly.
 
-Read the lane file with `#` comments and blanks stripped; file order is execution order. Lane files
-may cover several repos in one running order — **take only your repo's section.** If the file has
-section markers for other repos and you cannot tell which is yours, stop and ask.
+Read the lane file with `#` comments and blanks stripped **when extracting the chain / block list**;
+file order is execution order. Lane files may cover several repos in one running order — **take only
+your repo's section.** If the file has section markers for other repos and you cannot tell which is
+yours, stop and ask.
+
+**Comments are binding context for your own section, not decoration.** Stripping applies only to
+parsing the block list out of the file. The prose in your section's `#` comments — isolation
+rationale, prior-run gotchas, "do not touch X" — is the per-repo briefing for this run and must be
+honored exactly like the block list itself. `carryover-improvements`' lane files carry their entire
+per-repo briefing this way; an agent that strips comments before reading drops all of it.
 
 Print what you resolved. A lane driven against the wrong roadmap is worse than one driven against
 none.
@@ -91,6 +98,17 @@ none.
 
 An explicit `--isolation` that contradicts either of the first two rows → **stop and report.** Do
 not run a chain whose gates cannot pass.
+
+**Re-verify the caveat before you plan on it.** The isolation table above isn't policy handed down
+once — it's
+a measurement ("64 structure / 601 state errors versus 0/0 in the main tree") that can go stale the
+moment the corpus or the worktree machinery changes. The same applies to any carryover caveat this
+lane inherits from a prior run or a sibling lane's notes file. Before treating either as fact: run
+the one command that checks it (`./scripts/validate_brain.sh` in a scratch worktree for the isolation
+row; whatever the carryover names for a carried-forward one) and record the result. An orchestration
+run inherited at least one caveat that had since changed and planned a block on it — this is the
+same failure class `/generate-roadmap`'s Step 2 exists to close ("Inventory, and re-verify before you
+plan on it"); this step is its equivalent for isolation decisions and carryovers.
 
 ## Step 3 — Concurrency
 
@@ -191,7 +209,9 @@ work that has to be redone.
 - `mev validate-brain`'s flags **do not compose** (`main.rs` is an if/else-if chain, first flag
   wins). One invocation per flag.
 - Every `planning/` is a symlink into a `_planning/` vault. Any `rg`/`find` sweep that must be
-  exhaustive needs `-L`; one reporting "clean" without it is not trustworthy.
+  exhaustive needs `-L`; one reporting "clean" without it is not trustworthy. **At the brain root,
+  also pass `-uu`** — every sub-repo is gitignored there, so `rg` skips them all even with `-L`
+  alone, and a sweep missing `-uu` reports a false clean over the whole fleet.
 - `planning/state.json` is written with `ensure_ascii=False`. Script edits must round-trip with
   `json.dump(..., indent=2, ensure_ascii=False)` plus a trailing newline — the default escapes every
   em dash and turns a 3-field edit into ~130 lines of churn, and a conflict for every sibling lane.
