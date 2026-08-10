@@ -2,6 +2,10 @@
 .DS_Store
 *.swp
 
+# Python bytecode from scripts/ (regenerated on every run)
+__pycache__/
+*.pyc
+
 # SDLC worktrees (created by /sdlc-task and /sdlc-block at runtime)
 trees/
 
