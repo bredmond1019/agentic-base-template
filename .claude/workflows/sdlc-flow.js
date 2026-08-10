@@ -151,28 +151,45 @@ const VAULT_VERIFY_SCHEMA = {
   type: 'object',
   required: ['allCommitted'],
   properties: {
-    allCommitted:     { type: 'boolean', description: 'true iff every given path is tracked in the vault repo with no staged/unstaged diff' },
-    uncommittedPaths: { type: 'array', items: { type: 'string' }, description: 'the subset (vault-relative) that failed either check' },
+    allCommitted:     { type: 'boolean', description: 'true iff every given path is tracked+committed either in THIS repo\'s vault, or (BRAIN_ROOT case) in the brain root repo directly' },
+    uncommittedPaths: { type: 'array', items: { type: 'string' }, description: 'the subset (vault-relative) not committed anywhere — a real failure' },
+    brainRootExempt:  { type: 'array', items: { type: 'string' }, description: 'the subset that does not exist under this repo\'s own vault at all, but IS committed directly in the brain root repo — a legitimate cross-repo write (e.g. /generate-roadmap authoring at HQ), not a vault-commit failure' },
     notes:            { type: 'string' }
   }
 }
 async function verifyVaultCommit(runDir, vault, vaultRelPaths) {
-  if (!vault.vaulted || !vaultRelPaths.length) return { allCommitted: true, uncommittedPaths: [] }
+  if (!vault.vaulted || !vaultRelPaths.length) return { allCommitted: true, uncommittedPaths: [], brainRootExempt: [] }
   const result = await agent(`
-Independently verify that these paths are FULLY COMMITTED in the vault repo at ${vault.planningPath}
-(tracked, AND no staged or unstaged diff) — do not take anyone's word for it, re-check directly.
-Paths (relative to ${vault.planningPath}):
+Independently verify that these paths are FULLY COMMITTED — do not take anyone's word for it,
+re-check directly. Each path was derived from a "planning/..." entry a task self-reported as
+modified, but "planning/" is ambiguous: it may mean THIS repo's own vault, or (for a command whose
+own design authors at HQ, e.g. /generate-roadmap) the BRAIN ROOT repo's planning/ directly — a
+different git repository on disk. Classify each path into exactly one bucket, never guess:
+
+Paths (relative to "planning/", i.e. vault-relative if in this repo's own vault):
 ${vaultRelPaths.map(p => `  ${p}`).join('\n')}
-Run exactly these Bash calls (from ${runDir}):
-  cd ${runDir} && git -C ${vault.planningPath} status --porcelain -- ${vaultRelPaths.map(p => JSON.stringify(p)).join(' ')}
-  cd ${runDir} && git -C ${vault.planningPath} ls-files --error-unmatch -- ${vaultRelPaths.map(p => JSON.stringify(p)).join(' ')}
-A path is COMMITTED only if it produces NO line in the status --porcelain output AND the ls-files
---error-unmatch call exits 0 for it (nonzero/"did not match" means untracked or missing — NOT committed).
-Return via StructuredOutput: allCommitted (true only if every path passed both checks),
-uncommittedPaths (the vault-relative paths that failed either check; empty array if all committed),
-notes (what you actually observed).
+
+For EACH path <p>, run (from ${runDir}):
+  1. Check if it exists in THIS repo's vault: test -e "${vault.planningPath}/<p>"
+     - If yes: check committed there —
+       git -C ${vault.planningPath} status --porcelain -- "<p>"   (must produce NO output)
+       git -C ${vault.planningPath} ls-files --error-unmatch -- "<p>"   (must exit 0)
+       Committed both ways -> bucket VAULT_OK. Either check fails -> bucket UNCOMMITTED.
+     - If no: it is not in this repo's vault at all. Find the brain root by walking up from
+       ${vault.planningPath} to the nearest ancestor containing brain.toml:
+         BRAIN_ROOT=$(cd "${vault.planningPath}" && while [ ! -f brain.toml ] && [ "$PWD" != "/" ]; do cd ..; done; pwd)
+       Then check if it exists there instead: test -e "$BRAIN_ROOT/planning/<p>"
+       - If yes: check committed there (same two git calls, but against "$BRAIN_ROOT/planning"
+         instead of ${vault.planningPath}) -> bucket BRAIN_ROOT_OK if committed, else UNCOMMITTED.
+       - If no: it exists NOWHERE on disk -> bucket UNCOMMITTED (claimed written, but missing).
+
+Return via StructuredOutput: allCommitted (true only if every path landed in VAULT_OK or
+BRAIN_ROOT_OK — never true if any path is UNCOMMITTED), uncommittedPaths (every UNCOMMITTED path),
+brainRootExempt (every BRAIN_ROOT_OK path — these are NOT a failure, just a different repo),
+notes (what you actually observed, including which bucket each path landed in).
 `, { label: 'verify-vault-commit', schema: VAULT_VERIFY_SCHEMA, model: 'haiku' })
-  if (!result) return { allCommitted: false, uncommittedPaths: vaultRelPaths, notes: 'verification agent returned null' }
+  if (!result) return { allCommitted: false, uncommittedPaths: vaultRelPaths, brainRootExempt: [], notes: 'verification agent returned null' }
+  if (!Array.isArray(result.brainRootExempt)) result.brainRootExempt = []
   return result
 }
 
