@@ -443,10 +443,22 @@ Skip this entire step if the run bailed OR Step 3.5 set `reconcileFailed = true`
   `python3 -c "import os; print(os.path.realpath('planning'))"`.
 1. Mark every passed task done in `<specFile>` (Edit tool), using the spec's existing task-done marker
    convention if it has one (e.g. a leading `[done]`); if the spec has no such convention, leave it
-   and note that tasks weren't marked.
-2. Update `planning/status.md` (surgical Edit): if `blockDone`, flip this spec's Status to "Done" in
-   the Progress Table and update "Current focus"; otherwise keep it "In progress" (a task subset ran)
-   and optionally point "Current focus" at the next task. Refresh "Last updated" to today's date.
+   and note that tasks weren't marked. **Never remove or alter a marker already present from a prior
+   run** — this step only ADDS markers for the tasks that passed in this run. After marking, COUNT
+   the CUMULATIVE total: how many of the spec's tasks now carry a done marker (this run's plus every
+   prior run's combined), out of the spec's total task count. This run's own tally (this run's passed
+   count out of this run's selected task count) is only a slice — never use that slice alone as "how
+   many tasks are done" anywhere a count is written; use the cumulative count derived from the file
+   itself. A resumed two-task spec must read "2 of 2" after its second run, not "1 of 1".
+2. Update `planning/status.md` (surgical Edit). **"Current focus" is APPEND-ONLY narrative** — never
+   delete or rewrite any existing line under it; a prior block's narrative must survive this edit
+   VERBATIM. The one exception: if an existing line already refers to THIS spec by name (e.g. from an
+   earlier partial run), replace only that one line — never the whole section. If `blockDone`, flip
+   this spec's Status to "Done" in the Progress Table and add ONE new line under "Current focus"
+   recording that outcome, citing the cumulative task count from step 1 (e.g. "`<blockId>`: done (N of
+   M tasks)"); otherwise keep Status "In progress" (a task subset ran) and optionally add a new line
+   under "Current focus" pointing at the next task, citing the same cumulative count. Refresh "Last
+   updated" to today's date.
 3. **Flip the block's status in `planning/state.json`** — skip silently if there's no
    `planning/state.json`, OR if `blockDone` is false. Resolve the canonical block id from the
    status.md Progress Table row (the only judgment call in this step), then run this exact scripted
@@ -469,7 +481,7 @@ Skip this entire step if the run bailed OR Step 3.5 set `reconcileFailed = true`
            break
    if found:
        with open(path, 'w') as fh:
-           json.dump(data, fh, indent=2)
+           json.dump(data, fh, indent=2, ensure_ascii=False)
            fh.write(chr(10))
        print('FLIPPED:' + bid)
    else:
@@ -479,12 +491,17 @@ Skip this entire step if the run bailed OR Step 3.5 set `reconcileFailed = true`
    Read the script's own stdout to decide success — on `NOT_FOUND`, report it; never fabricate a
    block entry. Validate the file is still valid JSON afterward.
 4. **Regenerate derived surfaces** — run this whenever bookkeep runs at all, NOT only when `blockDone`
-   (status.md/tasks.md already changed either way):
-   - **In-place (no `--worktree`)**: run `mev emit-state --write` from `runDir`. If `mev` or
-     `brain.toml` is absent (standalone repo), skip silently.
+   (status.md/tasks.md already changed either way). This includes `state.json`'s top-level `focus`
+   object (e.g. `focus.next`) — step 3's scripted mutation above touches only the matched block's
+   `status` field and never `focus`, so `focus.next` is stale until this step runs:
+   - **In-place (no `--worktree`)**: run `mev emit-state --write` from `runDir`. This re-derives
+     `focus.next` from the just-flipped block status. If `mev` or `brain.toml` is absent (standalone
+     repo), skip silently.
    - **`--worktree`**: do NOT run `mev emit-state --write` — it refuses to run inside a linked
-     worktree. Derived surfaces regenerate on MAIN when the branch merges (`/clean-worktree` or
-     `/merge-train`).
+     worktree. `focus.next` is therefore **DEFERRED**, not updated — it still points at the block
+     that just closed until `/clean-worktree` or `/merge-train` runs `mev emit-state --write` on
+     merge. Report this explicitly (do not report the run as leaving `focus` fresh); do not attempt
+     to hand-edit `focus.next` here.
 5. **Commit** (stage explicitly — never `git add -A`). Never run `git checkout`/`git switch`/`git
    branch` outside this repo's own root, or (when vaulted) outside the vault's own root — if a `git
    add` fails, report it; do not relocate the commit to force it through.

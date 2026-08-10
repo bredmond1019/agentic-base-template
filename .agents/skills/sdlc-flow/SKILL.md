@@ -416,13 +416,19 @@ the second line (works for both cases). **This determination controls how step 6
 get it right before touching git.**
 
 **6b. Update authored docs (Edit tool, surgical):**
-1. `planning/status.md`:
-   - If bailed: keep the spec's Status as-is (or set `Blocked` if appropriate); set "Current focus" to
-     `<spec-slug> — BLOCKED: <bail_reason>`.
+1. `planning/status.md`. **"Current focus" is APPEND-ONLY narrative** — never delete or rewrite any
+   existing line under it; a prior block's narrative must survive this edit VERBATIM. The one
+   exception: if an existing line already refers to THIS spec by name (e.g. from an earlier partial
+   run), replace only that one line — never the whole section.
+   - If bailed: keep the spec's Status as-is (or set `Blocked` if appropriate); add ONE new line under
+     "Current focus" (or replace this spec's own prior line, per the exception above): `<spec-slug> —
+     BLOCKED: <bail_reason>` — do not touch any other existing line.
    - Else: if this run covered the FULL spec (no task-range selection was given), flip the spec's Status
-     to `Done`. If a task range/selection was given, leave Status as `In progress` and point "Current
-     focus" at the next task — UNLESS this range happened to be the last remaining tasks, in which case
-     flip to `Done` too. Update "Current focus" accordingly.
+     to `Done`. If a task range/selection was given, leave Status as `In progress` and add a new line
+     under "Current focus" pointing at the next task — UNLESS this range happened to be the last
+     remaining tasks, in which case flip to `Done` too. Add ONE new line under "Current focus" recording
+     this outcome (or replace this spec's own prior line, per the exception above) — do not touch any
+     other existing line.
    - Update the "Last updated" date.
 2. `planning/state.json` (the **authored block graph** — `tracks[].blocks[]`, a DIFFERENT file from
    `sdlc-flow-state.json`; skip this whole step silently if the repo has no `planning/state.json`):
@@ -449,7 +455,7 @@ get it right before touching git.**
              break
      if found:
          with open(path, 'w') as fh:
-             json.dump(data, fh, indent=2)
+             json.dump(data, fh, indent=2, ensure_ascii=False)
              fh.write(chr(10))
          print('FLIPPED:' + bid)
      else:
@@ -459,12 +465,18 @@ get it right before touching git.**
      Trust only this script's own stdout (`FLIPPED:<id>` or `NOT_FOUND`) — never assume success. Then
      validate: `python3 -c "import json;json.load(open('planning/state.json'))"`.
 3. Regenerate derived surfaces via `mev emit-state --write` — run this step whenever wrap-up runs at
-   all, independent of whether the spec fully completed (status.md was edited either way):
+   all, independent of whether the spec fully completed (status.md was edited either way). This
+   includes `state.json`'s top-level `focus` object (e.g. `focus.next`) — step 2's scripted mutation
+   above touches only the matched block's `status` field and never `focus`, so `focus.next` is stale
+   until this step runs:
    - **Worktree mode**: do NOT run it here — `mev emit-state` refuses to run inside a linked git
-     worktree. Surfaces regenerate on the base branch when this branch eventually merges (via
-     `/clean-worktree`, `/merge-train`, `/close-out --merge-branch`, or the `--auto-merge` path below).
-   - **Branch mode**: run it right here, on this branch, in the repo root: `mev emit-state --write`. If
-     `mev` or `brain.toml` is absent (standalone/non-brain repo), skip silently.
+     worktree. `focus.next` is therefore **DEFERRED**, not updated — it still points at the block that
+     just closed until the branch eventually merges (via `/clean-worktree`, `/merge-train`,
+     `/close-out --merge-branch`, or the `--auto-merge` path below) and re-runs `mev emit-state
+     --write`. Report this explicitly rather than implying `focus` is fresh.
+   - **Branch mode**: run it right here, on this branch, in the repo root: `mev emit-state --write`.
+     This re-derives `focus.next` from the just-flipped block status. If `mev` or `brain.toml` is
+     absent (standalone/non-brain repo), skip silently.
 4. Prepend a new entry to `log.md` (newest first): a dated header, one paragraph summarizing what was
    implemented across the tasks run, the final verdict (and why it bailed, if it did), notable
    decisions, ending with "Next: …", followed by the `git log --oneline -8` of this run's commits.
