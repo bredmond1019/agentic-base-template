@@ -3,7 +3,7 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-12T08:15:00-0300
+**Last updated:** 2026-08-12T13:45:00-0300
 
 ---
 
@@ -57,6 +57,48 @@ the same argument for leaving `conformance` non-gating. Unblocked by correcting 
 `planning/ticket-derive-tasks-json-validation-scope/`,
 `planning/ticket-emoji-gate-close-out-site-drift/`,
 `planning/ticket-corpus-checks-delta-attribution/`
+
+### Four more blocks: write-time validation, the operator-edge authoring rule, and roadmaps get a home
+
+**Eight blocks total shipped today; these are the last four.** `orchestration-record-write-time-validation`
+(4 tasks) makes `/begin-orchestration` and `/orchestrate` validate the run record they just wrote,
+applying HQ's standing "any generator writing into the corpus must validate its own output" rule to
+the two commands that write those records. `operator-work-authoring-contract` (8 tasks) taught both
+`/handoff` variants, `/wrap-up`, `/begin-session` and the skill mirror the twelve-field `carryover[]`
+shape and the operator-edge rule, and added it to `CLAUDE.md` as standing rule 7 so it reaches every
+scaffolded repo. `roadmaps-get-a-home-and-a-registry` (6 tasks) moved new roadmaps to
+`planning/roadmaps/<slug>/` with a registry entry, and gave `/begin-orchestration` the canonical
+slug-resolution rule that `/orchestrate` and `/consolidate-run` now cite.
+
+**The transposed `doc_id` class cost four blocked runs before it was fixed.** A concurrent lane wrote
+`<repo>-orchestration-review-<slug>` instead of `<repo>-orchestration-run-<slug>-review`, four times
+across four repos over the day. It stopped `/close-out`, then bailed
+`derive-tasks-json-validation-scope` at task 1, then bailed `orchestration-record-write-time-validation`
+at task 3 — the ticket whose entire purpose is preventing that class. The fourth fix also had to
+update an inbound `related:` edge in `bastion-web/handoff.md`; renaming the `doc_id` alone would have
+dangled the target and red-gated the corpus under `--graph`, which is worse than the original defect.
+
+**Two of my own specs were wrong, and the engine caught both.** `derive-tasks-json-validation-scope`
+task 2 needed a fix pass. More instructive: `roadmaps-get-a-home` task 3 asserted
+`rg -l 'planning/<slug>/' .claude/commands` returns nothing — unsatisfiable, because tasks 1-2
+deliberately add legacy-fallback prose containing that literal, and because `/capture` writes
+`planning/<slug>/notes.md` for an arbitrary slug with zero mentions of roadmaps. The engine re-ran
+the check against the pre-task-3 commit, proved the match set was unchanged, and bailed for a human
+decision rather than deleting prose to go green. **Rule learned: assert positively on the new form;
+never assert the absence of a literal that has legitimate other meanings.**
+
+**Blast-radius findings, measured rather than assumed.** The D16 derive stage was authoring
+`validation_commands` for every task including ten that touch compiled source — the malformed
+`cargo nextest run <binary>` form (a test-NAME filter, not a binary selector) marked four tasks passed
+without running their tests. `/close-out`'s emoji gate turned out to be a fifth gate site the
+four-site agreement suite never saw, scanning whole files with no PR-footer exemption. And
+`test_orchestration_run_contract.py`, shipped this morning, gated on the whole shared corpus with no
+delta attribution until `corpus-checks-delta-attribution` ported D64's baseline model to it.
+
+**Refs:** `planning/ticket-orchestration-record-write-time-validation/`,
+`planning/ticket-operator-work-authoring-contract/`,
+`planning/ticket-roadmaps-get-a-home-and-a-registry/`,
+`planning/chore-migrate-roadmaps-to-roadmaps-dir/`
 
 ---
 
