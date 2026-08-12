@@ -17,6 +17,26 @@ This is `BT.ticket.orchestration-run-run-consolidator` task 3 (D57 section 5). I
 only; it deliberately does not implement or test dedup, similarity, ranking or staleness -- those
 are `mev`'s (task 4 pins that restraint against `consolidate-run.md` itself).
 
+SCOPE-BOUNDARY CHECKS (task 4)
+-------------------------------
+A second, independent check family reads `.claude/commands/consolidate-run.md` itself and asserts
+the restraint the ticket exists to enforce -- grep-level, per the spec's Testing Strategy, but each
+one is proven to actually fail on a synthetic negative fixture so it cannot rot into a no-op (same
+discipline as `scripts/test_check_prompt_templates.py`):
+
+1. **No reimplementation.** The command states it implements no dedup/similarity/ranking/staleness
+   logic of its own and names `mev` as the source it consumes instead.
+2. **No state writes.** The command states it writes no `state.json` in any repo, and that its only
+   sanctioned write is the `lifecycle: consolidated` stamp.
+3. **D43 cited, not paraphrased.** The command references D43 by name/path. The historical defect
+   phrase `P0 = blocks other work` may appear only when flagged as the contradictory counter-example
+   it is (the word `contradictory` nearby) -- never asserted as the document's own rubric.
+4. **New carryover shape only.** `priority`, `blocks[]`, `clears_when` and `finding_id` are all
+   named; `blocking: bool` may appear only inside an explicit prohibition (`no`/`never` nearby), never
+   as a field the document instructs writing.
+5. **Never auto-merges.** The command states the matcher only suggests -- it never merges findings
+   on its own authority.
+
 TWO MODES
 ---------
 `--self-test`  -- synthetic fixtures under a temp dir: (a) realpath dedup collapsing a worktree
@@ -167,6 +187,74 @@ def realpath_dedup(root: Path, hits: list[str]) -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
+# Scope-boundary checks (task 4) -- read `.claude/commands/consolidate-run.md` and assert the
+# restraint the ticket exists to enforce. Grep-level by design (per the spec's Testing Strategy),
+# but every one is proven against a synthetic negative fixture in `self_test()` below.
+# ---------------------------------------------------------------------------
+
+COMMAND_DOC_PATH = REPO_ROOT / ".claude" / "commands" / "consolidate-run.md"
+
+
+def read_command_doc() -> str:
+    return COMMAND_DOC_PATH.read_text(encoding="utf-8")
+
+
+def check_no_reimplementation(text: str) -> bool:
+    """The doc must state it implements no dedup/similarity/ranking/staleness logic of its own,
+    and must name `mev` as the thing it consumes instead of reimplementing."""
+    lower = text.lower()
+    prohibits = "no dedup" in lower or "implements **no**" in text
+    names_mev_as_source = "mev" in lower and (
+        "consumes" in lower or "never recomputes" in lower or "already building" in lower
+    )
+    return prohibits and names_mev_as_source
+
+
+def check_no_state_writes(text: str) -> bool:
+    """The doc must state it writes no state.json in any repo, and name the lifecycle stamp as
+    the only sanctioned write."""
+    lower = text.lower()
+    prohibits_state_write = "writes no `state.json`" in lower or "writes no state.json" in lower
+    names_only_write = "lifecycle: consolidated" in text
+    return prohibits_state_write and names_only_write
+
+
+def check_d43_cited_not_paraphrased(text: str) -> bool:
+    """D43 must be cited. The historical defect phrase `P0 = blocks other work` may appear only
+    when flagged nearby as the contradictory counter-example it is -- never asserted bare as the
+    document's own rubric."""
+    if "D43" not in text:
+        return False
+    idx = text.find("P0 = blocks other work")
+    if idx == -1:
+        return True
+    window = text[max(0, idx - 200): idx]
+    return "contradictory" in window
+
+
+def check_new_carryover_shape(text: str) -> bool:
+    """`priority`, `blocks[]`, `clears_when` and `finding_id` must all be named. `blocking: bool`
+    may appear only inside an explicit prohibition (`no`/`never` nearby), never as an instruction
+    to write it."""
+    required_fields = ["priority", "blocks[]", "clears_when", "finding_id"]
+    if not all(f in text for f in required_fields):
+        return False
+    lower = text.lower()
+    idx = lower.find("blocking: bool")
+    if idx == -1:
+        return True
+    window = lower[max(0, idx - 80): idx]
+    return "no" in window or "never" in window
+
+
+def check_never_auto_merges(text: str) -> bool:
+    """The doc must state the matcher only suggests -- it never merges findings on its own
+    authority."""
+    lower = text.lower()
+    return "never auto-merges" in lower or "never auto-merge" in lower
+
+
+# ---------------------------------------------------------------------------
 # --self-test: synthetic fixtures, no dependency on the real corpus.
 # ---------------------------------------------------------------------------
 
@@ -295,12 +383,100 @@ def case_live_measured_snapshot() -> int:
     return 0
 
 
+# -- synthetic fixtures for the scope-boundary checks: a GOOD text each check must pass, and a
+# BAD text -- otherwise identical in spirit -- that must make it fail. Proving the negative is
+# what keeps a grep-level check from rotting into a no-op.
+
+_GOOD_NO_REIMPL = (
+    "This command implements **no** dedup, similarity matching, priority ranking, or staleness "
+    "logic of its own. `mev` is already building all three; this command calls `mev carryover` "
+    "and consumes its output rather than shipping a second implementation."
+)
+_BAD_NO_REIMPL = (
+    "This command sorts findings by a cosine-similarity score and merges near-duplicates "
+    "automatically before proposing them."
+)
+
+_GOOD_NO_STATE = (
+    "This command writes no `state.json` in any repo. The only write it makes is stamping "
+    "`lifecycle: consolidated` on the records it consumed."
+)
+_BAD_NO_STATE = (
+    "This command writes state.json in every repo it touches, updating carryover[] directly "
+    "with the merged findings."
+)
+
+_GOOD_D43 = (
+    "Cite D43 for the priority rubric; never paraphrase it. Restating D43's rubric is exactly "
+    'how a stray file came to assert the contradictory "P0 = blocks other work" -- a divergence '
+    "nothing caught."
+)
+_BAD_D43 = (
+    "Cite D43. Priority follows a simple rule: P0 = blocks other work, P1 = blocks this repo "
+    "only, P2 = routine, P3 = cosmetic."
+)
+
+_GOOD_CARRYOVER = (
+    "Proposed entries carry priority, blocks[], a typed clears_when predicate, and finding_id. "
+    "There is no `blocking: bool` field anywhere in a proposed entry."
+)
+_BAD_CARRYOVER = (
+    "Proposed entries carry priority, blocks[], a typed clears_when predicate, and finding_id. "
+    "Each proposed entry sets blocking: bool to true when it blocks other work."
+)
+
+_GOOD_NO_MERGE = (
+    "Never auto-merges. The matcher mev runs only suggests links between findings; this command "
+    "never merges two proposed entries into one on its own authority."
+)
+_BAD_NO_MERGE = (
+    "This command automatically merges duplicate findings identified by mev's matcher before "
+    "emitting the consolidated review."
+)
+
+
+def case_scope_boundary_checks() -> None:
+    """Each of the five boundary checks must pass its GOOD fixture and fail its BAD one -- proof
+    the check actually discriminates rather than always returning True."""
+    check("no-reimplementation: passes compliant text", check_no_reimplementation(_GOOD_NO_REIMPL))
+    check("no-reimplementation: fails violating text", not check_no_reimplementation(_BAD_NO_REIMPL))
+
+    check("no-state-writes: passes compliant text", check_no_state_writes(_GOOD_NO_STATE))
+    check("no-state-writes: fails violating text", not check_no_state_writes(_BAD_NO_STATE))
+
+    check("d43-cited-not-paraphrased: passes compliant text", check_d43_cited_not_paraphrased(_GOOD_D43))
+    check("d43-cited-not-paraphrased: fails paraphrased text", not check_d43_cited_not_paraphrased(_BAD_D43))
+
+    check("new-carryover-shape: passes compliant text", check_new_carryover_shape(_GOOD_CARRYOVER))
+    check("new-carryover-shape: fails violating text", not check_new_carryover_shape(_BAD_CARRYOVER))
+
+    check("never-auto-merges: passes compliant text", check_never_auto_merges(_GOOD_NO_MERGE))
+    check("never-auto-merges: fails violating text", not check_never_auto_merges(_BAD_NO_MERGE))
+
+
+def case_command_doc_meets_boundary_checks() -> None:
+    """The real `.claude/commands/consolidate-run.md` must itself pass all five checks -- the
+    synthetic fixtures above prove the checks discriminate; this proves the actual command file
+    honours the restraint they check for."""
+    if not COMMAND_DOC_PATH.exists():
+        check(f"command doc exists at {COMMAND_DOC_PATH}", False)
+        return
+    text = read_command_doc()
+    check("consolidate-run.md: no reimplementation", check_no_reimplementation(text))
+    check("consolidate-run.md: no state.json writes", check_no_state_writes(text))
+    check("consolidate-run.md: D43 cited, not paraphrased", check_d43_cited_not_paraphrased(text))
+    check("consolidate-run.md: new carryover shape only", check_new_carryover_shape(text))
+    check("consolidate-run.md: never auto-merges", check_never_auto_merges(text))
+
+
 def self_test() -> int:
     print("test_consolidator_discovery.py --self-test")
     case_realpath_dedup_collapses_worktree_copy()
     case_uu_finds_gitignored_subrepo()
     case_l_traverses_symlinked_planning()
     case_live_measured_snapshot()
+    case_scope_boundary_checks()
+    case_command_doc_meets_boundary_checks()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")
@@ -327,6 +503,7 @@ def main() -> int:
 
     print(f"test_consolidator_discovery.py: measuring {root}")
     rc = case_live_measured_snapshot()
+    case_command_doc_meets_boundary_checks()
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed: {FAILURES}")
         return 1
