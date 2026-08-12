@@ -95,6 +95,8 @@ standing rule 10, so one `git` invocation set against BRAIN_ROOT covers the whol
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -369,6 +371,54 @@ def _write_record(base: Path, repo: str, roadmap: str, filename: str, fm: dict, 
     return record_dir / filename
 
 
+def _git_ok(args: list[str], cwd: Path) -> None:
+    """Like `_run_git`, but raises loudly on failure -- fixture setup, not the thing under test."""
+    rc, _, err = _run_git(args, cwd)
+    assert rc == 0, f"git {args} failed in fixture setup: {err}"
+
+
+def _init_git_repo(base: Path) -> None:
+    """A real (but throwaway) git repo -- delta attribution's baseline resolution and
+    `git show`-based reconstruction are exercised for real here, not mocked, since the whole
+    point of this fixture suite is to prove the production code path (not a stand-in for it).
+    """
+    base.mkdir(parents=True, exist_ok=True)
+    _git_ok(["init", "-q"], base)
+    _git_ok(["config", "user.email", "test@example.com"], base)
+    _git_ok(["config", "user.name", "Delta Attribution Fixture"], base)
+
+
+def _commit_all(base: Path, message: str) -> None:
+    _git_ok(["add", "-A"], base)
+    _git_ok(["commit", "-q", "-m", message], base)
+
+
+def _run_corpus_mode(root: Path) -> tuple[int, str]:
+    """Run the real `corpus_mode` against `root`, capturing stdout (never a mock) so cases can
+    assert both on the exit code and on the human-readable NEW/pre-existing labeling.
+    """
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = corpus_mode(root)
+    return rc, buf.getvalue()
+
+
+_WELL_FORMED_FM = {
+    "roadmap": "demo-roadmap",
+    "lane": "C1",
+    "run_started": "2026-08-11",
+    "run_ended": "2026-08-11",
+    "lifecycle": "active",
+    "doc_id": "demo-repo-orchestration-run-demo-roadmap",
+}
+
+
+def _bad_lifecycle_fm() -> dict:
+    fm = dict(_WELL_FORMED_FM)
+    fm["lifecycle"] = "archived"  # pre-D57 vocabulary, no longer valid -- a real violation
+    return fm
+
+
 def self_test() -> int:
     print("test_orchestration_run_contract.py --self-test")
 
@@ -548,6 +598,135 @@ def self_test() -> int:
         check("(g) discovery counts orchestration-run directories correctly", dir_count == 2)
         check("(g) discovered synthetic fleet passes with no violations", check_records(records) == [])
 
+    # -----------------------------------------------------------------------------------
+    # Delta attribution (BT.ticket.corpus-checks-delta-attribution task 2): all five cases
+    # from the ticket's Testing Strategy, each built against a real (throwaway) git repo so
+    # `resolve_baseline_commit` / `read_baseline_records` / `classify_violations` are exercised
+    # for real, not mocked. Each case is paired with a proven negative so the suite cannot rot
+    # into a no-op (same discipline as scripts/test_check_prompt_templates.py).
+    # -----------------------------------------------------------------------------------
+
+    # (h) Pre-existing violation reports but does not block: the bad record is already in the
+    # baseline commit, and the working tree introduces no further change.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        _init_git_repo(base)
+        _write_record(base, "demo-repo", "demo-roadmap", "notes.md", _bad_lifecycle_fm())
+        _commit_all(base, "baseline already carries the violation")
+        rc, out = _run_corpus_mode(base)
+        check("(h) pre-existing violation does not block (exit 0)", rc == 0)
+        check("(h) pre-existing violation is labeled in output", "pre-existing" in out)
+
+        # Proven negative: the SAME violation, but introduced only after the baseline commit
+        # (i.e. genuinely new). It must NOT be reported as pre-existing/non-blocking -- proving
+        # this case actually discriminates baseline-membership rather than always passing.
+        base2 = Path(td) / "negative"
+        _init_git_repo(base2)
+        _write_record(base2, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
+        _commit_all(base2, "clean baseline")
+        _write_record(base2, "demo-repo", "demo-roadmap", "notes.md", _bad_lifecycle_fm())
+        rc2, out2 = _run_corpus_mode(base2)
+        check("(h) negative: a newly introduced violation is NOT reported as pre-existing", rc2 == 1)
+
+    # (i) New violation blocks: baseline is clean, the working tree introduces the violation.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        _init_git_repo(base)
+        _write_record(base, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
+        _commit_all(base, "clean baseline")
+        _write_record(base, "demo-repo", "demo-roadmap", "notes.md", _bad_lifecycle_fm())
+        rc, out = _run_corpus_mode(base)
+        check("(i) new violation blocks (exit non-zero)", rc == 1)
+        check("(i) new violation is labeled NEW in output", "NEW (blocking)" in out)
+
+        # Proven negative: revert the on-disk content back to exactly the baseline (working
+        # tree is now clean again) -- must return to exit 0, proving the block tracks the
+        # violation state, not merely "a file's mtime changed".
+        _write_record(base, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
+        rc2, _ = _run_corpus_mode(base)
+        check("(i) negative: reverting to the baseline content returns to exit 0", rc2 == 0)
+
+    # (j) By-delta, not by-path -- the load-bearing case. A duplicate-doc_id violation is
+    # introduced by adding a NEW record whose doc_id collides with an EXISTING, untouched record.
+    # The violation string names both files (including the one the change never opened), and a
+    # path-scoped implementation that only re-checks touched files would miss it entirely.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        _init_git_repo(base)
+        _write_record(
+            base, "repo-a", "roadmap-x", "notes.md",
+            {**_WELL_FORMED_FM, "doc_id": "repo-a-orchestration-run-roadmap-x"},
+        )
+        _write_record(
+            base, "repo-b", "roadmap-y", "notes.md",
+            {**_WELL_FORMED_FM, "roadmap": "roadmap-y", "doc_id": "repo-b-orchestration-run-roadmap-y"},
+        )
+        _commit_all(base, "two unrelated, well-formed records")
+
+        # The change: a NEW record (repo-c) whose doc_id collides with repo-a's UNTOUCHED record.
+        colliding_path = _write_record(
+            base, "repo-c", "roadmap-z", "notes.md",
+            {**_WELL_FORMED_FM, "roadmap": "roadmap-z", "doc_id": "repo-a-orchestration-run-roadmap-x"},
+        )
+        rc, out = _run_corpus_mode(base)
+        check("(j) cross-file duplicate blocks even though one owner file is untouched", rc == 1)
+
+        # Proven negative: a deliberately PATH-SCOPED classifier -- one that only re-runs
+        # check_records() over records at changed paths -- misses this violation, because the
+        # collision only becomes visible when the untouched owner (repo-a's record) is included
+        # in the same check_records() call. This is the exact failure mode D64 pins against.
+        records, _, _ = discover_records(base)
+        path_scoped_records = [r for r in records if r.path == colliding_path]
+        path_scoped_violations = check_records(path_scoped_records)
+        check(
+            "(j) negative: a path-scoped implementation misses the cross-file collision "
+            "(proves by-delta discriminates from by-path)",
+            path_scoped_violations == [],
+        )
+
+    # (k) A clean tree over a dirty corpus exits 0 and states the reported-not-blocked count
+    # explicitly, so a green run cannot be misread as "the whole corpus is clean".
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        _init_git_repo(base)
+        _write_record(base, "demo-repo", "demo-roadmap", "notes.md", _bad_lifecycle_fm())
+        _write_record(
+            base, "demo-repo", "other-roadmap", "notes.md",
+            {**_bad_lifecycle_fm(), "roadmap": "other-roadmap",
+             "doc_id": "demo-repo-orchestration-run-other-roadmap"},
+        )
+        _commit_all(base, "baseline with two pre-existing violations")
+        rc, out = _run_corpus_mode(base)
+        check("(k) clean tree over a dirty corpus exits 0", rc == 0)
+        check("(k) output states the pre-existing count explicitly", "2 pre-existing" in out)
+
+        # Proven negative: introduce one genuinely new violation on top -- must stop being "0"
+        # and the summary must now report exactly 1 NEW alongside the 2 pre-existing.
+        _write_record(
+            base, "demo-repo", "third-roadmap", "notes.md",
+            {**_bad_lifecycle_fm(), "roadmap": "third-roadmap",
+             "doc_id": "demo-repo-orchestration-run-third-roadmap"},
+        )
+        rc2, out2 = _run_corpus_mode(base)
+        check("(k) negative: adding a new violation on top stops the exit-0 result", rc2 == 1)
+        check("(k) negative: summary reports 1 NEW / 2 pre-existing", "1 NEW" in out2 and "2 " in out2 and "pre-existing" in out2)
+
+    # (l) Baseline unresolvable (no git repo at all) -- documented fallback is FAIL CLOSED:
+    # every violation found is treated as NEW.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)  # deliberately NOT a git repo
+        _write_record(base, "demo-repo", "demo-roadmap", "notes.md", _bad_lifecycle_fm())
+        rc, out = _run_corpus_mode(base)
+        check("(l) baseline-unresolvable + a violation fails closed (blocks)", rc == 1)
+        check("(l) baseline-unresolvable is reported with a WARNING", "WARNING" in out and "FAIL CLOSED" in out)
+
+        # Proven negative: baseline still unresolvable, but the corpus is well-formed -- fail
+        # closed must not block UNCONDITIONALLY, only when there is an actual violation to find.
+        base2 = Path(td) / "negative"
+        _write_record(base2, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
+        rc2, _ = _run_corpus_mode(base2)
+        check("(l) negative: baseline-unresolvable with no violations still exits 0", rc2 == 0)
+
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")
         return 1
@@ -620,7 +799,13 @@ def read_baseline_records(root: Path, baseline_sha: str) -> list[Record]:
             # File existed in the tree listing but couldn't be read (e.g. it's a symlink entry,
             # not a blob) -- skip rather than fail the whole baseline reconstruction over it.
             continue
-        rec = record_from_content(root / rel, content)
+        # Resolved (realpath) to match `discover_records`'s own realpath-deduped paths --
+        # otherwise a `root` reached through a symlink (e.g. a macOS tmp dir, or a repo path
+        # itself behind a symlink) makes the same logical file compare as two different strings
+        # between the current sweep and the baseline reconstruction, and every baseline record
+        # looks spuriously "new". Violation-string equality in `classify_violations` depends on
+        # both sides using the same path form for the same file.
+        rec = record_from_content((root / rel).resolve(), content)
         if rec is not None:
             records.append(rec)
     return records
