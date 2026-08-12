@@ -3,11 +3,47 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-12T13:45:00-0300
+**Last updated:** 2026-08-12T15:10:00-0300
 
 ---
 
 ## [2026-08-12]
+
+### Naming convention, its guard, and two migrations — run closed at 12 blocks
+
+**What:** Settled `<REPO>.<phase>.<block>` as the canonical name for block work and shipped
+`scripts/check_block_naming.py` to hold the line, then migrated everything that predated it — 16
+legacy directories renamed in HQ, and learn-ai's **29 non-canonical block IDs reduced to 0** with 63
+blocks conserved and both cross-repo edges (`BL.7.A -> LA.21.B`, `BW.11.A -> LA.21.E`) untouched.
+`LA.ticket.path-modules-list-cohesion` was closed as finished rather than migrated: its header said
+"Not started" while `sdlc/reports/task1-review.md` recorded a PASS dated 2026-07-05. The run is
+recorded at `planning/orchestration-run/harness-hardening/` with a terminal `review.md` whose every
+recipe was executed before it was written.
+
+**Why:** `/orchestrate` needed a heuristic to turn a block ID into a directory, because the
+directories disagreed with the IDs in three different spellings. The heuristic was a workaround for
+a naming defect, not a feature.
+
+**The guard shipped twice, and the first one was a no-op.** Attempt one copied D64's
+delta-attribution model on my instruction; it bailed because a fleet-wide delta gate is racy against
+concurrent lanes (six non-conforming directories appeared after the baseline, written by other
+lanes) and blind to gitignored trees `git ls-tree` cannot see. Attempt two was repo-scoped — correct,
+because directory naming has no action at a distance, which is the only thing D64's rule protects
+against. It **still** blocked on nothing: every `planning/` is a symlink into HQ's vault, so a
+provenance query rooted at the invoking repo reported "untracked" for all 50 of its spec directories
+and my never-block-on-unknown-provenance rule swallowed every finding. Found by probing the gate, not
+by reading its PASS. Fixed in `BT.ticket.block-naming-guard-provenance-fix`; a probe now blocks
+(`rc=1`) and clears on removal.
+
+**Measuring first turned a feared migration into a small one.** learn-ai looked like a graph
+migration — 19 inbound edges. Measured: 17 were internal, both genuinely cross-repo edges pointed at
+already-canonical IDs, and exactly **one** non-canonical ID was referenced by any edge. Likewise the
+16 directory renames touched no prose: **zero** markdown links pointed at them, so the 9-34
+references each were history, and rewriting history was declined.
+
+**Refs:** `planning/orchestration-run/harness-hardening/notes.md`,
+`planning/ticket-block-id-naming-convention-guard/`,
+`planning/ticket-block-naming-guard-provenance-fix/`, `planning/handoff.md`
 
 ### D57 run-record contract + consolidator, then two defect tickets closed via /orchestrate
 
