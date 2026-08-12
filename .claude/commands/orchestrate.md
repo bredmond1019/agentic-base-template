@@ -75,8 +75,10 @@ Each of these exists because it has already caused a real failure in this fleet.
    {"ts":"<ISO-8601>","lane":"<lane-name>","repo":"<repo>","block":"<ID>","status":"closed|bailed|held","note":"<one line>"}
    ```
 
-   The log lives beside the roadmap driving the run (e.g.
-   `planning/demand-ready/lane-log.jsonl`); if the chain has no roadmap, skip it.
+   The log lives beside the roadmap driving the run, at `<roadmap_dir>/lane-log.jsonl` — resolve
+   `<roadmap_dir>` from the driving roadmap's slug via `/begin-orchestration`'s Step 1C rule (new
+   location `planning/roadmaps/<slug>/` first, then legacy `planning/<slug>/`; both existing is an
+   error), never a hardcoded `planning/<slug>/`. If the chain has no roadmap, skip it.
 
    **Do not hand-edit a roadmap's generated regions.** Run `mev emit-state --write` and let the
    sequence table regenerate from `state.json`, which is the authority. Four concurrent sessions

@@ -23,7 +23,7 @@ Naming it costs one flag and removes a hidden coupling to epic status.
 
 | Flag | Required | Default | What it does |
 |---|---|---|---|
-| `--roadmap <path>` | **yes** | — | The roadmap this lane belongs to. Absolute, or relative to `BRAIN_ROOT`. |
+| `--roadmap <path\|slug>` | **yes** | — | The roadmap this lane belongs to. A path is absolute or relative to `BRAIN_ROOT` and is honoured as given; a bare slug is resolved per Step 1C. |
 | `--lane <path\|name>` | one of | — | Lane chain file. A bare name (`gtm`) resolves to `<roadmap-dir>/lane-<name>.txt`. |
 | `--blocks <id ...>` | one of | — | Inline block IDs instead of a lane file. Space- or comma-separated. |
 | `--repo <slug>` | no | inferred from cwd | Override only when inference is wrong. |
@@ -60,7 +60,20 @@ operator does not know which roadmap this lane belongs to, that is the thing to 
 must be a roadmap; a path that resolves to a lane file or a `tasks.md` is an argument error, not
 something to work around. **Never infer it.**
 
-**D. `roadmap_dir`** = the roadmap's directory.
+**Roadmap slug resolution (the canonical rule — `/orchestrate` and `/consolidate-run` cite this
+rather than restating it):** when `--roadmap` is given as a bare slug or resolves to a directory
+rather than a `roadmap.md` file, resolve it in this fixed order:
+
+1. `planning/roadmaps/<slug>/` — if it exists, that is `roadmap_dir`.
+2. Otherwise, legacy `planning/<slug>/` — if it exists, that is `roadmap_dir`.
+3. A slug present in **both** locations is an **error**, not a silent preference — stop and report
+   both paths. An ambiguous roadmap is how a lane appends to the wrong lane log.
+
+An explicit path argument (one that already names a file or a full directory, e.g.
+`planning/roadmaps/close-the-loop/roadmap.md` or `planning/demand-ready/`) is always **honoured as
+given** — resolution applies only to a bare slug, never overriding an explicit path.
+
+**D. `roadmap_dir`** = the roadmap's directory, per the resolution above.
 
 **E. `run_record_dir`** = `planning/orchestration-run/<roadmap-slug>/` in **this repo**, where
 `<roadmap-slug>` is `roadmap_dir`'s directory name (from D). Create the directory if absent; if it
