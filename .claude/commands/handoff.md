@@ -50,8 +50,9 @@ until someone reconciles by hand — the `engine-rs` `state-json-block-status-st
 
 **2b — Drain anything that must outlive this handoff** into `planning/state.json`'s
 `carryover[]`, so the next handoff can't overwrite it away. One quick pass, not a routing
-ceremony — append an entry with `slug`, `scope`, `kind`, `text`, `created` (plus optional
-`related` / `clears_when`), where `kind` is one of:
+ceremony — append an entry with `slug`, `scope`, `kind`, `text`, `created` as the required
+core, plus these optional fields — `docs/state/state-schema.md` is the authoritative field
+table; this restates only what an agent needs inline while appending:
 
 | kind | for |
 |---|---|
@@ -59,6 +60,26 @@ ceremony — append an entry with `slug`, `scope`, `kind`, `text`, `created` (pl
 | `known_issue` | a don't-re-investigate fact |
 | `env` | a transient environmental caveat ("installed binary is stale, rebuild first") |
 | `deferred` | a real follow-on you haven't ticketed yet |
+
+- `priority` (int, `0..=3`) — value if resolved, on the same rubric as `tracks[].blocks[]`.
+  Omit when the entry carries no value judgement.
+- `blocks` (array) — edges to the work this entry blocks, same forms as `depends_on`
+  (`{type:"block",repo,id}` / `{type:"external",what}`); feeds the same reverse-topological
+  `min`-propagation that derives `effective_priority`. Omit (don't write `[]`) when it blocks
+  nothing.
+- `finding_id` (string) — free-form join key so `mev carryover` can correlate the same finding
+  filed in multiple repos.
+- `related`, `reviewed`, `snoozed_until` — as documented in `docs/state/state-schema.md`.
+- `clears_when` — either the legacy human-readable string (for genuinely subjective
+  conditions), or a **typed predicate** object mev can evaluate itself: `block_closed`
+  (`repo`, `id`), `file_exists` (`path`), `file_contains` (`path`, `pattern`), or
+  `command_exits_zero` (`command`) — each takes an optional `note`. Prefer the typed form
+  whenever the condition is checkable.
+
+**Only entries with a typed `clears_when` predicate are machine-evaluable by `mev carryover`**
+— a prose `clears_when` (or none) lands the entry in its not-evaluable lane. `priority` and
+`finding_id` are what make an entry rankable and cross-repo-correlatable; an entry with none
+of these three still counts, but sits inert until someone triages it by hand.
 
 Append; don't duplicate an existing slug. **Delete** any entry whose `clears_when` resolved
 this session. Skip entirely if this repo has no `planning/state.json`.

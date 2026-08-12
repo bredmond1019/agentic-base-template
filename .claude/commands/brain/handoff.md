@@ -46,9 +46,28 @@ leave it living only in the prose below:
   - `kind: env` — a transient environmental caveat (e.g. "installed binary is stale, rebuild first").
   - `kind: deferred` — a real follow-on you haven't ticketed yet; promote it to a block/backlog when ready.
 
-  Follow the `carryover[]` field shape in `docs/state/state-schema.md` (`slug`, `scope`, `kind`, `text`,
-  optional `related` + `clears_when`, `created`). Keep it valid JSON; append, don't duplicate an existing
-  slug. **Delete** any existing `carryover[]` entry whose `clears_when` resolved this session.
+  Follow the `carryover[]` field shape in `docs/state/state-schema.md` — the authoritative table — for
+  the required core (`slug`, `scope`, `kind`, `text`, `created`) plus the optional fields worth naming
+  inline here since this is what agents actually read while appending:
+  - `priority` (int, `0..=3`) — value if resolved, same rubric as `tracks[].blocks[]`; omit when the
+    entry carries no value judgement.
+  - `blocks` (array) — edges to the work this entry blocks (`{type:"block",repo,id}` /
+    `{type:"external",what}`), feeding the same reverse-topological `min`-propagation that derives
+    `effective_priority`. Omit (don't write `[]`) when it blocks nothing.
+  - `finding_id` (string) — free-form join key so `mev carryover` can correlate the same finding filed
+    in several repos.
+  - `related`, `reviewed`, `snoozed_until` — as documented in `docs/state/state-schema.md`.
+  - `clears_when` — either the legacy human-readable string (subjective conditions only), or a **typed
+    predicate** mev can evaluate: `block_closed` (`repo`, `id`), `file_exists` (`path`), `file_contains`
+    (`path`, `pattern`), `command_exits_zero` (`command`) — each takes an optional `note`. Prefer the
+    typed form whenever the condition is checkable.
+
+  **Only entries with a typed `clears_when` predicate are machine-evaluable by `mev carryover`** — a
+  prose `clears_when` (or none) lands the entry in its not-evaluable lane; `priority` and `finding_id`
+  are what make it rankable and cross-repo-correlatable.
+
+  Keep it valid JSON; append, don't duplicate an existing slug. **Delete** any existing `carryover[]`
+  entry whose `clears_when` resolved this session.
 
 The handoff prose in Step 3 then *points at* these slugs instead of being their only home.
 
