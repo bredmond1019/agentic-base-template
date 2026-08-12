@@ -22,7 +22,7 @@ sits above it and spans repos. `/begin-orchestration` drives one lane of the res
 | Flag | Required | Default | What it does |
 |---|---|---|---|
 | `<slug>` | **yes** | — | Roadmap slug. Becomes `planning/<slug>/`. Kebab-case, names the *outcome* not the date. |
-| `--from <path ...>` | no | — | Source documents: a review, an audit, an action register, a previous roadmap. Repeatable. |
+| `--from <path ...>` | no | — | Source documents: a review, an audit, an action register, a previous roadmap. Repeatable. A `consolidated-review.md` emitted by `/consolidate-run` is a valid source. |
 | `--supersedes <path>` | no | — | The roadmap this replaces. Adds the banner to both documents. |
 | `--lanes <n>` | no | `4` | Target concurrent lanes. The real ceiling is operator capacity, not repo count. |
 | `--dry-run` | no | off | Print the lane assignment and cut list; write nothing. |
