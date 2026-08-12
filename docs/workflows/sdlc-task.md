@@ -137,7 +137,7 @@ project whose `harness.json` has no `fastCommand`/`perTask: false` checks pays z
 the reconcile's filtered check list is empty and the step is skipped with a log line.
 
 **What it costs.** Measured on real repos (see
-[`measurement.md`](../../planning/ticket-sdlc-task-has-no-authoritative-gate/measurement.md) and
+[`measurement.md`](../../planning/archive/ticket-sdlc-task-has-no-authoritative-gate/measurement.md) and
 [D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md)'s cost table): well under
 2% of a typical spec's total wall-clock on both repos where a full number could be obtained
 (≈0.4% on `bella`, ≤1.8% even on `engine-rs`'s incomplete worst-known measurement). There is no
