@@ -211,9 +211,19 @@ def find_violations(dirs: list[Path], prefixes: list[str]) -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
-# Provenance -- current tree only, no baseline. A directory git cannot vouch for (gitignored, or
-# on disk but never committed) is "unknown provenance": reported, never blocking. See the module
-# docstring's "PROVENANCE, NOT BASELINE" section for why this replaces D64's delta model here.
+# Gitignore skip -- current tree only, no baseline, and NOT a tracked-vs-untracked test. Under a
+# scope-based blocking rule (see WHY SCOPE, NOT DELTA above), whether a directory has been
+# `git add`ed carries no information: a non-conforming directory in this repo's scope is wrong
+# whether or not it has been committed yet. The only thing that legitimately exempts a directory
+# is being permanently unclassifiable -- genuinely `.gitignore`d. Every other non-conforming
+# directory blocks, regardless of git status. See the module docstring's "PROVENANCE, NOT
+# BASELINE" section.
+#
+# The gitignore check resolves the repository that OWNS each path, not the invoking repo's root
+# -- every repo's `planning/` is a symlink into a DIFFERENT git repo (HQ's vault), so a query
+# rooted at the invoking repo reports `fatal: ... is outside repository` (or simply "not ignored")
+# for content the vault genuinely tracks or ignores. That mismatch -- not tracked-vs-untracked --
+# was the actual bug: a query against the wrong repo can never see the right answer.
 # ---------------------------------------------------------------------------
 
 
@@ -229,42 +239,39 @@ def _run_git(args: list[str], cwd: Path) -> tuple[int, str, str]:
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 
 
-def is_known_to_git(git_root: Path, spec_dir: Path) -> bool:
-    """True if `spec_dir` is a directory git can actually vouch for at `git_root`: inside a git
-    work tree, not matched by any `.gitignore` rule, and its spec file is tracked (or at least
-    stageable -- `git add --dry-run` reports what `git status` would pick up without mutating the
-    index). False covers every "unknown provenance" case: no git repo at all, gitignored, or
-    present on disk but never `git add`ed.
+def owning_repo_root(path: Path) -> Optional[Path]:
+    """Resolve the git repository that OWNS `path` -- `git -C path rev-parse --show-toplevel`,
+    i.e. asked of the path itself, never of some other invocation root. `None` if `path` is not
+    inside any git work tree at all.
     """
-    rc, _, _ = _run_git(["rev-parse", "--is-inside-work-tree"], git_root)
-    if rc != 0:
+    rc, out, _ = _run_git(["rev-parse", "--show-toplevel"], path)
+    if rc != 0 or not out:
+        return None
+    return Path(out)
+
+
+def is_gitignored(spec_dir: Path) -> bool:
+    """True only if `spec_dir` is genuinely ignored by git, per `git check-ignore` run against the
+    repository that OWNS `spec_dir` (resolved per path -- never a fixed invocation root). A path
+    with no owning git repo at all is NOT treated as ignored: there is no `.gitignore` rule to
+    honor, so it falls through to blocking like any other non-conforming directory.
+    """
+    owning_root = owning_repo_root(spec_dir)
+    if owning_root is None:
         return False
-
-    rc_ignore, _, _ = _run_git(["check-ignore", "-q", str(spec_dir)], git_root)
-    if rc_ignore == 0:
-        # check-ignore exits 0 when the path IS ignored.
-        return False
-
-    spec_file = next(
-        (spec_dir / fn for fn in ("tasks.json", "tasks.md") if (spec_dir / fn).exists()),
-        None,
-    )
-    if spec_file is None:
-        return False
-
-    rc_ls, _, _ = _run_git(["ls-files", "--error-unmatch", str(spec_file)], git_root)
-    return rc_ls == 0
+    rc_ignore, _, _ = _run_git(["check-ignore", "-q", str(spec_dir)], owning_root)
+    return rc_ignore == 0
 
 
-def partition_by_provenance(
-    git_root: Path, violations: list[Path]
-) -> tuple[list[Path], list[Path]]:
-    """Split `violations` into (known, unknown_provenance) against `git_root`."""
-    known: list[Path] = []
-    unknown: list[Path] = []
+def partition_by_gitignore(violations: list[Path]) -> tuple[list[Path], list[Path]]:
+    """Split `violations` into (blocking, gitignored). Gitignored paths are reported separately
+    and never block; every other violation blocks, regardless of tracked/staged/untracked status.
+    """
+    blocking: list[Path] = []
+    gitignored: list[Path] = []
     for d in violations:
-        (known if is_known_to_git(git_root, d) else unknown).append(d)
-    return known, unknown
+        (gitignored if is_gitignored(d) else blocking).append(d)
+    return blocking, gitignored
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +280,10 @@ def partition_by_provenance(
 
 
 def repo_mode(repo_root: Path, brain_root: Optional[Path]) -> tuple[int, str]:
-    """Default mode: gate ONLY `repo_root` (the repo this guard was invoked from). Blocks on any
-    non-conforming block directory found there, git-known or not consulting any baseline --
-    unknown-provenance directories are reported separately and never block.
+    """Default mode: gate ONLY `repo_root` (the repo this guard was invoked from). Blocks on ANY
+    non-conforming block directory found there, regardless of git status (tracked, staged, or
+    brand-new on disk) -- the only exemption is a genuinely gitignored path, checked against the
+    repository that owns it.
     """
     buf = io.StringIO()
 
@@ -291,17 +299,17 @@ def repo_mode(repo_root: Path, brain_root: Optional[Path]) -> tuple[int, str]:
     out(f"{len(prefixes)} repo prefix(es) loaded from brain.toml")
 
     violations = find_violations(dirs, prefixes)
-    blocking, unknown = partition_by_provenance(repo_root, violations)
+    blocking, gitignored = partition_by_gitignore(violations)
 
     if blocking:
         out(f"\n{len(blocking)} non-conforming block director(y/ies) in this repo (blocking):")
         for d in blocking:
             out(f"  blocking (this repo): {d}: does not match <REPO>.<phase>.<block>")
-    if unknown:
-        out(f"\n{len(unknown)} director(y/ies) of unknown provenance (never blocking):")
-        for d in unknown:
-            out(f"  unknown provenance (gitignored/untracked): {d}")
-    if not blocking and not unknown:
+    if gitignored:
+        out(f"\n{len(gitignored)} director(y/ies) of unknown provenance (never blocking):")
+        for d in gitignored:
+            out(f"  unknown provenance (gitignored): {d}")
+    if not blocking and not gitignored:
         out("\nall block directories in this repo conform to <REPO>.<phase>.<block>")
 
     if blocking:
@@ -334,28 +342,31 @@ def fleet_mode(brain_root: Path, strict: bool) -> tuple[int, str]:
     out(f"{len(prefixes)} repo prefix(es) loaded from brain.toml")
 
     violations = find_violations(dirs, prefixes)
-    known, unknown = partition_by_provenance(brain_root, violations)
+    reportable, gitignored = partition_by_gitignore(violations)
 
-    if known:
-        out(f"\n{len(known)} non-conforming block director(y/ies) fleet-wide (reported, --fleet):")
-        for d in known:
+    if reportable:
+        out(
+            f"\n{len(reportable)} non-conforming block director(y/ies) fleet-wide "
+            "(reported, --fleet):"
+        )
+        for d in reportable:
             out(f"  reported (--fleet): {d}: does not match <REPO>.<phase>.<block>")
-    if unknown:
-        out(f"\n{len(unknown)} director(y/ies) of unknown provenance (never blocking):")
-        for d in unknown:
-            out(f"  unknown provenance (gitignored/untracked): {d}")
-    if not known and not unknown:
+    if gitignored:
+        out(f"\n{len(gitignored)} director(y/ies) of unknown provenance (never blocking):")
+        for d in gitignored:
+            out(f"  unknown provenance (gitignored): {d}")
+    if not reportable and not gitignored:
         out("\nall block directories fleet-wide conform to <REPO>.<phase>.<block>")
 
     if not strict:
         out(
-            f"\n--fleet is reporting-only: exiting 0 regardless of the {len(known)} finding(s) "
-            "above (pass --strict to gate on them)."
+            f"\n--fleet is reporting-only: exiting 0 regardless of the {len(reportable)} "
+            "finding(s) above (pass --strict to gate on them)."
         )
         return 0, buf.getvalue()
 
-    if known:
-        out(f"\n--strict: BLOCKED on {len(known)} fleet-wide non-conforming director(y/ies).")
+    if reportable:
+        out(f"\n--strict: BLOCKED on {len(reportable)} fleet-wide non-conforming director(y/ies).")
         return 1, buf.getvalue()
     out("\n--strict: no fleet-wide violations")
     return 0, buf.getvalue()
@@ -579,8 +590,9 @@ def self_test() -> int:
         check("(g) negative: the same shape, tracked, DOES block", rc2 == 1)
         check("(g) negative: it is reported as blocking, not unknown provenance", "blocking (this repo)" in out2)
 
-        # Untracked (present on disk, never `git add`ed, and not gitignored either) is also
-        # unknown provenance.
+        # Untracked (present on disk, never `git add`ed, and not gitignored either) now BLOCKS --
+        # tracked-vs-untracked carries no information under the scope-based blocking rule; only a
+        # genuine gitignore rule exempts a directory.
         base3 = Path(td) / "untracked"
         _init_git_repo(base3)
         _write_brain_toml(base3)
@@ -588,8 +600,11 @@ def self_test() -> int:
         _commit_all(base3, "clean baseline")
         _write_spec_dir(base3, "10.B-untracked")  # deliberately never `git add`ed
         rc3, out3 = _run_repo_mode(base3)
-        check("(g) an untracked non-conforming dir never blocks either (exit 0)", rc3 == 0)
-        check("(g) it is also reported as unknown provenance", "unknown provenance" in out3)
+        check("(g) an untracked (but not gitignored) non-conforming dir now blocks (exit 1)", rc3 == 1)
+        check(
+            "(g) it is reported as blocking, not unknown provenance",
+            "blocking (this repo)" in out3 and "unknown provenance" not in out3,
+        )
 
     # (h) --fleet reports fleet-wide and exits 0 unless --strict is passed; End-to-end discovery
     # also proves the -L -uu realpath-deduped sweep finds spec dirs reachable via a symlink
