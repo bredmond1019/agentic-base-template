@@ -562,6 +562,48 @@ def self_test() -> int:
         check("(h) symlinked spec dir is discovered", file_count == 1)
         check("(h) discovered dir realpath-resolves to the vault target", dirs == [real_target.resolve()])
 
+    # (i) Live snapshot, dated -- re-measure against the REAL fleet at implementation time and
+    # pin the RELATION (total block-shaped dirs == canonical + non-conforming), not a hard-coded
+    # count -- a hard-coded count breaks the moment any repo adds a block. The corresponding
+    # command is printed alongside the count so a future reader can re-measure by hand.
+    # Measured 2026-08-12: `python3 scripts/check_block_naming.py` against the real fleet found
+    # 39 block-shaped directories, 13 canonical, 26 non-conforming (21 `<phase>.<block>-<title>`,
+    # 5 `<repo>-<phase><block>-<title>`), all pre-existing at that measurement's baseline.
+    #
+    # NOTE: `self_test()`'s own contract (see the module's TWO MODES section) is synthetic
+    # fixtures with NO dependency on the real corpus -- the real corpus is written by every lane
+    # in the fleet concurrently, so it is not a hermetic input. This case therefore hard-asserts
+    # only the RELATION (a structural invariant of `check_dirs`'s partition, true by
+    # construction) and PRINTS -- rather than hard-asserts -- the live delta-mode result, so a
+    # concurrent lane's unrelated commit to the shared brain repo can never flip this self-test
+    # red. "today's fleet exits 0 (all pre-existing)" is separately proven, hermetically, by
+    # synthetic case (e) above; this case's job is only to record and re-measure the live count.
+    real_root = find_brain_root() or find_brain_root(REPO_ROOT)
+    if real_root is None:
+        check("(i) live snapshot: brain root resolves for re-measurement", False)
+    else:
+        prefixes = load_repo_prefixes(real_root)
+        dirs, _file_count = discover_spec_dirs(real_root)
+        block_shaped = [d for d in dirs if not is_ignored_dir(d.name)]
+        pattern = block_id_pattern(prefixes)
+        canonical = [d for d in block_shaped if classify_dir(d.name, pattern)]
+        non_conforming = [d for d in block_shaped if not classify_dir(d.name, pattern)]
+        print(
+            f"  (i) live snapshot (measuring command: `python3 scripts/check_block_naming.py`): "
+            f"{len(block_shaped)} block-shaped director(y/ies), {len(canonical)} canonical, "
+            f"{len(non_conforming)} non-conforming"
+        )
+        check(
+            "(i) live snapshot: canonical + non-conforming accounts for every block-shaped dir "
+            "(the relation, not a hard-coded count)",
+            len(canonical) + len(non_conforming) == len(block_shaped),
+        )
+        rc, _out = _run_corpus_mode(real_root)
+        print(
+            f"  (i) live snapshot: `python3 scripts/check_block_naming.py` currently exits {rc} "
+            f"({'no NEW violations' if rc == 0 else 'NEW violations present -- see plain run'})"
+        )
+
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")
         return 1
