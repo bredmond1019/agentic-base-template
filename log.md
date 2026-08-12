@@ -3,7 +3,60 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-10T09:40:00Z
+**Last updated:** 2026-08-12T08:15:00-0300
+
+---
+
+## [2026-08-12]
+
+### D57 run-record contract + consolidator, then two defect tickets closed via /orchestrate
+
+**Four blocks shipped.** `ticket-orchestration-run-record-contract` (6 tasks) addressed run records
+per `(repo x roadmap)` and migrated all 31 existing notes/review pairs across 10 repos into
+`orchestration-run/<roadmap-slug>/`. `ticket-orchestration-run-consolidator` (6 tasks) added
+`/consolidate-run` implementing D57 section 5 — discovery with realpath dedup, two-axis
+`origin_roadmap` selection, `finding_id` on every proposed entry — plus
+`scripts/test_consolidator_discovery.py`. Then `/orchestrate` drove two defect tickets found in
+carryover, both worktree-isolated, both closed.
+
+**The D16 derive stage was authoring to a different standard than the primary path.** All three
+engines' STEP 3 derive prompts told the agent to author `validation_commands` from `tasks.md` and
+never mentioned `generate-tasks.md`'s rule that it must be `[]` for any task touching compiled or
+linted source. Measured in `core/mev`: all 11 derived tasks got per-task overrides, ten of which
+should have had none — and the overrides used `cargo nextest run <binary>`, which filters by test
+*name*, not binary. `cargo nextest run brain_state` ran 2 unrelated tests and exited 0, marking
+**four tasks passed without ever running their tests**. The syntax bug was downstream of the scoping
+bug; only the wrong scope gave it a surface to appear on. Fixed in all three engines plus both
+Gemini-facing SKILL.md guides, with per-engine assertions so a partial fix fails.
+
+**The fix is the convention, not the command form.** Teaching the engines `--test <binary>` would
+have put Rust-specific mechanism into files that standing rule 1 says ship mechanism only. Citing
+`generate-tasks.md` and leaving the per-task judgement to run time is project-agnostic and fixes the
+whole class. `--no-tests=fail` was considered and rejected: it catches the zero-test case, which
+nextest already exits 4 on, and would not have caught the four false passes.
+
+**`/close-out`'s emoji gate was a fifth site nobody was comparing.** The four engine gate sites are
+diff-scoped to added lines and exempt the literal PR-footer phrase;
+`test_emoji_gate_diff_scoped.py` pinned that agreement across four sites and never saw
+`close-out.md`, whose inline gate scanned whole files with no exemption. So a file could pass four
+gates and fail the fifth — and a legacy file's pre-existing emoji failed a diff that never touched
+it. Now a five-site suite. The star block-registration marker became `` `[*]` `` in both
+`README.md` and `generate-roadmap.md`, changed in lockstep because it is roadmap-format vocabulary,
+not decoration.
+
+**A corpus-wide check with no delta attribution blocked work twice.** The
+`orchestration-run-contract-tests` check shipped this session gates on the *whole* shared corpus, so
+a transposed `doc_id` written by the concurrent operator-surface lane stopped `/close-out` and then
+bailed an unrelated ticket whose entire diff was a prompt edit. HQ's push gate solved this in D64 —
+validate everything, block only on what is new since the baseline — and the root `CLAUDE.md` makes
+the same argument for leaving `conformance` non-gating. Unblocked by correcting the two `doc_id`s
+(after verifying no `related:` edge pointed at them); the class fix is
+`BT.ticket.corpus-checks-delta-attribution`, written and registered, not yet run.
+
+**Refs:** `planning/decisions/D57-orchestration-run-artifact-contract.md`,
+`planning/ticket-derive-tasks-json-validation-scope/`,
+`planning/ticket-emoji-gate-close-out-site-drift/`,
+`planning/ticket-corpus-checks-delta-attribution/`
 
 ---
 
