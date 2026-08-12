@@ -110,6 +110,19 @@ customizations are never touched) — keep changes here additive and well-docume
    `prompt-template-parse` check (`scripts/check_prompt_templates.py`) parses each prompt region
    *in isolation*, which is what actually detects it. If it fails, fix the escaping — never
    re-baseline it, and do not conclude from a green `node --check` that a prompt is intact.
+7. **Work that requires the operator is filed as a graph edge, never left as prose.** A decision,
+   a credential, a judgement call, or a review that only the operator can make/hold/give is filed
+   as a `{"type":"operator", slug, exit, start, what?}` entry in `depends_on` on the block(s) it
+   gates — `slug` kebab-case and prefixed `operator-`, `exit` naming the artifact whose existence
+   ends the gate (never a description of the work), `start` a paste-ready command. A single
+   reducible yes/no on a fixed payload uses `{"type":"approval", slug, what, digest}` instead.
+   **Why:** an operator/approval edge inherits the effective priority of everything it gates and
+   surfaces in `/next` as the reason work can't start; prose in a handoff, a `note` field, or an
+   `## Open questions` bullet surfaces nowhere and is exactly how these get left for days. This
+   rule ships from here because it must reach every repo scaffolded from this template. **A
+   scaffolded repo with no `planning/state.json`** cannot file the edge — in that case say so
+   explicitly in the handoff and name who is expected to file it once a `state.json` exists;
+   never error, and never silently drop the item.
 
 <!-- BEGIN:response-style -->
 ## Response Style
