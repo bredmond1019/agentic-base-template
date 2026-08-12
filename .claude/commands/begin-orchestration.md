@@ -238,6 +238,17 @@ Each has already cost a real run in this fleet.
    section 1). At lane close, promote any item still `OPEN` into `state.json` `carryover[]` (D57
    section 4); do not copy it into another `notes.md`.
 
+   **Verify what you just wrote, before continuing.** After every write or append to `notes.md`
+   (and after writing the terminal `review.md`), run
+   `python3 <path-to-base-template>/scripts/test_orchestration_run_contract.py` and confirm it
+   exits 0. This is the writer's job, not some other repo's: the corpus is one shared vault, so an
+   unvalidated record surfaces as a failure in a different repo's gate, blocking a lane that never
+   touched it (the brain root `CLAUDE.md` rule — "any generator writing into the corpus must
+   validate its own output"). On a violation attributable to the record just written, **fix it**
+   (correct the `doc_id`, `roadmap:`, or `lifecycle` field per Rule 5 above) and re-run the checker
+   — do not proceed with a known violation. **Deleting or emptying the record is never an
+   acceptable way to make the check pass**; the record is the run's evidence.
+
 6. **Resolve what you can; record the call.** A lane that stops at every ambiguity is worthless,
    and one that stops at none is dangerous. Decide the ordinary things yourself — a spec slug that
    does not quite match convention, which of two plausible `--from` plan files is meant, whether a
