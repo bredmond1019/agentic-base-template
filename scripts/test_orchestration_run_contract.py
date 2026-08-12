@@ -55,6 +55,41 @@ either number, and only reports it -- it is informational, not something corpus 
 
 This is a GATING check once registered (task 6). A failure means a real `orchestration-run/`
 record violates the D57 contract -- fix the record, do not loosen this script.
+
+DELTA ATTRIBUTION (BT.ticket.corpus-checks-delta-attribution)
+---------------------------------------------------------------
+Corpus mode still DISCOVERS the whole corpus -- that breadth is the point, a doc_id collision
+red-gates every concurrent lane regardless of which repo wrote it. What changed is what the
+EXIT CODE reflects. The corpus is written by every lane in the fleet concurrently, so gating on
+the raw violation count makes base-template's pipeline depend on the authoring hygiene of repos
+it does not own and cannot see (measured 2026-08-12: an `operator-surface` doc_id typo blocked
+two unrelated base-template runs). This ports D64's push-gate design
+(`agentic-portfolio/hooks/pre-push` stage 1, `docs/decisions/D64-push-gate-delta-attribution.md`):
+compute the violation set twice -- once against the corpus as it is now, once against the corpus
+as of a resolved baseline commit -- and block only on violations that are NEW relative to that
+baseline. A violation present in both sets is pre-existing: reported, not blocking.
+
+Attribution is by DELTA, never by PATH. The two violation sets are compared as whole strings
+(which already embed the offending file's path), never filtered down to "files this tree
+touched" -- a deletion or rename can surface a violation on a file the change never opened (e.g.
+two records swapping which one legitimately owns a doc_id), and a path-scoped filter would miss
+exactly that class. D64 has a test pinning the same rule; this script's --self-test case (c3)
+mirrors it (task 2).
+
+Baseline resolution (the brain repo IS the corpus's git repo -- every `planning/` dir in the
+fleet, including every `core/<repo>/planning`, is tracked by the one HQ git repo per CLAUDE.md
+standing rule 10, so one `git` invocation set against BRAIN_ROOT covers the whole corpus):
+  1. merge-base(HEAD, upstream-tracking-branch), if HEAD has an upstream (`@{u}`) configured.
+  2. Else, HEAD itself -- "the last commit reachable from it" per the ticket's task 1 wording.
+     This means uncommitted local changes in the brain repo are treated as this tree's delta.
+  3. Baseline UNRESOLVABLE (not a git repo, or HEAD itself doesn't resolve -- a truly fresh
+     clone/init with zero commits) -- documented choice: FAIL CLOSED. Every violation found is
+     treated as NEW, i.e. corpus mode falls back to the pre-delta-attribution whole-corpus-blocks
+     behavior. This is printed loudly, never silent. The alternative (fail OPEN: no baseline means
+     nothing can be "new", so nothing ever blocks) turns the gate into a silent no-op the moment a
+     rare edge case is hit -- worse than the occasional over-block a truly baseline-less run
+     produces, and the whole reason this script exists is that a check nobody trusts gets bypassed
+     forever. Case (e5) in --self-test (task 2) pins this exact behavior.
 """
 
 from __future__ import annotations
@@ -155,8 +190,10 @@ def repo_slug_for(record_dir: Path) -> Optional[str]:
     return None
 
 
-def load_record(path: Path) -> Optional[Record]:
-    """Build a Record from a `notes.md`/`review.md` under `orchestration-run/<roadmap-slug>/`.
+def record_from_content(path: Path, text: str) -> Optional[Record]:
+    """Build a Record from a path + its already-read content -- shared by `load_record`
+    (reads off disk) and `read_baseline_records` (reads via `git show <sha>:<path>`, since a
+    baseline commit's tree has no filesystem path to `.read_text()`).
 
     Returns None for files that are not migrated-layout records at all -- e.g. a flat legacy
     `orchestration-run/notes.md` (roadmap-slug dir would resolve to `orchestration-run` itself)
@@ -171,10 +208,6 @@ def load_record(path: Path) -> Optional[Record]:
     repo_slug = repo_slug_for(roadmap_dir)
     if repo_slug is None:
         return None
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return None
     fm = parse_frontmatter(text)
     return Record(
         path=path,
@@ -184,6 +217,22 @@ def load_record(path: Path) -> Optional[Record]:
         doc_id=fm.get("doc_id"),
         lifecycle=fm.get("lifecycle"),
     )
+
+
+def load_record(path: Path) -> Optional[Record]:
+    """Build a Record from a `notes.md`/`review.md` under `orchestration-run/<roadmap-slug>/`,
+    reading its content off disk. See `record_from_content` for the shared parse logic.
+    """
+    if path.name not in ("notes.md", "review.md"):
+        return None
+    roadmap_dir = path.parent
+    if roadmap_dir.name in ("orchestration-run",) or roadmap_dir.name == "":
+        return None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return record_from_content(path, text)
 
 
 def check_records(records: list[Record]) -> list[str]:
@@ -506,6 +555,91 @@ def self_test() -> int:
     return 0
 
 
+def _run_git(args: list[str], cwd: Path) -> tuple[int, str, str]:
+    """Run a git command captured directly (never piped) so `$?` reflects git's own exit code,
+    not a pipe's (CLAUDE.md trap 1). Never raises -- git-not-on-PATH and any other OSError are
+    folded into a non-zero return so callers can treat them the same as "git said no".
+    """
+    try:
+        result = subprocess.run(
+            ["git", *args], cwd=cwd, capture_output=True, text=True,
+        )
+    except OSError as exc:
+        return 1, "", str(exc)
+    return result.returncode, result.stdout.strip(), result.stderr.strip()
+
+
+def resolve_baseline_commit(root: Path) -> tuple[Optional[str], str]:
+    """Resolve the baseline commit for delta attribution (see module docstring for the full
+    rationale). Returns (commit_sha, description) on success, or (None, reason) when
+    unresolvable -- callers must treat None as "fail closed", not "no baseline == nothing new".
+    """
+    rc, _, _ = _run_git(["rev-parse", "--is-inside-work-tree"], root)
+    if rc != 0:
+        return None, f"{root} is not inside a git working tree"
+
+    rc, head, _ = _run_git(["rev-parse", "HEAD"], root)
+    if rc != 0 or not head:
+        return None, "HEAD does not resolve (no commits reachable -- a truly fresh repo)"
+
+    rc, upstream, _ = _run_git(
+        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], root
+    )
+    if rc == 0 and upstream:
+        rc2, merge_base, _ = _run_git(["merge-base", "HEAD", upstream], root)
+        if rc2 == 0 and merge_base:
+            return merge_base, f"merge-base(HEAD, {upstream})"
+
+    # No upstream tracking branch configured -- fall back to "the last commit reachable from
+    # HEAD", i.e. HEAD itself. Anything not yet committed in the brain repo is this tree's delta.
+    return head, "HEAD (no upstream tracking branch configured)"
+
+
+def read_baseline_records(root: Path, baseline_sha: str) -> list[Record]:
+    """Reconstruct the in-scope records as they existed at `baseline_sha`, via `git show` --
+    never via `git checkout`, so this never mutates the caller's working tree or index.
+
+    `git ls-tree -r` walks the whole tree at that commit (this repo's git root already covers
+    the whole corpus per CLAUDE.md standing rule 10 -- every `planning/` dir in the fleet,
+    including every `core/<repo>/planning`, is tracked by the same HQ git repo), so this needs
+    no symlink-following of its own the way `discover_records`'s live filesystem sweep does.
+    """
+    rc, out, err = _run_git(["ls-tree", "-r", "--name-only", baseline_sha], root)
+    if rc != 0:
+        raise RuntimeError(f"git ls-tree failed for baseline {baseline_sha}: {err}")
+
+    records: list[Record] = []
+    for rel in out.splitlines():
+        rel = rel.strip()
+        if not rel or "orchestration-run/" not in rel:
+            continue
+        if not (rel.endswith("/notes.md") or rel.endswith("/review.md")):
+            continue
+        rc2, content, err2 = _run_git(["show", f"{baseline_sha}:{rel}"], root)
+        if rc2 != 0:
+            # File existed in the tree listing but couldn't be read (e.g. it's a symlink entry,
+            # not a blob) -- skip rather than fail the whole baseline reconstruction over it.
+            continue
+        rec = record_from_content(root / rel, content)
+        if rec is not None:
+            records.append(rec)
+    return records
+
+
+def classify_violations(current: list[str], baseline: list[str]) -> tuple[list[str], list[str]]:
+    """Split `current` violations into (new, pre_existing) against the `baseline` set.
+
+    Comparison is by the full violation string (which already embeds the offending file's path),
+    never by filtering `current` down to paths this tree touched -- that is the by-delta-never-
+    by-path rule: a rename/deletion can surface a violation on a file the change never opened,
+    and a path-scoped filter would miss exactly that class.
+    """
+    baseline_set = set(baseline)
+    new = [v for v in current if v not in baseline_set]
+    pre_existing = [v for v in current if v in baseline_set]
+    return new, pre_existing
+
+
 def corpus_mode(root: Path) -> int:
     records, distinct_count, dir_count = discover_records(root)
     print(f"discovered {distinct_count} distinct file(s) across {dir_count} orchestration-run/ "
@@ -513,14 +647,48 @@ def corpus_mode(root: Path) -> int:
     print(f"{len(records)} of those are migrated-layout notes.md/review.md records in scope for "
           "this check")
 
-    violations = check_records(records)
-    if violations:
-        print(f"\n{len(violations)} violation(s):")
-        for v in violations:
-            print(f"  FAIL {v}")
+    current_violations = check_records(records)
+
+    baseline_sha, baseline_desc = resolve_baseline_commit(root)
+    if baseline_sha is None:
+        print(f"\nWARNING: baseline unresolvable ({baseline_desc}).")
+        print("WARNING: falling back to FAIL CLOSED -- every violation found is treated as NEW "
+              "(the pre-delta-attribution whole-corpus-blocks behavior). This is a documented "
+              "edge case (a truly fresh clone/init with zero commits), not a silent no-op.")
+        new_violations = current_violations
+        pre_existing_violations: list[str] = []
+    else:
+        print(f"\nbaseline resolved: {baseline_desc} ({baseline_sha[:12]})")
+        baseline_records = read_baseline_records(root, baseline_sha)
+        baseline_violations = check_records(baseline_records)
+        new_violations, pre_existing_violations = classify_violations(
+            current_violations, baseline_violations
+        )
+
+    if current_violations:
+        pre_existing_set = set(pre_existing_violations)
+        print(f"\n{len(current_violations)} violation(s) found in the current corpus "
+              f"({len(new_violations)} NEW / blocking, {len(pre_existing_violations)} "
+              "pre-existing / not blocking):")
+        for v in current_violations:
+            if v in pre_existing_set:
+                print(f"  pre-existing (reported, not blocking): {v}")
+            else:
+                print(f"  NEW (blocking): {v}")
+    else:
+        print("\nno violations found in the current corpus")
+
+    if new_violations:
+        print(f"\nBLOCKED: {len(new_violations)} NEW violation(s) attributable to this tree's "
+              "changes.")
         return 1
 
-    print("\nall in-scope records satisfy the D57 contract")
+    if pre_existing_violations:
+        print(f"\nno NEW violations. {len(pre_existing_violations)} pre-existing violation(s) "
+              "were reported above but are NOT blocking -- this is a report of what this tree "
+              "did not break, not a claim the whole corpus is clean.")
+    else:
+        print("\nall in-scope records satisfy the D57 contract")
     return 0
 
 
