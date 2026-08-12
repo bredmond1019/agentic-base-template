@@ -373,6 +373,127 @@ def case_writer_commands_carry_verify_step() -> None:
         check(f"{label}: forbids deleting the record to pass", check_no_delete_to_pass(text))
 
 
+# ---------------------------------------------------------------------------
+# Roadmap-location checks (BT.ticket.roadmaps-get-a-home-and-a-registry task 4) -- assert that
+# the writer (`/generate-roadmap`) emits the new `planning/roadmaps/<slug>/` location and that
+# every reader (`/begin-orchestration`, `/orchestrate`, `/consolidate-run`) resolves a roadmap
+# slug rather than hardcoding either location, per-file, so a fix landing in N-1 of the readers
+# is caught rather than hidden behind a combined any-match assertion (the same D16-derive-prompt
+# defect shape the writer-command checks above already guard against). This is NOT a new gating
+# check -- it extends this script's existing scope-boundary assertions, which already read
+# command files for the D57 writers.
+# ---------------------------------------------------------------------------
+
+GENERATE_ROADMAP_PATH = REPO_ROOT / ".claude" / "commands" / "generate-roadmap.md"
+CONSOLIDATE_RUN_PATH = REPO_ROOT / ".claude" / "commands" / "consolidate-run.md"
+
+ROADMAP_READER_COMMANDS = (
+    ("begin-orchestration.md", BEGIN_ORCHESTRATION_PATH),
+    ("orchestrate.md", ORCHESTRATE_PATH),
+    ("consolidate-run.md", CONSOLIDATE_RUN_PATH),
+)
+
+
+def check_resolves_roadmap_location(text: str) -> bool:
+    """A reader must name the new location AND acknowledge a legacy fallback -- naming only the
+    new location (or only 'legacy' with no path) is what a hardcoded-not-resolved reader would
+    still satisfy by accident, so both must be present together."""
+    return "planning/roadmaps/" in text and "legacy" in text.lower()
+
+
+def check_both_locations_is_error(text: str) -> bool:
+    """The both-locations-is-an-error rule must be stated, not merely implied -- a reader that
+    silently prefers one location over the other is exactly the ambiguity hazard the ticket
+    calls out (a lane appending to the wrong lane log)."""
+    lower = text.lower()
+    return "both" in lower and "error" in lower
+
+
+def check_writer_emits_new_location(text: str) -> bool:
+    """The writer must instruct creating the roadmap folder at the new location."""
+    return "planning/roadmaps/<slug>/" in text
+
+
+# -- synthetic fixtures: a GOOD text each check must pass, and a BAD text that must fail it.
+
+_GOOD_RESOLVES_ROADMAP = (
+    "Resolve <slug> to planning/roadmaps/<slug>/ if it exists; otherwise, legacy "
+    "planning/<slug>/ if that exists instead."
+)
+_BAD_RESOLVES_ROADMAP = (
+    "Read the lane log from planning/<slug>/lane-log.jsonl."
+)
+
+_GOOD_BOTH_LOCATIONS_ERROR = (
+    "A slug present in both locations is an error -- stop and report rather than silently "
+    "choosing one."
+)
+_BAD_BOTH_LOCATIONS_ERROR = (
+    "If both locations exist, prefer the new one and continue without stopping."
+)
+
+_GOOD_WRITER_NEW_LOCATION = (
+    "Add the folder at planning/roadmaps/<slug>/roadmap.md, replacing the old layout."
+)
+_BAD_WRITER_NEW_LOCATION = (
+    "Add the folder at planning/<slug>/roadmap.md."
+)
+
+
+def case_roadmap_location_checks_discriminate() -> None:
+    """Each roadmap-location check must pass its GOOD fixture and fail its BAD one -- proof the
+    check actually discriminates rather than always returning True."""
+    check(
+        "resolves-roadmap-location: passes compliant text",
+        check_resolves_roadmap_location(_GOOD_RESOLVES_ROADMAP),
+    )
+    check(
+        "resolves-roadmap-location: fails hardcoded-legacy-only text",
+        not check_resolves_roadmap_location(_BAD_RESOLVES_ROADMAP),
+    )
+
+    check(
+        "both-locations-is-error: passes compliant text",
+        check_both_locations_is_error(_GOOD_BOTH_LOCATIONS_ERROR),
+    )
+    check(
+        "both-locations-is-error: fails silent-preference text",
+        not check_both_locations_is_error(_BAD_BOTH_LOCATIONS_ERROR),
+    )
+
+    check(
+        "writer-emits-new-location: passes compliant text",
+        check_writer_emits_new_location(_GOOD_WRITER_NEW_LOCATION),
+    )
+    check(
+        "writer-emits-new-location: fails legacy-only text",
+        not check_writer_emits_new_location(_BAD_WRITER_NEW_LOCATION),
+    )
+
+
+def case_writer_emits_new_roadmap_location() -> None:
+    """The real `/generate-roadmap` command must instruct writing to the new location."""
+    if not GENERATE_ROADMAP_PATH.exists():
+        check(f"generate-roadmap.md: file exists at {GENERATE_ROADMAP_PATH}", False)
+        return
+    text = GENERATE_ROADMAP_PATH.read_text(encoding="utf-8")
+    check("generate-roadmap.md: emits planning/roadmaps/<slug>/", check_writer_emits_new_location(text))
+
+
+def case_readers_resolve_roadmap_location() -> None:
+    """Each real reader command must resolve a roadmap slug rather than hardcode a path, and
+    state the both-locations-is-an-error rule -- asserted SEPARATELY per file, matching the
+    writer-command-checks discipline above: a fix landing in one of the three is the likely
+    failure, and a combined any-match assertion would hide it."""
+    for label, path in ROADMAP_READER_COMMANDS:
+        if not path.exists():
+            check(f"{label}: file exists at {path}", False)
+            continue
+        text = path.read_text(encoding="utf-8")
+        check(f"{label}: resolves roadmap location (new + legacy)", check_resolves_roadmap_location(text))
+        check(f"{label}: states both-locations-is-an-error", check_both_locations_is_error(text))
+
+
 def _sweep_with_rg(root: Path) -> Optional[list[Path]]:
     """Try `rg -L -uu --files -g '**/orchestration-run/**'`; None if no `rg` binary is on PATH.
 
@@ -824,6 +945,13 @@ def self_test() -> int:
     # the verify-after-write step, asserted separately per file.
     case_writer_command_checks_discriminate()
     case_writer_commands_carry_verify_step()
+
+    # (n) Roadmap-location family (BT.ticket.roadmaps-get-a-home-and-a-registry task 4): the
+    # writer emits the new location, and every reader resolves rather than hardcodes, each
+    # asserted separately against the real command files.
+    case_roadmap_location_checks_discriminate()
+    case_writer_emits_new_roadmap_location()
+    case_readers_resolve_roadmap_location()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")
