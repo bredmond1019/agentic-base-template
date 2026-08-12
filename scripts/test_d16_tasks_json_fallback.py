@@ -66,6 +66,33 @@ TICKET_MD = REPO_ROOT / ".claude" / "commands" / "ticket.md"
 TICKET_SKILL = REPO_ROOT / ".agents" / "skills" / "ticket" / "SKILL.md"
 GENERATE_TASKS_MD = REPO_ROOT / ".claude" / "commands" / "generate-tasks.md"
 
+# ticket-derive-tasks-json-validation-scope (task 4): the D16 STEP 3 derive prompts must honour the
+# generate-tasks.md:292 validation_commands [] convention. See that ticket's Description for the
+# measured false-pass baseline this pins against.
+SKILLS_DIR = REPO_ROOT / ".agents" / "skills"
+TICKET_SKILL_TASK = SKILLS_DIR / "sdlc-task" / "SKILL.md"
+TICKET_SKILL_FLOW = SKILLS_DIR / "sdlc-flow" / "SKILL.md"
+
+VALIDATION_SCOPE_CITATION = "generate-tasks.md"
+VALIDATION_SCOPE_EMPTY_RULE_PHRASES = [
+    "is [] for any task that touches source",
+    "CANNOT break the build",
+]
+CONDITIONAL_TARGETING_PHRASES = [
+    "target that task's own tests",
+    "match zero or the wrong tests",
+]
+# Stack-specific test-runner invocations that must never be hardcoded into a derive prompt
+# (CLAUDE.md standing rule 1 — the engines ship mechanism, never project facts).
+HARDCODED_STACK_COMMAND_SUBSTRINGS = [
+    "cargo nextest run",
+    "cargo test",
+    "npm test",
+    "npm run test",
+    "pytest ",
+    "go test",
+]
+
 READBACK_REQUIRED_PHRASES = [
     "json.load(open(",
     "non-empty bare array",
@@ -299,6 +326,137 @@ class DerivationShapeConformance(unittest.TestCase):
                 },
             ]
             self.assertEqual(self._validate_d45_shape(derived), [])
+
+
+FRESH_DECOMPOSED_MARKER = "author a FRESH decomposed"
+STEP4_MARKER = "STEP 4"
+
+
+def _derive_prompt_span(name: str) -> str:
+    """Return the STEP 3 'author a FRESH decomposed tasks.json' region of one engine's source —
+    the exact prompt region task 4 pins the validation_commands scoping rule inside. Whitespace
+    (including the template literal's line-wrap newlines) is collapsed to single spaces so a
+    phrase check isn't defeated by where the prompt happens to wrap a line."""
+    src = _read(WORKFLOWS / name)
+    start = src.find(FRESH_DECOMPOSED_MARKER)
+    if start == -1:
+        raise AssertionError(f"{name}: missing the '{FRESH_DECOMPOSED_MARKER}' STEP 3 prompt")
+    end = src.find(STEP4_MARKER, start)
+    if end == -1:
+        raise AssertionError(f"{name}: missing a STEP 4 marker after STEP 3 to bound the span")
+    return _normalize(src[start:end])
+
+
+def _normalize(text: str) -> str:
+    """Collapse whitespace and drop backticks so the two authoring surfaces — an engine's
+    template literal (escaped `` \\` `` around code terms) and a SKILL.md guide (bare Markdown
+    backticks around the same terms) — compare on prose content, not on which register's quoting
+    convention it happens to use."""
+    return " ".join(text.replace("\\`", "").replace("`", "").split())
+
+
+class ValidationCommandsScopingConvention(unittest.TestCase):
+    """ticket-derive-tasks-json-validation-scope, task 4: the D16 STEP 3 derive prompts must
+    teach the deriving agent the generate-tasks.md:292 validation_commands [] convention, per
+    engine — a fix landed on one file and not the others must fail this suite."""
+
+    def test_each_engine_states_the_empty_convention_separately(self):
+        # Deliberately one assertion PER ENGINE, not a single loop assertion that is satisfied by
+        # any one match — the measured defect's shape is "fixed in one file, missing in the
+        # others", and a collapsed assertion would not catch that.
+        for name in SEQUENTIAL_ENGINES:
+            with self.subTest(engine=name):
+                span = _derive_prompt_span(name)
+                missing = [p for p in VALIDATION_SCOPE_EMPTY_RULE_PHRASES if p not in span]
+                self.assertFalse(
+                    missing,
+                    f"{name}: STEP 3 derive prompt missing validation_commands [] convention "
+                    f"phrase(s): {missing}",
+                )
+
+    def test_each_engine_cites_generate_tasks_md_rather_than_paraphrasing(self):
+        for name in SEQUENTIAL_ENGINES:
+            with self.subTest(engine=name):
+                span = _derive_prompt_span(name)
+                self.assertIn(
+                    VALIDATION_SCOPE_CITATION, span,
+                    f"{name}: STEP 3 derive prompt must cite {VALIDATION_SCOPE_CITATION} as the "
+                    "convention's source rather than restating the rubric in its own words",
+                )
+
+    def test_conditional_targeting_rule_present_in_all_three(self):
+        for name in SEQUENTIAL_ENGINES:
+            with self.subTest(engine=name):
+                span = _derive_prompt_span(name)
+                missing = [p for p in CONDITIONAL_TARGETING_PHRASES if p not in span]
+                self.assertFalse(
+                    missing,
+                    f"{name}: STEP 3 derive prompt missing conditional targeting rule "
+                    f"phrase(s): {missing} — an authored override that runs tests must target "
+                    "that task's own tests and fail rather than pass on a zero match",
+                )
+
+    def test_no_engine_hardcodes_a_stack_specific_test_command(self):
+        # CLAUDE.md standing rule 1: the engines ship mechanism, never project facts. The worked
+        # example (cargo nextest run <binary>) belongs in the ticket, not in any engine prompt.
+        for name in SEQUENTIAL_ENGINES:
+            with self.subTest(engine=name):
+                span = _derive_prompt_span(name)
+                hits = [s for s in HARDCODED_STACK_COMMAND_SUBSTRINGS if s in span]
+                self.assertFalse(
+                    hits,
+                    f"{name}: STEP 3 derive prompt hardcodes stack-specific test command(s) {hits} "
+                    "— this is engine mechanism and must stay project-agnostic",
+                )
+
+    def test_removing_the_rule_from_a_single_engine_fails_the_suite(self):
+        # Proves the per-engine assertions actually discriminate rather than passing vacuously —
+        # simulate the exact measured defect (rule present in some engines, absent in one) using a
+        # synthetic span instead of mutating real source.
+        good_span = (
+            "validation_commands\" is [] for any task that touches source ... "
+            "Set it ONLY for a task that CANNOT break the build ... "
+            "target that task's own tests specifically ... "
+            "match zero or the wrong tests ... " + VALIDATION_SCOPE_CITATION
+        )
+        bad_span = "author a FRESH decomposed tasks.json from tasks.md's step list."
+
+        def _check(span: str) -> list:
+            errs = []
+            if any(p not in span for p in VALIDATION_SCOPE_EMPTY_RULE_PHRASES):
+                errs.append("missing empty-rule phrase")
+            if VALIDATION_SCOPE_CITATION not in span:
+                errs.append("missing citation")
+            if any(p not in span for p in CONDITIONAL_TARGETING_PHRASES):
+                errs.append("missing conditional targeting phrase")
+            return errs
+
+        self.assertEqual(_check(good_span), [])
+        self.assertTrue(_check(bad_span), "a span lacking the rule must be flagged, not pass")
+
+    def test_skill_guides_do_not_drift_from_engines_on_scoping_rule(self):
+        # Same no-drift idiom as test_ticket_md_and_skill_guide_do_not_drift_on_readback: each
+        # SKILL.md guide must agree with its matching engine on which scoping-rule phrases are
+        # present, since the guides do not auto-sync from the .js (CLAUDE.md update loop step 6).
+        pairs = [
+            (WORKFLOWS / "sdlc-task.js", TICKET_SKILL_TASK, "sdlc-task"),
+            (WORKFLOWS / "sdlc-flow.js", TICKET_SKILL_FLOW, "sdlc-flow"),
+        ]
+        all_phrases = (
+            VALIDATION_SCOPE_EMPTY_RULE_PHRASES
+            + [VALIDATION_SCOPE_CITATION]
+            + CONDITIONAL_TARGETING_PHRASES
+        )
+        failures = []
+        for engine_path, skill_path, label in pairs:
+            engine_span = _derive_prompt_span(engine_path.name)
+            skill_src = _normalize(_read(skill_path))
+            engine_has = {p: p in engine_span for p in all_phrases}
+            skill_has = {p: p in skill_src for p in all_phrases}
+            if engine_has != skill_has:
+                failures.append(f"{label}: engine vs SKILL.md phrase presence disagrees — drift")
+        if failures:
+            self.fail("\n  ".join(failures))
 
 
 class MeasuredBaseline(unittest.TestCase):
