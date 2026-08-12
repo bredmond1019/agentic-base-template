@@ -57,6 +57,22 @@ action at a distance: it can only ever be wrong about itself.** Scoping the gate
 gated is therefore exact and loses nothing -- and it sidesteps both failure modes above, because
 "this repo's own directories, right now" needs no baseline and no cross-repo visibility at all.
 
+ARCHIVE EXCLUSION
+-----------------
+Directories under an `archive/` subtree (any depth) are excluded from this guard entirely -- never
+reported as a violation, never counted toward a blocking exit code, in either mode. Decided
+2026-08-12 for Task 3 of `BT.ticket.block-naming-guard-provenance-fix`, once dropping the
+provenance test (Task 2) stopped swallowing base-template's own five non-conforming archive
+directories (`gc-blockA-sync-command` and three siblings, plus `bt-1-b-log-work-sync-rewire`).
+Two options were on the table: (a) exclude `archive/` from scope, or (b) rename the directories to
+canonical form. (a) was chosen -- archived work is a closed historical record, not an active block;
+renaming it edits history under the name it actually shipped with, and would require an inbound-
+link sweep through every closed spec, log entry, and decision that references the old name for no
+behavioral benefit (the guard's job is to keep *active* work honest, not to retroactively re-file
+the past). This exclusion is a deliberate, named rule (`is_archived_dir` below), not an incidental
+side effect of a glob -- and it applies to both `default` and `--fleet` mode, since the "archived
+work is history" reasoning is not specific to base-template's own directories.
+
 PROVENANCE, NOT BASELINE
 -------------------------
 A non-conforming directory git cannot see (gitignored, or present on disk but never `git add`ed)
@@ -148,6 +164,16 @@ def is_ignored_dir(name: str) -> bool:
     return name.startswith(_IGNORED_PREFIXES)
 
 
+def is_archived_dir(d: Path) -> bool:
+    """True if `d` sits under an `archive/` subtree, at any depth. Archived work is a closed
+    historical record, not an active block -- see the module docstring's "ARCHIVE EXCLUSION"
+    section for the full reasoning. This checks exact path COMPONENTS (`d.parts`), never a
+    substring match, so a directory merely named e.g. `archive-strategy` is not swept in by
+    accident.
+    """
+    return "archive" in d.parts
+
+
 def classify_dir(name: str, pattern: re.Pattern) -> bool:
     """True if `name` conforms to the canonical block-ID pattern."""
     return pattern.match(name) is not None
@@ -201,12 +227,26 @@ def discover_spec_dirs(root: Path) -> tuple[list[Path], int]:
 def find_violations(dirs: list[Path], prefixes: list[str]) -> list[Path]:
     """Apply the naming rule across a set of spec directories; return the non-conforming ones.
     `ticket-`/`chore-`/`plan-` directories are skipped entirely -- the convention does not apply
-    to them.
+    to them. Directories under an `archive/` subtree are also excluded -- see "ARCHIVE EXCLUSION"
+    in the module docstring; `find_archived_non_conforming` below reports them separately, for
+    visibility only.
     """
     pattern = block_id_pattern(prefixes)
     return [
         d for d in dirs
-        if not is_ignored_dir(d.name) and not classify_dir(d.name, pattern)
+        if not is_ignored_dir(d.name) and not is_archived_dir(d) and not classify_dir(d.name, pattern)
+    ]
+
+
+def find_archived_non_conforming(dirs: list[Path], prefixes: list[str]) -> list[Path]:
+    """The directories `find_violations` deliberately excludes because they sit under `archive/`
+    -- reported for visibility only, and NEVER contributes to a blocking exit code in any mode.
+    Together with `find_violations`, this partitions the non-ignored, non-conforming set.
+    """
+    pattern = block_id_pattern(prefixes)
+    return [
+        d for d in dirs
+        if not is_ignored_dir(d.name) and is_archived_dir(d) and not classify_dir(d.name, pattern)
     ]
 
 
@@ -300,6 +340,7 @@ def repo_mode(repo_root: Path, brain_root: Optional[Path]) -> tuple[int, str]:
 
     violations = find_violations(dirs, prefixes)
     blocking, gitignored = partition_by_gitignore(violations)
+    archived = find_archived_non_conforming(dirs, prefixes)
 
     if blocking:
         out(f"\n{len(blocking)} non-conforming block director(y/ies) in this repo (blocking):")
@@ -309,7 +350,11 @@ def repo_mode(repo_root: Path, brain_root: Optional[Path]) -> tuple[int, str]:
         out(f"\n{len(gitignored)} director(y/ies) of unknown provenance (never blocking):")
         for d in gitignored:
             out(f"  unknown provenance (gitignored): {d}")
-    if not blocking and not gitignored:
+    if archived:
+        out(f"\n{len(archived)} archived director(y/ies) (excluded, never blocking):")
+        for d in archived:
+            out(f"  excluded (archive/): {d}: does not match <REPO>.<phase>.<block>")
+    if not blocking and not gitignored and not archived:
         out("\nall block directories in this repo conform to <REPO>.<phase>.<block>")
 
     if blocking:
@@ -343,6 +388,7 @@ def fleet_mode(brain_root: Path, strict: bool) -> tuple[int, str]:
 
     violations = find_violations(dirs, prefixes)
     reportable, gitignored = partition_by_gitignore(violations)
+    archived = find_archived_non_conforming(dirs, prefixes)
 
     if reportable:
         out(
@@ -355,7 +401,11 @@ def fleet_mode(brain_root: Path, strict: bool) -> tuple[int, str]:
         out(f"\n{len(gitignored)} director(y/ies) of unknown provenance (never blocking):")
         for d in gitignored:
             out(f"  unknown provenance (gitignored): {d}")
-    if not reportable and not gitignored:
+    if archived:
+        out(f"\n{len(archived)} archived director(y/ies) (excluded, never blocking):")
+        for d in archived:
+            out(f"  excluded (archive/): {d}: does not match <REPO>.<phase>.<block>")
+    if not reportable and not gitignored and not archived:
         out("\nall block directories fleet-wide conform to <REPO>.<phase>.<block>")
 
     if not strict:
@@ -766,6 +816,59 @@ def self_test() -> int:
             rc == 0,
         )
         check("(j) Case C: it is reported as unknown provenance", "unknown provenance" in output)
+
+    # (k) TASK 3 of `BT.ticket.block-naming-guard-provenance-fix` -- archive exclusion. A
+    # non-conforming directory under an `archive/` subtree is excluded entirely: reported in its
+    # own section, but NEVER blocking, in either mode. A sibling non-conforming directory that is
+    # NOT under `archive/` still blocks -- proving this discriminates on path, not a blanket
+    # amnesty for the whole repo.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        _init_git_repo(base)
+        _write_brain_toml(base)
+        _write_spec_dir(base, "BW.1.A")
+        _write_spec_dir(base, "archive/10.B-old-block")
+        _commit_all(base, "canonical dir plus an archived non-conforming dir")
+        rc, output = _run_repo_mode(base)
+        check("(k) a non-conforming dir under archive/ never blocks (exit 0)", rc == 0)
+        check("(k) it is reported in an 'excluded (archive/)' section", "excluded (archive/)" in output)
+        check(
+            "(k) it is not reported as a blocking violation",
+            "blocking (this repo)" not in output,
+        )
+
+        # Proven negative: a nested archive/ subtree (archive/foo/bar) is excluded too -- the
+        # component check applies at any depth, not just directly under archive/.
+        _write_spec_dir(base, "archive/nested/10.C-also-old")
+        _git_ok(["add", "-A"], base)
+        rc_nested, out_nested = _run_repo_mode(base)
+        check("(k) negative: a nested archive/ subtree is excluded too (exit 0)", rc_nested == 0)
+        check(
+            "(k) negative: a directory merely named 'archive-strategy' is NOT swept in",
+            not is_archived_dir(base / "archive-strategy" / "10.D-oops"),
+        )
+
+        # Proven negative: a non-conforming dir OUTSIDE archive/ still blocks in the same repo --
+        # the exclusion is path-scoped, not a blanket amnesty once any archive/ dir exists.
+        _write_spec_dir(base, "10.E-active-violation")
+        _git_ok(["add", "-A"], base)
+        rc_active, out_active = _run_repo_mode(base)
+        check(
+            "(k) negative: a non-conforming dir OUTSIDE archive/ still blocks (exit 1)",
+            rc_active == 1,
+        )
+        check(
+            "(k) negative: it is reported as blocking, not excluded",
+            "blocking (this repo)" in out_active,
+        )
+
+        # --fleet with --strict also never blocks on an archived violation.
+        rc_fleet_strict, out_fleet_strict = _run_fleet_mode(base, strict=True)
+        check(
+            "(k) --fleet --strict still ignores the archived violation for its exit code "
+            "(other than the active violation above)",
+            "excluded (archive/)" in out_fleet_strict,
+        )
 
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")
