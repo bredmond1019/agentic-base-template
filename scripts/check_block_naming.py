@@ -29,13 +29,45 @@ exactly how `BT.ticket.roadmaps-get-a-home-and-a-registry` task 3 shipped an uns
 
 TWO MODES
 ---------
-`--self-test`  -- synthetic fixtures under a temp dir, no dependency on the real corpus.
-(default)      -- sweeps the real corpus from BRAIN_ROOT (walking up from cwd looking for
-                  `brain.toml`, or `--root` to force it) and reports every non-conforming block
-                  directory, exiting non-zero only for the ones new since the resolved baseline.
+`--self-test` -- synthetic fixtures under a temp dir, no dependency on the real corpus.
+(default)     -- gates ONLY the repo this script is invoked from (resolved from the script's own
+                  location, i.e. the repo `scripts/check_block_naming.py` was copied into --
+                  override with `--root`). Blocks on ANY non-conforming block directory found
+                  there, regardless of when it was created.
+`--fleet`     -- sweeps the WHOLE corpus from the brain root and REPORTS every non-conforming
+                  block directory across every repo. Always exits 0 unless `--strict` is also
+                  passed.
+
+WHY SCOPE, NOT DELTA (read this before "fixing" it to copy D64)
+-----------------------------------------------------------------
+The obvious move is to copy `BT.ticket.corpus-checks-delta-attribution`'s D64 baseline model from
+`scripts/test_orchestration_run_contract.py` -- attribute violations by comparing the corpus now
+against a resolved baseline commit, and block only on what's NEW. **That was tried here and it
+failed, on 2026-08-12** (see the ticket's Amendment Log): a fleet-wide delta gate is racy against
+concurrent lanes (six non-conforming directories appeared between a resolved baseline and the run,
+created by other lanes still using an old convention -- each legitimately "new", so the gate
+blocked this repo for work it did not do) and blind to gitignored trees (`git ls-tree` cannot see
+`core/engine-rs/crates/engine-core/planning` at any baseline, so it is permanently misclassified as
+new).
+
+D64's by-delta-never-by-path rule exists to protect corpus-integrity classes with ACTION AT A
+DISTANCE -- deleting a doc can surface a dangling-link error on a completely different file, so a
+path-scoped gate would miss exactly the class it exists to catch. **A badly named directory has no
+action at a distance: it can only ever be wrong about itself.** Scoping the gate to the repo being
+gated is therefore exact and loses nothing -- and it sidesteps both failure modes above, because
+"this repo's own directories, right now" needs no baseline and no cross-repo visibility at all.
+
+PROVENANCE, NOT BASELINE
+-------------------------
+A non-conforming directory git cannot see (gitignored, or present on disk but never `git add`ed)
+is reported as **unknown provenance** and never blocks or counts toward `--fleet --strict`'s exit
+code -- the guard cannot respect a naming convention decision made about something it cannot prove
+exists in the tracked corpus. This is a provenance check against the CURRENT tree only; there is no
+baseline commit anywhere in this module.
 
 DISCOVERY RULES (copied from `scripts/test_orchestration_run_contract.py`, the already-ported D64
-sibling -- see that module's docstring for the fuller rationale)
+sibling -- see that module's docstring for the fuller rationale; only the DISCOVERY plumbing is
+shared, not the delta-attribution model above it)
 -----------------------------------------------------------------------
 - Sweep with BOTH `-L` (follow symlinks -- every repo's `planning/` is one) AND `-uu` (search
   hidden/gitignored paths -- every sub-repo under the brain root is gitignored from the brain's own
@@ -46,31 +78,6 @@ sibling -- see that module's docstring for the fuller rationale)
 - This script shells out to `rg` captured directly via `subprocess.run(..., capture_output=True)`,
   never piped through another process -- a piped command's `$?` is the pipe's exit status, not
   `rg`'s (CLAUDE.md trap 1).
-
-DELTA ATTRIBUTION (D64 / `BT.ticket.corpus-checks-delta-attribution`)
------------------------------------------------------------------------
-Corpus mode still discovers the WHOLE corpus -- that breadth is the point. What changed is what
-the EXIT CODE reflects. The corpus is written by every lane in the fleet concurrently, so gating
-on the raw non-conforming count makes base-template's pipeline depend on every other repo's
-migration status (and there are 26 pre-existing non-conforming directories today). Compute the
-violation set twice -- once against the corpus as it is now, once against the corpus as of a
-resolved baseline commit -- and block only on violations NEW relative to that baseline. A
-violation present in both sets is pre-existing: reported, not blocking.
-
-Attribution is by DELTA, never by PATH: the two violation sets are compared as whole strings
-(which already embed the offending directory's path), never filtered down to "directories this
-tree touched" -- a rename/deletion can surface a violation on a directory the change never opened,
-and a path-scoped filter would miss exactly that class.
-
-Baseline resolution (the brain repo IS the corpus's git repo -- every `planning/` dir in the
-fleet, including every `core/<repo>/planning`, is tracked by the one HQ git repo per CLAUDE.md
-standing rule 10, so one `git` invocation set against BRAIN_ROOT covers the whole corpus):
-  1. merge-base(HEAD, upstream-tracking-branch), if HEAD has an upstream (`@{u}`) configured.
-  2. Else, HEAD itself -- "the last commit reachable from it".
-  3. Baseline UNRESOLVABLE (not a git repo, or HEAD itself doesn't resolve -- a truly fresh
-     clone/init with zero commits): FAIL CLOSED. Every violation found is treated as NEW. This is
-     printed loudly, never silent -- the alternative (fail OPEN) turns the gate into a silent
-     no-op the moment a rare edge case is hit.
 """
 
 from __future__ import annotations
@@ -104,12 +111,14 @@ def find_brain_root(start: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
-def load_repo_prefixes(root: Path) -> list[str]:
+def load_repo_prefixes(root: Optional[Path]) -> list[str]:
     """Read every `[[repos]] prefix = "XX"` from `root/brain.toml`.
 
     Never a hardcoded list -- a new repo is picked up the moment it registers a `[[repos]]` entry,
     no edit to this script required. stdlib-only (`tomllib`, py3.11+).
     """
+    if root is None:
+        return []
     toml_path = root / "brain.toml"
     if not toml_path.exists():
         return []
@@ -189,27 +198,22 @@ def discover_spec_dirs(root: Path) -> tuple[list[Path], int]:
     return dirs, len(distinct_files)
 
 
-def check_dirs(dirs: list[Path], prefixes: list[str]) -> list[str]:
-    """Apply the naming rule across a set of spec directories; return violation strings (empty =
-    all conform). `ticket-`/`chore-`/`plan-` directories are skipped entirely.
+def find_violations(dirs: list[Path], prefixes: list[str]) -> list[Path]:
+    """Apply the naming rule across a set of spec directories; return the non-conforming ones.
+    `ticket-`/`chore-`/`plan-` directories are skipped entirely -- the convention does not apply
+    to them.
     """
     pattern = block_id_pattern(prefixes)
-    violations: list[str] = []
-    for d in dirs:
-        name = d.name
-        if is_ignored_dir(name):
-            continue
-        if classify_dir(name, pattern):
-            continue
-        violations.append(
-            f"{d}: directory name {name!r} does not match <REPO>.<phase>.<block>"
-        )
-    return violations
+    return [
+        d for d in dirs
+        if not is_ignored_dir(d.name) and not classify_dir(d.name, pattern)
+    ]
 
 
 # ---------------------------------------------------------------------------
-# Delta attribution -- baseline resolution copied from
-# scripts/test_orchestration_run_contract.py (the already-ported D64 model).
+# Provenance -- current tree only, no baseline. A directory git cannot vouch for (gitignored, or
+# on disk but never committed) is "unknown provenance": reported, never blocking. See the module
+# docstring's "PROVENANCE, NOT BASELINE" section for why this replaces D64's delta model here.
 # ---------------------------------------------------------------------------
 
 
@@ -225,133 +229,136 @@ def _run_git(args: list[str], cwd: Path) -> tuple[int, str, str]:
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 
 
-def resolve_baseline_commit(root: Path) -> tuple[Optional[str], str]:
-    """Resolve the baseline commit for delta attribution (see module docstring). Returns
-    (commit_sha, description) on success, or (None, reason) when unresolvable -- callers must
-    treat None as "fail closed", not "no baseline == nothing new".
+def is_known_to_git(git_root: Path, spec_dir: Path) -> bool:
+    """True if `spec_dir` is a directory git can actually vouch for at `git_root`: inside a git
+    work tree, not matched by any `.gitignore` rule, and its spec file is tracked (or at least
+    stageable -- `git add --dry-run` reports what `git status` would pick up without mutating the
+    index). False covers every "unknown provenance" case: no git repo at all, gitignored, or
+    present on disk but never `git add`ed.
     """
-    rc, _, _ = _run_git(["rev-parse", "--is-inside-work-tree"], root)
+    rc, _, _ = _run_git(["rev-parse", "--is-inside-work-tree"], git_root)
     if rc != 0:
-        return None, f"{root} is not inside a git working tree"
+        return False
 
-    rc, head, _ = _run_git(["rev-parse", "HEAD"], root)
-    if rc != 0 or not head:
-        return None, "HEAD does not resolve (no commits reachable -- a truly fresh repo)"
+    rc_ignore, _, _ = _run_git(["check-ignore", "-q", str(spec_dir)], git_root)
+    if rc_ignore == 0:
+        # check-ignore exits 0 when the path IS ignored.
+        return False
 
-    rc, upstream, _ = _run_git(
-        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], root
+    spec_file = next(
+        (spec_dir / fn for fn in ("tasks.json", "tasks.md") if (spec_dir / fn).exists()),
+        None,
     )
-    if rc == 0 and upstream:
-        rc2, merge_base, _ = _run_git(["merge-base", "HEAD", upstream], root)
-        if rc2 == 0 and merge_base:
-            return merge_base, f"merge-base(HEAD, {upstream})"
+    if spec_file is None:
+        return False
 
-    # No upstream tracking branch configured -- fall back to "the last commit reachable from
-    # HEAD", i.e. HEAD itself. Anything not yet committed in the brain repo is this tree's delta.
-    return head, "HEAD (no upstream tracking branch configured)"
+    rc_ls, _, _ = _run_git(["ls-files", "--error-unmatch", str(spec_file)], git_root)
+    return rc_ls == 0
 
 
-def read_baseline_dirs(root: Path, baseline_sha: str) -> list[Path]:
-    """Reconstruct the in-scope spec directories as they existed at `baseline_sha`, via
-    `git ls-tree` -- never via `git checkout`, so this never mutates the caller's working tree or
-    index.
+def partition_by_provenance(
+    git_root: Path, violations: list[Path]
+) -> tuple[list[Path], list[Path]]:
+    """Split `violations` into (known, unknown_provenance) against `git_root`."""
+    known: list[Path] = []
+    unknown: list[Path] = []
+    for d in violations:
+        (known if is_known_to_git(git_root, d) else unknown).append(d)
+    return known, unknown
 
-    `git ls-tree -r` walks the whole tree at that commit (this repo's git root already covers the
-    whole corpus per CLAUDE.md standing rule 10), so this needs no symlink-following of its own the
-    way `discover_spec_dirs`'s live filesystem sweep does.
+
+# ---------------------------------------------------------------------------
+# The two run modes.
+# ---------------------------------------------------------------------------
+
+
+def repo_mode(repo_root: Path, brain_root: Optional[Path]) -> tuple[int, str]:
+    """Default mode: gate ONLY `repo_root` (the repo this guard was invoked from). Blocks on any
+    non-conforming block directory found there, git-known or not consulting any baseline --
+    unknown-provenance directories are reported separately and never block.
     """
-    rc, out, err = _run_git(["ls-tree", "-r", "--name-only", baseline_sha], root)
-    if rc != 0:
-        raise RuntimeError(f"git ls-tree failed for baseline {baseline_sha}: {err}")
+    buf = io.StringIO()
 
-    dirs: set[Path] = set()
-    for rel in out.splitlines():
-        rel = rel.strip()
-        if not rel:
-            continue
-        if os.path.basename(rel) not in ("tasks.json", "tasks.md"):
-            continue
-        # Resolved (realpath) to match `discover_spec_dirs`'s own realpath-deduped paths --
-        # otherwise a `root` reached through a symlink makes the same logical directory compare
-        # as two different strings between the current sweep and the baseline reconstruction, and
-        # every baseline entry looks spuriously "new".
-        dirs.add((root / os.path.dirname(rel)).resolve())
-    return sorted(dirs)
+    def out(s: str = "") -> None:
+        print(s, file=buf)
 
-
-def classify_violations(current: list[str], baseline: list[str]) -> tuple[list[str], list[str]]:
-    """Split `current` violations into (new, pre_existing) against the `baseline` set.
-
-    Comparison is by the full violation string (which already embeds the offending directory's
-    path), never by filtering `current` down to directories this tree touched -- the by-delta-
-    never-by-path rule.
-    """
-    baseline_set = set(baseline)
-    new = [v for v in current if v not in baseline_set]
-    pre_existing = [v for v in current if v in baseline_set]
-    return new, pre_existing
-
-
-def corpus_mode(root: Path) -> int:
-    prefixes = load_repo_prefixes(root)
-    dirs, file_count = discover_spec_dirs(root)
-    print(
+    prefixes = load_repo_prefixes(brain_root)
+    dirs, file_count = discover_spec_dirs(repo_root)
+    out(
         f"discovered {file_count} distinct tasks.json/tasks.md file(s) across {len(dirs)} spec "
-        "director(y/ies)"
+        f"director(y/ies) under {repo_root}"
     )
-    print(f"{len(prefixes)} repo prefix(es) loaded from brain.toml")
+    out(f"{len(prefixes)} repo prefix(es) loaded from brain.toml")
 
-    current_violations = check_dirs(dirs, prefixes)
+    violations = find_violations(dirs, prefixes)
+    blocking, unknown = partition_by_provenance(repo_root, violations)
 
-    baseline_sha, baseline_desc = resolve_baseline_commit(root)
-    if baseline_sha is None:
-        print(f"\nWARNING: baseline unresolvable ({baseline_desc}).")
-        print(
-            "WARNING: falling back to FAIL CLOSED -- every violation found is treated as NEW "
-            "(the pre-delta-attribution whole-corpus-blocks behavior). This is a documented "
-            "edge case (a truly fresh clone/init with zero commits), not a silent no-op."
-        )
-        new_violations = current_violations
-        pre_existing_violations: list[str] = []
-    else:
-        print(f"\nbaseline resolved: {baseline_desc} ({baseline_sha[:12]})")
-        baseline_dirs = read_baseline_dirs(root, baseline_sha)
-        baseline_violations = check_dirs(baseline_dirs, prefixes)
-        new_violations, pre_existing_violations = classify_violations(
-            current_violations, baseline_violations
-        )
+    if blocking:
+        out(f"\n{len(blocking)} non-conforming block director(y/ies) in this repo (blocking):")
+        for d in blocking:
+            out(f"  blocking (this repo): {d}: does not match <REPO>.<phase>.<block>")
+    if unknown:
+        out(f"\n{len(unknown)} director(y/ies) of unknown provenance (never blocking):")
+        for d in unknown:
+            out(f"  unknown provenance (gitignored/untracked): {d}")
+    if not blocking and not unknown:
+        out("\nall block directories in this repo conform to <REPO>.<phase>.<block>")
 
-    if current_violations:
-        pre_existing_set = set(pre_existing_violations)
-        print(
-            f"\n{len(current_violations)} non-conforming block director(y/ies) found "
-            f"({len(new_violations)} NEW / blocking, {len(pre_existing_violations)} "
-            "pre-existing / reported, not blocking):"
+    if blocking:
+        out(
+            f"\nBLOCKED: {len(blocking)} non-conforming block director(y/ies) in this repo. "
+            "Rename to <REPO>.<phase>.<block> (directory name equals the block ID exactly)."
         )
-        for v in current_violations:
-            if v in pre_existing_set:
-                print(f"  pre-existing (reported): {v}")
-            else:
-                print(f"  NEW (blocking): {v}")
-    else:
-        print("\nall block directories conform to <REPO>.<phase>.<block>")
+        return 1, buf.getvalue()
 
-    if new_violations:
-        print(
-            f"\nBLOCKED: {len(new_violations)} NEW non-conforming block director(y/ies) "
-            "attributable to this tree's changes."
-        )
-        return 1
+    out("\nno blocking violations in this repo")
+    return 0, buf.getvalue()
 
-    if pre_existing_violations:
-        print(
-            f"\nno NEW violations. {len(pre_existing_violations)} pre-existing non-conforming "
-            "director(y/ies) were reported above but are NOT blocking -- this is a report of "
-            "what this tree did not break, not a claim the whole fleet is migrated."
+
+def fleet_mode(brain_root: Path, strict: bool) -> tuple[int, str]:
+    """`--fleet`: reports non-conforming block directories across the WHOLE corpus. Reporting
+    only by default -- always exits 0 unless `strict` is also passed, because a fleet-wide gate is
+    racy against concurrent lanes (see module docstring) and this is not the repo-scoped guard.
+    """
+    buf = io.StringIO()
+
+    def out(s: str = "") -> None:
+        print(s, file=buf)
+
+    prefixes = load_repo_prefixes(brain_root)
+    dirs, file_count = discover_spec_dirs(brain_root)
+    out(
+        f"discovered {file_count} distinct tasks.json/tasks.md file(s) across {len(dirs)} spec "
+        f"director(y/ies) fleet-wide from {brain_root}"
+    )
+    out(f"{len(prefixes)} repo prefix(es) loaded from brain.toml")
+
+    violations = find_violations(dirs, prefixes)
+    known, unknown = partition_by_provenance(brain_root, violations)
+
+    if known:
+        out(f"\n{len(known)} non-conforming block director(y/ies) fleet-wide (reported, --fleet):")
+        for d in known:
+            out(f"  reported (--fleet): {d}: does not match <REPO>.<phase>.<block>")
+    if unknown:
+        out(f"\n{len(unknown)} director(y/ies) of unknown provenance (never blocking):")
+        for d in unknown:
+            out(f"  unknown provenance (gitignored/untracked): {d}")
+    if not known and not unknown:
+        out("\nall block directories fleet-wide conform to <REPO>.<phase>.<block>")
+
+    if not strict:
+        out(
+            f"\n--fleet is reporting-only: exiting 0 regardless of the {len(known)} finding(s) "
+            "above (pass --strict to gate on them)."
         )
-    else:
-        print("\nno non-conforming block directories at all")
-    return 0
+        return 0, buf.getvalue()
+
+    if known:
+        out(f"\n--strict: BLOCKED on {len(known)} fleet-wide non-conforming director(y/ies).")
+        return 1, buf.getvalue()
+    out("\n--strict: no fleet-wide violations")
+    return 0, buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -395,8 +402,8 @@ def _git_ok(args: list[str], cwd: Path) -> None:
 
 
 def _init_git_repo(base: Path) -> None:
-    """A real (but throwaway) git repo -- delta attribution's baseline resolution and
-    `git ls-tree`-based reconstruction are exercised for real here, not mocked.
+    """A real (but throwaway) git repo -- provenance checks are exercised for real here, not
+    mocked.
     """
     base.mkdir(parents=True, exist_ok=True)
     _git_ok(["init", "-q"], base)
@@ -409,70 +416,132 @@ def _commit_all(base: Path, message: str) -> None:
     _git_ok(["commit", "-q", "-m", message], base)
 
 
-def _run_corpus_mode(root: Path) -> tuple[int, str]:
-    """Run the real `corpus_mode` against `root`, capturing stdout (never a mock) so cases can
-    assert both the exit code and the human-readable NEW/pre-existing labeling.
-    """
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        rc = corpus_mode(root)
-    return rc, buf.getvalue()
+def _run_repo_mode(root: Path, brain_root: Optional[Path] = None) -> tuple[int, str]:
+    return repo_mode(root, brain_root if brain_root is not None else root)
+
+
+def _run_fleet_mode(root: Path, strict: bool = False) -> tuple[int, str]:
+    return fleet_mode(root, strict)
 
 
 def self_test() -> int:
     print("check_block_naming.py --self-test")
 
     # (a) Canonical passes: letter block, numeric block, and a three-letter prefix.
+    prefixes = _FIXTURE_PREFIXES
+    pattern = block_id_pattern(prefixes)
+    check("(a) letter block BW.10.B is canonical", classify_dir("BW.10.B", pattern))
+    check("(a) numeric block EN.3.2 is canonical", classify_dir("EN.3.2", pattern))
+    check(
+        "(a) three-letter prefix OKF.1.A is canonical",
+        classify_dir("OKF.1.A", pattern),
+    )
+    check(
+        "(a) mixed alnum block BW.8.K2 is canonical",
+        classify_dir("BW.8.K2", pattern),
+    )
+    # Proven negative: same shape, but with a title suffix -- must NOT pass, since the
+    # directory name must equal the block ID exactly.
+    check(
+        "(a) negative: a title suffix (EN.0.A-cargo-workspace) is rejected",
+        not classify_dir("EN.0.A-cargo-workspace", pattern),
+    )
+
+    # (b) A non-conforming directory in this repo blocks -- regardless of when it was created.
+    # No baseline is consulted anywhere in this module; a fresh `10.B-foo` dir created moments ago
+    # blocks exactly like one that has existed for a year.
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
-        prefixes = _FIXTURE_PREFIXES
-        pattern = block_id_pattern(prefixes)
-        check("(a) letter block BW.10.B is canonical", classify_dir("BW.10.B", pattern))
-        check("(a) numeric block EN.3.2 is canonical", classify_dir("EN.3.2", pattern))
-        check(
-            "(a) three-letter prefix OKF.1.A is canonical",
-            classify_dir("OKF.1.A", pattern),
-        )
-        check(
-            "(a) mixed alnum block BW.8.K2 is canonical",
-            classify_dir("BW.8.K2", pattern),
-        )
-        # Proven negative: same shape, but with a title suffix -- must NOT pass, since the
-        # directory name must equal the block ID exactly.
-        check(
-            "(a) negative: a title suffix (EN.0.A-cargo-workspace) is rejected",
-            not classify_dir("EN.0.A-cargo-workspace", pattern),
-        )
-        del base  # unused in this pure-function case
+        _init_git_repo(base)
+        _write_brain_toml(base)
+        _write_spec_dir(base, "BW.1.A")
+        _commit_all(base, "clean baseline")
+        # Created AFTER any notion of a baseline commit -- and never committed at all.
+        _write_spec_dir(base, "10.B-brand-new")
+        _git_ok(["add", "-A"], base)  # tracked (staged), so provenance is known
+        rc, output = _run_repo_mode(base)
+        check("(b) a brand-new non-conforming dir blocks (exit 1)", rc == 1)
+        check("(b) it is labeled 'blocking (this repo)' in output", "blocking (this repo)" in output)
 
-    # (b) ticket-/chore-/plan- directories are ignored entirely, even though they never match the
+        # Proven negative: remove the offending directory -- must return to exit 0, proving the
+        # block tracks the violation's presence, not some unrelated state.
+        shutil.rmtree(base / "10.B-brand-new")
+        rc2, _ = _run_repo_mode(base)
+        check("(b) negative: removing the violation returns to exit 0", rc2 == 0)
+
+    # (c) Repo scoping -- a non-conforming directory in ANOTHER repo never affects this repo's
+    # verdict, proven in both directions. `repo_mode` only ever sweeps the root it is given, so
+    # two sibling roots are naturally isolated from each other.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        _write_brain_toml(root)  # shared brain.toml one level up, as in the real fleet
+
+        repo_a = root / "repo-a"
+        _init_git_repo(repo_a)
+        _write_spec_dir(repo_a, "BW.1.A")  # repo A is clean
+        _commit_all(repo_a, "clean")
+
+        repo_b = root / "repo-b"
+        _init_git_repo(repo_b)
+        _write_spec_dir(repo_b, "10.B-legacy")  # repo B is non-conforming
+        _commit_all(repo_b, "dirty")
+
+        rc_a, _ = _run_repo_mode(repo_a, root)
+        check("(c) repo A's verdict is unaffected by repo B's violation (exit 0)", rc_a == 0)
+
+        rc_b, _ = _run_repo_mode(repo_b, root)
+        check("(c) repo B still blocks on its own violation (exit 1)", rc_b == 1)
+
+        # Other direction: repo A gets a violation, repo B is clean of its own -- each repo's
+        # verdict tracks only itself.
+        _write_spec_dir(repo_a, "hq-4a-oops")
+        _git_ok(["add", "-A"], repo_a)
+        rc_a2, _ = _run_repo_mode(repo_a, root)
+        check("(c) negative: repo A now blocks on its OWN new violation", rc_a2 == 1)
+        rc_b2, _ = _run_repo_mode(repo_b, root)
+        check(
+            "(c) repo B's verdict is still driven only by its own directories",
+            rc_b2 == 1,  # repo B's own pre-existing violation is still there
+        )
+
+    # (d) ticket-/chore-/plan- directories are ignored entirely, even though they never match the
     # canonical shape.
-    check("(b) ticket-foo is ignored", is_ignored_dir("ticket-foo"))
-    check("(b) chore-foo is ignored", is_ignored_dir("chore-foo"))
-    check("(b) plan-foo is ignored", is_ignored_dir("plan-foo"))
+    check("(d) ticket-foo is ignored", is_ignored_dir("ticket-foo"))
+    check("(d) chore-foo is ignored", is_ignored_dir("chore-foo"))
+    check("(d) plan-foo is ignored", is_ignored_dir("plan-foo"))
     # Proven negative: a directory that merely CONTAINS one of those words, but isn't prefixed
     # with it, is NOT ignored -- it still must conform.
     check(
-        "(b) negative: a directory containing 'ticket' but not prefixed is not ignored",
+        "(d) negative: a directory containing 'ticket' but not prefixed is not ignored",
         not is_ignored_dir("my-ticket-followup"),
     )
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        _init_git_repo(base)
+        _write_brain_toml(base)
+        _write_spec_dir(base, "ticket-some-fix")
+        _write_spec_dir(base, "chore-cleanup")
+        _write_spec_dir(base, "plan-explore")
+        _commit_all(base, "only ignored-shape dirs")
+        rc, _ = _run_repo_mode(base)
+        check("(d) a repo with only ticket-/chore-/plan- dirs never blocks", rc == 0)
 
-    # (c) Prefixes come from brain.toml, not a hardcoded list -- a fixture declaring a NEW prefix
+    # (e) Prefixes come from brain.toml, not a hardcoded list -- a fixture declaring a NEW prefix
     # accepts directories using it without editing this script.
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
         _write_brain_toml(base, ["ZQ"])
         loaded = load_repo_prefixes(base)
-        check("(c) a novel prefix (ZQ) round-trips from brain.toml", loaded == ["ZQ"])
+        check("(e) a novel prefix (ZQ) round-trips from brain.toml", loaded == ["ZQ"])
         pattern = block_id_pattern(loaded)
-        check("(c) ZQ.1.A is canonical once declared in brain.toml", classify_dir("ZQ.1.A", pattern))
+        check("(e) ZQ.1.A is canonical once declared in brain.toml", classify_dir("ZQ.1.A", pattern))
         # Proven negative: an UNREGISTERED prefix of the same shape is rejected.
         check(
-            "(c) negative: an unregistered prefix (QQ.1.A) is rejected",
+            "(e) negative: an unregistered prefix (QQ.1.A) is rejected",
             not classify_dir("QQ.1.A", pattern),
         )
 
-    # (d) No content assertion -- a spec directory with a canonical NAME whose tasks.md BODY
+    # (f) No content assertion -- a spec directory with a canonical NAME whose tasks.md BODY
     # contains an old-style string (`10.B-foo`) still passes; this guard inspects names only.
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
@@ -480,116 +549,111 @@ def self_test() -> int:
             base, "BW.10.B", "tasks.md",
             body="See legacy block 10.B-foo for context; also hq-4a-legacy is referenced here.",
         )
-        violations = check_dirs([d], _FIXTURE_PREFIXES)
-        check("(d) canonical dir with old-style strings in its BODY still passes", violations == [])
+        violations = find_violations([d], _FIXTURE_PREFIXES)
+        check("(f) canonical dir with old-style strings in its BODY still passes", violations == [])
 
-    # (e) Delta attribution: pre-existing non-conforming reports but does not block -- the bad
-    # directory is already in the baseline commit, and the working tree introduces no further
-    # change. This is the case that keeps the fleet green today.
-    with tempfile.TemporaryDirectory() as td:
-        base = Path(td)
-        _init_git_repo(base)
-        _write_brain_toml(base)
-        _write_spec_dir(base, "10.B-legacy-block")
-        _commit_all(base, "baseline already carries the violation")
-        rc, out = _run_corpus_mode(base)
-        check("(e) pre-existing non-conforming dir does not block (exit 0)", rc == 0)
-        check("(e) pre-existing non-conforming dir is labeled in output", "pre-existing" in out)
-
-        # Proven negative: the SAME violation, but introduced only AFTER the baseline commit --
-        # must NOT be reported as pre-existing, proving this case discriminates baseline
-        # membership rather than always passing.
-        base2 = Path(td) / "negative"
-        _init_git_repo(base2)
-        _write_brain_toml(base2)
-        _write_spec_dir(base2, "BW.1.A")
-        _commit_all(base2, "clean baseline")
-        _write_spec_dir(base2, "10.B-legacy-block")
-        rc2, _out2 = _run_corpus_mode(base2)
-        check("(e) negative: a newly introduced violation is NOT reported as pre-existing", rc2 == 1)
-
-    # (f) New violation blocks: baseline is clean, the working tree introduces a non-conforming
-    # directory.
+    # (g) Unknown provenance -- a gitignored directory is reported in its own section and never
+    # blocks, even though its name is non-conforming.
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
         _init_git_repo(base)
         _write_brain_toml(base)
         _write_spec_dir(base, "BW.1.A")
-        _commit_all(base, "clean baseline")
-        _write_spec_dir(base, "hq-4a-new-block")
-        rc, out = _run_corpus_mode(base)
-        check("(f) new non-conforming dir blocks (exit non-zero)", rc == 1)
-        check("(f) new violation is labeled NEW in output", "NEW (blocking)" in out)
+        (base / ".gitignore").write_text("ignored-tree/\n", encoding="utf-8")
+        _commit_all(base, "clean baseline with a gitignore rule")
+        _write_spec_dir(base, "ignored-tree/10.B-hidden")
+        rc, output = _run_repo_mode(base)
+        check("(g) a gitignored non-conforming dir never blocks (exit 0)", rc == 0)
+        check("(g) it is reported as unknown provenance", "unknown provenance" in output)
 
-        # Proven negative: remove the offending directory entirely -- must return to exit 0,
-        # proving the block tracks the violation's presence, not some unrelated state.
-        shutil.rmtree(base / "hq-4a-new-block")
-        rc2, _ = _run_corpus_mode(base)
-        check("(f) negative: removing the new violation returns to exit 0", rc2 == 0)
-
-    # (g) Baseline unresolvable (no git repo at all) -- documented fallback is FAIL CLOSED: every
-    # violation found is treated as NEW.
-    with tempfile.TemporaryDirectory() as td:
-        base = Path(td)  # deliberately NOT a git repo
-        _write_brain_toml(base)
-        _write_spec_dir(base, "10.B-legacy-block")
-        rc, out = _run_corpus_mode(base)
-        check("(g) baseline-unresolvable + a violation fails closed (blocks)", rc == 1)
-        check(
-            "(g) baseline-unresolvable is reported with a WARNING",
-            "WARNING" in out and "FAIL CLOSED" in out,
-        )
-
-        # Proven negative: baseline still unresolvable, but the corpus is well-formed -- fail
-        # closed must not block UNCONDITIONALLY, only when there is an actual violation to find.
+        # Proven negative: the SAME directory NAME, but tracked (not gitignored) -- must block,
+        # proving this case discriminates provenance rather than always passing.
         base2 = Path(td) / "negative"
+        _init_git_repo(base2)
         _write_brain_toml(base2)
         _write_spec_dir(base2, "BW.1.A")
-        rc2, _ = _run_corpus_mode(base2)
-        check("(g) negative: baseline-unresolvable with no violations still exits 0", rc2 == 0)
+        _commit_all(base2, "clean baseline")
+        _write_spec_dir(base2, "10.B-hidden")
+        _git_ok(["add", "-A"], base2)
+        rc2, out2 = _run_repo_mode(base2)
+        check("(g) negative: the same shape, tracked, DOES block", rc2 == 1)
+        check("(g) negative: it is reported as blocking, not unknown provenance", "blocking (this repo)" in out2)
 
-    # (h) End-to-end discovery: -L -uu realpath-deduped sweep finds spec dirs reachable via a
-    # symlink (mirrors every repo's `planning/` being a symlink into the vault).
+        # Untracked (present on disk, never `git add`ed, and not gitignored either) is also
+        # unknown provenance.
+        base3 = Path(td) / "untracked"
+        _init_git_repo(base3)
+        _write_brain_toml(base3)
+        _write_spec_dir(base3, "BW.1.A")
+        _commit_all(base3, "clean baseline")
+        _write_spec_dir(base3, "10.B-untracked")  # deliberately never `git add`ed
+        rc3, out3 = _run_repo_mode(base3)
+        check("(g) an untracked non-conforming dir never blocks either (exit 0)", rc3 == 0)
+        check("(g) it is also reported as unknown provenance", "unknown provenance" in out3)
+
+    # (h) --fleet reports fleet-wide and exits 0 unless --strict is passed; End-to-end discovery
+    # also proves the -L -uu realpath-deduped sweep finds spec dirs reachable via a symlink
+    # (mirrors every repo's `planning/` being a symlink into the vault).
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
+        _init_git_repo(base)
+        _write_brain_toml(base)
         real_target = base / "_vault" / "BW.2.A"
         real_target.mkdir(parents=True)
         (real_target / "tasks.json").write_text("{}", encoding="utf-8")
         symlinked_planning = base / "planning"
         symlinked_planning.mkdir()
         os.symlink(real_target, symlinked_planning / "BW.2.A")
+        _commit_all(base, "clean, symlinked layout")
         dirs, file_count = discover_spec_dirs(base)
         check("(h) symlinked spec dir is discovered", file_count == 1)
         check("(h) discovered dir realpath-resolves to the vault target", dirs == [real_target.resolve()])
 
+        _write_spec_dir(base, "10.B-fleet-violation")
+        _git_ok(["add", "-A"], base)
+        rc_report, out_report = _run_fleet_mode(base, strict=False)
+        check("(h) --fleet without --strict exits 0 despite a violation", rc_report == 0)
+        check("(h) --fleet reports the violation", "reported (--fleet)" in out_report)
+        rc_strict, _ = _run_fleet_mode(base, strict=True)
+        check("(h) --fleet --strict blocks on the same violation", rc_strict == 1)
+
+        # Proven negative: --fleet --strict with no violations exits 0.
+        shutil.rmtree(base / "10.B-fleet-violation")
+        rc_strict_clean, _ = _run_fleet_mode(base, strict=True)
+        check("(h) negative: --fleet --strict with no violations exits 0", rc_strict_clean == 0)
+
     # (i) Live snapshot, dated -- re-measure against the REAL fleet at implementation time and
-    # pin the RELATION (total block-shaped dirs == canonical + non-conforming), not a hard-coded
-    # count -- a hard-coded count breaks the moment any repo adds a block. The corresponding
-    # command is printed alongside the count so a future reader can re-measure by hand.
-    # Measured 2026-08-12: `python3 scripts/check_block_naming.py` against the real fleet found
-    # 39 block-shaped directories, 13 canonical, 26 non-conforming (21 `<phase>.<block>-<title>`,
-    # 5 `<repo>-<phase><block>-<title>`), all pre-existing at that measurement's baseline.
+    # pin the RELATION (canonical + non-conforming accounts for every block-shaped dir), not a
+    # hard-coded count -- a hard-coded count breaks the moment any repo adds a block. The
+    # corresponding command is printed alongside the count so a future reader can re-measure by
+    # hand.
+    # Measured 2026-08-12: `python3 scripts/check_block_naming.py --fleet` against the real fleet
+    # found 39 block-shaped directories, 13 canonical, 26 non-conforming (21
+    # `<phase>.<block>-<title>`, 5 `<repo>-<phase><block>-<title>`), plus 2 unclassified.
     #
     # NOTE: `self_test()`'s own contract (see the module's TWO MODES section) is synthetic
     # fixtures with NO dependency on the real corpus -- the real corpus is written by every lane
     # in the fleet concurrently, so it is not a hermetic input. This case therefore hard-asserts
-    # only the RELATION (a structural invariant of `check_dirs`'s partition, true by
-    # construction) and PRINTS -- rather than hard-asserts -- the live delta-mode result, so a
-    # concurrent lane's unrelated commit to the shared brain repo can never flip this self-test
-    # red. "today's fleet exits 0 (all pre-existing)" is separately proven, hermetically, by
-    # synthetic case (e) above; this case's job is only to record and re-measure the live count.
-    real_root = find_brain_root() or find_brain_root(REPO_ROOT)
-    if real_root is None:
+    # only the RELATION (a structural invariant, true by construction) and PRINTS -- rather than
+    # hard-asserts -- the live repo-scoped result for base-template, so a concurrent lane's
+    # unrelated commit elsewhere in the fleet can never flip this self-test red. No acceptance
+    # criterion requires the live fleet (`--fleet`) to exit 0 -- other lanes add non-conforming
+    # directories continuously, so that is unsatisfiable by construction; only THIS repo's
+    # (base-template's) plain invocation is asserted, separately, by the harness's own
+    # validation command.
+    real_brain_root = find_brain_root() or find_brain_root(REPO_ROOT)
+    if real_brain_root is None:
         check("(i) live snapshot: brain root resolves for re-measurement", False)
     else:
-        prefixes = load_repo_prefixes(real_root)
-        dirs, _file_count = discover_spec_dirs(real_root)
+        prefixes = load_repo_prefixes(real_brain_root)
+        dirs, _file_count = discover_spec_dirs(real_brain_root)
         block_shaped = [d for d in dirs if not is_ignored_dir(d.name)]
         pattern = block_id_pattern(prefixes)
         canonical = [d for d in block_shaped if classify_dir(d.name, pattern)]
         non_conforming = [d for d in block_shaped if not classify_dir(d.name, pattern)]
         print(
-            f"  (i) live snapshot (measuring command: `python3 scripts/check_block_naming.py`): "
+            "  (i) live snapshot (measuring command: "
+            "`python3 scripts/check_block_naming.py --fleet`): "
             f"{len(block_shaped)} block-shaped director(y/ies), {len(canonical)} canonical, "
             f"{len(non_conforming)} non-conforming"
         )
@@ -598,10 +662,10 @@ def self_test() -> int:
             "(the relation, not a hard-coded count)",
             len(canonical) + len(non_conforming) == len(block_shaped),
         )
-        rc, _out = _run_corpus_mode(real_root)
+        rc, _out = repo_mode(REPO_ROOT, real_brain_root)
         print(
-            f"  (i) live snapshot: `python3 scripts/check_block_naming.py` currently exits {rc} "
-            f"({'no NEW violations' if rc == 0 else 'NEW violations present -- see plain run'})"
+            "  (i) live snapshot: `python3 scripts/check_block_naming.py` "
+            f"(repo-scoped, base-template) currently exits {rc}"
         )
 
     if FAILURES:
@@ -615,23 +679,43 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true", help="run synthetic fixture cases only")
     parser.add_argument(
+        "--fleet", action="store_true",
+        help="report non-conforming block directories fleet-wide (reporting only unless --strict)",
+    )
+    parser.add_argument(
+        "--strict", action="store_true",
+        help="with --fleet, exit non-zero if any fleet-wide violation is found",
+    )
+    parser.add_argument(
         "--root", type=Path, default=None,
-        help="brain root to sweep in corpus mode (default: walk up from cwd for brain.toml)",
+        help=(
+            "override the root to gate/sweep (default: this script's own repo for the default "
+            "mode, the resolved brain root for --fleet)"
+        ),
     )
     args = parser.parse_args()
 
     if args.self_test:
         return self_test()
 
-    root = args.root or find_brain_root() or find_brain_root(REPO_ROOT)
-    if root is None:
-        print(
-            "could not resolve brain root (no brain.toml found walking up from cwd or "
-            "REPO_ROOT); pass --root explicitly",
-            file=sys.stderr,
-        )
-        return 2
-    return corpus_mode(root)
+    if args.fleet:
+        brain_root = args.root or find_brain_root() or find_brain_root(REPO_ROOT)
+        if brain_root is None:
+            print(
+                "could not resolve brain root (no brain.toml found walking up from cwd or "
+                "REPO_ROOT); pass --root explicitly",
+                file=sys.stderr,
+            )
+            return 2
+        rc, output = fleet_mode(brain_root, args.strict)
+        print(output, end="")
+        return rc
+
+    repo_root = args.root or REPO_ROOT
+    brain_root = find_brain_root(repo_root) or find_brain_root()
+    rc, output = repo_mode(repo_root, brain_root)
+    print(output, end="")
+    return rc
 
 
 if __name__ == "__main__":
