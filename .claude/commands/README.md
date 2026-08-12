@@ -263,7 +263,8 @@ workflows, so specs for later blocks are prepared while an earlier one builds. *
 one engine run at a time** — several repos run concurrently as separate sessions (the lane model).
 Ten standing rules, each from a real failure: never do block work yourself or via a subagent; verify
 every state write (engine bookkeeping is known-unreliable); check downstream Cargo consumers after a
-shared-crate change; commit after every `mev` command; report each block to the lane log; keep a
+shared-crate change; commit after every `mev` command; report each block to the lane log (resolved
+per `/begin-orchestration`'s rule — `planning/roadmaps/<slug>/`, else legacy `planning/<slug>/`); keep a
 `planning/orchestration-run/notes.md` running tab; and resolve ordinary ambiguities inline while
 recording the call. Flags: `--worktree` / `--no-worktree`, `--engine task|flow`, `--dry-run`,
 `--continue-on-fail`.
@@ -394,7 +395,8 @@ it are `Done`), and returns a status table. Read-only.
 
 ### `/generate-roadmap <slug> [--from <path> ...] [--supersedes <path>]`
 Authors the two things `/begin-orchestration` consumes: a **roadmap document** and one
-`lane-<name>.txt` chain file per lane. A roadmap is a *concurrency plan* — an assignment of work to
+`lane-<name>.txt` chain file per lane, written to `planning/roadmaps/<slug>/` and registered as an
+epic's `plan:` pointer. A roadmap is a *concurrency plan* — an assignment of work to
 parallel `/orchestrate` sessions that cannot step on each other. Encodes the rules that have cost
 real runs: the lane unit is the **repo, never the wave** (engines are serial inside a repo, so a
 repo holding 10 blocks is the critical path regardless of scheduling); **at most two heavy-gate
