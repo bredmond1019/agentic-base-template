@@ -71,6 +71,20 @@ leave it living only in the prose below:
 
 The handoff prose in Step 3 then *points at* these slugs instead of being their only home.
 
+**File operator work as a graph edge, never as prose.** Anything this session is leaving for the
+operator to decide, review, approve, or judge — a call only they can make, a credential only they
+hold, a thing they must look at — is filed as a `{"type":"operator", slug, exit, start, what?}`
+entry in `depends_on` on the block(s) it gates, **not** written into the handoff prose, a `note`
+field, or an `## Open questions` bullet. `slug` is kebab-case, prefixed `operator-`; `exit` names
+the artifact whose existence ends the gate (never a description of the work — e.g. `planning/
+decision-rate-card.md exists`, not "decide on pricing"); `start` is a paste-ready command the
+operator runs to begin. If the decision reduces to a single yes/no on a fixed payload, use
+`{"type":"approval", slug, what, digest}` instead. **Why:** an operator (or approval) edge
+inherits the effective priority of everything it gates and surfaces in `/next` as the reason work
+cannot start; prose in a handoff file surfaces nowhere and is exactly how these get left for days.
+Skip entirely if this repo has no `planning/state.json` — say so explicitly in the handoff instead
+and name who is expected to file it once one exists.
+
 ### Step 3 — Write `planning/handoff.md`
 
 Create or overwrite `planning/handoff.md` using this template. Be specific: the next agent
@@ -101,7 +115,9 @@ you drained in Step 2, *point at the home* rather than re-describing it: "see `s
 `cortex-leaf-migration`" or "block `BA.11.C` in `core/bastion`".>
 
 ## Open questions / choices
-<Unresolved decisions or things to verify before proceeding. If none: "None — clear to proceed.">
+<Name the `operator-`/`approval` slugs already filed in `depends_on` (Step 2) and what each
+gates — this section points at the graph, it does not substitute for it. If none: "None — clear
+to proceed.">
 
 ## Context the next agent needs
 <Only ephemeral, this-session framing the next agent needs to read the above. Durable constraints,
@@ -129,6 +145,7 @@ before committing.
 
 Tell the user:
 - `planning/handoff.md` was written (or updated)
+- Any `operator`/`approval` edges filed this session, and what they gate
 - What was logged and committed
 - The exact sequence to resume:
   1. Open a fresh Claude Code session:

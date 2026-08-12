@@ -91,6 +91,20 @@ here**. Note them in the handoff prose and let the next session file them proper
 Never hand-edit a block's `tasks` field — it's a derived pointer, not somewhere to inject
 entries.
 
+**2c — File operator work as a graph edge, never as prose.** Anything this session is leaving
+for the operator to decide, review, approve, or judge — a call only they can make, a credential
+only they hold, a thing they must look at — is filed as a `{"type":"operator", slug, exit,
+start, what?}` entry in `depends_on` on the block(s) it gates, **not** written into the handoff
+prose, a `note` field, or an `## Open questions` bullet. `slug` is kebab-case, prefixed
+`operator-`; `exit` names the artifact whose existence ends the gate (never a description of the
+work — e.g. `planning/decision-rate-card.md exists`, not "decide on pricing"); `start` is a
+paste-ready command the operator runs to begin. If the decision reduces to a single yes/no on a
+fixed payload, use `{"type":"approval", slug, what, digest}` instead. **Why:** an operator (or
+approval) edge inherits the effective priority of everything it gates and surfaces in `/next` as
+the reason work cannot start; prose in a handoff file surfaces nowhere and is exactly how these
+get left for days. Skip entirely if this repo has no `planning/state.json` — say so explicitly in
+the handoff instead (Step 3) and name who is expected to file it once one exists.
+
 ### Step 3 — Write `planning/handoff.md`
 
 The next agent has zero session memory. Be specific and honest. If `$ARGUMENTS` was provided,
@@ -123,7 +137,9 @@ not "fixed engine".>
 only — the next agent can look them up.>
 
 ## Open questions / choices
-<Unresolved decisions, or things to verify before proceeding.>
+<Name the `operator-`/`approval` slugs already filed in `depends_on` (Step 2c) and what each
+gates — this section points at the graph, it does not substitute for it. If truly nothing
+needs the operator: "None — clear to proceed.">
 
 ## First command after `/prime`
 `<exact command to run first>`
@@ -176,6 +192,7 @@ asked.
 
 - `planning/handoff.md` written (or updated)
 - Blocks flipped to `closed`; `carryover[]` slugs added or cleared
+- Any `operator`/`approval` edges filed this session, and what they gate
 - The `emit-state --write` summary, or that it was skipped (standalone)
 - What was committed
 - Next session: open a fresh session here → `/prime` (it surfaces the handoff automatically) →
