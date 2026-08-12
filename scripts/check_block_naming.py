@@ -668,6 +668,90 @@ def self_test() -> int:
             f"(repo-scoped, base-template) currently exits {rc}"
         )
 
+    # (j) TASK 1 of `BT.ticket.block-naming-guard-provenance-fix` -- the discriminating cases that
+    # expose the provenance bug: every repo's `planning/` is a symlink into HQ's vault, a
+    # DIFFERENT git repo, so a provenance query rooted at the invoking repo cannot see what the
+    # vault actually tracks. These pin the CORRECT (post-fix) behaviour and are expected to FAIL
+    # against the current (pre-fix) implementation -- see the ticket's Amendment Log for the
+    # captured failure output.
+
+    # Case A: a non-conforming directory in the invoking repo blocks -- no staging, no
+    # committing, no provenance consulted at all. Currently, an untracked-but-not-gitignored
+    # directory is classified "unknown provenance" and never blocks -- that is the bug.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        _init_git_repo(base)
+        _write_brain_toml(base)
+        _write_spec_dir(base, "BW.1.A")
+        _commit_all(base, "clean baseline")
+        # Deliberately NOT `git add`ed -- brand-new, on disk only.
+        _write_spec_dir(base, "10.B-untracked-should-block")
+        rc, output = _run_repo_mode(base)
+        check(
+            "(j) Case A: an untracked non-conforming dir in the invoking repo still blocks "
+            "(exit 1), with no staging/committing/provenance involved",
+            rc == 1,
+        )
+        check(
+            "(j) Case A: it is labeled 'blocking (this repo)', not unknown provenance",
+            "blocking (this repo)" in output and "unknown provenance" not in output,
+        )
+
+    # Case B: a directory tracked in a DIFFERENT git repo than the invocation root (the real vault
+    # topology) must not be misreported as unknown provenance. Currently, provenance is always
+    # queried against the invocation root's git, so a directory that is genuinely tracked -- just
+    # in another repo -- is indistinguishable from one that was never committed anywhere.
+    with tempfile.TemporaryDirectory() as td:
+        vault = Path(td) / "vault"
+        _init_git_repo(vault)
+        _write_spec_dir(vault, "10.B-vault-legacy")
+        _commit_all(vault, "tracked in the vault repo")
+
+        outer = Path(td) / "outer-repo"
+        _init_git_repo(outer)
+        _write_brain_toml(outer)
+        _write_spec_dir(outer, "BW.1.A")
+        _commit_all(outer, "clean baseline")
+        # `outer`'s own index has no knowledge of this symlink -- exactly the real topology,
+        # where `planning/` is a symlink the outer repo does not (and cannot) track through to
+        # the vault repo's own tracked content.
+        os.symlink(vault / "10.B-vault-legacy", outer / "10.B-vault-legacy")
+
+        rc, output = _run_repo_mode(outer)
+        check(
+            "(j) Case B: a directory tracked in a DIFFERENT (vault) repo is not misreported as "
+            "unknown provenance",
+            "unknown provenance" not in output,
+        )
+        check(
+            "(j) Case B: it is reported as blocking, since its name doesn't conform",
+            "blocking (this repo)" in output,
+        )
+
+    # Case C: a genuinely gitignored directory never blocks, verified with a REAL `git
+    # check-ignore` call against the repo that owns it -- not inferred from a failed `ls-files`.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        _init_git_repo(base)
+        _write_brain_toml(base)
+        _write_spec_dir(base, "BW.1.A")
+        (base / ".gitignore").write_text("ignored-tree/\n", encoding="utf-8")
+        _commit_all(base, "clean baseline with a gitignore rule")
+        ignored_dir = _write_spec_dir(base, "ignored-tree/10.B-really-ignored")
+        rc_ignore, _out_ignore, _err_ignore = _run_git(
+            ["check-ignore", "-q", str(ignored_dir)], base
+        )
+        check(
+            "(j) Case C: git check-ignore itself confirms the directory is ignored",
+            rc_ignore == 0,
+        )
+        rc, output = _run_repo_mode(base)
+        check(
+            "(j) Case C: a genuinely gitignored non-conforming dir never blocks (exit 0)",
+            rc == 0,
+        )
+        check("(j) Case C: it is reported as unknown provenance", "unknown provenance" in output)
+
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")
         return 1
