@@ -1,29 +1,35 @@
 #!/usr/bin/env python3
 """Cross-site fixture suite for the diff-scoped universal emoji gate.
 
-ticket-emoji-gate-diff-scoped, task 2. Task 1 moved all FOUR emoji-gate sites from
-whole-file scoping (`git diff --name-only` + scan the whole file) to added-line scoping
-(`git diff -M -U0 ... -- '*.md' '*.mdx'` + scan only `+` content lines). This suite proves
-the four sites actually agree, mechanically, rather than by eye:
+ticket-emoji-gate-diff-scoped, task 2, extended by ticket-emoji-gate-close-out-site-drift,
+task 2. The original task 1 moved four emoji-gate sites from whole-file scoping
+(`git diff --name-only` + scan the whole file) to added-line scoping
+(`git diff -M -U0 ... -- '*.md' '*.mdx'` + scan only `+` content lines). `/close-out`'s inline
+gate (`.claude/commands/close-out.md`) was a fifth, undiscovered site that had neither the
+added-line scoping nor the PR-footer exemption; it has since been brought into line with the
+other four sites. This suite proves all FIVE sites actually agree, mechanically, rather than by eye:
 
   - `.claude/commands/test.md`            (executable, hardcoded `main..HEAD`)
   - `.claude/workflows/sdlc-block.js`     (executable, `${baseRef}...HEAD`)
   - `.claude/workflows/sdlc-task.js`      (prose-to-agent, `${baseSha}..HEAD`)
   - `.claude/workflows/sdlc-flow.js`      (prose-to-agent, `${prBase}..HEAD`)
+  - `.claude/commands/close-out.md`       (executable, `$(cat .git/CLOSE_OUT_RANGE)` via argv)
 
 Each site embeds a real, runnable `python3 - <<'PYEOF' ... PYEOF` block. This suite extracts
 that literal script text out of each source file (undoing the JS template-literal double-
 backslash escaping the three `.js` sites carry, and substituting the site's base-ref placeholder
-with a real git ref), builds a real git-repo fixture per scenario, executes each extracted
-script against it with `cwd` set to the fixture, and asserts:
+with a real git ref -- `close-out.md` takes its range as `sys.argv[1]` instead of a substituted
+literal, so it is invoked with an explicit `main...HEAD` argument matching what Step 0.5 would
+actually compute for a feature branch cut from `main`), builds a real git-repo fixture per
+scenario, executes each extracted script against it with `cwd` set to the fixture, and asserts:
 
   1. the exit code matches the expected verdict for that scenario, and
-  2. all four sites produce the SAME exit code for every scenario.
+  2. all five sites produce the SAME exit code for every scenario.
 
-A case where the four disagree is exactly the bug this ticket exists to remove, so this
+A case where the five disagree is exactly the bug this ticket exists to remove, so this
 suite must be ABLE to fail on it -- it does not special-case around a real divergence.
 
-NOT registered in planning/harness.json yet (that happens in task 4, "register at the end") --
+Registered in planning/harness.json as `emoji-gate-diff-scoped-tests` --
 run directly: python3 scripts/test_emoji_gate_diff_scoped.py
 """
 
@@ -44,17 +50,23 @@ SOURCE_FILES = {
     "sdlc-block.js": REPO_ROOT / ".claude" / "workflows" / "sdlc-block.js",
     "sdlc-task.js": REPO_ROOT / ".claude" / "workflows" / "sdlc-task.js",
     "sdlc-flow.js": REPO_ROOT / ".claude" / "workflows" / "sdlc-flow.js",
+    "close-out.md": REPO_ROOT / ".claude" / "commands" / "close-out.md",
 }
 
 # The template-literal placeholder each JS site substitutes for the diff base ref.
-# test.md has none -- it hardcodes `main..HEAD` directly.
+# test.md has none -- it hardcodes `main..HEAD` directly. close-out.md has none either --
+# it takes its range as `sys.argv[1]` (see ARGV_SITES below) rather than a substituted literal.
 BASE_REF_PLACEHOLDER = {
     "sdlc-block.js": "${baseRef}",
     "sdlc-task.js": "${baseSha}",
     "sdlc-flow.js": "${prBase}",
 }
 
-SITE_NAMES = ["test.md", "sdlc-block.js", "sdlc-task.js", "sdlc-flow.js"]
+# Sites whose script reads its diff range from argv instead of a literal embedded in the
+# script text -- these get the range passed as an extra command-line argument at run time.
+ARGV_SITES = {"close-out.md": "main...HEAD"}
+
+SITE_NAMES = ["test.md", "sdlc-block.js", "sdlc-task.js", "sdlc-flow.js", "close-out.md"]
 
 PYEOF_BLOCK_RE = re.compile(r"<<'PYEOF'\n(.*?)\nPYEOF", re.DOTALL)
 
@@ -76,7 +88,7 @@ def extract_emoji_gate_script(site: str) -> str:
         )
     script = candidates[0]
 
-    if site != "test.md":
+    if site in BASE_REF_PLACEHOLDER:
         # The three .js sites embed this script inside a JS template literal, where every
         # literal backslash is doubled (`\\U0001F300` on disk -> `\U0001F300` at runtime).
         # Undo that so the extracted text is valid, directly-executable Python.
@@ -85,6 +97,11 @@ def extract_emoji_gate_script(site: str) -> str:
         if placeholder not in script:
             raise AssertionError(f"{site}: expected base-ref placeholder {placeholder!r} in extracted script")
         script = script.replace(placeholder, "main")
+    elif site in ARGV_SITES:
+        # Plain markdown-embedded bash (no JS template escaping), and the range comes from
+        # sys.argv[1] at run time rather than a literal baked into the script text.
+        if "sys.argv[1]" not in script:
+            raise AssertionError(f"{site}: expected script to read its range from sys.argv[1]")
 
     if "EMOJI = re.compile" not in script or "git" not in script:
         raise AssertionError(f"{site}: extracted script does not look like the emoji gate")
@@ -124,8 +141,9 @@ def commit_all(tmp: Path, message: str) -> None:
 
 
 def run_site_script(site: str, repo: Path) -> subprocess.CompletedProcess:
+    argv = [ARGV_SITES[site]] if site in ARGV_SITES else []
     return subprocess.run(
-        [sys.executable, "-c", EMOJI_SCRIPTS[site]],
+        [sys.executable, "-c", EMOJI_SCRIPTS[site], *argv],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -135,7 +153,7 @@ def run_site_script(site: str, repo: Path) -> subprocess.CompletedProcess:
 
 class EmojiGateFixture:
     """One disposable git repo: a `main` commit (the "already-merged legacy state") plus a
-    `feature` branch commit (the "task's own diff"). All four sites diff feature-branch HEAD
+    `feature` branch commit (the "task's own diff"). All five sites diff feature-branch HEAD
     against `main`."""
 
     def __init__(self, tmpdir: str):
@@ -161,7 +179,7 @@ def run_all_sites(repo: Path) -> dict[str, subprocess.CompletedProcess]:
 
 
 class EmojiGateDiffScopedTest(unittest.TestCase):
-    """Every test asserts BOTH the expected verdict AND that all four sites agree."""
+    """Every test asserts BOTH the expected verdict AND that all five sites agree."""
 
     def setUp(self):
         self._tmpdirs: list[str] = []
@@ -181,7 +199,7 @@ class EmojiGateDiffScopedTest(unittest.TestCase):
         unique = set(codes.values())
         self.assertEqual(
             len(unique), 1,
-            f"{msg}: the four sites DISAGREE on verdict -- {codes}\n"
+            f"{msg}: the five sites DISAGREE on verdict -- {codes}\n"
             + "\n".join(f"--- {s} ---\n{r.stdout}{r.stderr}" for s, r in results.items()),
         )
         expected_code = 0 if expect_pass else 1
@@ -189,7 +207,7 @@ class EmojiGateDiffScopedTest(unittest.TestCase):
         self.assertEqual(
             actual_code, expected_code,
             f"{msg}: expected exit {expected_code} ({'PASS' if expect_pass else 'FAIL'}), "
-            f"got {actual_code} from all four sites.\n"
+            f"got {actual_code} from all five sites.\n"
             + "\n".join(f"--- {s} ---\n{r.stdout}{r.stderr}" for s, r in results.items()),
         )
         return results
@@ -289,19 +307,20 @@ class EmojiGateDiffScopedTest(unittest.TestCase):
         fx.task_commit(files={"docs/guide.mdx": "This is new mdx content \U0001F680\n"})
         self.assert_all_sites(
             fx.path, expect_pass=False,
-            msg=".mdx files must be scanned identically to .md files at all four sites",
+            msg=".mdx files must be scanned identically to .md files at all five sites",
         )
 
     # -- the suite must be able to detect real disagreement ------------------------------
 
     def test_suite_can_detect_disagreement(self):
         """Not a gate scenario -- proves assert_all_sites actually fails on divergence,
-        so a future regression that makes the four sites disagree cannot pass silently."""
+        so a future regression that makes the five sites disagree cannot pass silently."""
         fake_results = {
             "test.md": subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
             "sdlc-block.js": subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr=""),
             "sdlc-task.js": subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
             "sdlc-flow.js": subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            "close-out.md": subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
         }
         codes = {site: r.returncode for site, r in fake_results.items()}
         self.assertNotEqual(
@@ -314,7 +333,7 @@ class ExtractionSanityTest(unittest.TestCase):
     """The extraction itself must be honest: fail loudly if a source file no longer contains
     exactly one recognizable emoji-gate script, rather than silently testing stale text."""
 
-    def test_all_four_sites_extract_a_single_script(self):
+    def test_all_five_sites_extract_a_single_script(self):
         for site in SITE_NAMES:
             script = EMOJI_SCRIPTS[site]
             self.assertIn("EMOJI = re.compile", script)
