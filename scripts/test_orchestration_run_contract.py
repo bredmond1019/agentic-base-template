@@ -89,7 +89,16 @@ class Record:
 
     @property
     def expected_doc_id(self) -> str:
-        return f"{self.repo_slug}-orchestration-run-{self.dir_roadmap_slug}"
+        base = f"{self.repo_slug}-orchestration-run-{self.dir_roadmap_slug}"
+        # notes.md carries the bare `<repo-slug>-orchestration-run-<roadmap-slug>` id (D57 section
+        # 2's literal pattern); review.md carries the same id with a `-review` suffix. Two files
+        # cannot legitimately share one doc_id -- `mev validate-brain --graph` indexes per FILE, so
+        # a shared id is a real E_GRAPH_DUPLICATE_DOC_ID, not a modeling nuance -- and this suffix
+        # is the pre-existing convention every one of the nine repos already used before migration
+        # (e.g. `bastion-web-orchestration-run-notes` / `-review`).
+        if self.path.name == "review.md":
+            return f"{base}-review"
+        return base
 
 
 def find_brain_root(start: Optional[Path] = None) -> Optional[Path]:
@@ -181,14 +190,12 @@ def check_records(records: list[Record]) -> list[str]:
     """Apply the four D57 rules across a set of records; return violation strings (empty = pass)."""
     violations: list[str] = []
 
-    # A "record" per D57 section 1 is the (repo x roadmap) PAIR -- notes.md and review.md for the
-    # same (repo_slug, dir_roadmap_slug) legitimately share one doc_id (both are required to match
-    # the same `<repo-slug>-orchestration-run-<roadmap-slug>` pattern). The collision this rule
-    # actually guards against is two DIFFERENT (repo, roadmap) pairs claiming the same doc_id --
-    # e.g. two roadmaps under the same repo whose slugs happened to collide -- which is what would
-    # red-gate `mev validate-brain --graph` corpus-wide. So dedup owners by (repo, roadmap), not by
-    # file path.
-    doc_id_owners: dict[str, set[tuple[str, str]]] = {}
+    # `mev validate-brain --graph` indexes per FILE, so notes.md and review.md must carry
+    # DIFFERENT doc_ids (see `expected_doc_id`'s `-review` suffix) -- two files sharing one id is
+    # a real E_GRAPH_DUPLICATE_DOC_ID. Dedup owners by file path so any two files (whatever their
+    # names) claiming the same doc_id are caught -- e.g. two roadmaps under the same repo whose
+    # slugs happened to collide.
+    doc_id_owners: dict[str, set[Path]] = {}
 
     for rec in records:
         loc = str(rec.path)
@@ -211,14 +218,13 @@ def check_records(records: list[Record]) -> list[str]:
             )
 
         if rec.doc_id:
-            doc_id_owners.setdefault(rec.doc_id, set()).add((rec.repo_slug, rec.dir_roadmap_slug))
+            doc_id_owners.setdefault(rec.doc_id, set()).add(rec.path)
 
-    for doc_id, owner_pairs in doc_id_owners.items():
-        if len(owner_pairs) > 1:
-            pairs = ", ".join(f"{repo}/{roadmap}" for repo, roadmap in sorted(owner_pairs))
+    for doc_id, owner_paths in doc_id_owners.items():
+        if len(owner_paths) > 1:
+            paths = ", ".join(str(p) for p in sorted(owner_paths))
             violations.append(
-                f"doc_id {doc_id!r} is shared by {len(owner_pairs)} distinct (repo, roadmap) "
-                f"records: {pairs}"
+                f"doc_id {doc_id!r} is shared by {len(owner_paths)} files: {paths}"
             )
 
     return violations
@@ -451,7 +457,7 @@ def self_test() -> int:
                 "run_started": "2026-08-11",
                 "run_ended": "2026-08-11",
                 "lifecycle": "active",
-                "doc_id": "agentic-portfolio-orchestration-run-demo-roadmap",
+                "doc_id": "agentic-portfolio-orchestration-run-demo-roadmap-review",
             },
             vaulted=False,
         )
@@ -476,7 +482,7 @@ def self_test() -> int:
             {
                 "roadmap": "roadmap-x", "lane": "C1", "run_started": "2026-08-11",
                 "run_ended": "2026-08-11", "lifecycle": "active",
-                "doc_id": "repo-a-orchestration-run-roadmap-x",
+                "doc_id": "repo-a-orchestration-run-roadmap-x-review",
             },
         )
         _write_record(
