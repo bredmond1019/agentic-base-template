@@ -3,10 +3,16 @@
 ## Variables
 
 $ARGUMENTS — one of two input modes:
-             - **Master-plan slug mode (default):** the spec's `planning/` directory name (its
-               phase-dotted slug), e.g. `<spec-slug>` or `2.1-learn-paths-structural-fixes`. New
-               master-plan specs follow the `P.N-slug` convention (see `planning/index.md` → *Task
-               directory naming convention*). The block definition is read from `master-plan.md`.
+             - **Master-plan slug mode (default):** the spec's `planning/` directory name — its block
+               ID. **Write new spec directories in the canonical form `<REPO>.<phase>.<block>`**
+               (e.g. `BA.0.A`, `EN.8.A`) — a repo-unique two-or-three-letter code from `brain.toml`, a
+               phase number, and a block letter or number; the directory name equals the block ID
+               exactly, no title suffix. This is the form `/generate-master-plan.md` and `/plan.md`
+               author (see `/generate-master-plan.md` step 4 for the full rule). **Legacy directories
+               still resolve** for as long as they exist — older specs may be spelled
+               `<phase>.<block>-<title>` (e.g. `2.1-learn-paths-structural-fixes`) or
+               `<repo>-<phase><block>-<title>`; this command does not require migrating them, it only
+               writes new ones canonically. The block definition is read from `master-plan.md`.
              - **Plan-file mode (`--from <path> [phaseN-blockX]`):** decompose a block from a
                standalone plan file instead of `master-plan.md`. The file may be either a single
                standalone block definition (legacy D34) or a master-plan-format `/plan` output with
