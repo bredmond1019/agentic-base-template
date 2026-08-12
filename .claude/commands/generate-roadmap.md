@@ -15,13 +15,17 @@ that can be checked by observation rather than asserted.
 **Related:** `/generate-master-plan` authors *one repo's* canonical block definitions. This command
 sits above it and spans repos. `/begin-orchestration` drives one lane of the result.
 
+**Single-copy command.** This command runs at `BRAIN_ROOT` and is deliberately **not** synced
+downstream by `scripts/sync_downstream_harness.py` (it has no meaning inside a leaf repo) — a
+change here needs no `/sync-downstream-harness` pass.
+
 ## Variables
 
 `$ARGUMENTS` — a concept name or slug, plus optional flags.
 
 | Flag | Required | Default | What it does |
 |---|---|---|---|
-| `<slug>` | **yes** | — | Roadmap slug. Becomes `planning/<slug>/`. Kebab-case, names the *outcome* not the date. |
+| `<slug>` | **yes** | — | Roadmap slug. Becomes `planning/roadmaps/<slug>/`. Kebab-case, names the *outcome* not the date. |
 | `--from <path ...>` | no | — | Source documents: a review, an audit, an action register, a previous roadmap. Repeatable. A `consolidated-review.md` emitted by `/consolidate-run` is a valid source. |
 | `--supersedes <path>` | no | — | The roadmap this replaces. Adds the banner to both documents. |
 | `--lanes <n>` | no | `4` | Target concurrent lanes. The real ceiling is operator capacity, not repo count. |
@@ -41,8 +45,8 @@ Usage: /generate-roadmap <slug> [--from <path> ...] [--supersedes <path>]
 **A. `BRAIN_ROOT`** — walk up from cwd for `brain.toml`. This command runs at HQ. A roadmap spanning
 repos cannot be authored from inside one of them.
 
-**B. `roadmap_dir`** = `<BRAIN_ROOT>/planning/<slug>/`. If it exists and holds a `roadmap.md`, stop
-and ask whether to supersede or amend — never overwrite one.
+**B. `roadmap_dir`** = `<BRAIN_ROOT>/planning/roadmaps/<slug>/`. If it exists and holds a
+`roadmap.md`, stop and ask whether to supersede or amend — never overwrite one.
 
 **C. Read every `--from` source in full.** Not summaries of them.
 
@@ -170,7 +174,7 @@ table is the signal the lanes may launch.
 
 ## Step 7 — Write the files
 
-### `planning/<slug>/roadmap.md`
+### `planning/roadmaps/<slug>/roadmap.md`
 
 OKF frontmatter (`type: Plan`, `status: active`, `related:` pointing at the sources and the
 superseded roadmap). Then, in order:
@@ -272,7 +276,7 @@ last roadmap that did accumulated a second "Revised Wave Table" while the first 
 authoritative, so the document carried two contradictory plans plus a generated table that outranked
 both. **A wave grid is a communication device, not a schedule.**
 
-### `planning/<slug>/lane-<name>.txt`
+### `planning/roadmaps/<slug>/lane-<name>.txt`
 
 One per lane. `<name>` must match what an operator would type after `--lane`.
 
@@ -311,15 +315,40 @@ execution rather than at planning time:
 A lane file covering several repos uses section markers and says **"take only your repo's section"**
 at the top — the reader stops and asks if it cannot tell which section is its own.
 
-### `planning/<slug>/lane-log.jsonl`
+### `planning/roadmaps/<slug>/lane-log.jsonl`
 
 Create it empty. Append-only, one line per integrated block. Four sessions editing one markdown
 file is the contention pattern this structure exists to avoid.
 
+### Register the roadmap in `epics[]`
+
+**A roadmap's home is a folder; its findability is a registry row — the folder alone only tidies
+the directory listing.** Epics already solved this: `state.json`'s `epics[]` array gives each entry
+an explicit `plan` field naming the doc that makes it real, and `mev`'s `epics_index` conformance
+check already validates that a registered `plan:` target resolves — one of its own fixtures already
+uses `planning/<slug>/roadmap.md` as an epic's `plan:` value. Reuse that registry rather than
+inventing a parallel `roadmaps[]` array: a roadmap is a multi-repo initiative's plan, which is
+exactly what an epic's `plan` field is for.
+
+In `<BRAIN_ROOT>/planning/state.json`'s `epics[]`:
+
+- **If this roadmap continues an existing epic** (it was authored `--from` that epic's prior
+  roadmap, or its outcomes are that epic's outcomes), update that epic's `plan` field to
+  `planning/roadmaps/<slug>/roadmap.md`. Do not add a second entry for the same initiative.
+- **If no existing epic covers this roadmap's outcomes**, add a new `epics[]` entry:
+  `{"slug": "<slug>", "title": "...", "description": "...", "status": "active", "weight": <n>,
+  "plan": "planning/roadmaps/<slug>/roadmap.md", "repos": [...]}` — `repos` is the union of every
+  lane's repo.
+
+Round-trip `state.json` with `json.dump(..., indent=2, ensure_ascii=False)` plus a trailing newline
+(CLAUDE.md trap), and commit it with an explicit pathspec — never a bare `git commit` against the
+brain's index (standing rule 10).
+
 ### `planning/index.md`
 
-Add the folder (standing rule 7). If superseding, mark the old folder's row — and if its documents
-are still referenced, write **"NOT archived"** on that row with the reason.
+Add the folder (standing rule 7) at `planning/roadmaps/<slug>/`. If superseding, mark the old
+folder's row — and if its documents are still referenced, write **"NOT archived"** on that row with
+the reason.
 
 ---
 
@@ -346,6 +375,7 @@ Then check by hand:
       one row loses its steps. Break it out; two of its items probably touch live traffic.
 - [ ] Every Definition-of-done item is an observation with a command, not a block ID.
 - [ ] The `# ROADMAP:` line in each lane file resolves to this roadmap.
+- [ ] The roadmap is registered in `epics[]` with a `plan` field pointing at `roadmap.md`'s new path.
 - [ ] The cut list is longer than you are comfortable with.
 
 Report the lane assignment, the Wave 0 item count, and the cut list. **Do not run `/orchestrate`** —
