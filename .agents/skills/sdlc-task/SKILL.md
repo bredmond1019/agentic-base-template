@@ -234,8 +234,9 @@ not persist between calls.
    then re-run. Deriving from an authored `tasks.md` is not guessing the task structure; fabricating
    one from nothing is what D16 still refuses to do.
 
-   **Per-task `validation_commands` scoping**: When authoring tasks.json, follow the convention from
-   the generate-tasks guide (never restate the rubric in your own words, just apply it). The rule:
+   **Per-task `validation_commands` scoping**: When authoring tasks.json, follow the convention
+   documented at `.claude/commands/generate-tasks.md` (search it for "validation_commands"); do not
+   restate the rubric in your own words, just apply it. The rule:
    `validation_commands` is `[]` for any task that touches source the project's checks compile or
    lint — those tasks fall back to the project-wide harness checks, which are authoritative for them.
    Set it ONLY for a task that CANNOT break the build (docs-only, config-only, fixture-only), with
