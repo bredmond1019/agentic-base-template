@@ -386,7 +386,7 @@ parallel `/orchestrate` sessions that cannot step on each other. Encodes the rul
 real runs: the lane unit is the **repo, never the wave** (engines are serial inside a repo, so a
 repo holding 10 blocks is the critical path regardless of scheduling); **at most two heavy-gate
 repos concurrently**, read from each `harness.json` rather than memory; `base-template` lands early
-in a worktree with propagation **deferred** to an operator gate; ★ blocks must be registered in
+in a worktree with propagation **deferred** to an operator gate; `[*]` blocks must be registered in
 `state.json` in a hard **Wave 0** or the lane cannot resolve them; the generated `epic-sequence`
 region is the only status surface and no wave table may be authored beside it; and the **Definition
 of Done must be written as observations with commands, not as blocks closed** — the failure that

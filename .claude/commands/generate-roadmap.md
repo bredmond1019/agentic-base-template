@@ -58,7 +58,7 @@ Collect candidate work from, in this order of trustworthiness:
 
 1. **`state.json` across the fleet** — every `open`/`blocked` block. This is the graph and it is fact.
 2. **Carryovers past their staleness threshold** — `mev carryover`, or `validate-brain --state`.
-3. **Findings in the `--from` documents** that have no block. These become ★ items (Step 6).
+3. **Findings in the `--from` documents** that have no block. These become `[*]` items (Step 6).
 4. **Operator decisions** named anywhere as gating something.
 
 > **Re-verify the load-bearing claims before building on them.** In this fleet a formal review was
@@ -151,7 +151,7 @@ the ones that must happen mid-run and get deferred to deploy time instead.
 **`/orchestrate` resolves block IDs from `state.json`.** A lane file naming an ID that is not in the
 graph does not degrade gracefully — the lane stops, or worse, improvises a spec.
 
-So every ★ item from Step 2.3 must be **filed as a ticket and registered in its repo's
+So every `[*]` item from Step 2.3 must be **filed as a ticket and registered in its repo's
 `state.json` before any lane launches.** Make that Wave 0 and say it is a hard gate.
 
 Wave 0 also carries:
@@ -180,7 +180,7 @@ superseded roadmap). Then, in order:
 | Supersedes banner | What the previous roadmap achieved, what it did not, and **whether its folder may be archived** — if any of its documents are still referenced, say so explicitly so nobody archives them |
 | The trade | Why this work, now. Lead with the finding that motivated it, with evidence |
 | The outcomes | Three to five, each an observable statement |
-| How to use this document | The generated table is authoritative; lane tables are execution order; ★ means filed in Wave 0 |
+| How to use this document | The generated table is authoritative; lane tables are execution order; `[*]` means filed in Wave 0 |
 | Wave 0 | The gate. A table of registration, corrections and operator ratifications |
 | Dependency graph | ASCII lane chains, then the cross-lane edges |
 | The lanes | One table per lane: block, engine, and a **notes column that carries the evidence** — file:line, `AR-nn`, the trap, the thing the last run got wrong |
@@ -333,7 +333,7 @@ bastion validate-brain --state
 
 Then check by hand:
 
-- [ ] Every block ID in every lane file exists in a `state.json`, **or** is marked ★ and appears in Wave 0.
+- [ ] Every block ID in every lane file exists in a `state.json`, **or** is marked `[*]` and appears in Wave 0.
 - [ ] No lane has more than one heavy repo live at a time, given the stated ordering.
 - [ ] Every cross-lane edge in the ASCII appears in the lane file of the *waiting* lane.
 - [ ] Every operator gate names the block it gates, in both the operator table and the lane file.
