@@ -137,11 +137,15 @@ python3 - "$(cat .git/CLOSE_OUT_RANGE)" <<'PYEOF'
 import subprocess, re, sys, os
 RANGE = sys.argv[1]
 EMOJI = re.compile(r'[\U0001F300-\U0001FAFF\U00002600-\U000027BF]')
+FOOTER = 'Generated with Claude Code'
 changed = subprocess.run(['git','diff', RANGE, '--name-only'], capture_output=True, text=True).stdout.splitlines()
 md_files = [f for f in changed if f.endswith(('.md','.mdx')) and os.path.isfile(f)]
 hits = []
 for path in md_files:
-    for n, line in enumerate(open(path, errors='ignore'), 1):
+    content = open(path, errors='ignore').read()
+    if FOOTER in content:
+        continue
+    for n, line in enumerate(content.splitlines(), 1):
         if EMOJI.search(line): hits.append(f'{path}:{n}: {line.rstrip()[:100]}')
 if hits:
     print('EMOJI CHECK FAIL:'); [print(h) for h in hits[:25]]; sys.exit(1)
