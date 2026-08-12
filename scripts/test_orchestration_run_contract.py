@@ -281,6 +281,98 @@ def check_records(records: list[Record]) -> list[str]:
     return violations
 
 
+# ---------------------------------------------------------------------------
+# Writer-command checks (BT.ticket.orchestration-record-write-time-validation task 3) -- assert
+# that `/begin-orchestration` and `/orchestrate` each carry the verify-after-write step this
+# ticket adds, so the step cannot silently rot out of one of the two copies (the same defect
+# shape the three D16 derive prompts had -- a fix landing in N-1 of N places is the likely
+# failure, so each command is asserted SEPARATELY, never with a combined any-match check).
+# ---------------------------------------------------------------------------
+
+BEGIN_ORCHESTRATION_PATH = REPO_ROOT / ".claude" / "commands" / "begin-orchestration.md"
+ORCHESTRATE_PATH = REPO_ROOT / ".claude" / "commands" / "orchestrate.md"
+
+
+def check_names_checker(text: str) -> bool:
+    """The step must name this checker by its real script path, not a vague 'validate the
+    record' instruction an agent could satisfy by reading the file and deciding it looks fine."""
+    return "test_orchestration_run_contract.py" in text
+
+
+def check_fix_then_rerun(text: str) -> bool:
+    """On a violation, the step must instruct fixing the record and re-running the checker --
+    not merely running it once and proceeding regardless of the result."""
+    lower = text.lower()
+    return "fix" in lower and ("re-run" in lower or "rerun" in lower)
+
+
+def check_no_delete_to_pass(text: str) -> bool:
+    """Deleting or emptying the record to make the checker pass must be explicitly forbidden,
+    not merely never mentioned."""
+    lower = text.lower()
+    return "delet" in lower and ("never" in lower or "not " in lower or "not\n" in lower)
+
+
+# -- synthetic fixtures: a GOOD text each check must pass, and a BAD text -- otherwise identical
+# in spirit -- that must make it fail. Proving the negative is what keeps a grep-level check from
+# rotting into a no-op.
+
+_GOOD_NAMES_CHECKER = (
+    "After writing the record, run `python3 scripts/test_orchestration_run_contract.py` and "
+    "confirm it exits 0."
+)
+_BAD_NAMES_CHECKER = (
+    "After writing the record, validate that it looks correct before continuing."
+)
+
+_GOOD_FIX_RERUN = (
+    "On a violation attributable to the record just written, fix it (correct the doc_id, "
+    "roadmap, or lifecycle field) and re-run the checker -- do not proceed with a known violation."
+)
+_BAD_FIX_RERUN = (
+    "Run the checker once after writing the record; if it fails, note the failure in the log "
+    "and continue with the run."
+)
+
+_GOOD_NO_DELETE = (
+    "Deleting or emptying the record is never an acceptable way to make the check pass -- the "
+    "record is the run's evidence."
+)
+_BAD_NO_DELETE = (
+    "If the checker keeps failing on the record, delete the record and start the run fresh."
+)
+
+
+def case_writer_command_checks_discriminate() -> None:
+    """Each of the three writer-command checks must pass its GOOD fixture and fail its BAD one --
+    proof the check actually discriminates rather than always returning True."""
+    check("names-checker: passes compliant text", check_names_checker(_GOOD_NAMES_CHECKER))
+    check("names-checker: fails violating text", not check_names_checker(_BAD_NAMES_CHECKER))
+
+    check("fix-then-rerun: passes compliant text", check_fix_then_rerun(_GOOD_FIX_RERUN))
+    check("fix-then-rerun: fails violating text", not check_fix_then_rerun(_BAD_FIX_RERUN))
+
+    check("no-delete-to-pass: passes compliant text", check_no_delete_to_pass(_GOOD_NO_DELETE))
+    check("no-delete-to-pass: fails violating text", not check_no_delete_to_pass(_BAD_NO_DELETE))
+
+
+def case_writer_commands_carry_verify_step() -> None:
+    """The real `.claude/commands/begin-orchestration.md` and `.claude/commands/orchestrate.md`
+    must each pass all three checks, asserted SEPARATELY per file -- a fix landing in one of the
+    two copies is the likely failure, and a combined any-match assertion would hide it."""
+    for label, path in (
+        ("begin-orchestration.md", BEGIN_ORCHESTRATION_PATH),
+        ("orchestrate.md", ORCHESTRATE_PATH),
+    ):
+        if not path.exists():
+            check(f"{label}: file exists at {path}", False)
+            continue
+        text = path.read_text(encoding="utf-8")
+        check(f"{label}: names the checker by its real path", check_names_checker(text))
+        check(f"{label}: states fix-then-rerun behavior", check_fix_then_rerun(text))
+        check(f"{label}: forbids deleting the record to pass", check_no_delete_to_pass(text))
+
+
 def _sweep_with_rg(root: Path) -> Optional[list[Path]]:
     """Try `rg -L -uu --files -g '**/orchestration-run/**'`; None if no `rg` binary is on PATH.
 
@@ -726,6 +818,12 @@ def self_test() -> int:
         _write_record(base2, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
         rc2, _ = _run_corpus_mode(base2)
         check("(l) negative: baseline-unresolvable with no violations still exits 0", rc2 == 0)
+
+    # (m) Writer-command checks (BT.ticket.orchestration-record-write-time-validation task 3):
+    # the checks discriminate on synthetic fixtures, and the two real writer commands both carry
+    # the verify-after-write step, asserted separately per file.
+    case_writer_command_checks_discriminate()
+    case_writer_commands_carry_verify_step()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")
