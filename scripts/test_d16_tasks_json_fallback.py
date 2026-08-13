@@ -460,22 +460,57 @@ class ValidationCommandsScopingConvention(unittest.TestCase):
 
 
 class MeasuredBaseline(unittest.TestCase):
-    """Sanity-checks the fleet-wide baseline claim from this spec's Description: prose-only ticket
-    specs (tasks.md present, tasks.json absent) exist in this repo's own planning vault today."""
+    """Observes the prose-only ticket-spec population in this repo's own planning vault.
 
-    def test_at_least_one_prose_only_ticket_spec_exists_locally(self):
+    This class records a CENSUS, not an invariant. It originally asserted that at least one
+    prose-only ticket spec (tasks.md present, tasks.json absent) existed locally, as a sanity-check
+    on the baseline claim in the D16 spec's Description.
+
+    That assertion was wrong as a gating check, and it went red on 2026-08-13 the moment the last
+    three prose-only specs were decomposed by /generate-tasks during a routine /orchestrate chain.
+    The population reaching zero is the harness WORKING — every spec carrying an authored tasks.json
+    is the intended end state, and D16's fallback exists precisely so the remaining ones can be
+    recovered. Gating on a mutable corpus census means the check fails on success, and it fails for
+    the repo that finished its migration first.
+
+    The D16 fallback BEHAVIOUR is covered by the synthetic-fixture tests above, which do not depend
+    on corpus state. This class now reports the census and skips when it is empty, so a legitimate
+    end state can never red-gate the fleet again. When the population is non-empty it still asserts
+    something real: that each member is genuinely prose-only and would therefore exercise the
+    fallback.
+    """
+
+    def _prose_only_specs(self):
         planning = REPO_ROOT / "planning"
         prose_only = []
         for d in sorted(planning.iterdir()):
             if not d.is_dir() or not d.name.startswith("ticket-"):
                 continue
             if (d / "tasks.md").exists() and not (d / "tasks.json").exists():
-                prose_only.append(d.name)
-        self.assertTrue(
-            prose_only,
-            "expected at least one prose-only ticket spec (tasks.md, no tasks.json) locally — "
-            "see this spec's Amendment Log for the measured baseline",
-        )
+                prose_only.append(d)
+        return prose_only
+
+    def test_prose_only_ticket_specs_when_present_are_derivable_by_the_fallback(self):
+        prose_only = self._prose_only_specs()
+        if not prose_only:
+            self.skipTest(
+                "no prose-only ticket specs remain locally — this is the intended end state, "
+                "not a regression; D16 fallback behaviour is covered by the fixture tests above"
+            )
+        # Not a tautology: the selector above keys on FILE PRESENCE, this asserts the tasks.md is
+        # substantive enough for D16's derive to have a source. A stub tasks.md is exactly the
+        # underivable case D16 is documented to abort on, and it should surface here, not at run time.
+        failures = []
+        for d in prose_only:
+            text = (d / "tasks.md").read_text(encoding="utf-8")
+            if not text.startswith("---"):
+                failures.append(f"{d.name}: tasks.md has no OKF frontmatter")
+            if "## Acceptance Criteria" not in text:
+                failures.append(f"{d.name}: tasks.md has no '## Acceptance Criteria' section")
+            if len(text.split()) < 100:
+                failures.append(f"{d.name}: tasks.md is a stub ({len(text.split())} words)")
+        if failures:
+            self.fail("\n  ".join(failures))
 
 
 if __name__ == "__main__":
