@@ -15,8 +15,10 @@ target repo:
       - commands/*.md               (flat root only - NOT commands/brain/, which is
                                        brain-only reference content, never propagated downstream)
       - workflows/*.js               (the SDLC engines)
-      - workflows/*.json             (e.g. harness.schema.json - the check schema the engines
-                                       validate planning/harness.json against; mechanism, not policy)
+      - workflows/*.json             (e.g. harness.schema.json - an authoring aid for editors/
+                                       linters that resolve $schema; the engines never validate
+                                       planning/harness.json against it at runtime, they just cat
+                                       + JSON.parse it as data. Mechanism, not policy.)
       - workflows/templates/*.md
   - from base-template/.agents/skills/ (base-template -> target's .agents/skills/), one slug at a
     time via AGENT_SKILL_SLUGS (explicit, like HOOK_FILENAMES - not a directory glob, so a new
