@@ -69,6 +69,16 @@ OPERATOR_EDGE_TYPES = ("operator", "approval")
 
 KNOWN_STATUS_VALUES = {"done", "blocked", "docs", "running", "passed", "completed"}
 
+# Dated snapshot for the realpath-dedup relation (never a hard constant -- the fleet moves under
+# concurrent lanes and any fixed pair would go stale the moment a new spec runs). The self-test's
+# live-measurement case re-runs this exact command against the real corpus at test time and asserts
+# the RELATION (raw > distinct, every /trees/-routed hit collapses onto a non-trees/ realpath), not
+# these numbers -- they are recorded here only as the ticket's own dated provenance.
+MEASURING_COMMAND = "rg -L -uu --files -g '**/sdlc/sdlc-*state.json'"
+MEASURED_DATE = "2026-08-12"
+MEASURED_RAW = 861
+MEASURED_DISTINCT = 438
+
 
 # ---------------------------------------------------------------------------
 # Brain root + generic sweep/dedup plumbing (mirrors scripts/test_consolidator_discovery.py's
@@ -691,6 +701,70 @@ def case_block_to_spec_slug_resolution() -> None:
     check("phase-letter block is unresolved (needs master-plan.md, not fabricated)", resolve_block_to_spec_slug("EN.8.B") is None)
 
 
+def case_roadmap_isolation() -> None:
+    """The primary axis of the command: two roadmaps sharing the same fixture tree must never leak
+    into each other's result, in either direction."""
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+
+        roadmap_a = base / "planning" / "roadmaps" / "roadmap-a"
+        roadmap_a.mkdir(parents=True)
+        _write(roadmap_a / "lane-log.jsonl",
+               '{"ts":"2026-08-12T00:00:00Z","lane":"a","repo":"repo-alpha","block":"BT.ticket.thing-a",'
+               '"status":"closed","note":"n"}\n')
+
+        roadmap_b = base / "planning" / "roadmaps" / "roadmap-b"
+        roadmap_b.mkdir(parents=True)
+        _write(roadmap_b / "lane-log.jsonl",
+               '{"ts":"2026-08-12T00:00:00Z","lane":"b","repo":"repo-beta","block":"BT.ticket.thing-b",'
+               '"status":"closed","note":"n"}\n')
+
+        notes_a = base / "core" / "repo-alpha" / "planning" / "orchestration-run" / "roadmap-a" / "notes.md"
+        _write(notes_a, "---\nlifecycle: lane-complete\n---\n\n| # | Item |\n|---|---|\n| 1 | a |\n")
+        notes_b = base / "core" / "repo-beta" / "planning" / "orchestration-run" / "roadmap-b" / "notes.md"
+        _write(notes_b, "---\nlifecycle: lane-complete\n---\n\n| # | Item |\n|---|---|\n| 1 | b |\n")
+
+        result_a = discover(base, "roadmap-a")
+        check("--roadmap A reports A's lane (repo-alpha)", "repo-alpha" in result_a["lanes"])
+        check("--roadmap A never leaks B's lane (repo-beta)", "repo-beta" not in result_a["lanes"])
+        check("--roadmap A's roadmap_dir is A's own directory", result_a["roadmap_dir"] == str(roadmap_a))
+
+        result_b = discover(base, "roadmap-b")
+        check("--roadmap B reports B's lane (repo-beta)", "repo-beta" in result_b["lanes"])
+        check("--roadmap B never leaks A's lane (repo-alpha)", "repo-alpha" not in result_b["lanes"])
+        check("--roadmap B's roadmap_dir is B's own directory", result_b["roadmap_dir"] == str(roadmap_b))
+
+
+def case_live_measured_snapshot() -> None:
+    """(8) Live, dated measurement from BRAIN_ROOT for run-state-shaped files
+    (`**/sdlc/sdlc-*state.json`). Asserts the RELATION -- naive raw count exceeds realpath-distinct
+    count, and every hit routed through a `/trees/` segment collapses onto a non-`trees/` realpath
+    -- never a hard equality against MEASURED_RAW/MEASURED_DISTINCT, which are a dated snapshot
+    that goes stale as the fleet accumulates runs. Skipped (not failed) when no brain.toml is
+    reachable, e.g. a clone of only this repo with no vault sibling."""
+    root = find_brain_root(REPO_ROOT) or find_brain_root()
+    if root is None:
+        print(
+            "  skip (8) live measured snapshot: no brain.toml found walking up from "
+            f"{REPO_ROOT} or cwd -- this property only applies inside the agentic-portfolio brain root"
+        )
+        return
+
+    print(f"  measuring from {root} with: {MEASURING_COMMAND}  (dated {MEASURED_DATE}, "
+          f"snapshot was raw={MEASURED_RAW} distinct={MEASURED_DISTINCT})")
+    raw = sweep(root, "**/sdlc/sdlc-*state.json", ("sdlc", "sdlc-", "state.json"),
+                follow_symlinks=True, hidden=True)
+    naive = len(raw)
+    distinct = realpath_dedup(root, raw)
+    print(f"  naive={naive} distinct={len(distinct)}")
+
+    trees_hits = [h for h in raw if "/trees/" in h]
+    non_collapsing = [h for h in trees_hits if "/trees/" in str(Path(os.path.realpath(root / h)))]
+
+    check("(8) naive raw count exceeds realpath-distinct count", naive > len(distinct))
+    check("(8) every /trees/-routed hit collapses onto a non-trees/ realpath", len(non_collapsing) == 0)
+
+
 def case_no_writes() -> None:
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
@@ -710,6 +784,7 @@ def case_empty_roadmap_is_explicit() -> None:
         result = discover(base, "ghost")
         check("empty lane-log yields explicit empty lanes dict, not a missing key", result["lanes"] == {})
         check("repos_in_lane_log is explicitly empty list", result["repos_in_lane_log"] == [])
+        check("operator_coverage_total is explicitly 0, not an omitted key", result["operator_coverage_total"] == 0)
         check("coverage caveat is always present", "coverage_caveat" in result and result["coverage_caveat"])
 
 
@@ -754,6 +829,8 @@ def self_test() -> int:
     case_unknown_status_passthrough()
     case_operator_match_by_type_not_slug_prefix()
     case_block_to_spec_slug_resolution()
+    case_roadmap_isolation()
+    case_live_measured_snapshot()
     case_no_writes()
     case_empty_roadmap_is_explicit()
     case_full_join_end_to_end()
