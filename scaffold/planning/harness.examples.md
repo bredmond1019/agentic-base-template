@@ -38,7 +38,8 @@ projects that have a dev server to smoke-test.
       { "name": "fmt",    "command": "cargo fmt --check",             "purpose": "Format gate", "gates": true },
       { "name": "clippy", "command": "cargo clippy --all-targets -- -D warnings", "fastCommand": "cargo clippy -- -D warnings", "purpose": "Lint gate — end-of-flow review sees test/bench targets too", "gates": true },
       { "name": "test",   "command": "cargo nextest run --workspace", "fastCommand": "cargo nextest run --lib --workspace", "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true },
-      { "name": "build",  "command": "cargo build --release",         "purpose": "Build gate",  "gates": true, "perTask": false }
+      { "name": "build",  "command": "cargo build --release",         "purpose": "Build gate",  "gates": true, "perTask": false },
+      { "name": "cargo-audit", "command": "command -v cargo-audit >/dev/null 2>&1 && cargo audit || true", "purpose": "Reports known-vulnerable dependencies via cargo-audit's advisory database, against the WHOLE dependency tree (including paths never compiled into a shipped artifact) — not the same claim as a vulnerability in this repo's actual build. Guarded by `command -v cargo-audit` so an uninstalled binary cannot hard-block a push. REPORT-ONLY (gates:false) as a deliberate first-pass choice: flip to gates:true only once this repo's audit is verified clean.", "gates": false }
     ]
   },
   "uiTest": { "enabled": false }
@@ -343,7 +344,8 @@ runs the engine uses `port + taskNumber` automatically. `routes[]` are smoke-che
       { "name": "lint",   "command": "npm run lint",        "purpose": "Lint gate",  "gates": true },
       { "name": "types",  "command": "npx tsc --noEmit",    "purpose": "Type gate",  "gates": true },
       { "name": "test",   "command": "npm test",            "purpose": "Test suite — AUTHORITATIVE for verdict", "gates": true },
-      { "name": "build",  "command": "npm run build",       "purpose": "Build gate", "gates": true, "perTask": false }
+      { "name": "build",  "command": "npm run build",       "purpose": "Build gate", "gates": true, "perTask": false },
+      { "name": "audit",  "command": "npm audit --audit-level=high", "purpose": "Dependency-audit report (npm audit). Threshold set to --audit-level=high so moderate/low advisories — which npm audit otherwise fails on for any finding at or above low — don't create noise. REPORT-ONLY (gates:false) as a deliberate first-pass choice: flip to gates:true only once this repo's high/critical audit is clean.", "gates": false }
     ]
   },
   "uiTest": {
