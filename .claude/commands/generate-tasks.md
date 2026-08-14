@@ -167,6 +167,32 @@ $ARGUMENTS — one of two input modes:
    - **`dependsOn` ids are all valid** — every id referenced exists as some task's `task_id` in the
      same array, and the final Validate task depends on every other task's id.
    - **Acceptance Criteria are non-empty and observable** — each criterion can be judged true/false.
+   - **Un-gateable criteria are declared (D64) — can fail.** This repo's checks are all in-repo and
+     in-language (`node --check` plus a set of Python scripts here; `cargo fmt`/`clippy`/`nextest`/
+     `build` for a Rust repo) and structurally cannot observe evidence living outside that boundary.
+     Apply this mechanical test to **every** Acceptance Criterion, keyed on *where the criterion's
+     evidence lives* — never on how important or risky it feels:
+
+     | Evidence location | Verdict |
+     |---|---|
+     | this repo, this language, observable in-process | **gated** — say nothing further |
+     | another process (an external CLI, e.g. `gh`), another repo (a sibling git index), a generated
+       artifact (e.g. a `status.md` a tool emits), or an **installed artefact** (the binary/distributed
+       copy the fleet runs, as opposed to the source tree the checks compile) | **declare it** |
+
+     Any criterion whose evidence lives in another process, another repo, a generated artifact, or
+     an installed artefact, and carries neither a named failing command nor a dedicated
+     fixture-evidence task in `tasks.json` (a task whose `acceptance_criteria` name the concrete
+     fixture standing in for the missing gate — a retro-fixture against a known-bad instance, or a
+     corpus sweep), fails this check: revise the
+     spec in place — declare the criterion explicitly and add the evidence task — then re-run this
+     self-check. **`tasksPassed` is evidence of gate agreement, not correctness** — a green suite is
+     never itself the evidence for an un-gateable criterion. Ordinary criteria ("the function
+     returns X", "the diagnostic fires", "the field validates") resolve to the first row instantly,
+     need no ceremony, and get no added step — this rule must stay quiet on the common case or it
+     destroys the lean lane. A verification task that shells out to an installed binary (`mev`,
+     `bastion`, or similar) must state explicitly whether it is checking **source** or **installed**
+     behaviour — the two diverge, and the divergence is invisible unless named.
    - **Validation Commands are present** (or `planning/harness.json` → `validation.checks[]` supplies
      them as the fallback).
    - **No leftover template sentinels** — no `{{TOKEN}}`, no literal seed strings the Output Format
