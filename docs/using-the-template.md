@@ -46,6 +46,17 @@ but **no application code and no configured validation commands yet**.
   `planning/harness.json` for stack-specific config.
 - **Project-specific commands** — if your project needs custom commands, place them in
   `.claude/commands/`. Project-level commands take precedence over global commands on name conflict.
+- **A resolving `$schema`** — the scaffolded `planning/harness.json` carries
+  `"$schema": "../.claude/workflows/harness.schema.json"` unedited. This resolves for a new
+  project the same way it does for every existing one: not by anything the scaffold copy step
+  does, but because the project's tier vault root (`core/_planning/`, `_planning/`,
+  `side/_planning/`, `business/_planning/`, `client/_planning/`) already carries a
+  `.claude/workflows/harness.schema.json` **symlink** to base-template's canonical schema (per
+  [D62](../planning/decisions/D62-harness-schema-realpath-resolution.md)). That symlink is a
+  one-time, per-vault-root artifact — five today, a sixth (`portfolio/_planning/`) once it gains
+  its first `harness.json` — not a per-project step; nothing in `/new-project` needs to create
+  or touch it. See `docs/harness-json.md`'s "Why the `$schema` path resolves from two different
+  physical parents" section for the mechanics.
 
 ## 2. Configure harness.json for your stack
 

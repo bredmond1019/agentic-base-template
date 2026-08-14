@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [harness.json, validation, pipeline config, checks, UI-test, stack profiles]
-related: [base-template-architecture, D5-okf-phase-2-adopted, D6-harness-richer-checks]
+related: [base-template-architecture, D5-okf-phase-2-adopted, D6-harness-richer-checks, D62-harness-schema-realpath-resolution]
 ---
 
 # harness.json — configuration reference
@@ -32,6 +32,31 @@ Point your editor at the schema via the `$schema` field and it will validate inl
   ...
 }
 ```
+
+### Why the `$schema` path resolves from two different physical parents
+
+In every generated project, `planning/` is a **symlink** into the company-brain vault
+(`core/_planning/<repo>/`, `_planning/<repo>/`, and sibling vault roots per tier). A
+`../`-relative `$schema` string is therefore read from two different physical parents
+depending on how the reader gets there:
+
+- **Lexical / textual-normalisation face** — a pure string join (`os.path.normpath`,
+  `path.resolve`, most editor `$ref` autocomplete) collapsing `<repo>/planning/..` lands on
+  `<repo>/.claude/workflows/harness.schema.json`, which exists in every synced repo. This
+  reading resolves.
+- **Physical / `realpath`-canonicalized face** — the file's real, symlink-resolved location is
+  `core/_planning/<repo>/harness.json` (or the sibling vault root); its `../` is
+  `core/_planning/`, which has no `.claude/` of its own. Any reader that actually calls
+  `open()`/`stat()` on the joined path — including a naive lexical resolver, once the OS walks
+  the symlink — hits this and fails, not just realpath-canonicalizing tools.
+
+The fix (see [D62](../planning/decisions/D62-harness-schema-realpath-resolution.md)) is a
+`.claude/workflows/harness.schema.json` **symlink** placed at each vault root, pointing at
+base-template's canonical schema. That makes a real file exist at the join point on both faces,
+so the existing `"../.claude/workflows/harness.schema.json"` string resolves everywhere with
+zero edits to any project's `harness.json`. `scripts/test_harness_schema_realpath.py` is the
+fleet audit that pins both faces resolving for every live config (registered in this repo's own
+`planning/harness.json` as the `harness-schema-realpath` gating check).
 
 ## Config-absent behavior
 
