@@ -298,12 +298,25 @@ heading's bullets used to hold (bulleted lines in one string are fine). `accepta
 `validation_commands` — `[]` for any task that touches source the project's checks compile or lint;
 the spec-level markdown sections stay authoritative for those. **Set it for a task that CANNOT break
 the build** — docs-only, config-only, fixture-only — with the cheap commands that actually verify
-that task (file exists, frontmatter present, index updated). `/sdlc-flow` and `/sdlc-task` run those
-commands INSTEAD of the project-wide gating checks for that task, so a markdown edit stops paying
-for a full compile; the end review still re-runs the full gating suite over the integrated tree, so
-nothing escapes validation. In compile-expensive stacks this is the single cheapest win available
-at authoring time — a docs task in a Rust workspace can otherwise cost minutes per attempt to
-validate a paragraph. Example:
+that task (file exists, frontmatter present, index updated).
+
+**The two engines run an override differently ([D63](../../planning/decisions/D63-per-task-validation-commands-augment-gating.md)) — know which one the spec is targeting:**
+- **`/sdlc-flow`** still runs the override commands INSTEAD of the project-wide gating checks for
+  that task, so a markdown edit stops paying for a full compile; its end review unconditionally
+  re-runs the full gating suite over the integrated tree afterward, so nothing escapes validation.
+- **`/sdlc-task` has no end review.** Every `gates:true` harness check's cheap `fastCommand` (or
+  `command` if no `fastCommand` is defined) still runs alongside the task's own
+  `validation_commands` — the override only ever substitutes for the non-gating portion of the
+  harness list. This means `validation_commands` does **not** buy the same skip-the-gates savings
+  under `/sdlc-task` that it buys under `/sdlc-flow`; it still avoids the *expensive* authoritative
+  form (that only runs once, in `/sdlc-task`'s own terminal reconcile), but a docs-only task cannot
+  use it to skip a project's gating checks entirely — under this lean engine, whatever a task's own
+  tripwire runs is the only gate that task gets until the terminal reconcile.
+
+In compile-expensive stacks, setting `validation_commands` is still the single cheapest win
+available at authoring time for a docs/config/fixture-only task — a docs task in a Rust workspace
+can otherwise cost minutes per attempt to validate a paragraph — but under `/sdlc-task` that saving
+comes from skipping the expensive `command` form, not the gating checks themselves. Example:
 `"validation_commands": ["test -f docs/thing.md", "grep -q '^type:' docs/thing.md", "grep -q 'thing.md' docs/index.md"]`
 `max_attempts` — defaults to 3, only set per-task to override. `files` — every task but the final
 Validate task needs ≥1 entry. `dependsOn` — ids that must complete first; the final Validate task
