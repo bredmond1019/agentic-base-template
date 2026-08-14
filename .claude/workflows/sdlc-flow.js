@@ -1287,6 +1287,13 @@ log(`Tasks in spec: ${allTasks.join(', ')}${selectedTasks ? ` | selected: ${task
 // Per-task validation overrides from tasks.json's `validation_commands` (see ENUMERATE_SCHEMA).
 // Returns null when the task declared none, which means "use the harness gating checks" — the
 // pre-existing behaviour for every task in every existing spec.
+// D63 (planning/decisions/D63-per-task-validation-commands-augment-gating.md) — DELIBERATELY
+// DIFFERENT from sdlc-task.js: this engine stays a PURE SUBSTITUTE, unchanged. When present, a
+// task's validation_commands still fully replaces the harness gating checks for that task's
+// per-task tripwire (zero harness.json gates:true checks run for that task). This is safe here,
+// and unsafe in sdlc-task.js, because this engine's end review (~line 1932 below) unconditionally
+// re-runs the FULL gates:true harness suite over the integrated tree regardless of any per-task
+// override — nothing is ever silently skipped forever, only deferred to the end review.
 const taskCheckMap = new Map(
   (enumResult.taskChecks || [])
     .filter(tc => tc && Number.isInteger(tc.taskId) && Array.isArray(tc.validationCommands) && tc.validationCommands.length)
@@ -1294,7 +1301,17 @@ const taskCheckMap = new Map(
 )
 function taskCommandsFor(taskNum) { return taskCheckMap.get(taskNum) || null }
 if (taskCheckMap.size) {
-  log(`Per-task validation overrides (tasks.json validation_commands): ${[...taskCheckMap.keys()].sort((a, b) => a - b).join(', ')} — these tasks skip the project-wide harness tripwire.`)
+  log(`Per-task validation overrides (tasks.json validation_commands): ${[...taskCheckMap.keys()].sort((a, b) => a - b).join(', ')} — D63: these tasks run ZERO planning/harness.json gates:true checks on their per-task tripwire (pure substitute, unchanged); the end review's full gating suite is the backstop.`)
+}
+
+// D63 — shared validated: vocabulary (identical strings in sdlc-task.js, per the ADR). This engine
+// only ever lands on ranHarnessList (no override) or ranNoneOfHarnessList (override present) — it
+// never reaches substitutedSubset, which is an /sdlc-task-only case (see the ADR's "never actually
+// lands on both case 2 and case 3 within the same engine").
+const VALIDATED_LABEL = {
+  ranHarnessList: 'ran the harness list',
+  substitutedSubset: 'substituted a documented subset (gates:true checks still ran)',
+  ranNoneOfHarnessList: 'ran none of the harness list (tasks.json override, /sdlc-flow end review will reconcile)',
 }
 
 // Hardcoded engine-parse gate (mechanism, not project policy — see renderCheckList). Per-task
@@ -1422,12 +1439,15 @@ STEP W4 — use the Write tool for both files. Do NOT run \`git add\`, \`git com
 }
 
 async function runTests(label, { gatingOnly, taskCommands = null, onPass = null, engineFiles = [] }) {
+  // D63 — pure substitute, unchanged: usingOverride still fully replaces the harness gating checks
+  // for this task's per-task tripwire (not augmented, unlike sdlc-task.js). Safe here because the
+  // end review below unconditionally re-runs the full gates:true suite over the integrated tree.
   const usingOverride = Array.isArray(taskCommands) && taskCommands.length > 0
   return tracedAgent(`${W}
 You are the test agent for the /sdlc-flow pipeline. Run the project's validation checks and report.
 
 IMPORTANT — run ONLY the checks enumerated below (${usingOverride
-    ? "this task declares its OWN validation_commands in tasks.json, which REPLACE the project-wide harness checks for this task — the full harness suite still runs at the end review"
+    ? "this task declares its OWN validation_commands in tasks.json, which REPLACE the project-wide harness checks for this task (D63 — pure substitute for this engine) — the full harness suite still runs at the end review"
     : 'from planning/harness.json + the spec'}). Do NOT invent
 checks. All Bash calls run from the worktree root (prefix each with: cd ${worktreePath} &&).
 
@@ -1804,16 +1824,20 @@ Return via StructuredOutput:
     }
 
     // 3. Fast test (tripwire) — gating checks only unless testDepth=full. A task that declares its
-    //    own `validation_commands` in tasks.json runs THOSE instead (the end review still runs the
-    //    full harness suite over the integrated tree, so nothing escapes validation — this only
-    //    changes what the per-task tripwire costs).
-    const passValidatedLabel = taskCommandsFor(taskNum)
-      ? 'per-task validation_commands (tasks.json override)'
-      : (testDepth === 'fast' ? 'gating checks (fast tripwire)' : 'full gating suite')
+    //    own `validation_commands` in tasks.json runs THOSE instead (D63 — pure substitute, unchanged
+    //    for this engine: the end review still runs the full harness suite over the integrated tree,
+    //    so nothing escapes validation — this only changes what the per-task tripwire costs).
+    //    passValidatedLabel is always one of the shared VALIDATED_LABEL trichotomy (D63).
+    const hasOverride = !!taskCommandsFor(taskNum)
+    const passValidatedLabel = hasOverride ? VALIDATED_LABEL.ranNoneOfHarnessList : VALIDATED_LABEL.ranHarnessList
     const passPayload = buildPassPayload(taskNum, t, attempt, passValidatedLabel)
     const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum), onPass: passPayload, engineFiles: engineFilesFor(taskNum) })
     if (testResult && testResult.allPassed) {
       t.validated = passValidatedLabel
+      // D63 — a task that ran ZERO harness.json gating checks must be VISIBLE in terminal output,
+      // never only recorded in state. In this engine that is the ordinary override case (pure
+      // substitute), backstopped by the end review's unconditional full-suite re-run.
+      log(`Task ${taskNum}: validated → "${passValidatedLabel}".${passValidatedLabel === VALIDATED_LABEL.ranNoneOfHarnessList ? ' NOTE: this task ran ZERO planning/harness.json gates:true checks on its per-task tripwire; the end review will re-run the full gating suite over the integrated tree.' : ''}`)
       taskPassed = true
       if (testResult.stateWritten) {
         // The folded write went straight to disk (no STATE_WRITE_SCHEMA result to read startedAt
