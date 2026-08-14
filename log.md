@@ -3,7 +3,66 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-12T15:10:00-0300
+**Last updated:** 2026-08-14T00:20:00-0300
+
+---
+
+## [2026-08-14]
+
+### Five-block orchestrate chain: 11 gating checks to 16, and a diagnosis corrected twice
+
+**What:** Ran `/orchestrate` over the five queued base-template blocks and closed all five.
+`roadmap-status-command` ships `/roadmap-status` plus an 878-line discovery script;
+`harness-schema-realpath` lands **D62** (vault-root symlinks, 17/17 configs resolving on both the
+physical and lexical face, zero `harness.json` edits); `tasks-json-validation-commands-override`
+lands **D63**; `engine-state-write-validates-before-commit` puts `mev validate-brain --state` in
+front of every state commit with byte-exact rollback and D64-style delta attribution;
+`declare-ungateable-acceptance-criteria` makes specs declare what the harness structurally cannot
+see. Gating checks 11 to 16. Three downstream syncs across 17 repos, committed per repo.
+
+**Why:** These were the four blocks the previous handoff left queued, plus the roadmap-status block
+whose two dependencies had just closed. The chain was the cheapest way to clear them, and it
+doubled as a live test of the harness against itself.
+
+**D63 is the decision worth knowing.** A task-level `validation_commands` array used to *replace*
+the whole harness check list for that task's tripwire, so a spec could opt every gating check out of
+a run and nothing reported it. It now **augments** `gates:true` checks under `/sdlc-task` and stays a
+**pure substitute** under `/sdlc-flow` — because only `/sdlc-flow` has an end review that re-runs the
+full suite, so only there is a substitution guaranteed temporary. The divergence is deliberate and
+`sdlc-flow`'s SKILL.md now says so, to stop a future reader unifying it by reflex.
+
+**The chain's real output was a diagnosis that was wrong twice.** Two blocks finished every task and
+were left `open` in `state.json`. First reading: a worktree-mode write failure. Second: "bookkeep
+reports success while writing nothing." Both wrong. `sdlc-task.js:1652` sets
+`fullRun = !selectedTasks` and `:1742` requires it to close the block, so every `--resume` — which
+always names a range — is treated as a deliberate partial run and *correctly* declines to close.
+`:1760` prints the decision. Blocks 1-2 were resumed and stayed open; blocks 3-5 ran straight
+through and closed themselves. Four for four. Filed as wave 207 with the fix explicitly fenced: do
+not drop the `fullRun` guard, which would silently close every genuine subset run.
+
+**Four agents had already misfiled the sibling symptom.** Reports from `engine-rs` and `bastion-web`
+described a spec's Metadata header reading `Not started` while the board said `closed`, each filed
+against `BT.ticket.sdlc-state-write-reliability` — closed at wave 31, so the evidence surfaced
+nowhere. It is not an engine defect: `last-run` appears exactly once in the entire harness
+(`ticket.md:108`), where `/ticket` authors it as `never`, and nothing updates it. Fleet census: 23 of
+52 closed blocks with a local spec still read `Not started`; the other 29 were hand repairs by agents
+who noticed. Operator decision: derive the field from `state.json` rather than write it.
+
+**A gate that failed on success.** `test_d16_tasks_json_fallback.py` asserted at least one prose-only
+ticket spec existed in `planning/`. Decomposing the last three took the population to zero and
+red-gated the repo mid-chain — the harness working as intended is exactly what broke it. Now a census
+that skips when empty and asserts substance when non-empty, proven failable against a seeded stub.
+
+**Two stale instructions corrected, both proven wrong rather than suspected.**
+`/sync-downstream-harness`'s step-5 recipe told you to `git add .claude/ planning/.template-version`
+in the sub-repo; in a vaulted repo that fails with `beyond a symbolic link` and **aborts the whole
+add**, committing nothing — measured across all 16 repos. And both `CLAUDE.md` and that command sent
+agents to `core/orchestrator`'s `SDLC_FLOW` workflow as a second consumer of the `tasks.json`
+contract; it was retired, its schema and docs deleted by orchestrator `75b6c8e`.
+
+**Refs:** `planning/handoff.md`, `planning/decisions/D62-harness-schema-realpath-resolution.md`,
+`planning/decisions/D63-per-task-validation-commands-augment-gating.md`, `planning/index.md`
+(wave 207)
 
 ---
 
