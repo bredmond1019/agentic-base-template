@@ -3,11 +3,31 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-14T09:46:03-0300
+**Last updated:** 2026-08-14T13:10:12-0300
 
 ---
 
 ## [2026-08-14]
+
+### /close-out: two real gates fixed, generate-master-plan self-heal validated
+
+**What:** Ran `/close-out` over this session's command-audit work (`88b8957...HEAD`). Step 1
+surfaced two gating failures, both fixed per operator direction: `.agents/skills/sdlc-flow/SKILL.md`
+was missing the entire D16-derive-from-tasks.md-fallback + validation_commands-scoping section
+(confirmed pre-existing — reverting just that file to the pre-session commit reproduces the
+failure identically), so added it with the D63 pure-substitute framing specific to this engine;
+and `test_harness_schema_realpath.py` hardcoded `LIVE_EXPECTED_FILES = 17`, stale the moment
+`client/jardins-fitness` (a concurrent session's scaffold) became the fleet's 18th live config —
+bumped, with a comment noting this is a closed-corpus census gate that will need bumping again.
+Steps 2-3 (coverage, docs) found nothing to patch. Handoff updated: wave 207 remains untouched and
+still the priority queue; this session's own work (the command audit, the retire/restore of
+`/review-PR`, and the `/generate-master-plan` self-heal fix for missing `state.json`/wave-table
+sentinels) is recorded as a separate completed thread.
+**Why:** Operator asked to close out the command-audit session properly rather than leaving fixes
+uncommitted and undocumented.
+**Refs:** `planning/handoff.md`, carryover `brain-commands-tier-sync-source-still-partly-stale`
+(new), carryover `sync-downstream-harness-pending-command-retirements` (cleared — resolved by this
+session's own `/sync-downstream-harness --apply` run).
 
 ### Command audit: retired /status, /briefing, /review-workflow; /review-PR retired then restored
 
