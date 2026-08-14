@@ -212,3 +212,4 @@ If a settled architectural decision came out of this session, say so and suggest
 - `planning/status.md`
 - `planning/state.json` (`tracks[].blocks[]` + `carryover[]`)
 - `planning/handoff.md` (only if it already exists)
+

@@ -9,10 +9,16 @@ description: >
 ## Variables
 
 $ARGUMENTS — one of two input modes:
-             - **Master-plan slug mode (default):** the spec's `planning/` directory name (its
-               phase-dotted slug), e.g. `<spec-slug>` or `2.1-learn-paths-structural-fixes`. New
-               master-plan specs follow the `P.N-slug` convention (see `planning/index.md` → *Task
-               directory naming convention*). The block definition is read from `master-plan.md`.
+             - **Master-plan slug mode (default):** the spec's `planning/` directory name — its block
+               ID. **Write new spec directories in the canonical form `<REPO>.<phase>.<block>`**
+               (e.g. `BA.0.A`, `EN.8.A`) — a repo-unique two-or-three-letter code from `brain.toml`, a
+               phase number, and a block letter or number; the directory name equals the block ID
+               exactly, no title suffix. This is the form `/generate-master-plan.md` and `/plan.md`
+               author (see `/generate-master-plan.md` step 4 for the full rule). **Legacy directories
+               still resolve** for as long as they exist — older specs may be spelled
+               `<phase>.<block>-<title>` (e.g. `2.1-learn-paths-structural-fixes`) or
+               `<repo>-<phase><block>-<title>`; this command does not require migrating them, it only
+               writes new ones canonically. The block definition is read from `master-plan.md`.
              - **Plan-file mode (`--from <path> [phaseN-blockX]`):** decompose a block from a
                standalone plan file instead of `master-plan.md`. The file may be either a single
                standalone block definition (legacy D34) or a master-plan-format `/plan` output with
@@ -94,7 +100,35 @@ $ARGUMENTS — one of two input modes:
    - Do not invent work beyond what the block defines.
    - Size tasks to roughly 21 hours spread across Mon/Wed/Fri sessions.
    - Enforce **the project's standing rules** as written in `CLAUDE.md` — do not assume any stack, locale-parity, or content-layout rule unless written there. Every task must leave the project's gated checks (`planning/harness.json` → `validation.checks[]` with `gates: true`) passing.
-   - **Disjoint file ownership (parallel-merge safety).** A block's tasks run as parallel pipelines that merge independently, so two tasks editing the same existing file collide at merge. Decompose so each task **owns a distinct set of files**. When two tasks would touch the same file, either (a) make one `dependsOn` the other so `/sdlc-block` serializes them into different waves, or (b) restrict the shared file to **append-only** edits (the block engine union-merges files declared `additiveFiles`). Name each task's primary files in its step so the dependency analysis can see the boundaries — an undeclared overlap escalates the whole block on a merge conflict.
+   - **Compilable task boundaries (outranks decomposition preferences under the sequential engines).**
+     `/sdlc-flow` and `/sdlc-task` run every task **sequentially on one branch/worktree with no
+     inter-task merge step** — `sdlc-flow.js`'s own header says so explicitly ("sequential tasks (no
+     inter-task merge conflicts)") — and both gate the project's checks after **every single task**
+     (the `runTests()` call inside each engine's per-task loop: `sdlc-flow.js`'s and `sdlc-task.js`'s
+     `test-${taskNum}-${attempt}` gate). Under those two engines **every task must leave the gating
+     suite passing** — for a compiled or type-checked stack that means the repository must compile
+     (and typecheck) at every task boundary, not just at the end of the spec. When a single logical
+     change cannot be split without leaving an intermediate task non-compiling — a renamed public
+     type, a struct's changed fields, an altered trait/interface signature, and every call site each
+     one touches — do **not** split it across tasks to satisfy disjoint ownership below. Put the whole
+     change in **one** task instead. **This constraint outranks the disjoint-file-ownership rule
+     whenever the two conflict: the tasks merge, not the constraint.** Since this command decomposes
+     before the consuming engine is chosen (the recommendation is step 11, after decomposition), apply
+     this constraint by default unless the block is already known to run under `/sdlc-block` (e.g. it
+     is one block of a multi-block roadmap being decomposed by `/sdlc-block` itself) — in that case the
+     disjoint-ownership rule below governs instead.
+   - **Disjoint file ownership (parallel-merge safety) — `/sdlc-block` only.** This rule is scoped to
+     `/sdlc-block`'s parallel-merge model, where each task runs as its own pipeline and the pipelines
+     merge independently; it does **not** apply under `/sdlc-flow` or `/sdlc-task` (see the compilable
+     task boundaries rule above, which governs task boundaries there instead — including when it
+     requires two tasks that would otherwise be disjoint to merge into one). Under `/sdlc-block`: a
+     block's tasks run as parallel pipelines that merge independently, so two tasks editing the same
+     existing file collide at merge. Decompose so each task **owns a distinct set of files**. When two
+     tasks would touch the same file, either (a) make one `dependsOn` the other so `/sdlc-block`
+     serializes them into different waves, or (b) restrict the shared file to **append-only** edits
+     (the block engine union-merges files declared `additiveFiles`). Name each task's primary files in
+     its step so the dependency analysis can see the boundaries — an undeclared overlap escalates the
+     whole block on a merge conflict.
    - Foundational steps come first; the final step is always Validate.
    - **Write the task list as `tasks.json`, not markdown headings.** Every SDLC engine reads
      `planning/<spec-slug>/tasks.json` directly — a **bare array** of `{task_id, title, description,
@@ -104,6 +138,12 @@ $ARGUMENTS — one of two input modes:
      pattern. `tasks.md` still carries the prose (Goal, Context Pointers, Acceptance Criteria,
      Validation Commands, Notes, Amendment Log) but the Step-by-Step Tasks section in it is just a
      one-line pointer at the JSON file, not the task list itself.
+   - **This command's `--from` mode is one of two derivation surfaces that both author `tasks.json`
+     from a `tasks.md`/block source — the other is each engine's own D16 preflight.** `sdlc-task.js`,
+     `sdlc-flow.js`, and `sdlc-run.js` now derive `tasks.json` from an existing `tasks.md` themselves
+     (rather than aborting with "No tasks.json (D16)") when a spec ships prose-only, using the same
+     author-a-fresh-decomposition discipline this step describes — they are a recovery backstop for
+     an already-written spec, not a substitute for running this command up front.
 
 7. Create the directory `planning/<spec-slug>/` if it does not exist, then write **both**
    `planning/<spec-slug>/tasks.md` (prose) and `planning/<spec-slug>/tasks.json` (task list) using
@@ -116,10 +156,49 @@ $ARGUMENTS — one of two input modes:
    - **`tasks.json` parses as valid JSON** and is a non-empty array (not wrapped in an object —
      orchestrator's `LoadTaskStateNode` expects a bare array).
    - **Every task except the final Validate task names ≥1 file** in its `files[]` (so the dependency
-     analysis and disjoint-ownership guard can see boundaries).
+     analysis, the `/sdlc-block` disjoint-ownership guard, and the compilable-boundary review below
+     can see boundaries). Under the sequential engines this does **not** imply the named files must be
+     disjoint *across* tasks — two tasks are free to touch the same file there, since there is no
+     inter-task merge to collide. This property and the compilable-boundary check below do not
+     contradict each other: naming files is about visibility for both guards, not about which guard's
+     ownership rule applies.
+   - **Compilable task boundaries — can fail.** Check whether any single breaking public-surface
+     change (a renamed public type, a struct's changed fields, an altered trait/interface signature)
+     is split across two or more tasks such that an intermediate task would leave the repository
+     non-compiling. If it is, this check **fails**: merge those tasks into one before proceeding, per
+     the compilable task boundaries rule in step 6, then re-run this self-check. (This still applies
+     even when the block is known to run under `/sdlc-block`: that engine's disjoint-ownership rule
+     governs *which* files a task owns, but a task that cannot compile on its own is never a valid
+     task under any engine.)
    - **`dependsOn` ids are all valid** — every id referenced exists as some task's `task_id` in the
      same array, and the final Validate task depends on every other task's id.
    - **Acceptance Criteria are non-empty and observable** — each criterion can be judged true/false.
+   - **Un-gateable criteria are declared (D64) — can fail.** This repo's checks are all in-repo and
+     in-language (`node --check` plus a set of Python scripts here; `cargo fmt`/`clippy`/`nextest`/
+     `build` for a Rust repo) and structurally cannot observe evidence living outside that boundary.
+     Apply this mechanical test to **every** Acceptance Criterion, keyed on *where the criterion's
+     evidence lives* — never on how important or risky it feels:
+
+     | Evidence location | Verdict |
+     |---|---|
+     | this repo, this language, observable in-process | **gated** — say nothing further |
+     | another process (an external CLI, e.g. `gh`), another repo (a sibling git index), a generated
+       artifact (e.g. a `status.md` a tool emits), or an **installed artefact** (the binary/distributed
+       copy the fleet runs, as opposed to the source tree the checks compile) | **declare it** |
+
+     Any criterion whose evidence lives in another process, another repo, a generated artifact, or
+     an installed artefact, and carries neither a named failing command nor a dedicated
+     fixture-evidence task in `tasks.json` (a task whose `acceptance_criteria` name the concrete
+     fixture standing in for the missing gate — a retro-fixture against a known-bad instance, or a
+     corpus sweep), fails this check: revise the
+     spec in place — declare the criterion explicitly and add the evidence task — then re-run this
+     self-check. **`tasksPassed` is evidence of gate agreement, not correctness** — a green suite is
+     never itself the evidence for an un-gateable criterion. Ordinary criteria ("the function
+     returns X", "the diagnostic fires", "the field validates") resolve to the first row instantly,
+     need no ceremony, and get no added step — this rule must stay quiet on the common case or it
+     destroys the lean lane. A verification task that shells out to an installed binary (`mev`,
+     `bastion`, or similar) must state explicitly whether it is checking **source** or **installed**
+     behaviour — the two diverge, and the divergence is invisible unless named.
    - **Validation Commands are present** (or `planning/harness.json` → `validation.checks[]` supplies
      them as the fallback).
    - **No leftover template sentinels** — no `{{TOKEN}}`, no literal seed strings the Output Format
@@ -253,7 +332,7 @@ the spec-level markdown sections stay authoritative for those. **Set it for a ta
 the build** — docs-only, config-only, fixture-only — with the cheap commands that actually verify
 that task (file exists, frontmatter present, index updated).
 
-**The two engines run an override differently (D63) — know which one the spec is targeting:**
+**The two engines run an override differently ([D63](../../planning/decisions/D63-per-task-validation-commands-augment-gating.md)) — know which one the spec is targeting:**
 - **`/sdlc-flow`** still runs the override commands INSTEAD of the project-wide gating checks for
   that task, so a markdown edit stops paying for a full compile; its end review unconditionally
   re-runs the full gating suite over the integrated tree afterward, so nothing escapes validation.

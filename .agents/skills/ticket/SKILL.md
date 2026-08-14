@@ -39,11 +39,51 @@ list), explicit Acceptance Criteria, and a Testing Strategy, feeding directly in
    - If the fix touches more than 3–4 files or needs its own sub-phases, it belongs in `/plan`.
    - Every task in `tasks.json` must name ≥1 concrete file in its `files[]` (the Validate task is
      exempt).
+   - **Compilable task boundaries (outranks the file-based split when the two conflict).** `/ticket`
+     only ever feeds `/sdlc-task` or `/sdlc-flow` — never `/sdlc-block`'s parallel-merge model — and
+     both of those engines run every task **sequentially on one branch/worktree with no inter-task
+     merge step**, gating the project's checks after **every single task**. That means a single
+     breaking public-surface change (a renamed public type, a struct's changed fields, an altered
+     trait/interface signature, and every call site each one touches) must never be split across
+     tasks such that an intermediate task leaves the repository non-compiling — put the whole change
+     in **one** task instead, even if that task then touches more files than usual. This constraint
+     is **unconditional here**, with no `/sdlc-block` carve-out (unlike `generate-tasks.md`'s
+     equivalent rule): `/ticket` never produces a spec that `/sdlc-block` will decompose in parallel.
+4.5. **Un-gateable acceptance criteria must be declared, not just written down** (D64). This
+   repo's checks are all in-repo and in-language (`node --check` plus a set of Python scripts here;
+   `cargo fmt`/`clippy`/`nextest`/`build` for a Rust repo) and structurally cannot observe evidence
+   living outside that boundary. For **each** Acceptance Criterion, apply this mechanical test —
+   keyed on *where the criterion's evidence lives*, never on how important or risky the criterion
+   feels:
+
+   | Evidence location | Verdict |
+   |---|---|
+   | this repo, this language, observable in-process | **gated** — say nothing further |
+   | another process (an external CLI, e.g. `gh`), another repo (a sibling git index), a generated
+     artifact (e.g. a `status.md` a tool emits), or an **installed artefact** (the binary/distributed
+     copy the fleet runs, as opposed to the source tree the checks compile) | **declare it** |
+
+   If a criterion lands in the second row, mark it explicitly as un-gateable in the Acceptance
+   Criteria section and assign it a dedicated fixture-evidence task in `tasks.json` (a task whose
+   `acceptance_criteria` name the concrete fixture that stands in for the missing gate — e.g. a
+   retro-fixture against a known-bad instance, or a corpus sweep). **`tasksPassed` is evidence of
+   gate agreement, not correctness** — a green suite is never itself the evidence for an un-gateable
+   criterion.
+
+   Ordinary criteria ("the function returns X", "the diagnostic fires", "the field validates")
+   resolve to the first row instantly, need no ceremony, and get no added step — this rule must stay
+   quiet on the common case or it destroys the lean lane.
+
+   **Corollary for any verification step that shells out to an installed binary** (`mev`, `bastion`,
+   or similar): it must state explicitly whether it is checking **source** or **installed**
+   behaviour. The two diverge, and the divergence is invisible unless named.
+
 5. Choose a short descriptive slug (e.g. `fix-null-deref`, `add-rate-limit`, `patch-auth-refresh`).
    This is the `<slug>` referenced in "Register the block in state.json" below.
 6. Create `planning/ticket-{slug}/` if it does not exist, then write **both**
    `planning/ticket-{slug}/tasks.md` (prose) and `planning/ticket-{slug}/tasks.json` (task list)
-   using the Plan Format below.
+   using the Plan Format below. When writing the Acceptance Criteria section, apply the
+   **un-gateable criteria** rule below to every criterion before moving on.
 7. Register this ticket's block in `planning/state.json` — see "Register the block in state.json"
    below.
 8. **Property self-check.** Before reporting, re-read the spec and **revise in place** until every
@@ -59,7 +99,19 @@ list), explicit Acceptance Criteria, and a Testing Strategy, feeding directly in
      wrapper — that shape is D44, and D44 is superseded), 1-indexed integer `task_id`, `description`
      as one string, and no `status` or `attempt_count` key authored by you (those are engine-owned).
    - **Every task names ≥1 concrete file** in its `files[]` (Validate is exempt).
+   - **Compilable task boundaries — can fail.** Check whether any single breaking public-surface
+     change (a renamed public type, a struct's changed fields, an altered trait/interface signature)
+     is split across two or more tasks such that an intermediate task would leave the repository
+     non-compiling under `/sdlc-task` or `/sdlc-flow`'s per-task gate. If it is, this check **fails**:
+     merge those tasks into one before proceeding, per the compilable task boundaries rule in step 4,
+     then re-run this self-check.
    - **Acceptance Criteria are non-empty and observable** — each can be judged true/false.
+   - **Un-gateable criteria are declared (D64) — can fail.** Re-apply the evidence-location table
+     from step 4.5 to every Acceptance Criterion. Any criterion whose evidence lives in another
+     process, another repo, a generated artifact, or an installed artefact, and that carries
+     neither a named failing command nor a dedicated fixture-evidence task in `tasks.json`, fails
+     this check: declare it explicitly and add the evidence task, then re-run this self-check.
+     Judge this purely on where the evidence lives — never on how important the criterion seems.
    - **Testing Strategy is non-empty** — names the test file(s) and what each must cover.
    - **Validation Commands are present** (or `planning/harness.json` → `validation.checks[]`
      supplies them as the fallback).
@@ -170,6 +222,10 @@ standalone block, not one already sitting in `master-plan.md`.
    you just wrote. (Not implemented in `mev` yet — the step is a no-op until it ships.)
 5. Save `planning/state.json` and validate it is still valid JSON:
    `python3 -c "import json;json.load(open('planning/state.json'))"`.
+   This is a **parse-only** sanity check, not schema validation — it cannot catch a shape mismatch
+   (e.g. a struct-typed field like `origin` written as a scalar), which parses fine as JSON and
+   only fails `mev`'s typed deserialization. For real schema confidence, run
+   `mev validate-brain --state`.
 
 ### State refresh (do not hand-author `state.json`'s `tasks` field)
 

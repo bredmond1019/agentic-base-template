@@ -37,12 +37,16 @@ field, know which bucket it's in:
 
 | Bucket | Fields | You may hand-edit these |
 |---|---|---|
-| **Authored** (source of truth) | `tracks[].blocks[]` (`id`, `title`, `status`, `depends_on`, `wave`, `note?`, `origin?`, `tasks?`), `backlog[]` (HQ only), `carryover[]`, HQ `tiers[]`, `note` (portfolio kind) | **Yes** |
+| **Authored** (source of truth) | `tracks[].blocks[]` (`id`, `title`, `status`, `depends_on`, `wave`, `note?`, `origin?`, `tasks?`), `backlog[]` (HQ only), `carryover[]`, HQ `tiers[]`, `epics[]` (HQ only — `plan` field points at a roadmap's `roadmap.md` per `/generate-roadmap`'s registration step), `note` (portfolio kind) | **Yes** |
 | **Derived** (a regenerated cache) | `focus`, brain `repos[]`, brain `cross_repo[]`, master-plan wave tables | **No — never hand-edit.** Run `mev emit-state --write` instead |
 
 If you find yourself about to type a value into `focus.now[]`, `repos[]`, or `cross_repo[]` directly,
 stop — edit the authored `tracks[].blocks[]` (or the child repo's own state.json) instead, then
 regenerate (see Step 4 below).
+
+An `epics[]` entry's `plan` is a path, not a slug — resolve a roadmap's directory via
+`/begin-orchestration`'s Step 1C rule (`planning/roadmaps/<slug>/`, else legacy `planning/<slug>/`)
+before hand-editing it, rather than assuming either location.
 
 ## `kind` — which template applies
 
@@ -88,6 +92,10 @@ error-prone part of editing `state.json` by hand:
    statuses). Never invent a block ID prefix — resolve it from `brain.toml`.
 3. **Validate the JSON is well-formed** before doing anything else:
    `python3 -c "import json;json.load(open('planning/state.json'))"`.
+   This is a **parse-only** sanity check, not schema validation — it cannot catch a shape mismatch
+   (e.g. a struct-typed field like `origin` written as a scalar), which parses fine as JSON and
+   only fails `mev`'s typed deserialization. For real schema confidence, run
+   `mev validate-brain --state`.
 4. **Regenerate derived views** — run `mev emit-state --write` (from anywhere under the brain root; it
    walks up to find `brain.toml`). This recomputes `focus`, brain `repos[]`/`cross_repo[]`, and any
    `master-plan.md` wave tables with `wave-table` sentinels. Never hand-patch these fields to "match" —
