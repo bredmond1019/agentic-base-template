@@ -3,11 +3,33 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-14T00:20:00-0300
+**Last updated:** 2026-08-14T09:46:03-0300
 
 ---
 
 ## [2026-08-14]
+
+### Command audit: retired /status, /briefing, /review-workflow; /review-PR retired then restored
+
+**What:** Ran a usage-vs-usefulness audit of all 92 slash commands across HQ and the global
+harness (published as an artifact, iterated with operator corrections). Folded `/add-project`
+into `/new-project --brain-only`. Added a `/prime` → `/session-recap` pointer (both HQ and
+base-template copies, mirrored into the live global install). Retired `/status`, `/briefing`
+(HQ-only), and `/review-workflow` outright — command files, `.agents/skills` mirrors, the global
+install, and the Gemini skill mirror all removed, plus every doc reference across
+`.claude/commands/README.md`, `scaffold/CLAUDE.md`/`scaffold/GEMINI.md`, and
+`docs/workflows/{index,commands}.md`. `/review-PR` was retired the same way, but its spec-aware
+Acceptance-Criteria gate (checks the diff against the block's own AC + re-runs the gating suite
+before posting a `gh pr review` verdict) turned out to have no substitute in `/code-review` —
+restored it and every file the retirement touched (`sdlc-block.md`, `merge-train.md`,
+`generate-tasks.md`, `harness-json.md`, both scaffold docs, the command README, HQ's `CLAUDE.md`)
+to their exact original content.
+**Why:** Operator wanted a clear picture of which commands are actually load-bearing versus dead
+weight before continuing to grow the command surface, and to close the docs/prime overlap the
+audit surfaced.
+**Refs:** carryover `sync-downstream-harness-pending-command-retirements` — downstream repos
+scaffolded with `--include-commands` (confirmed: learn-ai) still carry stale copies of the
+retired files and the un-pointed `/prime`; run `/sync-downstream-harness` to propagate.
 
 ### Five-block orchestrate chain: 11 gating checks to 16, and a diagnosis corrected twice
 

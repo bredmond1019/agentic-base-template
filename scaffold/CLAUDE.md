@@ -84,7 +84,6 @@ live in `.claude/commands/` and take precedence over global commands on name con
 | `/next` (global) | Briefing on what's next, what's blocked, and recommend next action |
 | `/handoff` (global) | Write handoff.md + log work + commit; hands off to a fresh agent |
 | `/wrap-up` (global) | Log work + commit; clean session close without a handoff file |
-| `/status` (global) | Quick status snapshot of current focus and momentum |
 | `/log-work` (global) | Log a completed work session and update status.md |
 | `/archive` (global) | Retire a folder/file — distill durable residue first (D35 gate) |
 | `/capture` (global) | Scaffold planning/<slug>/notes.md for pre-plan ideas; adds backlog ticket to brain |
@@ -114,7 +113,6 @@ live in `.claude/commands/` and take precedence over global commands on name con
 | `/process-tasks` (global) | Process a task list sequentially |
 | `/update-task` (global) | Update a task spec after a deviation or completion |
 | `/review-task` (global) | Verify a completed task against its spec and acceptance criteria |
-| `/review-workflow` (global) | Verify that a completed pipeline executed correctly |
 | `/review-PR` (global) | Review a PR against its block spec; post structured verdict |
 | `/close-out` (global) | Verify test coverage, patch docs, and hand off cleanly |
 

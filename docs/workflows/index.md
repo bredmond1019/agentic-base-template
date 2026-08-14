@@ -127,7 +127,7 @@ contract — it uses `sdlc-flow-state.json` + `worklog.md` instead (see
 | `[taskN-]test.md` | test | review |
 | `[taskN-]review.md` | review | fix, document |
 | `[taskN-]document.md` | document | — |
-| `[taskN-]workflow.md` | wrap-up (sdlc-run) | humans, `/review-workflow` |
+| `[taskN-]workflow.md` | wrap-up (sdlc-run) | humans |
 | `sdlc-flow-state.json` | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | `--resume`, end-review localization, PR body — **committed** |
 | `worklog.md` | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | human-readable run trail — **committed** |
 

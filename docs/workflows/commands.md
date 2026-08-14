@@ -51,7 +51,7 @@ flowchart TD
 
 | Phase | Command | Role | Output |
 |---|---|---|---|
-| Start | `/status` · `/process-tasks` · `/session-recap` | Orient: current focus, eligible specs, recent work | chat only |
+| Start | `/session-recap` · `/process-tasks` | Orient: recent work + current focus, eligible specs | chat only |
 | Block setup | `/start-block [spec]` | Flip the spec to `In progress` | `status.md` |
 | **1 — Plan** | `/generate-tasks <spec>` | Author the full task spec from the master plan + commit it | `tasks.md` |
 | 1 — Plan (ad-hoc) | `/chore` · `/ticket` · `/plan <desc>` | Plan work that isn't a master-plan block | `planning/<prefix>-<slug>/{tasks,plan}.md` |
