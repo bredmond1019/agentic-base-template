@@ -203,6 +203,65 @@ branch's `focus.next` as stale until the merge step (`/clean-worktree` or `/merg
 
 ---
 
+## Validate-then-commit contract for `state.json`
+
+Bookkeep's `state.json` block-status flip is never a bare `json.dump` + commit. `json.load()`
+succeeding only proves the file is well-formed JSON — it is not schema validity. `mev`
+deserializes `state.json` into typed structs, so a scalar where a struct belongs (e.g. a string
+`origin` where the schema types it as `{type, slug}`) parses fine and fails deserialization for
+the **whole file**. That exact shape mismatch happened 2026-08-09, produced `E_STATE_MALFORMED_JSON`
+plus 30 cascading errors, and blocked every other repo's push gate — the incident this contract
+exists to prevent from recurring. `sdlc-flow.js`'s wrap-up equivalent, and the analogous writes in
+`sdlc-run.js` (step 5b) and `sdlc-block.js`'s `syncBlockState()` helper, all follow the identical
+contract below — none of the four engines is excluded.
+
+**What runs, in order:**
+
+1. Read `planning/state.json` and keep its **pre-write bytes** verbatim, before mutating anything.
+2. If `mev` is on `PATH`: run `mev validate-brain --state`, capturing its `E_`/`W_` diagnostic
+   lines as the pre-write baseline.
+3. Mutate the block's `status` field in memory and write it (`json.dump(..., ensure_ascii=False)`
+   plus a trailing newline — never `ensure_ascii=True`, which escapes every em dash and turns a
+   3-field edit into ~130 lines of unrelated churn).
+4. Run `mev validate-brain --state` again and diff its output against the baseline.
+
+**What "validated" means — delta, not absolute count.** The write is rejected only if it
+introduces diagnostic lines **not present in the pre-write baseline**. Pre-existing corpus errors
+(a sibling lane's unrelated breakage, a stale warning) never block this write — the same
+delta-attribution rule the push gate uses under D64. A run never fails because the corpus was
+already red before it started.
+
+**Rejection is byte-exact rollback, and it surfaces.** If net-new diagnostics appear, `state.json`
+on disk is overwritten back to the exact pre-write bytes captured in step 1 — never re-derived,
+never "close enough." The block is **not** flipped to `closed` this run even if every task passed;
+it stays open until a clean write lands on a later run. The rejection is never silent: the engine
+logs `state.json: write REJECTED — net-new schema error(s) from mev validate-brain --state; rolled
+back byte-exact, block NOT closed this run`, and the offending diagnostic lines are copied into the
+stage's notes.
+
+**`mev` absent degrades to a stated warning, not a run failure.** If `mev` is not on `PATH`, the
+write lands unchecked (`json.load`-level parsing only, matching how the harness treats other absent
+tooling) and the engine logs it explicitly as `UNVALIDATED: mev not available, json.load-level
+parse only` — never presented as if the schema check ran.
+
+**Worktree mode is decided, not deferred.** `mev validate-brain --state` reads
+`planning/state.json` directly from the current working tree — it needs none of the cross-repo
+`BRAIN_ROOT` resolution that makes `mev emit-state --write` unsafe inside a linked worktree. So
+this validation step runs **the same way** whether `/sdlc-task --worktree` or in-place: it is never
+deferred to merge. Only the separate `mev emit-state --write` regeneration of derived surfaces
+(`focus.next`, wave tables) is deferred to merge time in worktree mode — a different step, on
+purpose (see [Bookkeep's `status.md` and `focus.next` rules](#bookkeeps-statusmd-and-focusnext-rules)
+above).
+
+**Verified by fixtures, not by observing this spec's own run.** `scripts/test_state_write_validation.py`
+reproduces the 2026-08-09 payload (a string `origin` where the schema wants a struct) and asserts
+it passes `json.load` while being rejected by `mev validate-brain --state` — the contrast that is
+the whole point of this contract — plus byte-exact rollback, surfaced rejection, delta-only
+gating against a pre-reddened fixture corpus, worktree behavior, and the mev-absent degrade.
+Registered `gates: true` in `planning/harness.json`.
+
+---
+
 ## Committed state
 
 `/sdlc-task` writes a committed `sdlc-task-state.json` under `planning/<spec>/sdlc/`:

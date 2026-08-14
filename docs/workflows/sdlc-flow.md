@@ -128,6 +128,40 @@ and bails straight to wrap-up (draft PR).
 
 ---
 
+## Validate-then-commit contract for `state.json`
+
+Wrap-up's block-status flip carries the identical contract documented in full in
+[`sdlc-task.md`'s "Validate-then-commit contract for `state.json`"](sdlc-task.md#validate-then-commit-contract-for-statejson)
+— read that page for the step-by-step mechanics (pre-write byte capture, before/after
+`mev validate-brain --state` diff, net-new-only rejection under D64 delta attribution, byte-exact
+rollback, and the `mev`-absent degrade). It exists because `json.load()` passing is not schema
+validity: `mev` deserializes `state.json` into typed structs, and the 2026-08-09 incident (a
+string `origin` where the schema wants a struct) parsed fine as JSON while failing deserialization
+for the whole file, cascading into 30 errors and blocking every other repo's push gate.
+
+The two engines' behavior is deliberately identical — same typed check, same delta attribution,
+same byte-exact rollback, same surfacing rule, same mev-absent degrade — so nothing below repeats
+that mechanism; only what differs for `/sdlc-flow` is called out:
+
+- **Worktree path verified, not just asserted.** `/sdlc-flow` runs in a worktree far more often
+  than `/sdlc-task` does (it is common for non-trivial spec work), so the worktree answer —
+  `mev validate-brain --state` runs the same way in-place or in a worktree; only `mev emit-state
+  --write` defers to merge — was verified to hold on the worktree path specifically, not only
+  in-place. `mev validate-brain --state` reads `planning/state.json` directly from the current
+  working tree and needs none of the cross-repo `BRAIN_ROOT` resolution that makes `emit-state
+  --write` unsafe inside a linked worktree, so the validation step is unaffected by which mode
+  produced the commit.
+- **Rejection never silently swallows the block close.** If the write introduces net-new
+  diagnostics, wrap-up rolls `state.json` back to its pre-write bytes, leaves the block open even
+  though every task passed, and logs `state.json: write REJECTED — net-new schema error(s) from
+  mev validate-brain --state; rolled back byte-exact, block NOT closed this run` — the PR still
+  goes out (wrap-up's other edits are unaffected), but the block-status flip is not among them.
+
+Verified by the same fixture suite as `/sdlc-task`: `scripts/test_state_write_validation.py`,
+registered `gates: true` in `planning/harness.json`.
+
+---
+
 ## PR-stage outcome vocabulary
 
 The PR stage used to return a single self-reported `created` boolean, which the engine trusted on

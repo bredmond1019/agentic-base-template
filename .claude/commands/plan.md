@@ -210,6 +210,10 @@ to any block registered here.
      `{ "type": "backlog", "slug": "<backlog-slug>" }`.
 3. Save `planning/state.json` and validate it is still valid JSON:
    `python3 -c "import json;json.load(open('planning/state.json'))"`.
+   This is a **parse-only** sanity check, not schema validation — it cannot catch a shape mismatch
+   (e.g. a struct-typed field like `origin` written as a scalar), which parses fine as JSON and
+   only fails `mev`'s typed deserialization. For real schema confidence, run
+   `mev validate-brain --state`.
 
 ### State Refresh
 
