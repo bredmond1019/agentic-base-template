@@ -419,7 +419,9 @@ const BOOKKEEP_SCHEMA = {
   properties: {
     statusUpdated:      { type: 'boolean', description: 'true if planning/status.md was updated' },
     tasksMarked:        { type: 'boolean', description: 'true if tasks.md task markers were updated' },
-    blockStatusFlipped: { type: 'string', description: 'the state.json tracks[].blocks[].id flipped to "closed", or "" if none (partial run, no state.json, or block not found)' },
+    blockStatusFlipped: { type: 'string', description: 'the state.json tracks[].blocks[].id flipped to "closed", or "" if none (partial run, no state.json, block not found, or the write was rejected by validation)' },
+    stateWriteValidated: { type: 'boolean', description: 'true if mev validate-brain --state gated the state.json mutation (before/after diff, net-new only); false when mev was not on PATH and the write landed with only json.load-level parsing (a degrade, not a pass)' },
+    stateWriteRejected: { type: 'boolean', description: 'true if the state.json mutation introduced net-new schema errors and was rolled back byte-exact; the block was NOT flipped to closed this run' },
     emitStateRan:       { type: 'boolean', description: 'true if mev emit-state --write ran successfully (false when skipped: worktree mode or mev/brain.toml absent)' },
     commitHash:         { type: 'string' },
     notes:              { type: 'string' }
@@ -1857,13 +1859,26 @@ Target:
    - Resolve the block's canonical ID from the status.md Progress Table row (the <BlockID> column, or
      the id that row maps to in state.json). This is the only part of this step that stays your
      judgment call — the mutation itself is scripted below, not an Edit-tool diff.
-   - Run ONE scripted mutation (never the Edit tool) to perform the write — substitute the id you
-     resolved for <RESOLVED_ID> (keep it as the script's sole argv, quoted):
+   - VALIDATE-THEN-COMMIT CONTRACT: the mutation must not stand unless it passes the real typed schema
+     check. \`json.load()\` succeeding is NOT schema validity — mev deserializes state.json into typed
+     structs, so a scalar where a struct belongs parses fine as JSON and fails deserialization for the
+     WHOLE FILE (this is exactly what happened 2026-08-09 with a string \`origin\` where the schema
+     types it as a struct). Run ONE scripted mutation (never the Edit tool) that captures the pre-write
+     bytes, mutates in memory, runs \`mev validate-brain --state\` BEFORE and AFTER the write, and
+     rejects — byte-exact rollback — any write that introduces diagnostic lines NOT present in the
+     BEFORE baseline. Pre-existing corpus errors (e.g. a sibling lane's unrelated breakage) must never
+     block this write — NET-NEW only, the same delta-attribution rule the push gate uses under D64.
+     Substitute the id you resolved for <RESOLVED_ID> (keep it as the script's sole argv, quoted):
      cd ${runDir} && python3 -c "
-import json, sys
+import json, subprocess, sys, shutil
+
 path = 'planning/state.json'
 bid = sys.argv[1]
-data = json.load(open(path))
+
+with open(path, 'rb') as fh:
+    pre_bytes = fh.read()
+
+data = json.loads(pre_bytes)
 found = False
 for track in data.get('tracks', []):
     for block in track.get('blocks', []):
@@ -1873,20 +1888,67 @@ for track in data.get('tracks', []):
             break
     if found:
         break
-if found:
+
+if not found:
+    print('NOT_FOUND')
+    sys.exit(0)
+
+mev_available = shutil.which('mev') is not None
+
+def diagnostics():
+    r = subprocess.run(['mev', 'validate-brain', '--state'], capture_output=True, text=True)
+    lines = (r.stdout + r.stderr).splitlines()
+    return set(l for l in lines if l.strip().startswith('[E_') or l.strip().startswith('[W_'))
+
+if not mev_available:
     with open(path, 'w') as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write(chr(10))
     print('FLIPPED:' + bid)
-else:
-    print('NOT_FOUND')
+    print('UNVALIDATED: mev not on PATH -- schema check skipped, write landed with only json.load-level parsing')
+    sys.exit(0)
+
+baseline = diagnostics()
+
+with open(path, 'w') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
+    fh.write(chr(10))
+
+after = diagnostics()
+net_new = after - baseline
+
+if net_new:
+    with open(path, 'wb') as fh:
+        fh.write(pre_bytes)
+    print('REJECTED:' + bid)
+    for line in sorted(net_new):
+        print('NET_NEW: ' + line)
+    sys.exit(1)
+
+print('FLIPPED:' + bid)
 " "<RESOLVED_ID>"
      The script searches EVERY tracks[].blocks[] entry and only ever mutates the one matching block's
-     "status" field; on a miss it prints NOT_FOUND and never opens the file for writing, so it stays
-     byte-unchanged. Read the script's own stdout — do not infer success yourself: on "FLIPPED:<id>"
-     set blockStatusFlipped to that id; on "NOT_FOUND" report it in notes, do NOT fabricate a block
-     entry, and set blockStatusFlipped to "".
-   - Validate: cd ${runDir} && python3 -c "import json;json.load(open('planning/state.json'))"
+     "status" field. Read the script's own stdout AND exit code — do not infer success yourself:
+       - "NOT_FOUND" (exit 0) → the file stays byte-unchanged. Report it in notes, do NOT fabricate a
+         block entry, and set blockStatusFlipped to "".
+       - "FLIPPED:<id>" with NO "UNVALIDATED:" line (exit 0) → mev validated the write and found no
+         net-new diagnostics. Set blockStatusFlipped to that id and stateWriteValidated=true.
+       - "FLIPPED:<id>" WITH an "UNVALIDATED:" line (exit 0) → mev is not installed; the write landed
+         unchecked (json.load-level parse only, matching how the harness degrades other absent
+         tooling). Set blockStatusFlipped to that id, stateWriteValidated=false, and copy the
+         UNVALIDATED line verbatim into notes — this is a DEGRADE, not a silent pass.
+       - "REJECTED:<id>" (exit 1) → the write introduced net-new schema errors and was rolled back;
+         state.json on disk is now byte-identical to its content before this step ran. Set
+         blockStatusFlipped to "", stateWriteRejected=true, and copy every "NET_NEW:" line verbatim
+         into notes. This MUST be reported — never silently swallow it, and do not treat the block as
+         closed this run even though "Block done" above said yes; step 3's status.md edit already
+         recorded progress narrative, but the block stays open until a clean write lands on a later
+         run.
+   - WORKTREE NOTE (decided, not deferred): this validation step runs the SAME WAY in worktree mode as
+     in place. \`mev validate-brain --state\` reads planning/state.json in THIS repo directly — it does
+     not need the cross-repo BRAIN_ROOT resolution that makes \`--graph\`/\`emit-state --write\` unsafe
+     inside a linked worktree. Only step 5's \`emit-state --write\` (regenerating derived surfaces) is
+     deferred to merge in worktree mode; this validation is never deferred.
 
 5. Regenerate derived surfaces via \`mev emit-state --write\`. Run this step whenever this bookkeep
    stage runs at all — it is NOT conditional on "Block done" above: step 2/3 already edited
@@ -1927,8 +1989,10 @@ EOF
 
 Return via StructuredOutput: statusUpdated, tasksMarked, blockStatusFlipped, emitStateRan, commitHash, notes.
 `, withModel({ label: 'bookkeep', schema: BOOKKEEP_SCHEMA }, MODEL.bookkeep))
-  if (bookkeepResult?.blockStatusFlipped) {
-    log(`state.json: block "${bookkeepResult.blockStatusFlipped}" → closed${bookkeepResult.emitStateRan ? '; derived surfaces (incl. focus.next) regenerated (mev emit-state --write).' : useWorktree ? '; focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree or /merge-train runs `mev emit-state --write` on merge.' : '.'}`)
+  if (bookkeepResult?.stateWriteRejected) {
+    log(`state.json: write REJECTED — net-new schema error(s) from mev validate-brain --state; rolled back byte-exact, block NOT closed this run. ${bookkeepResult?.notes || ''}`)
+  } else if (bookkeepResult?.blockStatusFlipped) {
+    log(`state.json: block "${bookkeepResult.blockStatusFlipped}" → closed (${bookkeepResult.stateWriteValidated ? 'validated: mev validate-brain --state, net-new only' : 'UNVALIDATED: mev not available, json.load-level parse only'})${bookkeepResult.emitStateRan ? '; derived surfaces (incl. focus.next) regenerated (mev emit-state --write).' : useWorktree ? '; focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree or /merge-train runs `mev emit-state --write` on merge.' : '.'}`)
   } else if (blockDone) {
     log(`Bookkeep: no state.json block flipped (${bookkeepResult?.notes || 'no state.json, or block not found'}).`)
   }
