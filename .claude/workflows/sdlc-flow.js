@@ -429,7 +429,9 @@ const WRAPUP_SCHEMA = {
     nextFocus:     { type: 'string' },
     amendments:    { type: 'array', items: { type: 'string' }, description: 'D18 dated amendment-log lines appended to the spec (empty if none)' },
     commitHash:    { type: 'string' },
-    blockStatusFlipped: { type: 'string', description: 'The state.json tracks[].blocks[].id flipped to "closed" on the branch this run, or "" if none (spec not fully done, no state.json, or block not found).' },
+    blockStatusFlipped: { type: 'string', description: 'The state.json tracks[].blocks[].id flipped to "closed" on the branch this run, or "" if none (spec not fully done, no state.json, block not found, or the write was rejected by validation).' },
+    stateWriteValidated: { type: 'boolean', description: 'true if mev validate-brain --state gated the state.json mutation (before/after diff, net-new only); false when mev was not on PATH and the write landed with only json.load-level parsing (a degrade, not a pass)' },
+    stateWriteRejected: { type: 'boolean', description: 'true if the state.json mutation introduced net-new schema errors and was rolled back byte-exact; the block was NOT flipped to closed this run' },
     emitStateRan:  { type: 'boolean', description: 'true if `mev emit-state --write` regenerated derived surfaces on the branch itself during this in-place (non-worktree) wrap-up; false when skipped (worktree mode, or mev/brain.toml absent)' },
     stateWritten:  { type: 'boolean', description: 'true if the agent ALSO persisted sdlc-flow-state.json + worklog.md this same turn (the wrap-up-phase state-write fold); false/omitted when it did not (write not attempted/completed)' },
     notes:         { type: 'string' }
@@ -2288,13 +2290,27 @@ Target:
       <BlockID> column, or the id that row maps to in state.json). This is the only part of this
       step that stays your judgment call — the mutation itself is scripted below, not an Edit-tool
       diff.
-    - Run ONE scripted mutation (never the Edit tool) to perform the write — substitute the id you
+    - VALIDATE-THEN-COMMIT CONTRACT (same as sdlc-task.js's bookkeep stage): the mutation must not
+      stand unless it passes the real typed schema check. \`json.load()\` succeeding is NOT schema
+      validity — mev deserializes state.json into typed structs, so a scalar where a struct belongs
+      parses fine as JSON and fails deserialization for the WHOLE FILE (this is exactly what happened
+      2026-08-09 with a string \`origin\` where the schema types it as a struct). Run ONE scripted
+      mutation (never the Edit tool) that captures the pre-write bytes, mutates in memory, runs
+      \`mev validate-brain --state\` BEFORE and AFTER the write, and rejects — byte-exact rollback —
+      any write that introduces diagnostic lines NOT present in the BEFORE baseline. Pre-existing
+      corpus errors (e.g. a sibling lane's unrelated breakage) must never block this write — NET-NEW
+      only, the same delta-attribution rule the push gate uses under D64. Substitute the id you
       resolved for <RESOLVED_ID> (keep it as the script's sole argv, quoted):
         cd ${worktreePath} && python3 -c "
-import json, sys
+import json, subprocess, sys, shutil
+
 path = 'planning/state.json'
 bid = sys.argv[1]
-data = json.load(open(path))
+
+with open(path, 'rb') as fh:
+    pre_bytes = fh.read()
+
+data = json.loads(pre_bytes)
 found = False
 for track in data.get('tracks', []):
     for block in track.get('blocks', []):
@@ -2304,22 +2320,70 @@ for track in data.get('tracks', []):
             break
     if found:
         break
-if found:
+
+if not found:
+    print('NOT_FOUND')
+    sys.exit(0)
+
+mev_available = shutil.which('mev') is not None
+
+def diagnostics():
+    r = subprocess.run(['mev', 'validate-brain', '--state'], capture_output=True, text=True)
+    lines = (r.stdout + r.stderr).splitlines()
+    return set(l for l in lines if l.strip().startswith('[E_') or l.strip().startswith('[W_'))
+
+if not mev_available:
     with open(path, 'w') as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write(chr(10))
     print('FLIPPED:' + bid)
-else:
-    print('NOT_FOUND')
+    print('UNVALIDATED: mev not on PATH -- schema check skipped, write landed with only json.load-level parsing')
+    sys.exit(0)
+
+baseline = diagnostics()
+
+with open(path, 'w') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
+    fh.write(chr(10))
+
+after = diagnostics()
+net_new = after - baseline
+
+if net_new:
+    with open(path, 'wb') as fh:
+        fh.write(pre_bytes)
+    print('REJECTED:' + bid)
+    for line in sorted(net_new):
+        print('NET_NEW: ' + line)
+    sys.exit(1)
+
+print('FLIPPED:' + bid)
 " "<RESOLVED_ID>"
-      The script searches EVERY tracks[].blocks[] entry and only ever mutates the one matching
-      block's "status" field; on a miss it prints NOT_FOUND and never opens the file for writing,
-      so it stays byte-unchanged. Read the script's own stdout — do not infer success yourself: on
-      "FLIPPED:<id>" set blockStatusFlipped to that id; on "NOT_FOUND" report it in notes, do NOT
-      fabricate a block entry, and set blockStatusFlipped to "".
-    - Validate the file is still valid JSON:
-        cd ${worktreePath} && python3 -c "import json;json.load(open('planning/state.json'))"
-    - Set blockStatusFlipped to the block id you closed (or "" if none).
+      The script searches EVERY tracks[].blocks[] entry and only ever mutates the one matching block's
+      "status" field. Read the script's own stdout AND exit code — do not infer success yourself:
+        - "NOT_FOUND" (exit 0) → the file stays byte-unchanged. Report it in notes, do NOT fabricate a
+          block entry, and set blockStatusFlipped to "".
+        - "FLIPPED:<id>" with NO "UNVALIDATED:" line (exit 0) → mev validated the write and found no
+          net-new diagnostics. Set blockStatusFlipped to that id and stateWriteValidated=true.
+        - "FLIPPED:<id>" WITH an "UNVALIDATED:" line (exit 0) → mev is not installed; the write landed
+          unchecked (json.load-level parse only, matching how the harness degrades other absent
+          tooling). Set blockStatusFlipped to that id, stateWriteValidated=false, and copy the
+          UNVALIDATED line verbatim into notes — this is a DEGRADE, not a silent pass.
+        - "REJECTED:<id>" (exit 1) → the write introduced net-new schema errors and was rolled back;
+          state.json on disk is now byte-identical to its content before this step ran. Set
+          blockStatusFlipped to "", stateWriteRejected=true, and copy every "NET_NEW:" line verbatim
+          into notes. This MUST be reported — never silently swallow it, and do not treat the block as
+          closed this run even though earlier logic said to proceed; the spec's status.md edit already
+          recorded progress narrative, but the block stays open until a clean write lands on a later
+          run.
+    - WORKTREE NOTE (decided, not deferred — same as sdlc-task.js and verified here on the worktree
+      path specifically, since \`/sdlc-flow\` runs in a worktree far more often than \`/sdlc-task\`
+      does): this validation step runs the SAME WAY in worktree mode as in place. \`mev validate-brain
+      --state\` reads planning/state.json in THIS repo's working tree directly (\`${worktreePath}\`) — it
+      does not need the cross-repo BRAIN_ROOT resolution that makes \`emit-state --write\` unsafe inside
+      a linked worktree. Only step 2c's \`emit-state --write\` (regenerating derived surfaces) is
+      deferred to merge in worktree mode; this validation is never deferred, in either engine.
+    - Set blockStatusFlipped to the block id you closed (or "" if none, or if the write was rejected).
 
 2c. Regenerate derived surfaces via \`mev emit-state --write\`. Run this step whenever this wrap-up
     stage runs at all — it is NOT conditional on "was this the last task" / full-spec completion above:
@@ -2381,12 +2445,17 @@ EOF
    cd ${worktreePath} && git log --oneline -1`}
 ${renderWrapupStateWriteRecipe(wrapupStatePayload)}
 Return via StructuredOutput: statusUpdated, devlogUpdated, nextFocus, amendments[], commitHash,
-blockStatusFlipped (the state.json block id closed in step 2b, or ""), emitStateRan (step 2c),
+blockStatusFlipped (the state.json block id closed in step 2b, or "" — including when the write was
+rejected by validation), stateWriteValidated, stateWriteRejected (step 2b), emitStateRan (step 2c),
 stateWritten (true only if you performed the additional state write above), notes.
 `, withModel({ label: 'wrap-up', schema: WRAPUP_SCHEMA, phase: 'Wrap-up' }, MODEL.wrapup))
 
+if (wrapupResult?.stateWriteRejected) {
+  log(`state.json: write REJECTED — net-new schema error(s) from mev validate-brain --state; rolled back byte-exact, block NOT closed this run. ${wrapupResult?.notes || ''}`)
+} else if (wrapupResult?.blockStatusFlipped) {
+  log(`state.json: block "${wrapupResult.blockStatusFlipped}" → closed on the branch (${wrapupResult?.stateWriteValidated ? 'validated: mev validate-brain --state, net-new only' : 'UNVALIDATED: mev not available, json.load-level parse only'})${wrapupResult?.emitStateRan ? '; derived surfaces (incl. focus.next) regenerated (mev emit-state --write).' : '; focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree, /merge-train, or /close-out --merge-branch runs `mev emit-state --write` on merge.'}`)
+}
 if (wrapupResult?.amendments?.length) log(`Spec amendments (D18): ${wrapupResult.amendments.length} line(s) appended.`)
-if (wrapupResult?.blockStatusFlipped) log(`state.json: block "${wrapupResult.blockStatusFlipped}" → closed on the branch${wrapupResult?.emitStateRan ? '; derived surfaces (incl. focus.next) regenerated (mev emit-state --write).' : '; focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree, /merge-train, or /close-out --merge-branch runs `mev emit-state --write` on merge.'}`)
 log(`Derived surfaces (in-place, this wrap-up): ${wrapupResult?.emitStateRan ? 'regenerated (mev emit-state --write).' : useWorktree ? 'skipped — worktree mode; focus.next stays stale until regenerated on merge.' : 'skipped (mev/brain.toml absent).'}`)
 
 // Final state write (status reflects the terminal state; PR fields filled after creation).

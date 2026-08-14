@@ -16,17 +16,17 @@
   },
   ".claude/workflows/sdlc-flow.js::isolation-and-branch-naming": {
     "hash": "d53ad8615922ff9cff712662b2687f19e6fbb1d87381acfeeee83079f1eb5e94",
-    "lines": "887-1054",
+    "lines": "889-1056",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   },
   ".claude/workflows/sdlc-flow.js::triage-bail-taxonomy": {
     "hash": "f9f99d95d08481e792f0e069c38a08eb6f412453d0d7fc671e637c5e18cd89e2",
-    "lines": "1214-1452",
+    "lines": "1216-1454",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   },
   ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
     "hash": "f61b9c3d86fe5c8f4c5c194d25a23b539575fbc6776b1c2440bc0aa624a851ce",
-    "lines": "1963-2117",
+    "lines": "1965-2119",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   }
 }
