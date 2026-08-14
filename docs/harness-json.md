@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [harness.json, validation, pipeline config, checks, UI-test, stack profiles]
-related: [base-template-architecture, D5-okf-phase-2-adopted, D6-harness-richer-checks, D62-harness-schema-realpath-resolution]
+related: [base-template-architecture, D5-okf-phase-2-adopted, D6-harness-richer-checks, D62-harness-schema-realpath-resolution, D64-ungateable-criteria-must-be-declared]
 ---
 
 # harness.json — configuration reference
@@ -16,6 +16,45 @@ related: [base-template-architecture, D5-okf-phase-2-adopted, D6-harness-richer-
 engine code (`.claude/workflows/*.js`) carries the *mechanism* (pipeline ordering, retry loops,
 report formats) and ships **no stack defaults**. This file is where a project names its real
 validation commands and decides whether a UI-test stage exists.
+
+## Scope: the gates are in-repo and in-language, by design
+
+Every check a `harness.json` can declare — `command`, `baseline-diff`, `count-delta`,
+`warning-scan`, `forbidden-pattern-scan`, `skip-count-regression` — runs a shell command against
+**this repo's working tree**, in **this repo's language toolchain**. For `base-template` that is
+`node --check` over four engines plus a set of Python scripts; for a Rust project it is
+`cargo fmt`/`clippy`/`nextest`/`build`. That scope is deliberate, not an oversight — it is what
+makes a check fast, hermetic, and reproducible in a worktree. But it means these checks
+**structurally cannot observe** four classes of evidence, ever, regardless of which stack profile
+a project picks:
+
+1. **Another process** — an external CLI the code shells out to (`gh`, `git` against a second
+   repo). The command's own exit code can be checked, but *what that process actually did* (did a
+   PR really get created?) is outside any in-repo check's view.
+2. **Another repo** — a sibling git index in a particular state. `harness.json` has no field for
+   "assert this about a different repository's tree."
+3. **A generated artifact** — a file emitted by a separate tool run, such as `status.md` or the
+   boards `mev emit-state` writes across the fleet. A unit test can prove the generator's logic is
+   correct without proving the artifact it emits into production reflects that logic.
+4. **An installed artefact** — the compiled binary or distributed copy the fleet actually runs, as
+   opposed to the source tree the gates compile against. Measured instance: `mev` on `PATH` was
+   built Aug 9 12:57 against source HEAD Aug 9 23:22, and `bastion` embeds `mev` as a path library
+   (`core/bastion/Cargo.toml:36`) built Jul 31 against source HEAD Aug 6 — every gate in both repos
+   passed against current source while the deployed binaries ran stale code. Nothing in
+   `harness.json` asks "is what's deployed what we built?"; that question is closed only by a
+   project's own distribution step — `/sync-downstream-harness` for this repo's engines,
+   `cargo install --path core/mev` (or `core/bastion`) for the Rust binaries on `PATH`. Until that
+   step runs, source-tree correctness and installed behavior can diverge silently.
+
+An acceptance criterion whose evidence lives in any of the four classes above is **un-gateable by
+construction** — no `harness.json` check, however creatively written, can gate it directly. What
+*is* gateable is whether the spec **admits** the gap and pairs the criterion with fixture evidence
+instead of a bare command; `/ticket` and `/generate-tasks` enforce that declaration (see
+[D64](../planning/decisions/D64-ungateable-criteria-must-be-declared.md) for the full diagnostic,
+the observed instances, and why the trigger is a mechanical evidence-location test rather than a
+judgment call). A green `harness.json` suite is evidence of **gate agreement**, not correctness —
+it proves the checks that exist all passed, not that the criteria resting outside their reach are
+true.
 
 ## Location and schema
 
