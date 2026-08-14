@@ -1,5 +1,10 @@
 # Prime — Orient to this brain or sub-brain tier at the start of a session.
 
+> **For routine session starts, use `/session-recap` instead.** It's lighter (log.md + status.md
+> only) and covers the common case — what changed recently, where things stand, what's next.
+> Reach for `/prime` when you need genuine deep re-orientation: first session in a while, picking
+> up an unfamiliar tier, or `/session-recap` itself feels like it's missing context.
+
 This command is **`brain.toml`-driven**. It behaves differently based on CWD:
 - **At Brain Root (HQ):** Orients to the full company brain (HQ + all tiers). Reads HQ top-level + 4 tier rollups + _root caches.
 - **In a Sub-brain Tier (core, portfolio, side, client):** Orients to this tier only (tier README/CLAUDE/index/status + per-repo cache cards).
