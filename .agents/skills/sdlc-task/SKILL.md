@@ -249,9 +249,14 @@ not persist between calls.
    ("acceptance_criteria/validation_commands can stay [] per task").
    - `allTasks` = every `task_id`, in array order.
    - **Per-task validation override**: for each task whose `validation_commands` is a non-empty array,
-     remember `{taskId, validationCommands}` — this task's test stage runs ONLY these commands,
-     **replacing** the harness gating checks for that task alone (copy the commands verbatim; every
-     other task still uses the harness/spec checks below).
+     remember `{taskId, validationCommands}`. Per
+     [D63](../../../planning/decisions/D63-per-task-validation-commands-augment-gating.md),
+     `/sdlc-task` treats this as **augment-gating-only** — it never causes a `gates:true` harness
+     check to be skipped. This task's test stage runs the project's `gates:true` harness checks
+     (fast form) **in addition to** these commands, copied verbatim; nothing is replaced. (Only if
+     `harness.json` defines zero `gates:true` checks does this task run solely its own commands —
+     see Step 3's test-step bullet for how that edge case is reported, never silent.) Every other
+     task still uses the harness/spec checks below, unchanged.
    - **Engine-parse-safety scan**: for each task, check its `files` array for any path under
      `.claude/workflows/`. Remember `{taskId, files: [...matching paths only...]}` for every task that
      has one. This produces an **unconditional, hardcoded gate** later (independent of
@@ -356,12 +361,20 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
      surfaces exactly like a test failure: the task is never marked passed on this attempt; triage decides whether
      to RETRYABLE (fix and try again, ≤3 times) or MAJOR (bail to a human right now).
    - **Test step** — run ONLY the applicable check set, never invent checks:
-     - If this task declared its own `validation_commands` override (Step 2.1): run exactly those
-       commands, each one gating.
-     - Else, render the harness checks: if `testDepth == fast`, filter to checks with `gates:true`
-       AND `perTask !== false`; if `full`, run the whole `validation.checks[]` list. If no
-       `harness.json`/no matching checks, fall back to the spec's `## Validation Commands` in order
-       (or one informational no-op row if the spec has none).
+     - If this task declared its own `validation_commands` override (Step 2.1) — **D63,
+       augment-gating-only**: run the project's `gates:true` harness checks (fast form —
+       `fastCommand`, or `command` if no `fastCommand` is set), numbered first, **PLUS** this task's
+       own override commands, numbered to continue the sequence, all gating. Nothing is skipped; the
+       override is additive. If `harness.json` defines zero `gates:true` checks, there is nothing of
+       the harness's own to add — this task then runs only its own override commands, and the
+       `validated:` label records this explicitly as **"ran none of the harness list (tasks.json
+       override, /sdlc-flow end review will reconcile)"**, logged to terminal output too (never
+       folded silently into a bare "validated" claim). Otherwise, on a normal project, the label is
+       **"substituted a documented subset (gates:true checks still ran)"**.
+     - Else, render the harness checks (label **"ran the harness list"**): if `testDepth == fast`,
+       filter to checks with `gates:true` AND `perTask !== false`; if `full`, run the whole
+       `validation.checks[]` list. If no `harness.json`/no matching checks, fall back to the spec's
+       `## Validation Commands` in order (or one informational no-op row if the spec has none).
      - **Always additionally add** the engine-parse-safety gate for any `.claude/workflows/` file this
        task's `files[]` names (Step 2.1): `node --check <file>` per file, gating, regardless of
        harness.json.

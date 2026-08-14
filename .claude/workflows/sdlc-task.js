@@ -1125,6 +1125,9 @@ log(`Tasks in spec: ${allTasks.join(', ')}${selectedTasks ? ` | selected: ${task
 
 // Per-task validation overrides from tasks.json's `validation_commands` (see ENUMERATE_SCHEMA).
 // null => use the harness gating checks, the pre-existing behaviour for every existing spec.
+// D63 (planning/decisions/D63-per-task-validation-commands-augment-gating.md) — augment-gating-only:
+// when present, this AUGMENTS the project's `gates:true` harness checks (fast form) rather than
+// replacing them. See runTests()'s usingOverride branch below for the combined rendering.
 const taskCheckMap = new Map(
   (enumResult.taskChecks || [])
     .filter(tc => tc && Number.isInteger(tc.taskId) && Array.isArray(tc.validationCommands) && tc.validationCommands.length)
@@ -1132,7 +1135,25 @@ const taskCheckMap = new Map(
 )
 function taskCommandsFor(taskNum) { return taskCheckMap.get(taskNum) || null }
 if (taskCheckMap.size) {
-  log(`Per-task validation overrides (tasks.json validation_commands): ${[...taskCheckMap.keys()].sort((a, b) => a - b).join(', ')} — these tasks skip the project-wide harness tripwire.`)
+  log(`Per-task validation overrides (tasks.json validation_commands): ${[...taskCheckMap.keys()].sort((a, b) => a - b).join(', ')} — D63: these AUGMENT the project's gates:true harness checks (fast form) rather than replacing them; each task's own commands run in addition, never instead.`)
+}
+
+// D63 — shared validated: vocabulary (identical strings in sdlc-flow.js, per the ADR). A pass
+// always lands on exactly one of these three; never a fourth ad hoc label.
+const VALIDATED_LABEL = {
+  ranHarnessList: 'ran the harness list',
+  substitutedSubset: 'substituted a documented subset (gates:true checks still ran)',
+  ranNoneOfHarnessList: 'ran none of the harness list (tasks.json override, /sdlc-flow end review will reconcile)',
+}
+
+// D63 — the set of harness.json checks that gate a per-task fast-tripwire pass (mirrors
+// renderCheckList's own gatingOnly filter). Used to (a) number the combined check list when a task
+// also declares its own validation_commands, and (b) detect the edge case where a project's
+// harness.json defines no gates:true checks at all, so even the augmented list has nothing of the
+// harness's own to run — a pre-existing harness-authoring gap (D56's domain), but one that must
+// stay VISIBLE (case 3 below) rather than be silently folded into "substituted".
+function gatingChecks(cfg) {
+  return (cfg?.validation?.checks ?? []).filter(c => c.gates && c.perTask !== false)
 }
 
 // Hardcoded engine-parse gate (mechanism, not project policy — see renderCheckList). Per-task
@@ -1172,6 +1193,14 @@ log(harnessCfg
   ? `Harness config: ${(harnessCfg.validation?.checks || []).length} check(s).`
   : 'No planning/harness.json — validation falls back to the spec.')
 
+// D63 — computed once; see gatingChecks() above. A project with zero gates:true checks means an
+// overridden task's augmentation has nothing of the harness's own to add, which is the one case
+// where /sdlc-task can still land on VALIDATED_LABEL.ranNoneOfHarnessList (see runTests below).
+const harnessGatingCheckCount = gatingChecks(harnessCfg).length
+if (taskCheckMap.size && harnessGatingCheckCount === 0) {
+  log(`WARNING (D63): planning/harness.json defines ZERO gates:true checks — task(s) [${[...taskCheckMap.keys()].sort((a, b) => a - b).join(', ')}] with a validation_commands override will run ONLY their own declared commands; there is nothing of the project-wide harness list to augment with.`)
+}
+
 // Resolve test depth: CLI flag overrides the built-in 'fast' default.
 const testDepth = testDepthFlag || 'fast'
 log(`Policy: testDepth=${testDepth}`)
@@ -1192,12 +1221,14 @@ const BAIL_REASONS = [
 // Test stage helper — gatingOnly=true → fast tripwire (gating checks); false → full suite.
 // ----------------------------------------------------------------
 // Render a per-task validation override (tasks.json `validation_commands`) in the same shape
-// renderCheckList emits, so the test agent's instructions are identical either way.
-function renderTaskCheckList(commands, cwd) {
+// renderCheckList emits, so the test agent's instructions are identical either way. `startIndex`
+// (D63) lets this continue the numbering after the harness gating checks it now augments, rather
+// than restarting at CHECK 1 and colliding with them.
+function renderTaskCheckList(commands, cwd, startIndex = 1) {
   const cd = cwd ? `cd ${cwd} && ` : ''
   return commands.map((cmd, i) => {
-    const n = i + 1
-    return `CHECK ${n} — task_validation_${n} (per-task validation_commands override from tasks.json) [GATING — a failure here blocks the verdict]:
+    const n = startIndex + i
+    return `CHECK ${n} — task_validation_${i + 1} (per-task validation_commands override from tasks.json — additive, per D63) [GATING — a failure here blocks the verdict]:
   ${cd}${cmd}
   echo "CHECK${n}_EXIT:$?"`
   }).join('\n\n')
@@ -1301,17 +1332,38 @@ function buildBailPayload(taskNum, t, majorFallback, exhaustionFallback = null) 
 
 async function runTests(label, { gatingOnly, taskCommands = null, onPass = null, engineFiles = [] }) {
   const usingOverride = Array.isArray(taskCommands) && taskCommands.length > 0
+  const cd = runDir ? `cd ${runDir} && ` : ''
+
+  // D63 — augment-gating-only: a per-task validation_commands override NEVER causes a gates:true
+  // harness check to be skipped. When present, the harness gating checks render FIRST (fast form,
+  // gatingOnly:true, regardless of --test-depth — the cheap form is what augments, per the ADR),
+  // numbered 1..N, followed by the task's own override commands continuing the numbering, then any
+  // hardcoded engine-parse checks. When the project defines zero gates:true checks, the harness
+  // portion is simply empty — there is nothing to augment with (see harnessGatingCheckCount above).
+  let checklistBody
+  let overrideNote
+  if (usingOverride) {
+    const harnessPart = harnessGatingCheckCount > 0
+      ? renderCheckList(harnessCfg, { gatingOnly: true, cwd: runDir, engineFiles: [] })
+      : ''
+    const taskPart = renderTaskCheckList(taskCommands, runDir, harnessGatingCheckCount + 1)
+    const engineChecks = renderEngineParseChecks(engineFiles, cd, harnessGatingCheckCount + taskCommands.length + 1)
+    checklistBody = [harnessPart, taskPart, engineChecks].filter(Boolean).join('\n\n')
+    overrideNote = harnessGatingCheckCount > 0
+      ? 'this task ALSO declares its OWN validation_commands in tasks.json — per D63 these AUGMENT the project gates:true harness checks below, they do NOT replace them'
+      : 'this task declares its OWN validation_commands in tasks.json; this project configures zero gates:true harness checks, so only the task-declared commands below run (D63 — reported, not silent)'
+  } else {
+    checklistBody = renderCheckList(harnessCfg, { gatingOnly, cwd: runDir, engineFiles })
+    overrideNote = 'from planning/harness.json + the spec'
+  }
+
   return tracedAgent(`${W}
 You are the test agent for the lean /sdlc-task pipeline. Run the project's validation checks and report.
 
-IMPORTANT — run ONLY the checks enumerated below (${usingOverride
-    ? 'this task declares its OWN validation_commands in tasks.json, which REPLACE the project-wide harness checks for this task'
-    : 'from planning/harness.json + the spec'}). Do NOT invent
+IMPORTANT — run ONLY the checks enumerated below (${overrideNote}). Do NOT invent
 checks. All Bash calls run from the run root (prefix each with: cd ${runDir} &&).
 
-${usingOverride
-    ? renderTaskCheckList(taskCommands, runDir)
-    : renderCheckList(harnessCfg, { gatingOnly, cwd: runDir, engineFiles })}
+${checklistBody}
 
 Then run the universal emoji gate (a harness rule, always) — DIFF-SCOPED: it judges only lines
 ADDED by this task, never a whole changed file, so a legacy file's pre-existing emoji does not fail
@@ -1576,14 +1628,21 @@ Return via StructuredOutput:
     }
 
     // Fast test (tripwire) — gating checks only unless testDepth=full. A task declaring its own
-    // `validation_commands` in tasks.json runs THOSE instead.
-    const passValidatedLabel = taskCommandsFor(taskNum)
-      ? 'per-task validation_commands (tasks.json override)'
-      : (testDepth === 'fast' ? 'gating checks (fast tripwire)' : 'full gating suite')
+    // `validation_commands` in tasks.json AUGMENTS those gating checks rather than replacing them
+    // (D63). passValidatedLabel is always one of the shared VALIDATED_LABEL trichotomy.
+    const hasOverride = !!taskCommandsFor(taskNum)
+    const passValidatedLabel = !hasOverride
+      ? VALIDATED_LABEL.ranHarnessList
+      : (harnessGatingCheckCount > 0 ? VALIDATED_LABEL.substitutedSubset : VALIDATED_LABEL.ranNoneOfHarnessList)
     const passPayload = buildPassPayload(taskNum, t, passValidatedLabel)
     const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum), onPass: passPayload, engineFiles: engineFilesFor(taskNum) })
     if (testResult && testResult.allPassed) {
       t.validated = passValidatedLabel
+      // D63 — a task that ran ZERO harness.json gating checks must be VISIBLE in terminal output,
+      // never only recorded in state. This is the one case /sdlc-task can still reach it (the
+      // project defines no gates:true checks to augment with); the ordinary override case always
+      // lands on "substituted" because the harness gating checks ran alongside it.
+      log(`Task ${taskNum}: validated → "${passValidatedLabel}".${passValidatedLabel === VALIDATED_LABEL.ranNoneOfHarnessList ? ' WARNING: this task ran ZERO planning/harness.json gates:true checks.' : ''}`)
       taskPassed = true
       if (testResult.stateWritten) {
         // The folded write went straight to disk (no STATE_WRITE_SCHEMA result to read startedAt
