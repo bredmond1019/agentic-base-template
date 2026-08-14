@@ -38,6 +38,19 @@ Amendment Log. It is intentionally NOT registered in `planning/harness.json` yet
 task 5, once the fix has actually landed) -- a red gate would block every unrelated task in
 this same spec from committing.
 
+THE SCAFFOLD TEMPLATE IS NOT A LIVE CONFIG
+-------------------------------------------
+`base-template/scaffold/planning/harness.json` is discovered by the walk like every other
+file, but it is a TEMPLATE, not a live project config -- its `"$schema"` string is correct at
+its DESTINATION (in a generated project, `.claude/` is a sibling of `planning/`), and it can
+never resolve inside `base-template/scaffold/`, because `.claude/` ships from the harness half
+and `scaffold/.claude/` must never exist (would violate the two-halves rule in CLAUDE.md).
+Asserting resolution on it here would be asserting a false thing about a template. It is
+therefore EXCLUDED from the pass/fail resolution assertion and reported on its own line
+instead -- never silently dropped from the discovery count, since a file that vanishes from a
+report is indistinguishable from a file that was never discovered. The gate is **17 of 17
+live configs**, not 18 of 18.
+
 DISCOVERY
 ---------
 Walks the brain root (found by walking up from this script's own location looking for
@@ -96,8 +109,25 @@ _EXCLUDE_DIRS = {
 # The measured minimum fleet size (2026-08-09): 16 broken vaulted repos + the one passing
 # brain-root file + base-template's own scaffold stub = 18. A discovery walk that regresses to
 # being symlink-blind (or silently skips a gitignored tree) finds far fewer than this and would
-# report a falsely "clean" fleet -- pinning a floor here is what catches that regression.
+# report a falsely "clean" fleet -- pinning a floor here is what catches that regression. This
+# is a floor on DISCOVERY, not on the resolution assertion -- see LIVE_EXPECTED_FILES below for
+# the count the pass/fail gate actually applies to.
 MIN_EXPECTED_FILES = 18
+
+# Of the discovered files, exactly one is the scaffold template
+# (`base-template/scaffold/planning/harness.json`) -- excluded from the resolution assertion
+# per the module docstring. The remaining files are live project configs, and the fleet gate is
+# "17 of 17 live configs resolve", not "18 of 18 discovered files resolve".
+LIVE_EXPECTED_FILES = 17
+
+# Suffix identifying the scaffold template's lexical path, regardless of which brain-root
+# absolute prefix it is discovered under.
+_SCAFFOLD_SUFFIX = os.path.join("base-template", "scaffold", "planning", "harness.json")
+
+
+def is_scaffold_template(lexical_path: str) -> bool:
+    """True if `lexical_path` is the scaffold template, not a live project config."""
+    return os.path.normpath(lexical_path).endswith(_SCAFFOLD_SUFFIX)
 
 
 def find_brain_root(start: str) -> str:
@@ -244,11 +274,28 @@ def main() -> int:
     results = evaluate(canonical)
     results.sort(key=lambda r: r.physical_dir)
 
+    scaffold_results = [r for r in results if is_scaffold_template(r.lexical_path)]
+    live_results = [r for r in results if not is_scaffold_template(r.lexical_path)]
+
+    if len(scaffold_results) != 1:
+        failures.append(
+            f"SCAFFOLD DETECTION: expected exactly 1 discovered file matching the scaffold "
+            f"template suffix {_SCAFFOLD_SUFFIX!r}, found {len(scaffold_results)}. Either the "
+            "scaffold stub moved/vanished or a live repo's path now collides with the suffix -- "
+            "both need a human look, not a silent pass."
+        )
+
+    if len(live_results) != LIVE_EXPECTED_FILES:
+        failures.append(
+            f"LIVE CONFIG COUNT: expected exactly {LIVE_EXPECTED_FILES} live harness.json "
+            f"configs (excluding the scaffold template), found {len(live_results)}."
+        )
+
     broken_physical: list[Result] = []
     broken_lexical: list[Result] = []
     content_errors: list[str] = []
 
-    for r in results:
+    for r in live_results:
         if not r.physical_ok:
             broken_physical.append(r)
         else:
@@ -263,15 +310,23 @@ def main() -> int:
                 content_errors.append(f"[lexical] {err}")
 
     print(f"Discovered {len(canonical)} distinct harness.json files "
-          f"({len(raw_paths)} raw paths before dedup) under {brain_root}\n")
+          f"({len(raw_paths)} raw paths before dedup) under {brain_root}: "
+          f"{len(live_results)} live config(s) + {len(scaffold_results)} scaffold template\n")
 
-    print(f"PHYSICAL face (realpath-canonicalized): {len(results) - len(broken_physical)}/"
-          f"{len(results)} resolve")
+    for r in scaffold_results:
+        print(
+            f"SCAFFOLD TEMPLATE (excluded from resolution assert -- correct at its destination, "
+            f"never resolvable inside base-template/scaffold/): {r.lexical_path}"
+        )
+    print()
+
+    print(f"PHYSICAL face (realpath-canonicalized): {len(live_results) - len(broken_physical)}/"
+          f"{len(live_results)} live configs resolve")
     for r in broken_physical:
         print(f"  BROKEN (physical): {r.physical_dir}/harness.json -> {r.physical_target}")
 
     print(f"\nLEXICAL face (planning/ symlink face, textual normalisation): "
-          f"{len(results) - len(broken_lexical)}/{len(results)} resolve")
+          f"{len(live_results) - len(broken_lexical)}/{len(live_results)} live configs resolve")
     for r in broken_lexical:
         print(f"  BROKEN (lexical):  {r.lexical_path} -> {r.lexical_target}")
 
@@ -293,7 +348,8 @@ def main() -> int:
         )
         return 1
 
-    print(f"\nPASS: all {len(results)} harness.json files resolve on both faces.")
+    print(f"\nPASS: all {len(live_results)} live harness.json files resolve on both faces "
+          f"(1 scaffold template reported separately, asserted at its destination instead).")
     return 0
 
 
