@@ -128,6 +128,30 @@ live in `.claude/commands/` and take precedence over global commands on name con
 | `/start-block` (global) | Start a new spec block: branch, initial commit, worktree setup |
 | `/merge-train` (global) | Merge all approved block PRs in dependency order |
 
+### State
+
+| Command | What it does |
+|---|---|
+| `/update-state` (global) | Safely edit this repo's `planning/state.json` per the canonical schema |
+
+### Orchestration
+
+| Command | What it does |
+|---|---|
+| `/orchestrate` (global) | Drive an ordered chain of blocks through the SDLC engines in one session |
+| `/begin-orchestration` (global) | Brief a lane agent from a roadmap + lane file, then drive `/orchestrate` under the concurrency/isolation/operator-gate rules |
+| `/begin-session` (global) | Open a named operator session, work it with the operator, and close it on its exit artifact |
+| `/consolidate-run` (global) | Cross-check per-repo orchestration-run records for one roadmap and propose `carryover[]` entries |
+| `/roadmap-status` (global) | Read-only, mid-run view of one roadmap's live lanes across every repo |
+
+### Backlog
+
+| Command | What it does |
+|---|---|
+| `/backlog-ticket` (global) | Capture a queued idea into `planning/backlog.md` with uniform tags |
+| `/initial-research` (global) | Conduct reconnaissance on a topic and report back |
+| `/blocked` (global) | Capture a new blocker on the fly — updates `depends_on` in `planning/state.json` |
+
 ### E2E
 
 | Command | What it does |
