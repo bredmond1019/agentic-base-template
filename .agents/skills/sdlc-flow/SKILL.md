@@ -223,6 +223,14 @@ Everything below runs from the main repo root first.
    it — running that task's tests means running ONLY those commands (they fully replace the
    harness/spec checks for that task's fast tripwire). Tasks with no `validation_commands` fall back to
    the harness/spec checks as normal. The end-review always runs the full harness/spec suite regardless.
+   **This is deliberately NOT what `/sdlc-task` does, and the difference must not be "fixed".** Per
+   [D63](../../../planning/decisions/D63-per-task-validation-commands-augment-gating.md), `/sdlc-task`
+   treats an override as **augment-gating-only** — a `gates:true` check is never skipped there —
+   because that engine has no end review, so an overridden task's own list would be the only gate it
+   ever gets. `/sdlc-flow` keeps pure substitution precisely because the end review above re-runs the
+   full suite over the integrated tree, so nothing is ever skipped forever. Unifying the two engines
+   here would either re-impose the compile cost the override exists to avoid, or silently weaken
+   `/sdlc-task`.
 5. Engine-parse-safety scan: for each task, look at its `files[]` for any path under
    `.claude/workflows/`. Record those paths per task — they get an unconditional
    `node --check <path>` gate (see Phase 3), independent of `harness.json`, in both the fast per-task

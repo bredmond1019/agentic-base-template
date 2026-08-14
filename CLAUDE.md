@@ -40,11 +40,15 @@ When a discovery in a downstream project improves the harness:
 4. Commit. The new commit hash becomes the provenance stamp for the next generated project.
 5. **Run `/sync-downstream-harness`** (dry-run first, then `--apply`) to pull the change into every
    already-scaffolded repo — see `planning/decisions/D48-downstream-harness-sync-script.md`. This
-   is not optional busywork: a fix that lives only here isn't fixed anywhere real work happens. If
-   the change touched `sdlc-flow.js` or the `tasks.json` contract specifically, also check
-   `core/orchestrator`'s `SDLC_FLOW` workflow (`app/schemas/sdlc_schema.py`) — it's a second,
-   independently-implemented consumer of the same contract (see
-   `core/orchestrator/docs/sdlc-flow-workflow.md`) that this script does not touch.
+   is not optional busywork: a fix that lives only here isn't fixed anywhere real work happens.
+   Committing the pull takes **two** commits in **two** repos: the sub-repo owns `.claude/` and
+   `.agents/`, while every `planning/.template-version` is tracked by the brain repo through the
+   vault symlink. Staging them together fails with `beyond a symbolic link` and **aborts the whole
+   `git add`**, silently committing nothing — see the command's step 5.
+   `core/orchestrator` used to hold a second, independent implementation of the `tasks.json`
+   contract worth cross-checking; it was **retired** (`app/schemas/sdlc_schema.py` and
+   `docs/sdlc-flow-workflow.md` deleted by orchestrator `75b6c8e`, verified 2026-08-13), so there is
+   no longer a second consumer to check. Re-add one here by name if another ever appears.
 6. **If the change touched `.claude/workflows/sdlc-task.js` or `sdlc-flow.js` behaviorally**
    (new flag, changed default, new pipeline stage, changed commit convention, changed state-file
    contract — not a comment-only or token-tiering tweak), also review the matching
