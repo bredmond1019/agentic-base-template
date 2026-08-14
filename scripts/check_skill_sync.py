@@ -49,11 +49,11 @@ MANIFEST_PATH = ROOT / "scripts" / "skill_sync_manifest.json"
 # named by `anchor` — see the file for the surrounding phase/comment markers if a range needs
 # re-picking after a refactor moves code around.
 ANCHORS = [
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 768, 874,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 771, 877,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1013, 1234,
+    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1017, 1238,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1472, 1591,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1476, 1595,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 889, 1056,
      ".agents/skills/sdlc-flow/SKILL.md"),
