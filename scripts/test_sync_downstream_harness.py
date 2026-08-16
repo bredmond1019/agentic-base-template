@@ -96,6 +96,37 @@ class EnginesOnlyGuard(unittest.TestCase):
         names = {p.name for p in sync.harness_files(self.bt)}
         self.assertIn("prime.md", names)
 
+    def test_workflows_md_syncs_to_every_target_including_engines_only(self):
+        """workflows/*.md are shared procedures the commands include by reference.
+
+        block-registration.md is read by /plan, /ticket and /chore instead of each carrying
+        its own copy (D65). If it were gated on engines_only, HQ's producers would point at
+        a file that does not exist there — and HQ runs real SDLC work (D63). Same rule as
+        workflows/*.js: mechanism, never gated.
+        """
+        _write(self.bt / ".claude" / "workflows" / "block-registration.md", "shared proc\n")
+        for engines_only in (False, True):
+            names = {p.name for p in sync.harness_files(self.bt, engines_only=engines_only)}
+            self.assertIn("block-registration.md", names,
+                          f"missing with engines_only={engines_only}")
+
+    def test_invoked_scripts_sync_but_base_template_own_tooling_does_not(self):
+        """Only scripts a downstream command actually invokes propagate.
+
+        /ticket, /chore and /generate-tasks shell out to render_spec.py; without it they fail
+        at their render step in every scaffolded repo. The rest of scripts/ is base-template's
+        own gate and test tooling — project fact, and propagating it would drop dead checks
+        into 17 repos.
+        """
+        _write(self.bt / "scripts" / "render_spec.py", "# renderer\n")
+        _write(self.bt / "scripts" / "test_sync_downstream_harness.py", "# own tooling\n")
+        for engines_only in (False, True):
+            names = {p.name for p in sync.harness_files(self.bt, engines_only=engines_only)}
+            self.assertIn("render_spec.py", names,
+                          f"missing with engines_only={engines_only}")
+            self.assertNotIn("test_sync_downstream_harness.py", names,
+                             "base-template's own tooling must never propagate")
+
     def test_harness_files_excludes_generate_roadmap_for_any_target(self):
         """generate-roadmap.md is HQ-only by nature (Step 1A: 'this command runs at HQ') and
         stays single-copy at base-template — excluded regardless of engines_only, unlike

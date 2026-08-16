@@ -244,10 +244,39 @@ def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
     if workflows_dir.is_dir():
         files.extend(p for p in workflows_dir.glob("*.js") if p.is_file())
         files.extend(p for p in workflows_dir.glob("*.json") if p.is_file())
+        # workflows/*.md — shared procedures the commands include BY REFERENCE, e.g.
+        # block-registration.md, which /plan, /ticket and /chore all tell the agent to read
+        # instead of carrying their own copy (D65). These are mechanism, not project fact, and
+        # they sync to EVERY target including the brain root — same rule as workflows/*.js.
+        # Gating them on engines_only would leave HQ's producers pointing at a file that does
+        # not exist there, and HQ now runs real SDLC work (D63).
+        files.extend(p for p in workflows_dir.glob("*.md") if p.is_file())
     templates_dir = workflows_dir / "templates"
     if templates_dir.is_dir():
         files.extend(p for p in templates_dir.glob("*.md") if p.is_file())
+    files.extend(collect_script_files(root))
     return files
+
+
+# The base-template scripts/ files this script distributes downstream. Explicitly enumerated
+# (not a glob over scripts/) for the same reason as HOOK_FILENAMES and AGENT_SKILL_SLUGS: most
+# of scripts/ is base-template's OWN test and gate tooling, which is project fact and must never
+# propagate. Only scripts a downstream command actually invokes belong here, and each addition
+# is a deliberate widening.
+#
+# render_spec.py is invoked by /ticket, /chore and /generate-tasks to render tasks.md from the
+# block record. Without it those commands fail at their render step in every scaffolded repo.
+# check_block_records.py is the interim block-record gate until mev's W_BLOCK_* checks ship.
+SCRIPT_FILENAMES: list[str] = ["render_spec.py", "check_block_records.py"]
+
+
+def collect_script_files(root: Path) -> list[Path]:
+    """The scripts/ files a downstream command invokes at runtime."""
+    scripts_dir = root / "scripts"
+    if not scripts_dir.is_dir():
+        return []
+    return [scripts_dir / name for name in SCRIPT_FILENAMES
+            if (scripts_dir / name).is_file()]
 
 
 # The brain hooks/ files this script distributes downstream. Explicitly enumerated (not a glob
@@ -306,12 +335,20 @@ def diff_repo(base_template_root: Path, brain_root: Path, target: RepoTarget) ->
         return report
 
     for src in harness_files(base_template_root, target.engines_only):
-        rel = src.relative_to(base_template_root / ".claude")
-        dst = target.repo_path / ".claude" / rel
+        # harness_files now returns two roots: .claude/** and scripts/** (the scripts a
+        # downstream command invokes at runtime). Resolve the destination prefix per file
+        # rather than assuming everything lives under .claude/.
+        if src.is_relative_to(base_template_root / "scripts"):
+            prefix = "scripts"
+            rel = src.relative_to(base_template_root / "scripts")
+        else:
+            prefix = ".claude"
+            rel = src.relative_to(base_template_root / ".claude")
+        dst = target.repo_path / prefix / rel
         if not dst.exists():
-            report.diffs.append(FileDiff(rel_path=str(rel), status="new", dest_prefix=".claude"))
+            report.diffs.append(FileDiff(rel_path=str(rel), status="new", dest_prefix=prefix))
         elif not filecmp.cmp(src, dst, shallow=False):
-            report.diffs.append(FileDiff(rel_path=str(rel), status="changed", dest_prefix=".claude"))
+            report.diffs.append(FileDiff(rel_path=str(rel), status="changed", dest_prefix=prefix))
 
     skill_diffs: list[FileDiff] = []
     for src in agent_skill_files(base_template_root):
@@ -344,8 +381,10 @@ def diff_repo(base_template_root: Path, brain_root: Path, target: RepoTarget) ->
     manifest = load_manifest(target.repo_path)
     current_keys: set[str] = set()
     for src in harness_files(base_template_root, target.engines_only):
-        rel = src.relative_to(base_template_root / ".claude")
-        current_keys.add(f".claude/{rel}")
+        if src.is_relative_to(base_template_root / "scripts"):
+            current_keys.add(f"scripts/{src.relative_to(base_template_root / 'scripts')}")
+        else:
+            current_keys.add(f".claude/{src.relative_to(base_template_root / '.claude')}")
     for src in agent_skill_files(base_template_root):
         rel = src.relative_to(base_template_root / ".agents")
         current_keys.add(f".agents/{rel}")
@@ -385,6 +424,7 @@ def apply_repo(base_template_root: Path, brain_root: Path, report: RepoReport, v
         src_root = {
             ".claude": base_template_root / ".claude",
             ".agents": base_template_root / ".agents",
+            "scripts": base_template_root / "scripts",
             "hooks": brain_root / "hooks",
         }[d.dest_prefix]
         src = src_root / d.rel_path
@@ -397,10 +437,13 @@ def apply_repo(base_template_root: Path, brain_root: Path, report: RepoReport, v
     # omitted (see docstring).
     files: dict[str, str] = {}
     for src in harness_files(base_template_root, report.target.engines_only):
-        rel = src.relative_to(base_template_root / ".claude")
-        dst = report.target.repo_path / ".claude" / rel
+        if src.is_relative_to(base_template_root / "scripts"):
+            prefix, rel = "scripts", src.relative_to(base_template_root / "scripts")
+        else:
+            prefix, rel = ".claude", src.relative_to(base_template_root / ".claude")
+        dst = report.target.repo_path / prefix / rel
         if dst.is_file():
-            files[f".claude/{rel}"] = hash_file(dst)
+            files[f"{prefix}/{rel}"] = hash_file(dst)
     for src in agent_skill_files(base_template_root):
         rel = src.relative_to(base_template_root / ".agents")
         dst = report.target.repo_path / ".agents" / rel
