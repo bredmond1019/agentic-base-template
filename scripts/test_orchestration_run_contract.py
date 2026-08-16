@@ -544,6 +544,16 @@ def discover_records(root: Path) -> tuple[list[Record], int, int]:
 
     distinct = sorted({p.resolve() for p in raw_paths})
 
+    # Archived records are cold and must never gate. `/archive` moves a finished
+    # `orchestration-run/<roadmap>/` under `planning/archive/`, which puts an `archive` segment
+    # above `orchestration-run` -- and `repo_slug_for()` walks upward past `orchestration-run` to
+    # the first non-`planning` segment, so it resolves the repo slug to `archive` and every
+    # archived record reports a doc_id mismatch it can never satisfy. This is not hypothetical:
+    # the 2026-08-16 fleet archive pass moved one such record and turned this check red for a
+    # reason unrelated to any live contract. `check_block_naming.py` already excludes archived
+    # directories for the same reason; this mirrors it.
+    distinct = [p for p in distinct if "archive" not in p.parts]
+
     run_dirs: set[Path] = set()
     for p in distinct:
         parts = p.parts
