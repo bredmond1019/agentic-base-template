@@ -78,8 +78,39 @@ repo's own `/generate-master-plan` / `/generate-tasks` / `/sdlc-flow`.
      leverage rather than one-off motion.
 6. Write (or revise) `planning/<concept>/master-plan.md` using the Output Format below. Maintain OKF
    frontmatter.
+
+6.5. **File a block record in each block's TARGET SUB-REPO (D65).** This program plan coordinates;
+   it does not execute. The repo that executes a block is where its definition has to live, because
+   that is where `/generate-tasks <BlockID>` will look for it — and it reads **only**
+   `planning/blocks/<BlockID>.json`, never this document. A program block with no record in its
+   target repo is invisible to the harness that has to build it.
+
+   For each block, in the sub-repo it names:
+   - Write `planning/blocks/<BlockID>.json`, following
+     `.claude/workflows/block-registration.md` in that repo (the shared procedure: the block ID, the
+     operator and cross-repo edge questions, the carryover read, the record itself, and `state.json`
+     registration). Validate against `.claude/workflows/block.schema.json`.
+   - Set `initiative` to this concept slug and put this program plan's `doc_id` in `related`, so the
+     block points back at the program that placed it.
+   - Carry this plan's **cross-repo interfaces** into the record's `interfaces`, and its **Out of
+     scope** into `out_of_scope`. Those are the two fields the program level knows and the sub-repo
+     does not.
+   - A cross-repo dependency becomes a real edge:
+     `{"type": "block", "repo": "<other-repo-slug>", "id": "<their-ID>"}`. The ordering this document
+     exists to express is only enforced once it is in the graph; as prose it is enforced by nobody.
+
+   **Never hand-author a sub-repo's `master-plan.md`.** Per D65 it is a generated view of that repo's
+   block graph. Write the block records; the view follows.
+
+   If a target sub-repo has no `planning/state.json`, say so explicitly in the report and name who
+   files the record once one exists — never silently drop the block.
+
 7. **Property self-check (before reporting).** Re-read and **revise in place** until every property
    holds, then re-check:
+   - **Every block has a block record in its target sub-repo** at `planning/blocks/<BlockID>.json`,
+     validating against `block.schema.json`, with non-empty `description`, `why` and `out_of_scope`.
+     If a block's `why` cannot be grounded without inventing a fact, that is a question for the
+     operator, not a field to fill in — leave it and say so.
    - **Every block is a `### <Prefix>.<PhaseNumber>.<BlockLetter> — <name>` heading under a
      `## Phase N — <name>` heading** — the heading is the bare ID (e.g. `### BA.0.A — <name>`), no
      literal "Block" word. No flat
