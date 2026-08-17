@@ -20,7 +20,11 @@ block ID, no title suffix. `<REPO>` must be one of the prefixes declared in `bra
 `[[repos]]` entries (never a hardcoded list), `<phase>` is one or more digits, `<block>` is one or
 more letters/digits (`B`, `2`, `K2`, `B2` all valid). `ticket-`/`chore-`/`plan-` directories are
 smaller units with their own already-working convention; this guard never touches them -- flagging
-them would flag ~90 correct directories.
+them would flag ~90 correct directories. Same exemption for their repo-scoped siblings
+`<REPO>.ticket.<slug>` / `<REPO>.chore.<slug>` / `<REPO>.plan.<slug>` (e.g.
+`BT.ticket.carryover-container-routing`) -- the 2026-08-17 naming convention update (D67) that
+lets a ticket/chore dir sort and grep next to that repo's real blocks without being mistaken for
+one.
 
 This guard makes NO assertion about file CONTENT -- only directory NAMES. Old-form strings like
 `10.B-foo` legitimately appear in roadmap prose, closed specs' bodies, `log.md` history, and
@@ -117,6 +121,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # them: flagging `ticket-foo` / `chore-foo` / `plan-foo` would flag ~90 correct directories.
 _IGNORED_PREFIXES = ("ticket-", "chore-", "plan-")
 
+# 2026-08-17: the repo-scoped sibling of the same convention -- `<REPO>.ticket.<slug>` /
+# `<REPO>.chore.<slug>` / `<REPO>.plan.<slug>` (e.g. `BT.ticket.carryover-container-routing`).
+# Same "smaller than a block, don't touch it" exemption as the bare forms above, just qualified
+# with the repo prefix so a ticket dir sorts and greps next to that repo's real blocks. See D67.
+_IGNORED_KINDS = ("ticket", "chore", "plan")
+
 
 def find_brain_root(start: Optional[Path] = None) -> Optional[Path]:
     """Walk upward from `start` (default: cwd) looking for a directory containing brain.toml."""
@@ -159,9 +169,19 @@ def block_id_pattern(prefixes: list[str]) -> re.Pattern:
     return re.compile(rf"^(?:{alternation})\.\d+\.[A-Za-z0-9]+$")
 
 
-def is_ignored_dir(name: str) -> bool:
-    """`ticket-`/`chore-`/`plan-` directories are not blocks; the convention does not apply."""
-    return name.startswith(_IGNORED_PREFIXES)
+def is_ignored_dir(name: str, prefixes: Optional[list[str]] = None) -> bool:
+    """`ticket-`/`chore-`/`plan-` directories are not blocks; the convention does not apply.
+    Same exemption for their repo-scoped siblings `<REPO>.ticket.<slug>` /
+    `<REPO>.chore.<slug>` / `<REPO>.plan.<slug>` when `prefixes` (from brain.toml) is supplied --
+    matched by exact prefix, never a substring, so e.g. `BTX.ticket.foo` does not piggyback on a
+    registered `BT` prefix.
+    """
+    if name.startswith(_IGNORED_PREFIXES):
+        return True
+    for prefix in prefixes or []:
+        if any(name.startswith(f"{prefix}.{kind}.") for kind in _IGNORED_KINDS):
+            return True
+    return False
 
 
 def is_archived_dir(d: Path) -> bool:
@@ -234,7 +254,8 @@ def find_violations(dirs: list[Path], prefixes: list[str]) -> list[Path]:
     pattern = block_id_pattern(prefixes)
     return [
         d for d in dirs
-        if not is_ignored_dir(d.name) and not is_archived_dir(d) and not classify_dir(d.name, pattern)
+        if not is_ignored_dir(d.name, prefixes) and not is_archived_dir(d)
+        and not classify_dir(d.name, pattern)
     ]
 
 
@@ -246,7 +267,8 @@ def find_archived_non_conforming(dirs: list[Path], prefixes: list[str]) -> list[
     pattern = block_id_pattern(prefixes)
     return [
         d for d in dirs
-        if not is_ignored_dir(d.name) and is_archived_dir(d) and not classify_dir(d.name, pattern)
+        if not is_ignored_dir(d.name, prefixes) and is_archived_dir(d)
+        and not classify_dir(d.name, pattern)
     ]
 
 
@@ -576,6 +598,27 @@ def self_test() -> int:
         "(d) negative: a directory containing 'ticket' but not prefixed is not ignored",
         not is_ignored_dir("my-ticket-followup"),
     )
+
+    # (d2) repo-scoped siblings: `<REPO>.ticket.<slug>` / `<REPO>.chore.<slug>` /
+    # `<REPO>.plan.<slug>` are ignored once the repo's prefix is declared, but a same-shaped
+    # string under an UNREGISTERED prefix is not -- and neither is one that merely starts with
+    # the prefix without the required dot-kind-dot separator.
+    check(
+        "(d2) BW.ticket.foo is ignored given BW is a registered prefix",
+        is_ignored_dir("BW.ticket.foo", _FIXTURE_PREFIXES),
+    )
+    check(
+        "(d2) EN.chore.cleanup is ignored given EN is a registered prefix",
+        is_ignored_dir("EN.chore.cleanup", _FIXTURE_PREFIXES),
+    )
+    check(
+        "(d2) negative: ZZ.ticket.foo is not ignored -- ZZ is not a registered prefix",
+        not is_ignored_dir("ZZ.ticket.foo", _FIXTURE_PREFIXES),
+    )
+    check(
+        "(d2) negative: BWX.ticket.foo does not piggyback on the registered BW prefix",
+        not is_ignored_dir("BWX.ticket.foo", _FIXTURE_PREFIXES),
+    )
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
         _init_git_repo(base)
@@ -583,9 +626,13 @@ def self_test() -> int:
         _write_spec_dir(base, "ticket-some-fix")
         _write_spec_dir(base, "chore-cleanup")
         _write_spec_dir(base, "plan-explore")
+        _write_spec_dir(base, "BW.ticket.carryover-container-routing")
         _commit_all(base, "only ignored-shape dirs")
         rc, _ = _run_repo_mode(base)
-        check("(d) a repo with only ticket-/chore-/plan- dirs never blocks", rc == 0)
+        check(
+            "(d2) a repo with only ticket-/chore-/plan- and BW.ticket.* dirs never blocks",
+            rc == 0,
+        )
 
     # (e) Prefixes come from brain.toml, not a hardcoded list -- a fixture declaring a NEW prefix
     # accepts directories using it without editing this script.
@@ -712,7 +759,7 @@ def self_test() -> int:
     else:
         prefixes = load_repo_prefixes(real_brain_root)
         dirs, _file_count = discover_spec_dirs(real_brain_root)
-        block_shaped = [d for d in dirs if not is_ignored_dir(d.name)]
+        block_shaped = [d for d in dirs if not is_ignored_dir(d.name, prefixes)]
         pattern = block_id_pattern(prefixes)
         canonical = [d for d in block_shaped if classify_dir(d.name, pattern)]
         non_conforming = [d for d in block_shaped if not classify_dir(d.name, pattern)]
