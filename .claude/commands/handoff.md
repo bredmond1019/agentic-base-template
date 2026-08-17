@@ -60,6 +60,17 @@ table; this restates only what an agent needs inline while appending:
 | `known_issue` | a don't-re-investigate fact |
 | `env` | a transient environmental caveat ("installed binary is stale, rebuild first") |
 | `deferred` | a real follow-on you haven't ticketed yet |
+| `defect` | a real unticketed bug with a fix — not yet filed as its own block |
+
+**reference[] vs. carryover[] — route at write time, not after.** Before appending, ask
+whether the finding is *permanently true* (a gotcha that will still be true next month, a
+deliberate non-fix the team chose not to reverse, a load-bearing measured number someone will
+need again) — those belong in `reference[]`, not `carryover[]`. `carryover[]` is for work-class
+findings that eventually clear: a constraint, an unticketed defect, a deferred follow-on, or a
+transient env caveat. If you're about to write a fact that has no `clears_when` because nothing
+will ever make it stop being true, that is the signal it belongs in `reference[]` instead — see
+`docs/state/reference-container-schema.md` (`HQ.ticket.reference-container-schema-doc`) for the
+`reference[]` field table and its own kind vocabulary once that doc exists.
 
 - `priority` (int, `0..=3`) — value if resolved, on the same rubric as `tracks[].blocks[]`.
   Omit when the entry carries no value judgement.
