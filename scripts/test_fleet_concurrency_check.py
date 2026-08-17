@@ -241,6 +241,7 @@ class HeavyRepoDetection(unittest.TestCase):
     def test_ui_test_enabled_is_heavy(self) -> None:
         self._write_harness({"uiTest": {"enabled": True}, "validation": {"checks": []}})
         self.assertTrue(fcc.is_heavy_repo(str(self.repo)))
+        self.assertEqual(fcc.heavy_category(str(self.repo)), "browser-automation")
 
     def test_playwright_check_command_is_heavy(self) -> None:
         self._write_harness(
@@ -250,6 +251,7 @@ class HeavyRepoDetection(unittest.TestCase):
             }
         )
         self.assertTrue(fcc.is_heavy_repo(str(self.repo)))
+        self.assertEqual(fcc.heavy_category(str(self.repo)), "browser-automation")
 
     def test_docs_only_repo_is_not_heavy(self) -> None:
         self._write_harness(
@@ -259,9 +261,189 @@ class HeavyRepoDetection(unittest.TestCase):
             }
         )
         self.assertFalse(fcc.is_heavy_repo(str(self.repo)))
+        self.assertIsNone(fcc.heavy_category(str(self.repo)))
 
     def test_missing_harness_json_is_not_heavy(self) -> None:
         self.assertFalse(fcc.is_heavy_repo(str(self.repo)))
+        self.assertIsNone(fcc.heavy_category(str(self.repo)))
+
+    def test_cargo_build_release_is_native_build_heavy(self) -> None:
+        self._write_harness(
+            {
+                "uiTest": {"enabled": False},
+                "validation": {
+                    "checks": [
+                        {"name": "fmt", "command": "cargo fmt --check"},
+                        {"name": "clippy", "command": "cargo clippy -- -D warnings"},
+                        {"name": "test", "command": "cargo nextest run --workspace"},
+                        {"name": "build", "command": "cargo build --release"},
+                    ]
+                },
+            }
+        )
+        self.assertTrue(fcc.is_heavy_repo(str(self.repo)))
+        self.assertEqual(fcc.heavy_category(str(self.repo)), "native-build")
+
+    def test_mixed_browser_and_native_signals_classify_browser_automation(self) -> None:
+        # A repo gating on both is the more dangerous (browser-automation) category, so it
+        # must not be under-counted against the smaller pool.
+        self._write_harness(
+            {
+                "uiTest": {"enabled": False},
+                "validation": {
+                    "checks": [
+                        {"name": "build", "command": "cargo build --release"},
+                        {"name": "e2e", "command": "npx playwright test"},
+                    ]
+                },
+            }
+        )
+        self.assertEqual(fcc.heavy_category(str(self.repo)), "browser-automation")
+
+
+class RealFleetHarnessShapes(unittest.TestCase):
+    """Classifies real harness.json files from the fleet, when present on this machine.
+
+    Skips (rather than fails) any repo whose harness.json isn't found — these live outside this
+    repo, in sibling checkouts, and their presence is environment-dependent.
+    """
+
+    _BRAIN_ROOT_CANDIDATES = [
+        Path(__file__).resolve().parents[2],  # base-template/../.. -> agentic-portfolio
+    ]
+
+    def _repo_path(self, relative: str) -> Path:
+        for root in self._BRAIN_ROOT_CANDIDATES:
+            candidate = root / relative
+            if (candidate / "planning" / "harness.json").exists():
+                return candidate
+        self.skipTest(f"{relative}/planning/harness.json not found on this machine")
+
+    def test_rust_repos_classify_native_build_heavy(self) -> None:
+        for relative in ("core/engine-rs", "core/bastion", "core/mev", "core/okf-core"):
+            with self.subTest(repo=relative):
+                repo = self._repo_path(relative)
+                self.assertEqual(fcc.heavy_category(str(repo)), "native-build")
+
+    def test_base_template_and_hq_are_light(self) -> None:
+        base_template = Path(__file__).resolve().parents[1]
+        self.assertIsNone(fcc.heavy_category(str(base_template)))
+
+        hq = self._BRAIN_ROOT_CANDIDATES[0]
+        if not (hq / "planning" / "harness.json").exists():
+            self.skipTest("HQ planning/harness.json not found on this machine")
+        self.assertIsNone(fcc.heavy_category(str(hq)))
+
+
+class TieredCapacity(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.lock_dir = str(Path(self._tmp.name) / "locks")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_native_build_pool_allows_four_concurrent_lanes(self) -> None:
+        results = [
+            fcc.register(
+                f"repo-{i}",
+                category="native-build",
+                pid=os.getpid() + i,
+                lock_dir_override=self.lock_dir,
+            )
+            for i in range(4)
+        ]
+        self.assertTrue(all(r.allowed for r in results))
+
+    def test_fifth_native_build_lane_is_refused(self) -> None:
+        for i in range(4):
+            fcc.register(
+                f"repo-{i}",
+                category="native-build",
+                pid=os.getpid() + i,
+                lock_dir_override=self.lock_dir,
+            )
+        r5 = fcc.register(
+            "repo-5", category="native-build", pid=os.getpid() + 5, lock_dir_override=self.lock_dir
+        )
+        self.assertFalse(r5.allowed)
+        self.assertIn("native-build", r5.reason)
+
+    def test_native_build_and_browser_automation_pools_are_independent(self) -> None:
+        # Fill the browser-automation pool (cap 2)...
+        fcc.register(
+            "web-a", category="browser-automation", pid=os.getpid(), lock_dir_override=self.lock_dir
+        )
+        fcc.register(
+            "web-b",
+            category="browser-automation",
+            pid=os.getpid() + 1,
+            lock_dir_override=self.lock_dir,
+        )
+        # ...a native-build lane must still be allowed, since it draws from a separate pool.
+        r = fcc.register(
+            "engine-rs", category="native-build", pid=os.getpid() + 2, lock_dir_override=self.lock_dir
+        )
+        self.assertTrue(r.allowed)
+
+        # And a third browser-automation lane is still refused.
+        r_third_web = fcc.register(
+            "web-c",
+            category="browser-automation",
+            pid=os.getpid() + 3,
+            lock_dir_override=self.lock_dir,
+        )
+        self.assertFalse(r_third_web.allowed)
+
+    def test_max_heavy_lanes_override_still_works_per_category(self) -> None:
+        fcc.register(
+            "repo-a",
+            category="native-build",
+            pid=os.getpid(),
+            lock_dir_override=self.lock_dir,
+            max_heavy_lanes=1,
+        )
+        r2 = fcc.register(
+            "repo-b",
+            category="native-build",
+            pid=os.getpid() + 1,
+            lock_dir_override=self.lock_dir,
+            max_heavy_lanes=1,
+        )
+        self.assertFalse(r2.allowed)
+
+    def test_cli_is_heavy_reports_category(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            (repo / "planning").mkdir(parents=True)
+            (repo / "planning" / "harness.json").write_text(
+                json.dumps(
+                    {
+                        "uiTest": {"enabled": False},
+                        "validation": {
+                            "checks": [{"name": "build", "command": "cargo build --release"}]
+                        },
+                    }
+                )
+            )
+            rc = fcc.main(["is-heavy", "--repo-path", str(repo)])
+            self.assertEqual(rc, 0)
+
+    def test_cli_register_accepts_category_flag(self) -> None:
+        rc = fcc.main(
+            [
+                "register",
+                "--repo",
+                "repo-a",
+                "--category",
+                "native-build",
+                "--pid",
+                str(os.getpid()),
+                "--lock-dir",
+                self.lock_dir,
+            ]
+        )
+        self.assertEqual(rc, 0)
 
 
 if __name__ == "__main__":

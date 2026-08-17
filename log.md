@@ -3,9 +3,38 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-14T13:10:12-0300
+**Last updated:** 2026-08-17T00:00:00-0300
 
 ---
+
+## [2026-08-17]
+
+### D66: heavy-lane concurrency capped per category, not fleet-wide
+
+**What:** `BT.ticket.heavy-command-signals-rust-build` set out to fix a missing native-build
+signal in `scripts/fleet_concurrency_check.py` — every Rust repo (`engine-rs`, `bastion`, `mev`,
+`okf-core`) gates on `cargo build --release`, which the enforcer didn't recognize, so all four read
+as light against the 2-heavy-lane ceiling. Fixing detection alone would have folded native-build
+lanes into the same `MAX_HEAVY_LANES = 2` pool sized for browser-automation — the operator flagged
+this as the wrong lesson from the right fix: the 2-lane rule exists because three concurrent
+Next.js + Playwright lanes once saturated the MacBook Pro's CPU, and Rust lanes have almost never
+been the culprit (the operator routinely runs 3-4 concurrently). Landed [D66](planning/decisions/D66-tiered-heavy-lane-concurrency.md):
+`heavy_category()` now returns `"browser-automation"` (cap 2, unchanged) or `"native-build"` (cap
+4, per the operator's real usage and D57's measured per-task cost), each with an independent lock
+pool so the categories never compete for the same slot. Updated `fleet_concurrency_check.py`, its
+test suite (26 tests, including live classification against every fleet Rust repo's real
+`harness.json` present on this machine), `planning/harness.json`'s gate, `orchestrate.md` /
+`begin-orchestration.md` + their `.agents/skills/` mirrors, and amended the originating block
+record's scope/AC. Filed an operator edge on the block (`operator-fleet-concurrency-live-smoke-test`)
+for the one thing still unverified: exercising `register`/`status`/`release` against the real
+`<brain_root>/.fleet-locks/` registry while genuinely idle — the unit suite only covers isolated
+lock dirs.
+**Why:** A prior session traced this ticket back from a question about whether some fleet Rust
+projects were being treated as "heavier" than they really are — the operator confirmed browser
+automation, not Rust builds, is the actual CPU risk, which is a decision worth recording rather
+than leaving as an unenforced assumption baked into a single flat constant.
+**Refs:** `planning/decisions/D66-tiered-heavy-lane-concurrency.md`,
+`planning/blocks/BT.ticket.heavy-command-signals-rust-build.json`, D61, D57.
 
 ## [2026-08-14]
 

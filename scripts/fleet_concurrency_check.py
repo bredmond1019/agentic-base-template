@@ -32,11 +32,13 @@ Design (recorded in full in planning/decisions/D61-fleet-concurrency-enforcement
   every operation reports success with `degraded: true` and a reason — the caller proceeds exactly
   as it would have under the old prose-only rule. The mechanism only ever adds a capability; it
   never becomes a new way for a run to fail that the old rule didn't already have.
-- **"Heavy" is derived from a repo's own `planning/harness.json`, never memorized.** `is_heavy_repo`
-  reads the target repo's harness config and calls it heavy if `uiTest.enabled` is true, or any
-  validation check's command mentions a browser/production-build tool (Playwright, Cypress,
-  Puppeteer, `next build`, `vite build`, `npm run build`) — the same signal
-  begin-orchestration.md already names ("browser/production-build checks").
+- **"Heavy" is derived from a repo's own `planning/harness.json`, never memorized, and comes in two
+  categories with separate caps** (D66): `heavy_category` reads the target repo's harness config
+  and returns `"browser-automation"` if `uiTest.enabled` is true or any validation check's command
+  names a browser/production-build tool (Playwright, Cypress, Puppeteer, `next build`, `vite
+  build`, `npm run build`, ...), `"native-build"` if a check names a native compile/link command
+  (`cargo build --release`), or `None` if neither. Capacity (`MAX_LANES_BY_CATEGORY`) is counted
+  per category — a native-build lane never competes with a browser-automation lane for a slot.
 
 CLI:
   python3 scripts/fleet_concurrency_check.py register --repo <name> [--pid PID] [--ttl SECONDS] [--lock-dir DIR]
@@ -59,11 +61,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-MAX_HEAVY_LANES = 2
 DEFAULT_TTL_SECONDS = 4 * 60 * 60  # 4 hours
 LOCK_SUBDIR = ".fleet-locks"
 
-HEAVY_COMMAND_SIGNALS = (
+# Two distinct cost shapes get lumped under "heavy" in the old prose rule, but they are not
+# equally dangerous (see planning/decisions/D66-tiered-heavy-lane-concurrency.md):
+#
+# - browser-automation: repeated, interactive-cost tooling (Playwright et al) that stacks CPU
+#   pressure the whole time a lane runs. This is what motivated the original 2-lane ceiling
+#   (three concurrent Next.js + Playwright lanes saturated the operator's MacBook Pro).
+# - native-build: a compile/link step that is expensive once per lane (end/reconcile), not
+#   per-task, per D57 measurement — cheap enough in practice that the operator routinely runs
+#   3-4 Rust lanes concurrently without issue.
+BROWSER_AUTOMATION_SIGNALS = (
     "playwright",
     "cypress",
     "puppeteer",
@@ -73,6 +83,19 @@ HEAVY_COMMAND_SIGNALS = (
     "yarn build",
     "pnpm build",
 )
+
+NATIVE_BUILD_SIGNALS = (
+    "cargo build --release",
+)
+
+MAX_LANES_BY_CATEGORY = {
+    "browser-automation": 2,
+    "native-build": 4,
+}
+
+# Legacy name/value, kept for any external caller still importing it directly.
+HEAVY_COMMAND_SIGNALS = BROWSER_AUTOMATION_SIGNALS
+MAX_HEAVY_LANES = MAX_LANES_BY_CATEGORY["browser-automation"]
 
 
 def _safe_repo_name(repo: str) -> str:
@@ -183,13 +206,23 @@ def _sweep_stale(lock_dir: Path, ttl_seconds: int) -> list:
 
 def register(
     repo: str,
+    category: str = "browser-automation",
     pid: Optional[int] = None,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
     lock_dir_override: Optional[str] = None,
-    max_heavy_lanes: int = MAX_HEAVY_LANES,
+    max_heavy_lanes: Optional[int] = None,
 ) -> LockResult:
+    """Register `repo` as an active heavy lane in `category`.
+
+    Capacity is counted per category, not fleet-wide: a native-build lane never competes for a
+    slot with a browser-automation lane. `max_heavy_lanes`, if given, overrides
+    MAX_LANES_BY_CATEGORY[category]; otherwise the category's own default applies.
+    """
     pid = pid if pid is not None else os.getpid()
     lock_dir = resolve_lock_dir(lock_dir_override)
+    cap = max_heavy_lanes if max_heavy_lanes is not None else MAX_LANES_BY_CATEGORY.get(
+        category, MAX_HEAVY_LANES
+    )
 
     if lock_dir is None:
         return LockResult(
@@ -200,24 +233,28 @@ def register(
         )
 
     survivors = _sweep_stale(lock_dir, ttl_seconds)
+    category_survivors = [e for e in survivors if e.get("category", "browser-automation") == category]
 
     # Idempotent: if this exact repo+pid already holds a slot, re-registering succeeds without
     # consuming a second slot.
     own_path = _lock_path(lock_dir, repo, pid)
-    already_registered = any(entry.get("_path") == str(own_path) for entry in survivors)
-    active_repos = [e["repo"] for e in survivors]
+    already_registered = any(entry.get("_path") == str(own_path) for entry in category_survivors)
+    active_repos = [e["repo"] for e in category_survivors]
 
-    if not already_registered and len(survivors) >= max_heavy_lanes:
+    if not already_registered and len(category_survivors) >= cap:
         return LockResult(
             allowed=False,
-            reason=f"fleet at capacity ({len(survivors)}/{max_heavy_lanes} heavy lanes active): "
-            f"{', '.join(active_repos)}",
+            reason=f"fleet at capacity for '{category}' ({len(category_survivors)}/{cap} lanes "
+            f"active): {', '.join(active_repos)}",
             active=active_repos,
         )
 
     if not already_registered:
         own_path.write_text(
-            json.dumps({"repo": repo, "pid": pid, "started_at": time.time()}, indent=2)
+            json.dumps(
+                {"repo": repo, "pid": pid, "category": category, "started_at": time.time()},
+                indent=2,
+            )
         )
         active_repos.append(repo)
 
@@ -253,30 +290,46 @@ def status(lock_dir_override: Optional[str] = None, ttl_seconds: int = DEFAULT_T
             reason="fleet lock store unavailable",
         )
     survivors = _sweep_stale(lock_dir, ttl_seconds)
-    return LockResult(allowed=True, active=[e["repo"] for e in survivors])
+    return LockResult(
+        allowed=True,
+        active=[f"{e['repo']} ({e.get('category', 'browser-automation')})" for e in survivors],
+    )
 
 
-def is_heavy_repo(repo_path: str) -> bool:
-    """True if the target repo's planning/harness.json indicates a heavy (browser/production-build)
-    gate: uiTest.enabled, or a validation check command naming a known heavy tool."""
+def heavy_category(repo_path: str) -> Optional[str]:
+    """The heavy-lane category for `repo_path`'s planning/harness.json, or None if light.
+
+    `uiTest.enabled` and any browser-automation signal classify as "browser-automation" (checked
+    first — it is the more resource-dangerous category, so a repo matching both is not
+    under-counted). Otherwise a native-build signal classifies as "native-build". Neither -> None.
+    """
     harness_path = Path(repo_path) / "planning" / "harness.json"
     if not harness_path.exists():
-        return False
+        return None
     try:
         data = json.loads(harness_path.read_text())
     except (OSError, json.JSONDecodeError):
-        return False
+        return None
 
     if data.get("uiTest", {}).get("enabled"):
-        return True
+        return "browser-automation"
 
     checks = data.get("validation", {}).get("checks", [])
-    for check in checks:
-        command = str(check.get("command", "")).lower()
-        if any(signal in command for signal in HEAVY_COMMAND_SIGNALS):
-            return True
+    commands = [str(check.get("command", "")).lower() for check in checks]
 
-    return False
+    if any(any(signal in command for signal in BROWSER_AUTOMATION_SIGNALS) for command in commands):
+        return "browser-automation"
+
+    if any(any(signal in command for signal in NATIVE_BUILD_SIGNALS) for command in commands):
+        return "native-build"
+
+    return None
+
+
+def is_heavy_repo(repo_path: str) -> bool:
+    """True if the target repo's planning/harness.json indicates any heavy gate (either
+    category). Kept as a boolean convenience wrapper around heavy_category()."""
+    return heavy_category(repo_path) is not None
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -285,10 +338,22 @@ def _build_parser() -> argparse.ArgumentParser:
 
     reg = sub.add_parser("register", help="Register this lane as starting a heavy repo.")
     reg.add_argument("--repo", required=True)
+    reg.add_argument(
+        "--category",
+        choices=sorted(MAX_LANES_BY_CATEGORY),
+        default="browser-automation",
+        help="Heavy-lane category (capacity is counted per category, not fleet-wide). "
+        "Determine via `is-heavy --repo-path`.",
+    )
     reg.add_argument("--pid", type=int, default=None)
     reg.add_argument("--ttl", type=int, default=DEFAULT_TTL_SECONDS)
     reg.add_argument("--lock-dir", default=None)
-    reg.add_argument("--max-heavy-lanes", type=int, default=MAX_HEAVY_LANES)
+    reg.add_argument(
+        "--max-heavy-lanes",
+        type=int,
+        default=None,
+        help="Override the category's default cap (default: MAX_LANES_BY_CATEGORY[category]).",
+    )
 
     rel = sub.add_parser("release", help="Release this lane's heavy-repo slot.")
     rel.add_argument("--repo", required=True)
@@ -312,6 +377,7 @@ def main(argv: Optional[list] = None) -> int:
     if args.action == "register":
         result = register(
             args.repo,
+            category=args.category,
             pid=args.pid,
             ttl_seconds=args.ttl,
             lock_dir_override=args.lock_dir,
@@ -331,9 +397,14 @@ def main(argv: Optional[list] = None) -> int:
         return 0
 
     if args.action == "is-heavy":
-        heavy = is_heavy_repo(args.repo_path)
-        print(json.dumps({"repo_path": args.repo_path, "heavy": heavy}, indent=2))
-        return 0 if heavy else 1
+        category = heavy_category(args.repo_path)
+        print(
+            json.dumps(
+                {"repo_path": args.repo_path, "heavy": category is not None, "category": category},
+                indent=2,
+            )
+        )
+        return 0 if category is not None else 1
 
     parser.error(f"unknown action: {args.action}")
     return 2
