@@ -3,11 +3,44 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-17T00:00:00-0300
+**Last updated:** 2026-08-17T13:42:00-0300
 
 ---
 
 ## [2026-08-17]
+
+### BT.ticket.carryover-container-routing + D67 (block-naming guard exemption)
+
+**What:** Ran `BT.ticket.carryover-container-routing` (5/5 tasks) via `/sdlc-task --resume`,
+teaching `handoff.md`/`wrap-up.md`/`log-work.md` a `defect` carryover kind, an explicit
+`reference[]`-vs-`carryover[]` routing rule (permanently-true facts route to `reference[]`,
+work-class findings route to `carryover[]`), and a mandatory `mev validate-state` step
+immediately after any `state.json` write. The first run bailed on `check_block_naming.py`: the
+spec's own directory (`BT.ticket.carryover-container-routing`) doesn't match the guard's
+`<REPO>.<phase>.<block>` pattern. Confirmed with the operator that `<REPO>.ticket.<slug>` is the
+new intended ticket-naming convention (matching a sibling `BT.ticket.engines-read-block-record`),
+not a mistake — the directory stays as-is. Landed
+[D67](planning/decisions/D67-repo-scoped-ticket-naming-convention.md): `is_ignored_dir()` now
+also exempts `<REPO>.ticket.<slug>` / `<REPO>.chore.<slug>` / `<REPO>.plan.<slug>`, matched
+against `brain.toml`'s registered prefixes, alongside the existing bare `ticket-`/`chore-`/
+`plan-` forms. Self-test gained fixture cases (d2); all 18 `harness.json` gating checks + the
+diff-scoped emoji gate pass. `/close-out`'s doc sweep found no stale `docs/` content in this repo,
+but surfaced a real conflict: the five-value kind vocabulary this ticket shipped
+(`constraint`/`known_issue`/`env`/`deferred`/`defect`) conflicts with the brain repo's
+`docs/state/state-schema.md`, which per **D72** (`carryover-three-container-split`, brain repo)
+narrows `carryover[].kind` to `defect`/`deferred`/`drift`/`env` and retires `constraint`/
+`known_issue` from `carryover[]` entirely — D72's obligations table never named these three
+command files as a consumer. Filed as carryover (`carryover-kind-vocab-conflicts-with-d72`)
+rather than silently resolved, since narrowing now may be premature (D72's `reference[]` struct,
+Block B, hasn't landed) — see `planning/handoff.md` for the full writeup.
+
+**Why:** The ticket closes a real gap — `carryover[]` findings had no `defect` kind and no
+explicit routing rule against the newer `reference[]` concept, so agents were guessing. D67 exists
+because the block-naming guard was about to block a naming convention the operator was actively
+adopting, not enforce a real violation; fixing the guard (not the directory) keeps the convention
+change from being silently blocked by tooling that hadn't caught up.
+
+**Refs:** `BT.ticket.carryover-container-routing`, D67, D72 (brain repo)
 
 ### D66: heavy-lane concurrency capped per category, not fleet-wide
 
