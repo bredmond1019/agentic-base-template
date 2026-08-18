@@ -3,9 +3,34 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-17T13:42:00-0300
+**Last updated:** 2026-08-18T02:20:33Z
 
 ---
+
+## [2026-08-18]
+
+### BT.ticket.engine-parse-gate-non-js-false-positive + BT.ticket.extraction-port-gate-cannot-lie
+
+**What:** Ran both tickets back-to-back via `/sdlc-task --resume`, 5/5 tasks each, no bail.
+`engine-parse-gate-non-js-false-positive` scoped `renderEngineParseChecks()` in `sdlc-task.js`/
+`sdlc-flow.js`/`sdlc-run.js` to `.js` files only (it was flagging non-`.js` files under
+`.claude/workflows/` as engine-parse targets); added
+`scripts/test_engine_parse_gate_extension_filter.py`, gated. `extraction-port-gate-cannot-lie`
+authored [D68](planning/decisions/D68-extraction-port-gate-must-fail-on-deliverable.md), the
+extraction/port-block authoring rule added to `block-registration.md` Step 4 (four required
+constraints: moved-asset content diff, per-file test-count diff, source-tree-measured-at-gate-time
+baseline, gate-shown-capable-of-failing-on-the-deliverable); built
+`scripts/test_extraction_port_gate_rule.py` (6-case proxy fixture suite), gated as
+`extraction-port-gate-rule-tests`.
+
+**Why:** Both were queued follow-ups from prior sessions — the engine-parse gate was producing
+false-positive CHECK entries for non-`.js` workflow files, and the extraction/port rule closes a
+gap where an extraction/port block's AC-set could describe a gate without the rule actually being
+shown capable of failing on the deliverable.
+
+**Refs:** [D68](planning/decisions/D68-extraction-port-gate-must-fail-on-deliverable.md). `/close-out`
+ran clean: 19/19 `harness.json` gating checks + diff-scoped emoji gate pass; coverage scan found no
+gap (only source file in range was the test file itself); doc sweep found nothing stale or missing.
 
 ## [2026-08-17]
 
