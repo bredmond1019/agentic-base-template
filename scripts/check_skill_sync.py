@@ -55,11 +55,11 @@ ANCHORS = [
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1479, 1598,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 889, 1056,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 892, 1059,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "triage-bail-taxonomy", 1216, 1454,
+    (".claude/workflows/sdlc-flow.js", "triage-bail-taxonomy", 1219, 1457,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 1965, 2119,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 1968, 2122,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 
