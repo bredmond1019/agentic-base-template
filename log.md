@@ -9,6 +9,21 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-19]
 
+Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` a fourth time (tasks 1-6). Tasks 1 and 2 re-verified clean again. Task 3 re-verified the prior deletion of `sdlc-block.js`/`sdlc-run.js` (commit a547258) is correct and complete, but the run again hit the CHECK engine-parse-safety failure quoting `Cannot find module .../sdlc-block.js` and `.../sdlc-run.js`, with no progress since the prior attempt's byte-identical failure. Re-ran the guarded shell snippet exactly as rendered by `sdlc-flow.js`'s `renderEngineParseChecks` against worktree HEAD (48dc4c2): both files print "does not exist (deleted by this task) -- nothing to parse" and exit 0, confirming the guarded gate itself already passes. A bare unguarded `node --check` on the same deleted paths reproduces the exact `MODULE_NOT_FOUND` text quoted in the failure, so the failure is coming from something bypassing the guarded template rather than from the gate mechanism. Tasks 4, 5, 6 were not run. Verdict: **BAILED** — needs an operator to confirm which command the test stage is actually executing for this check, since the guarded rendering path is confirmed clean. Next: operator investigates the test-stage command path, then resume from Task 3 (or later) accordingly.
+
+```
+48dc4c2 chore: wrap up BT.ticket.retire-unused-engines
+a4ff406 chore: wrap up BT.ticket.retire-unused-engines
+7ff26ec chore: wrap up BT.ticket.retire-unused-engines
+86fd6fd feat: implement BT.ticket.retire-unused-engines-task3
+74accaf chore: init worktree BT.ticket.retire-unused-engines-flow
+1f125d2 fix(harness): --update re-stamped drifted anchors instead of relocating them
+3d4d0de fix(engines): tell the test agent not to substitute its own node --check
+cd15c51 fix(engines): a task that deletes an engine can now pass its own parse gate
+```
+
+## [run: 2026-08-19]
+
 Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` a third time (tasks 1-6). Tasks 1 and 2 re-verified clean again. Task 3 re-verified the prior attempt's deletion of `sdlc-block.js`/`sdlc-run.js` (commit a547258, already on this worktree's HEAD) is correct and complete, but hit the same CHECK 21/22 engine-parse-safety failure as attempt 1 — byte-identical text, no progress made. Re-ran the guarded shell snippet exactly as rendered by `sdlc-flow.js`/`sdlc-task.js`'s `renderEngineParseChecks` for `sdlc-block.js` and `sdlc-run.js`: it exits 0 (file absent → "nothing to parse", not an error). A plain unguarded `node --check` on the same deleted paths reproduces the exact `MODULE_NOT_FOUND` text seen in CHECK 21/22, so the failure is coming from how the test/triage stage evaluates a deleted file, not from the actual gate mechanism, which already passes. This is the same structural gap the ticket already bailed on once before — `sdlc-flow.js`'s own hardcoded per-task-file engine-parse-safety gate runs `node --check` on every `.js` path listed in task 3's `tasks.json` `files[]`, and no bounded fix exists within this ticket's scope. Tasks 4, 5, 6 were not run. Verdict: **BAILED** — needs an operator decision on how to reconcile a file-deleting task's `files[]` with this gate; a third identical retry will not resolve it. Next: operator decides the reconciliation approach, then resume from Task 3 (or later) accordingly.
 
 ```
