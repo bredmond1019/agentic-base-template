@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -146,20 +147,43 @@ class StaleEntryExpiry(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def _write_raw_lock(self, repo: str, pid: int, started_at: float) -> None:
+    def _write_raw_lock(
+        self, repo: str, pid: int, started_at: float, pid_source: str = "self"
+    ) -> None:
         path = Path(self.lock_dir) / f"{repo}__{pid}.json"
-        path.write_text(json.dumps({"repo": repo, "pid": pid, "started_at": started_at}))
+        path.write_text(
+            json.dumps(
+                {"repo": repo, "pid": pid, "pid_source": pid_source, "started_at": started_at}
+            )
+        )
 
-    def test_dead_pid_entry_expires_and_does_not_block_the_fleet(self) -> None:
-        # A pid that (almost certainly) does not correspond to a running process.
+    def test_explicit_dead_pid_entry_expires_and_does_not_block_the_fleet(self) -> None:
+        # A pid that (almost certainly) does not correspond to a running process, EXPLICITLY
+        # supplied by whatever caller wrote this entry - pid-liveness only ever applies to
+        # explicit entries.
         dead_pid = 999999
-        self._write_raw_lock("repo-a", dead_pid, time.time())
-        self._write_raw_lock("repo-b", os.getpid(), time.time())
+        self._write_raw_lock("repo-a", dead_pid, time.time(), pid_source="explicit")
+        self._write_raw_lock("repo-b", os.getpid(), time.time(), pid_source="explicit")
 
         # Without the sweep this would be "at capacity"; the dead entry must be swept first.
         r3 = fcc.register("repo-c", pid=os.getpid() + 1, lock_dir_override=self.lock_dir)
         self.assertTrue(r3.allowed)
         self.assertEqual(sorted(r3.active), ["repo-b", "repo-c"])
+
+    def test_self_entry_with_dead_pid_is_NOT_swept_by_pid_liveness(self) -> None:
+        # A "self" entry's pid is the short-lived writer process's own os.getpid() - it is
+        # ALWAYS gone by the time a later, separate process checks it. Treating that as a
+        # liveness signal is exactly the dead-on-arrival bug this model fixes: pid-liveness must
+        # never apply to a "self" entry, only TTL + explicit release.
+        dead_pid = 999999
+        self._write_raw_lock("repo-a", dead_pid, time.time(), pid_source="self")
+        self._write_raw_lock("repo-b", os.getpid(), time.time(), pid_source="self")
+
+        # Both are within TTL and neither is "explicit", so both entries must survive the sweep -
+        # the fleet is already at the 2-lane cap.
+        r3 = fcc.register("repo-c", pid=os.getpid() + 1, lock_dir_override=self.lock_dir)
+        self.assertFalse(r3.allowed)
+        self.assertEqual(sorted(r3.active), ["repo-a", "repo-b"])
 
     def test_ttl_expired_entry_is_swept_even_if_pid_is_alive(self) -> None:
         # Use our own pid (definitely alive) but an ancient started_at with a tiny TTL.
@@ -444,6 +468,105 @@ class TieredCapacity(unittest.TestCase):
             ]
         )
         self.assertEqual(rc, 0)
+
+
+class CrossProcessSurvival(unittest.TestCase):
+    """Drives fleet_concurrency_check.py through SEPARATE subprocess invocations - the exact
+    dead-on-arrival regression from planning/BT.ticket.fleet-lock-pid-liveness/sdlc/reports/
+    liveness-baseline.md, now asserted as a test. A within-one-process assertion cannot see this
+    bug (register and _sweep_stale share the same live os.getpid() the whole time), which is why
+    the pre-fix suite passed despite the defect. Each `_run` call is its own OS process; by the
+    time a later call's status/register runs, any earlier call's process has already exited.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.lock_dir = str(Path(self._tmp.name) / "locks")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(_MODULE_PATH), *args, "--lock-dir", self.lock_dir],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_registered_lane_survives_a_later_separate_process_status_call(self) -> None:
+        reg = self._run("register", "--repo", "probe-dead-on-arrival")
+        self.assertEqual(reg.returncode, 0)
+        reg_out = json.loads(reg.stdout)
+        self.assertTrue(reg_out["allowed"])
+        self.assertIn("probe-dead-on-arrival", reg_out["active"])
+
+        # A SEPARATE, later process. The `register` process above has already exited by now, so
+        # under the pre-fix model (which trusted os.getpid() of the writer as the liveness
+        # signal) this entry would already be gone.
+        stat = self._run("status")
+        self.assertEqual(stat.returncode, 0)
+        stat_out = json.loads(stat.stdout)
+        self.assertTrue(any("probe-dead-on-arrival" in entry for entry in stat_out["active"]))
+
+    def test_nplus1_registration_across_separate_processes_is_refused(self) -> None:
+        r1 = self._run("register", "--repo", "cross-a")
+        r2 = self._run("register", "--repo", "cross-b")
+        self.assertEqual(r1.returncode, 0)
+        self.assertEqual(r2.returncode, 0)
+
+        # A third, in a THIRD separate process, while the first two lanes' registering processes
+        # have both already exited - capacity must still be enforced.
+        r3 = self._run("register", "--repo", "cross-c")
+        self.assertEqual(r3.returncode, 3)
+        r3_out = json.loads(r3.stdout)
+        self.assertFalse(r3_out["allowed"])
+        self.assertEqual(sorted(r3_out["active"]), ["cross-a", "cross-b"])
+
+    def test_reregister_across_separate_processes_refreshes_heartbeat_without_new_slot(
+        self,
+    ) -> None:
+        r1 = self._run("register", "--repo", "heartbeat-a")
+        self.assertEqual(r1.returncode, 0)
+
+        lock_files = list(Path(self.lock_dir).glob("heartbeat-a__*.json"))
+        self.assertEqual(len(lock_files), 1)
+        first_started_at = json.loads(lock_files[0].read_text())["started_at"]
+
+        time.sleep(0.05)
+
+        # Re-register the SAME repo from a different process. Since no explicit --pid was passed
+        # either time, both write under the "self" pid convention this CLI uses today
+        # (os.getpid() of whichever process is running) - but the lock filename is keyed on
+        # repo+pid, so a genuinely different process pid would create a second file. What must
+        # hold regardless is that the fleet never reports more than one active entry for this
+        # repo+category, and an explicit heartbeat re-register of the same file bumps started_at.
+        same_pid = json.loads(lock_files[0].read_text())["pid"]
+        r2 = self._run("register", "--repo", "heartbeat-a", "--pid", str(same_pid))
+        self.assertEqual(r2.returncode, 0)
+        r2_out = json.loads(r2.stdout)
+        self.assertEqual(r2_out["active"].count("heartbeat-a"), 1)
+
+        second_started_at = json.loads(lock_files[0].read_text())["started_at"]
+        self.assertGreater(second_started_at, first_started_at)
+
+    def test_release_across_separate_processes_removes_exactly_its_own_entry(self) -> None:
+        r1 = self._run("register", "--repo", "release-a")
+        r1_out = json.loads(r1.stdout)
+        lock_files = list(Path(self.lock_dir).glob("release-a__*.json"))
+        self.assertEqual(len(lock_files), 1)
+        pid = json.loads(lock_files[0].read_text())["pid"]
+
+        r2 = self._run("register", "--repo", "release-b")
+        self.assertEqual(r2.returncode, 0)
+
+        rel = self._run("release", "--repo", "release-a", "--pid", str(pid))
+        self.assertEqual(rel.returncode, 0)
+        self.assertFalse((Path(self.lock_dir) / f"release-a__{pid}.json").exists())
+
+        stat = self._run("status")
+        stat_out = json.loads(stat.stdout)
+        self.assertTrue(any("release-b" in entry for entry in stat_out["active"]))
+        self.assertFalse(any("release-a" in entry for entry in stat_out["active"]))
 
 
 if __name__ == "__main__":
