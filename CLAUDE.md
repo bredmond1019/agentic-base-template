@@ -145,6 +145,18 @@ customizations are never touched) — keep changes here additive and well-docume
    retires the entry on its first `mev carryover` sweep while the finding is still live, which is
    strictly worse than no predicate.
 
+9. **If it is not in `state.json`, it does not exist.** Everything that has to get done is filed
+   into one of the graph's containers — a block in `tracks[].blocks[]`, an `operator`/`approval`/
+   `block`/`external` edge in a block's `depends_on`, a `carryover[]` entry, a `reference[]` fact,
+   a `backlog[]` row, an `epics[]` entry — and the routing table is at the top of
+   `.claude/workflows/block-registration.md`. A markdown file is where work is *described*; the
+   graph is where it is *held*. Prose gates nothing, sorts nowhere and appears on no board, so an
+   item living only in a plan, a review, a handoff or an `## Open questions` bullet is **lost, not
+   deferred** — six drift tickets filed on disk where the drift detector could not see them, and 30
+   of 202 `carryover[]` entries holding operator work that gates nothing, are the measured version
+   of this. Rules 7 and 8 are two instances of it. Where a document and the graph disagree, the
+   graph wins.
+
 <!-- BEGIN:response-style -->
 ## Response Style
 

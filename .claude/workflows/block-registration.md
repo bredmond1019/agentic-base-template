@@ -23,6 +23,34 @@ record's field contract is `block.schema.json`, next to this file.
 
 ---
 
+## The rule this whole file serves — if it is not in `state.json`, it does not exist
+
+Everything that has to get done lands in `state.json` in **some** shape. A markdown file is where
+work is *described*; the graph is where it is *held*. Prose gates nothing, sorts nowhere, and
+surfaces on no board — so an item that lives only in a plan, a review, a handoff, an
+`## Open questions` bullet or a `note` field is not deferred, it is lost. This is measured, not
+theoretical: six drift tickets were filed on disk where the drift detector could not see them, and
+30 of the fleet's 202 `carryover[]` entries are operator work parked where it gates nothing.
+
+There is a container for every shape of "to be done." Route to one of them, always:
+
+| The thing | Where it goes | Filed by |
+|---|---|---|
+| Work an agent can do | a block in `tracks[].blocks[]` + `planning/blocks/<ID>.json` | `/plan`, `/ticket`, `/chore` |
+| Work only a human can do | `{"type": "operator", slug, exit, start}` in the gated block's `depends_on` | any command; driven by `/begin-session` |
+| A single yes/no on a fixed payload | `{"type": "approval", slug, what, digest}` in `depends_on` | same |
+| A dependency on another repo's work | `{"type": "block", repo, id}` in `depends_on` | same — and **file the other half** |
+| A non-block dependency (hardware, a paid API, a manual step) | `{"type": "external", what}` in `depends_on` | same. Never for work in a fleet repo |
+| A finding that will clear but is not ticketed yet | `carryover[]`, kind `defect` · `deferred` · `drift` · `env` | `/handoff`, `/wrap-up`, `/log-work` |
+| A fact that is permanently true | `reference[]` | same |
+| An idea not yet shaped into work | `backlog[]` (HQ brain) + a `/capture` note | `/backlog-ticket`, `/capture` |
+| A multi-repo initiative | `epics[]` with a `plan` field naming its document (HQ brain) | `/generate-roadmap` |
+
+The document still gets written — the narrative, the reasoning, the cut list are what a document is
+for. But **every actionable item in it also has a row**, and where the two disagree the graph wins.
+
+---
+
 ## Step 1 — Resolve the block ID
 
 Find this repo's `prefix` in `brain.toml` at the brain root (e.g. `MV`). Then:
@@ -63,6 +91,27 @@ item written as prose in a handoff, a `note`, or an `## Open questions` bullet s
 
 For a single reducible yes/no on a fixed payload, use
 `{"type": "approval", "slug", "what", "digest": "sha256:<hex>"}` instead.
+
+**These edges are how a chain sequences around a human, and they are the only mechanism that
+actually blocks.** An operator session is a first-class member of a plan: file it as an edge and
+the work behind it is held until the artifact exists, it inherits that work's effective priority,
+it surfaces in `/next` as the reason nothing is moving, and `/begin-session <slug>` drives it to
+its exit. Nothing else in the graph does that — the same item as prose, a `note`, or a
+`carryover[]` entry gates nothing at all.
+
+**But autonomy is the target, and every edge you file is a chain that stops until you are at the
+keyboard.** So the test is narrow: *can only a human do this?* A credential only the operator
+holds, a decision that is theirs to own, an outward-facing or irreversible action, a physical
+machine, a judgement no evidence available to an agent can settle. If an agent could answer it by
+reading the repo, running the gate, or following an existing decision — it is not an operator
+edge, and filing one anyway converts autonomous work into a queue at the operator's desk.
+
+Two design moves keep the count honest:
+
+- **Shrink the gate.** Prefer one narrow decision with a named artifact over "review this
+  initiative." A gate the operator can close in fifteen minutes closes; a vague one does not.
+- **Bind it late.** Cut blocks so the operator edge sits on the last block that needs it rather
+  than the first block of the chain, and everything ahead of it keeps running unattended.
 
 **B. Does this block depend on work landing in another repo first?** A same-repo "Depends on"
 line never reveals a cross-repo edge. If yes, resolve that repo's `slug` from `brain.toml` and
@@ -350,9 +399,27 @@ PY
 For every row printed, point at the file on disk, or at the block or command that creates it.
 Any you cannot point at gets rewritten as unresolved.
 
+### C6 — Nothing actionable is left in prose
+
+The initiative's own documents — `plan.md`, `roadmap.md`, `sequence.md`, the assessment, the notes,
+the red-team output — accumulate real work in passing: an open question nobody closed, a "we should
+also", a follow-up the red team raised and the author agreed with, a finding with no block. Every
+one of them is invisible the moment the session ends.
+
+Re-read them and route each actionable item to a container from the table at the top of this file —
+a block, an operator or approval edge, a carryover, a reference, a backlog row — **or to the cut
+list with a reason**. Those are the only two legitimate destinations. "Mentioned in the plan" is
+neither.
+
+```bash
+grep -nEi 'TODO|follow[- ]?up|we should|still needs|open question|not covered|left for later'   planning/<slug>/*.md
+```
+
+Every hit is either already a row in `state.json`, or a cut-list line, or a defect to fix now.
+
 ### Report the pass
 
-Say what it read and what it found: blocks scanned, defects per check, what was fixed, and
+Say what it read and what it found: blocks scanned, defects per check (C1–C6), what was fixed, and
 anything left standing as deliberate with its reason. **A pass that reports nothing on a
 multi-repo initiative is a claim** — state it as one, so a reader can tell it ran.
 

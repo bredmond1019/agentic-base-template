@@ -109,6 +109,19 @@ This stage does not author block records or register `state.json`. That is `/pla
    - **owning repo** — and whether it is code, a config/docs change, or an **operator errand**
      (a human action: a credential, a machine visit, a decision). Errands are first-class; they
      block chains and they are invisible if unlisted.
+
+     An errand is not a footnote in the cut — it becomes a `{"type": "operator", slug, exit, start}`
+     edge in `depends_on` at registration, driven by `/begin-session <slug>`, and that edge is the
+     only thing in the graph that actually holds the work behind it. Sequence with them where a
+     human genuinely gates the chain.
+
+     **Aim the cut at autonomy anyway.** Every errand is a place the chain stops until the operator
+     is at the keyboard, so file one only when *only* a human can do it — a credential, an
+     outward-facing or irreversible action, a machine visit, a decision that is theirs to own.
+     Anything an agent could settle by reading the repo, running the gate, or following an existing
+     decision is not an errand. Then make the ones that survive small and late: one narrow decision
+     with a named exit artifact, placed on the last block that needs it rather than the first, so
+     everything ahead of it keeps running unattended.
    - **ships** — the one-line answer to "what can the operator do now"
    - **depends_on** — real edges, including cross-repo and operator edges
    - **files it will touch, by path** — provisional is fine, but named. `/plan` and
@@ -159,6 +172,11 @@ This stage does not author block records or register `state.json`. That is `/pla
      and an enforcement half, a read side and a write side — re-derive each half's `depends_on`
      from what *that half* needs. Inherited edges block the half that never needed them for the
      length of the run. Identical `depends_on` on two rows split from one is the signature.
+   - **Actionable work that exists only in this document.** Open questions, agreed red-team
+     findings, "we should also" lines, and findings with no row. Every one is either a block in the
+     cut (which becomes a `state.json` row at registration), an operator errand, or a line in the
+     cut list with a reason. Nothing that has to get done survives as prose: a markdown file
+     describes work, the graph holds it, and an item with no container is lost rather than deferred.
    - **Operator errands whose exit artifact you cannot point at.** Every errand's exit must name a
      file you can point to on disk, or the row or command that creates it. If you cannot, write
      `UNRESOLVED — operator names the artifact` rather than a plausible-looking path. An invented
@@ -203,7 +221,8 @@ This stage does not author block records or register `state.json`. That is `/pla
       `Repo` without saying so and naming the lane it may not run beside; no path is written by two
       rows in different repos; no cross-repo row is missing its other half; no two rows split from
       one carry identical inherited `depends_on`; no oversized flag is left undecided; and every
-      operator errand's exit names an artifact you can point at, or says `UNRESOLVED`.
+      operator errand's exit names an artifact you can point at, or says `UNRESOLVED`; and every
+      actionable item in this document is a block, an errand, or a cut-list line — never loose prose.
     - Frontmatter `related:` carries ≥1 real `doc_id`.
 
 11. Commit with an explicit pathspec. Report the cut and the next command:
@@ -308,6 +327,7 @@ OK  <command> → <expected output>
 | Split rows with inherited edges | | |
 | Oversized flags left undecided | | |
 | Ungrounded operator exit artifacts | | |
+| Actionable work left only in prose | | |
 
 ## Red team — what survived
 

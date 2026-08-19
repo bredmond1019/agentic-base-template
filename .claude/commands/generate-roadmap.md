@@ -262,6 +262,17 @@ consequence you cannot state is usually not an edge.
 Draw them as ASCII in the roadmap. Six to eight edges is normal for four lanes; twenty means the
 lane split is wrong and should be redrawn.
 
+**The operator lane is a real lane, and it should be the shortest one.** Its gates are what let a
+roadmap sequence correctly around a human instead of pretending one is not needed — each is filed
+as a `{"type": "operator", slug, exit, start}` edge on the block it gates and driven by
+`/begin-session <slug>`. But a roadmap's value is the hours it runs without you: every gate is a
+point where four concurrent lanes can end up waiting on one desk. Keep only the gates where *only*
+a human can act (a credential, an outward-facing or irreversible action, a machine visit, a
+decision that is theirs to own), give each a named exit artifact, and place it on the last block
+that needs it rather than the first — so the lane ahead of it runs unattended. State the count and
+where each falls in the run; a roadmap with a gate early in every lane is a roadmap that runs at
+operator speed.
+
 **Operator gates are edges too.** A block waiting on a DNS record or a human read-through is
 blocked exactly as hard as one waiting on a sibling repo — and unlike a code dependency, nothing in
 the graph models it. Name every one in the lane file *and* in the operator table, with the block it
@@ -303,6 +314,13 @@ table is the signal the lanes may launch.
 > **Registration is not optional bookkeeping.** Tickets filed on disk but absent from `state.json`
 > are invisible to the board, to the generated sequence table, and to `/attention`. This has already
 > happened once here: six tickets about drift, filed where the drift detector could not see them.
+>
+> The rule generalizes past tickets: **everything this roadmap says must happen has a row in
+> `state.json`** — a block, an operator or approval edge, a `carryover[]` entry, a `reference[]`
+> fact, a `backlog[]` row, the `epics[]` entry for the roadmap itself. The document carries the
+> narrative and the reasoning; the graph carries the work. An item that lives only in a lane table's
+> notes column, an operator paragraph, or a "still to decide" line is not scheduled, not sorted, and
+> not on any board — it is lost, not deferred. Where the two disagree, the graph wins.
 
 ---
 
@@ -551,6 +569,10 @@ Then check by hand:
       in both; no two blocks split from one sequence row carry identical inherited `depends_on`;
       every block flagged oversized carries a split-now-or-defer decision; and every operator
       `exit` names an artifact that exists on disk or that a named block or command creates.
+- [ ] **Every actionable item in this roadmap has a `state.json` row** — a block, an operator or
+      approval edge, a carryover, a reference, a backlog row, or the roadmap's own `epics[]` entry —
+      or a cut-list line with a reason. Sweep the document for open questions, "still to decide"
+      lines and agreed findings with no home before handing over.
 - [ ] **No two concurrent lanes write the same path**, and every cross-tree writer (a block whose
       files leave its own repo's tree) names the lane it may not run beside, in both lane files.
 - [ ] Every Definition-of-done item is an observation with a command, not a block ID.

@@ -148,7 +148,8 @@ re-derived anyway (D65).
    correctly-authored single block cannot show: a second repo with no block record (and `external`
    edges standing in for unfiled fleet work), a block whose `files[]` leave its own repo's tree, a
    split row whose halves both inherited the original's `depends_on`, a sizing flag carried forward
-   instead of decided, and an operator `exit` naming an artifact nobody can point at. Report what it
+   instead of decided, an operator `exit` naming an artifact nobody can point at, and actionable
+   work left in prose with no row in `state.json`. Report what it
    found — including "nothing", which on a multi-block initiative is a claim.
 
 8. **Write the narrative** to `planning/<slug>/plan.md` using the Output Format below. The
@@ -173,7 +174,12 @@ re-derived anyway (D65).
      graph node (`mev`'s `W_GRAPH_ISOLATED_NODE`). Use genuine doc_ids only; never invent one. On
      a revise, leave an already-populated `related:` intact.
    - **No `master-plan.md` was authored or edited.** It is generated from the block graph.
-   - **The consistency pass (7b) ran and is reported** — C1–C5, with what it found and what was
+   - **Nothing actionable exists only in this document.** Every open question, follow-up, agreed
+     red-team finding and "we should also" in `plan.md` is either a row in `state.json` — a block,
+     an operator/approval edge, a `carryover[]` entry, a `reference[]` fact, a backlog row — or a
+     cut-list line with a reason. Those are the only two destinations. Prose gates nothing and
+     surfaces on no board, so an item held only here is lost, not deferred.
+   - **The consistency pass (7b) ran and is reported** — C1–C6, with what it found and what was
      left standing deliberately. Specifically: no `depends_on` edge is `{"type": "external"}` for
      work that lives in a fleet repo; every block whose `files[]` reach outside its own repo's tree
      says so and names the lane it may not run beside; no two blocks split from one row carry
@@ -348,7 +354,7 @@ Blocks ready to decompose:
   ...
 
 Pre-plan input:   sequence.md <used | absent> <, departures: ...>
-Consistency pass: C1 <n> · C2 <n> · C3 <n> · C4 <n> · C5 <n> — <fixed | none found>
+Consistency pass: C1 <n> · C2 <n> · C3 <n> · C4 <n> · C5 <n> · C6 <n> — <fixed | none found>
 Handoff test on <first block ID>: PASS | FAIL — <what was missing>
 Red team: <x> attacks landed, <y> rejected
 

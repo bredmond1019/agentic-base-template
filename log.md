@@ -3,9 +3,54 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-18T02:20:33Z
+**Last updated:** 2026-08-19
 
 ---
+
+## [2026-08-19]
+
+### D69 — the initiative-wide consistency pass
+
+**What:** Added Step 7 to `.claude/workflows/block-registration.md` — a pass run **once per
+initiative**, after every block is authored and before registration closes, with five checks read
+across every block at once: C1 a second repo means a second block record (`{"type": "external"}`
+naming a repo in `brain.toml` is an unfiled block, not an external dependency); C2 concurrency
+judged on files touched rather than repos in flight; C3 a split row re-derives each half's
+`depends_on` instead of inheriting the original's; C4 a sizing flag resolved into split-now-or-defer;
+C5 an operator `exit` written `UNRESOLVED` rather than as an invented artifact path. C1/C2/C5 carry
+listing snippets; C3/C4 are judgement. Wired into `/plan` (new step 7b + two self-check properties +
+a report line), `/generate-roadmap` (Step 6's Wave 0 gate, a new Step 4 section assigning lanes on
+files touched, two Step 8 checklist items, a lane-file comment rule for cross-tree writers) and
+`/sequence` (new step 6b sweep over rows, a split decision in step 5, an Exit column on the operator
+errands table, a sweep table in the output format, self-check and report lines). Authored
+[D69](planning/decisions/D69-initiative-wide-consistency-pass.md); brain-side, added the
+"one pass every fan-out needs" section to `docs/how-to-plan-with-agents.md` §9.
+
+**Why:** The `orchestration-extension` roadmap — the first full run of the pre-plan chain — needed
+several post-registration audits. All five defects were of one kind: a constraint that exists only
+*between* rows (a second repo, a concurrent lane, an inherited edge, a prior sizing flag, an
+ungrounded artifact), invisible to the per-row agent that authored its own row correctly. Three of
+five agents had the right instinct on the cross-repo half and wrote `external` rather than inventing
+an ID; nothing turned that correct refusal into filed work.
+
+**Also:** made operator sessions explicit as chain members in the same three commands —
+`block-registration.md` Step 2A, `/sequence` step 5's errand bullet, `/generate-roadmap` Step 5 —
+with the autonomy bias stated alongside: an operator edge is the only mechanism that actually holds
+the work behind it (and `/begin-session` drives it), but every gate is a point where the run waits
+on one desk, so file one only where *only* a human can act, then shrink it (one decision, one named
+exit artifact) and bind it late (the last block that needs it, not the first).
+
+**Also:** added C6 (nothing actionable left in prose) and the rule it serves — **if it is not in
+`state.json`, it does not exist** — as the opening section of `block-registration.md`, with the
+container routing table (block · operator/approval/block/external edge · `carryover[]` ·
+`reference[]` · `backlog[]` · `epics[]`) and the two legitimate destinations for any item: a row, or
+the cut list with a reason. Mirrored as standing rule 9 in this repo's `CLAUDE.md`, as a section in
+HQ's, as self-check properties in `/plan`, `/sequence` and `/generate-roadmap`, and as a bullet in
+`docs/how-to-plan-with-agents.md` §9.
+
+**Not done:** no mechanical gate. A proxy fixture suite in the shape of
+`scripts/test_extraction_port_gate_rule.py` is the follow-up; D69 states this explicitly rather than
+implying the rule is enforced.
 
 ## [2026-08-18]
 
