@@ -22,6 +22,7 @@ Run: python3 scripts/test_engine_parse_gate_extension_filter.py
 from __future__ import annotations
 
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -146,8 +147,11 @@ class MixedInputRendersOnlyTheJsPath(unittest.TestCase):
         for engine in ALL_ENGINES:
             with self.subTest(engine=engine):
                 rendered = run_render(engine, [JS_PATH] + NON_JS_PATHS)
+                # Count CHECK-block headers, not "node --check" occurrences: the block's prose
+                # legitimately names the command more than once when warning the test agent not
+                # to substitute its own unguarded form.
                 self.assertEqual(
-                    rendered.count("node --check"), 1,
+                    len(re.findall(r"^CHECK \d+ \u2014 engine-parse-safety", rendered, re.M)), 1,
                     f"{engine}: expected exactly one CHECK block, got: {rendered!r}",
                 )
                 self.assertIn(
