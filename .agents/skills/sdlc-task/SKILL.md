@@ -210,7 +210,10 @@ Run everything below from the **main repo root** unless noted.
      - If thin: **abort immediately** — `ABORTED (D19)`, report the reason, and tell the user to flesh
        out the spec (or `/generate-tasks --force`) and re-run. Do not proceed to Step 2.
    - Capture the **emoji-gate diff base**: `baseSha = git rev-parse --short HEAD` — the HEAD sha as it
-     stands right now, before any task commits. Every later test stage diffs against this sha.
+     stands right now, before any task commits. The emoji gate itself now diffs each of THIS run's
+     own recorded commit SHAs against its own parent, not `baseSha..HEAD`; `baseSha` survives only
+     as the cannot-scope fallback check (Step 6 below) and as `state.base_sha` for `/close-out`'s
+     in-place fallback.
 - If the spec file is missing entirely: abort — `Missing spec`, tell the user to run
   `/generate-tasks <blockId>` (and `/breakdown`), commit, then re-run.
 
@@ -396,11 +399,17 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
        - `forbidden-pattern-scan`: for every `rules[]` entry, grep `pattern` over `paths` (optionally
          minus an `allowlistPattern`); the check passes only if EVERY rule is clean.
      - **Always additionally run the emoji-gate** (a harness rule, unconditional — not read from
-       `harness.json`): DIFF-SCOPED — it judges only lines **added** by this task, never a whole
-       changed file, so a legacy file's pre-existing emoji does not fail a diff that never touched
-       it. Run `git diff -M -U0 <baseSha>..HEAD -- '*.md' '*.mdx'` and scan only `+` content lines
-       (never the `+++`/`---` header lines) for emoji; a pure rename with no added content lines
-       passes, a brand-new file with an emoji fails (its added lines are its whole content).
+       `harness.json`): DIFF-SCOPED to this run's own recorded commit SHAs, never the whole
+       `<baseSha>..HEAD` range — it judges only lines **added** by commits THIS run itself made, so
+       neither a legacy file's pre-existing emoji nor a concurrent sibling session's commit on a
+       shared in-place branch can fail a diff this run never touched. For each commit SHA recorded
+       in `state.tasks[].commit` (in memory, not re-read from disk — disk writes only happen after
+       a task passes, and this gate runs after the commit is made but before the write), run
+       `git diff -M -U0 <commit>^..<commit> -- '*.md' '*.mdx'` and scan only `+` content lines
+       (never the `+++`/`---` header lines) for emoji. If no commits are recorded but
+       `<baseSha>..HEAD` is non-empty, refuse to pass — an unscoped range is a sign that the
+       run-state never initialized the commit list correctly. A pure rename with no added content
+       lines passes, a brand-new file with an emoji fails (its added lines are its whole content).
      - The task PASSES this attempt only if every gating check passed AND the emoji gate is clean.
    - **On pass**: mark the task `passed`, record which check set validated it, and stop the attempt
      loop for this task (do not run further attempts).

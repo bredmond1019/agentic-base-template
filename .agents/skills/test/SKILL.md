@@ -84,7 +84,11 @@ For each entry in `validation.checks[]`, run `command` and record:
 
 **Emoji prohibition** — hard FAIL if this work ADDS a line containing an emoji to any markdown
 file. DIFF-SCOPED: only lines added by this work are judged, never a whole changed file — a legacy
-file's pre-existing emoji does not fail a diff that never touched it:
+file's pre-existing emoji does not fail a diff that never touched it. This site stays on the
+**base-ref range** (`main..HEAD`) by design, not the run-state-scoped commit-SHA form used by
+`sdlc-task.js`/`sdlc-flow.js`: `/test` is operator-invoked directly against a feature branch cut
+from the base, with no run-state file to scope by and no shared-branch concurrent-session window
+to be exposed to (BT.ticket.emoji-gate-diff-window-concurrent-sessions):
 
 ```bash
 python3 - <<'PYEOF'
