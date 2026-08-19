@@ -417,10 +417,18 @@ specced. Verify mechanically before handing over, because neither crosswalk catc
 
 ```bash
 for id in $(grep -vhE '^\s*#|^\s*$' lane-*.txt); do
-  echo "$id" | grep -qE '^[A-Z]{2,3}\.[0-9]+\.[0-9A-Za-z]+$' \
+  echo "$id" | grep -qE '^[A-Z]{2,3}\.[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)?$' \
     || echo "NOT A BLOCK ID: $id"
 done
 ```
+
+The pattern is deliberately permissive about the segments after the prefix, because a block ID has
+three legitimate shapes — `EN.12.A` (roadmap block), `BT.ticket.<slug>`, `HQ.chore.<slug>` — plus
+legacy forms still live in the corpus (`OR.B`, `EN.1-plan.A`, `MV.3B.Q`, `BU.0.A-ccf`). Verified
+against all 792 registered IDs: zero false positives. What it is actually asserting is *a repo
+prefix followed by dot-separated segments*, which is what separates a real ID from `SQ-01`,
+`AR-12` or a bare slug. **Do not tighten it to `[0-9]+\.[0-9A-Za-z]+` — that rejects every ticket
+and chore block**, which is most of what a roadmap of small work contains.
 
 Three things belong in these comments and nowhere else, because they are read at the moment of
 execution rather than at planning time:
