@@ -9,6 +9,22 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-19]
 
+Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` again (tasks 1-6, resuming after the prior run's timeout bail). Tasks 1 and 2 re-verified clean (usage census/baseline recorded, D68 site-table fault-injection proof). Task 3 re-confirmed the prior attempt's deletion of `sdlc-block.js`/`sdlc-run.js` plus their skill guides and gate unwiring was already committed (91f71d4) and gates green, then hit a different, structural blocker on re-verification: `sdlc-flow.js`'s own hardcoded per-task-file engine-parse-safety gate (`renderEngineParseChecks`, lines 701-717 — independent of `planning/harness.json` by design) runs `node --check` on every `.js` path listed in task 3's `tasks.json` `files[]`, which legitimately names `sdlc-block.js` and `sdlc-run.js` since those are exactly the files the task deletes; `node --check` on a now-deleted path throws `MODULE_NOT_FOUND`, reproduced directly and matching CHECK 21/22 verbatim. No bounded fix exists within this ticket's scope — resolving it means either editing `tasks.json`'s `files[]` to omit files the task's own acceptance criteria requires confirming are gone, or modifying the shared `sdlc-flow.js` gate mechanism itself, which is out of scope for a ticket about retiring two other engines. Tasks 4, 5, 6 were not run. Verdict: **BAILED** — this is a structural spec gap the ticket did not anticipate; needs an operator decision on how to reconcile a file-deleting task with sdlc-flow.js's own file-existence gate. Next: operator decides the reconciliation approach (amend tasks.json's files[] scoping vs. amend the shared engine gate), then resume from Task 3 (or later) accordingly.
+
+```
+944a515 chore: wrap up BT.ticket.retire-unused-engines
+91f71d4 feat: implement BT.ticket.retire-unused-engines-task3
+51bb15e chore: init worktree BT.ticket.retire-unused-engines-flow
+501d21e perf(harness): stop roadmap-status-discovery-tests SIGKILLing its caller
+31d48da feat(harness): three more authoring skills — commit, derive, gates
+a4c12f8 feat(harness): mirror the authoring skills onto the vendor-neutral surface
+fff3bcb feat(harness): distribute .claude/skills/ downstream
+af52cd0 feat: implement BT.ticket.fleet-lock-pid-liveness-task3
+```
+
+
+## [run: 2026-08-19]
+
 Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` (retiring `/sdlc-block` and `/sdlc-run`). Task 1 re-derived the fleet-wide usage census and recorded the six baseline gated-check exit codes on `tasks.json`'s task 1 entry (all six exit 0). Task 2 proved all three D68 site-table gates (`check_prompt_templates.py`, `test_emoji_gate_diff_scoped.py`, `test_state_write_validation.py`) correctly go red on deliberate faults injected into the surviving `sdlc-task.js` engine, then restored the tree clean — proof-only, no commit. Task 3 deleted `sdlc-block.js`/`sdlc-run.js` and their `.agents/skills/` guides and unwired every gate reading those files by disk path (`planning/harness.json`'s `engines-parse` plus five scripts, including two — `test_engine_parse_gate_extension_filter.py` and `test_d16_tasks_json_fallback.py` — not named in the ticket's own file list but discovered to read the retired engines directly), keeping every gate green at the commit boundary; it stopped there because `roadmap-status-discovery-tests` (`roadmap_status_discovery.py --self-test`) hung past 5 minutes without finishing in this environment, a pre-existing corpus-wide process-timeout issue the block record itself already flags ("the full 20-check suite exceeds a 2-minute shell timeout and was not measured"), not a defect from this change. Tasks 4, 5, 6 (skill-manifest re-stamp, D39 supersession, README/doc updates) were not run. Verdict: **BAILED** at Task 3 on the hang; not independently re-verified against base state this run. Next: resume from Task 4 in a fresh environment (or with the hanging self-test isolated/skipped), then continue through Task 6.
 
 ```
