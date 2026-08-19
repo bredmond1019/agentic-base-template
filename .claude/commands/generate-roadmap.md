@@ -115,6 +115,27 @@ cites the stale version.
 If the pre-plan folder is more than a few weeks old, or its repos have moved substantially, say so
 and recommend a `/seams` refresh rather than building four concurrent lanes on it.
 
+### When there is no `sequence.md` — the floor
+
+This command stays fully usable without the pre-plan chain; most roadmaps are built from a review,
+an audit or a previous roadmap, and Steps 2–7 handle that unchanged. But a roadmap fans one cut out
+to four concurrent lanes, which multiplies a wrong assumption by four. Three questions are cheap and
+must be answered somewhere in the document, in proportion to the roadmap's size:
+
+1. **Built, half-built, or absent** — for every capability a lane *calls* rather than builds. A
+   capability that exists in source with no production call site is a rewrite wearing a wiring
+   block's clothes, and lane balancing built on that estimate is wrong by a lane.
+2. **The single writer per shared artifact.** Any file, table or state two lanes both touch. This
+   is the one the lane model cannot absorb — two lanes writing one artifact is the contention
+   failure lanes exist to prevent, and it does not surface until the merge.
+3. **What is being deleted first.** Dead surface inherited into four lanes is inherited four times.
+
+**Escalation trigger.** If question 1 cannot be answered for a capability on a lane's critical
+path, or question 2 comes back "unclear" for any shared artifact, **stop and recommend
+`/assess` + `/seams` on that area** rather than authoring lanes over the gap. Name the capability.
+A roadmap is the most expensive artifact to be wrong in — it is the one that dispatches concurrent
+sessions against the mistake.
+
 ---
 
 ## Step 2 — Inventory, and re-verify before you plan on it
@@ -461,6 +482,9 @@ Then check by hand:
 - [ ] The `# ROADMAP:` line in each lane file resolves to this roadmap.
 - [ ] The roadmap is registered in `epics[]` with a `plan` field pointing at `roadmap.md`'s new path.
 - [ ] The cut list is longer than you are comfortable with.
+- [ ] **The floor is answered** — carried from `seams.md`/`sequence.md`, or answered inline per
+      Step 1b: no capability on a lane's critical path is unclassified, and every artifact two lanes
+      touch has one named writer.
 - [ ] **If a `sequence.md` was a source:** every `SQ-nn` ref appears in the roadmap or a lane file
       or has a cut-list row; every `candidate` row is in Wave 0; every wave exit line survived into
       the Definition of done as a command; every departure from the authored cut is stated with a
