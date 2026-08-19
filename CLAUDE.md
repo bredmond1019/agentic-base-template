@@ -129,6 +129,22 @@ customizations are never touched) — keep changes here additive and well-docume
    explicitly in the handoff and name who is expected to file it once a `state.json` exists;
    never error, and never silently drop the item.
 
+   **The failure mode is filing it as a `carryover[]` entry instead**, which looks equivalent at
+   write time and behaves nothing alike: a carryover entry gates no block, so the work is never
+   forced. Measured 2026-08-19 across the fleet — **30 of 202 `carryover[]` entries are operator
+   work misfiled this way**, against 46 correctly-filed `operator` edges. `/handoff`, `/wrap-up`,
+   `/log-work` and `/begin-orchestration` all now ask this question *before* offering the
+   `carryover[]` kind table, because that is where the misfiling happens.
+8. **`carryover[]` has exactly four kinds: `defect`, `deferred`, `drift`, `env`** (HQ D72).
+   `constraint` and `known_issue` are **retired** — okf-core preserves them only through its
+   `CarryoverKind::Unknown(String)` fallback so legacy entries still round-trip; never mint new
+   ones. Route at write time to one of three homes, not two: operator-only work to an `operator`
+   edge (rule 7), permanently-true facts to `reference[]`, and only what is left to `carryover[]`.
+   The authoritative field table is `docs/state/state-schema.md`; commands restate only what an
+   agent needs inline. **Never author a typed `clears_when` that is already satisfied** — it
+   retires the entry on its first `mev carryover` sweep while the finding is still live, which is
+   strictly worse than no predicate.
+
 <!-- BEGIN:response-style -->
 ## Response Style
 
