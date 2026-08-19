@@ -493,6 +493,44 @@ Then check by hand:
 Report the lane assignment, the Wave 0 item count, and the cut list. **Do not run `/orchestrate`** —
 this command authors; `/begin-orchestration` executes.
 
+## Session boundary — end here, one fresh session per lane
+
+**This command ends its session, and it does not run anything.** Authoring the concurrency plan and
+driving a lane are different jobs, and the second is not one session but N.
+
+Each lane is **one fresh Opus session, held open for that lane's whole chain.** Fresh because the
+lane agent must read the lane file and the roadmap as written — it is the first reader, and if it
+needs context only this session has, the lane file is underspecified and every other lane has the
+same hole. Held open because the lane agent is the **single writer** for its repo: it owns the run
+record, resolves conflicts, decides the ordinary scope calls, and carries what block 1 taught it
+into block 7. That continuity is the job. The engines spawn their own agent stacks inside it.
+
+Never drive two lanes from one session. The lane model's entire premise is one repo per session.
+
+Close by telling the operator:
+
+```
+Roadmap authored: planning/roadmaps/<slug>/
+  roadmap.md · lane-<a>.txt · lane-<b>.txt · ... · lane-log.jsonl
+Registered in state.json epics[] as <slug>.
+
+Wave 0 is a HARD GATE — <n> items must be filed and registered before any lane
+launches. /orchestrate resolves block IDs from state.json; a lane naming an
+unregistered ID stops or improvises a spec.
+  <the Wave 0 items, or "none — lanes may launch">
+
+Then open ONE FRESH SESSION PER LANE — Opus — each in its own repo directory:
+  cd <repo-a> && /begin-orchestration --roadmap planning/roadmaps/<slug>/roadmap.md --lane <a>
+  cd <repo-b> && /begin-orchestration --roadmap planning/roadmaps/<slug>/roadmap.md --lane <b>
+
+Concurrency: at most 2 browser-automation lanes and 4 native-build lanes at once.
+Start with: <the lanes that may run together, and which repo waits and why>.
+
+Operator gates on this run: <each, with the block it gates>.
+
+I have not run anything. This command authors; /begin-orchestration executes.
+```
+
 ---
 
 ## Traps
