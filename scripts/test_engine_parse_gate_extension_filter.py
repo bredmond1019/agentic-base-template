@@ -22,6 +22,7 @@ Run: python3 scripts/test_engine_parse_gate_extension_filter.py
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -183,6 +184,70 @@ class EmptyInputStillRendersEmpty(unittest.TestCase):
             with self.subTest(engine=engine):
                 rendered = run_render(engine, [])
                 self.assertEqual(rendered, "")
+
+
+class DeletedEngineFileIsNotAParseFailure(unittest.TestCase):
+    """A task that DELETES an SDLC engine legitimately names it in its own tasks.json files[],
+    so this gate would run `node --check` on a path that no longer exists and get
+    MODULE_NOT_FOUND -- a check that can never pass, whatever the task does.
+
+    That is not hypothetical: it bailed BT.ticket.retire-unused-engines twice on 2026-08-19,
+    a ticket whose entire purpose is deleting sdlc-block.js and sdlc-run.js. The only escapes
+    were to lie in files[] (omitting the very files the acceptance criteria say must be gone)
+    or to hand-edit the shared engine mid-run. The gate now guards on existence first: a file
+    that is gone has no syntax to be wrong.
+
+    The two survivors are the only engines that can carry the fix -- sdlc-run.js is itself
+    being retired, so it is excluded here rather than patched.
+    """
+
+    GUARDED_ENGINES = sorted(ENGINES_WITH_CD)
+
+    def test_render_guards_on_existence_before_parsing(self):
+        for engine in self.GUARDED_ENGINES:
+            with self.subTest(engine=engine):
+                rendered = run_render(engine, [".claude/workflows/sdlc-block.js"])
+                self.assertIn(
+                    "if [ -f", rendered,
+                    f"{engine}: engine-parse check must test for the file's existence before "
+                    "running node --check, or a deleting task can never pass its own gate",
+                )
+                self.assertIn("does not exist", rendered)
+                self.assertIn(
+                    "node --check", rendered,
+                    f"{engine}: the guard must still parse the file when it IS present -- "
+                    "guarding must not disable the check",
+                )
+
+    def test_guard_shell_passes_when_absent_and_still_fails_on_bad_syntax(self):
+        """Execute the rendered guard's shell semantics for real: absent -> 0, valid -> 0,
+        syntactically broken -> non-zero. Without the last assertion this suite would happily
+        accept a guard that had been neutered into always passing."""
+        with tempfile.TemporaryDirectory() as tmp:
+            good = os.path.join(tmp, "good.js")
+            bad = os.path.join(tmp, "bad.js")
+            missing = os.path.join(tmp, "missing.js")
+            with open(good, "w", encoding="utf-8") as fh:
+                fh.write("const a = 1\n")
+            with open(bad, "w", encoding="utf-8") as fh:
+                fh.write("const = =\n")
+
+            def guard_exit(path: str) -> int:
+                script = (
+                    f'if [ -f {path} ]; then node --check {path}; '
+                    f'else echo "does not exist"; fi'
+                )
+                return subprocess.run(
+                    ["bash", "-c", script], capture_output=True, text=True
+                ).returncode
+
+            self.assertEqual(guard_exit(missing), 0, "a deleted file must not fail the gate")
+            self.assertEqual(guard_exit(good), 0, "a valid engine must still pass")
+            self.assertNotEqual(
+                guard_exit(bad), 0,
+                "a syntactically broken engine must STILL fail -- the existence guard must not "
+                "have turned this gate into one that cannot fail",
+            )
 
 
 if __name__ == "__main__":

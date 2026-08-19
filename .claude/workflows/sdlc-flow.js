@@ -711,7 +711,7 @@ function renderEngineParseChecks(files, cd, startIndex) {
   return files.map((f, i) => {
     const n = startIndex + i
     return `CHECK ${n} — engine-parse-safety (hardcoded parse-time gate on modified SDLC engine file — mechanism, unconditional on harness.json) [GATING — a failure here blocks the verdict]:
-  ${cd}node --check ${f}
+  ${cd}if [ -f ${f} ]; then node --check ${f}; else echo "engine-parse-safety: ${f} does not exist (deleted by this task) — nothing to parse"; fi
   echo "CHECK${n}_EXIT:$?"`
   }).join('\n\n')
 }
