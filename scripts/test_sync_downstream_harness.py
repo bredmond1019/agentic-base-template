@@ -215,5 +215,46 @@ class EnginesOnlyGuard(unittest.TestCase):
         )
 
 
+class MirroredSkillBodiesMatch(unittest.TestCase):
+    """Repo invariant, not a fixture test: the .agents/skills mirrors of the .claude/skills
+    authoring guides must stay body-identical to their source.
+
+    The mirror exists for the vendor-neutral surface and differs ONLY in frontmatter (folded
+    `description:`, no `allowed-tools:`). It was made by hand because the usual mirror transform is
+    a blind word substitution, and every "claude" string in these bodies is a literal path or
+    filename - `CLAUDE.md` in the corpus-membership rule, `.claude` in skip_dirs. Substituting them
+    makes the documented rules false. This test is what catches that."""
+
+    MIRRORED = ["write-okf-markdown", "edit-state-json"]
+
+    def _body(self, path: Path) -> str:
+        return path.read_text(encoding="utf-8").split("---", 2)[2]
+
+    def test_agents_mirror_body_matches_claude_source(self):
+        root = Path(sync.__file__).resolve().parent.parent
+        checked = 0
+        for slug in self.MIRRORED:
+            src = root / ".claude" / "skills" / slug / "SKILL.md"
+            mirror = root / ".agents" / "skills" / slug / "SKILL.md"
+            if not src.is_file() or not mirror.is_file():
+                continue
+            checked += 1
+            self.assertEqual(
+                self._body(src),
+                self._body(mirror),
+                f"{slug}: .agents mirror body has drifted from its .claude source",
+            )
+        self.assertEqual(checked, len(self.MIRRORED), "a mirrored skill is missing from one surface")
+
+    def test_agents_mirror_drops_claude_only_frontmatter(self):
+        root = Path(sync.__file__).resolve().parent.parent
+        for slug in self.MIRRORED:
+            mirror = root / ".agents" / "skills" / slug / "SKILL.md"
+            if not mirror.is_file():
+                continue
+            fm = mirror.read_text(encoding="utf-8").split("---", 2)[1]
+            self.assertNotIn("allowed-tools", fm, f"{slug}: allowed-tools is Claude-only")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

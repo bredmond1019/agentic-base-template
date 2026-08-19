@@ -313,7 +313,18 @@ def hook_files(brain_root: Path) -> list[Path]:
 # sdlc-task/sdlc-flow were in the 2026-08 audit) is never accidentally propagated - widen this
 # deliberately, per-slug, once a guide has actually been checked. sdlc-run/sdlc-block are NOT yet
 # in this list - their SKILL.md guides predate that audit and have not been verified.
-AGENT_SKILL_SLUGS: list[str] = ["sdlc-task", "sdlc-flow"]
+AGENT_SKILL_SLUGS: list[str] = [
+    "sdlc-task",
+    "sdlc-flow",
+    # Mirrors of .claude/skills/<slug>/SKILL.md for the vendor-neutral surface. Their BODIES are
+    # byte-identical to the .claude copies by design and only the frontmatter differs (folded
+    # `description:`, no `allowed-tools:`) - the mirror was made by hand precisely because the
+    # usual blind word substitution corrupts them: every "claude" string in these bodies is a
+    # literal path or filename (`CLAUDE.md` in the corpus-membership rule, `.claude` in
+    # skip_dirs), and rewriting them would make the rules they state false.
+    "write-okf-markdown",
+    "edit-state-json",
+]
 
 
 # The .claude/skills/<slug>/SKILL.md guides this script distributes downstream. Enumerated per-slug
