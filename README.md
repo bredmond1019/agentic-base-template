@@ -131,3 +131,17 @@ project.
 
 - **SDLC Task Wrap-up:** The lightweight `/sdlc-task` workflow engine does not automatically call `/log-work` at the end of a run, which can leave `state.json` open until manually closed.
 - **Decision Propagation:** A formal strategy for propagating architectural decisions (ADRs) to downstream generated projects after generation is a planned enhancement.
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](./LICENSE-APACHE) · <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](./LICENSE-MIT) · <http://opensource.org/licenses/MIT>)
+
+at your option. Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this work by you, as defined in the Apache-2.0 license, shall be dual licensed
+as above, without any additional terms or conditions.
+
+Built for one operator and released because it may be useful to others — there is no support
+obligation, no issue-response SLA, and no stability promise. See HQ decisions D40 and D75.
