@@ -1,3 +1,9 @@
+---
+name: sequence
+description: >
+  Custom skill: sequence
+---
+
 # Sequence — Cut a verified seam map into an ordered set of blocks each of which ships something.
 
 Stage 3 of the pre-plan pipeline: `/assess` → `/seams` → `/sequence` → `/plan`.
@@ -116,11 +122,6 @@ This stage does not author block records or register `state.json`. That is `/pla
    - **the gate that proves it** — and per base-template D68, how that gate is shown capable of
      failing
    - **the risk that would sink it**
-   - **a split decision, whenever anything has already flagged the block as oversized** — a
-     red-team verdict, a decomposition you wrote into its own row ("this is really T3–T9"), a note
-     from `seams.md`. A sizing flag is a decision owed, not a note to carry forward: write
-     *split now* (and cut the rows) or *defer, with the trigger that forces the split later*.
-     A row that ships carrying an unresolved flag ships oversized — that has already happened.
 
    And once per **repo**, not per block: whether that repo's gates are **heavy** and in which
    category. Determine it mechanically, never by memory:
@@ -133,40 +134,6 @@ This stage does not author block records or register `state.json`. That is `/pla
    contract and which re-pins it, and whether a data-contract or workspace-contract version bump is
    required. A cross-repo edge with no named author is the most common source of two half-built
    sides that never meet.
-
-   **A block that spans two repos is two rows, one per repo, each with its own ID.** One row filed
-   under a single owning repo loses the other half: the row closes, its repo's lane is green, and
-   nobody filed the work on the other side. Test every row mechanically, not by memory — does its
-   `Files` column contain a path outside its `Repo`'s tree? If so, either the paths are wrong or a
-   row is missing. Write both rows and the edge between them.
-
-6b. **Cross-block consistency sweep — run it once, over the whole cut, before the red team.**
-   Steps 3–6 are per-row judgements. Every defect below survives a row that is individually
-   correct, because no single row can see it; they are what actually shipped from the cut this
-   step was added for. Sweep the finished table and fix each in place:
-
-   - **A second repo with no row.** Any row whose `Repo` cell names two repos, or whose `Files`
-     leave its own repo's tree, or whose gate's evidence lives in a sibling repo. Each needs the
-     other half filed as its own row, in that repo, with an ID from that repo's `state.json`.
-   - **Files-touched collisions, not just repo collisions.** Lane assignment downstream reasons
-     about *repos in flight*; blocks do not respect that boundary. A `base-template` row editing
-     files under `core/mev/` collides with a live `mev` lane and nothing sees it. Build the
-     path → row map for the whole cut. Two rows in different repos naming the same path is one
-     writer too many — say which row owns it. A row writing outside its own tree keeps the right
-     to do so, but the `Files` cell must say so and the row must name the lane it may not run
-     beside; that sentence is what `/generate-roadmap` schedules on.
-   - **Split rows that kept the whole row's edges.** When you cut one row into two — a config half
-     and an enforcement half, a read side and a write side — re-derive each half's `depends_on`
-     from what *that half* needs. Inherited edges block the half that never needed them for the
-     length of the run. Identical `depends_on` on two rows split from one is the signature.
-   - **Operator errands whose exit artifact you cannot point at.** Every errand's exit must name a
-     file you can point to on disk, or the row or command that creates it. If you cannot, write
-     `UNRESOLVED — operator names the artifact` rather than a plausible-looking path. An invented
-     path (a plist stated nowhere, a rule file that does not exist) satisfies every check this
-     document runs and gates nothing.
-
-   Report the sweep's findings in `sequence.md` — including "none", which on a multi-repo cut is a
-   claim and should read as one.
 
 7. **State the cut list.** What was considered and excluded, with the reason. Make this longer than
    is comfortable — an unstated cut reads as an oversight, gets re-proposed, and is re-litigated.
@@ -199,11 +166,6 @@ This stage does not author block records or register `state.json`. That is `/pla
       real `state.json`, and every `candidate` appears in the Wave 0 table.
     - Every repo has a gate weight determined by running `is-heavy`, not asserted.
     - Every wave exit is a command with an expected output, not a list of closed blocks.
-    - **The 6b sweep ran and its findings are in the document.** No row's `Files` reach outside its
-      `Repo` without saying so and naming the lane it may not run beside; no path is written by two
-      rows in different repos; no cross-repo row is missing its other half; no two rows split from
-      one carry identical inherited `depends_on`; no oversized flag is left undecided; and every
-      operator errand's exit names an artifact you can point at, or says `UNRESOLVED`.
     - Frontmatter `related:` carries ≥1 real `doc_id`.
 
 11. Commit with an explicit pathspec. Report the cut and the next command:
@@ -291,23 +253,13 @@ OK  <command> → <expected output>
 
 ## Operator errands
 
-| # | Errand | Blocks | Exit artifact (pointable, or `UNRESOLVED`) | Why a human |
-|---|---|---|---|---|
+| # | Errand | Blocks | Why a human |
+|---|---|---|---|
 
 ## What is cut, and why
 
 | Candidate | Why it is out |
 |---|---|
-
-## Cross-block consistency sweep
-
-| Check | Findings | What changed |
-|---|---|---|
-| Second repo with no row | | |
-| Files-touched collision / cross-tree writer | | |
-| Split rows with inherited edges | | |
-| Oversized flags left undecided | | |
-| Ungrounded operator exit artifacts | | |
 
 ## Red team — what survived
 
@@ -350,11 +302,10 @@ Block IDs allocated: <per repo, e.g. EN.12.A-EN.13.F (28) · MV.4.A-MV.4.C (3)>
 Repos: <list with gate weight>
 Forks resolved: <k>
 Blocks re-cut for failing the ships-alone test: <list>
-Consistency sweep (6b): <findings per check, or "none">
-Cross-tree writers: <rows whose files leave their own repo, and the lane each may not run beside>
 Red team: <x> landed, <y> rejected
 Handoff test on block 1: PASS | FAIL — <what was missing>
 
 Next:  /plan "<the initiative>"                    (one repo)
        /generate-roadmap <slug> --from planning/<slug>/sequence.md   (several repos)
 ```
+

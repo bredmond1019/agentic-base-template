@@ -16,6 +16,11 @@ that can be checked by observation rather than asserted.
 **Related:** `/generate-master-plan` authors *one repo's* canonical block definitions. This command
 sits above it and spans repos. `/begin-orchestration` drives one lane of the result.
 
+**Upstream:** for work on an existing system, the pre-plan pipeline runs first —
+`/assess` → `/seams` → `/sequence`. Its `sequence.md` is an authored cut, not a body of findings,
+and Step 1b says how to carry it through rather than re-derive it. Method:
+`docs/how-to-plan-with-agents.md` in the brain repo.
+
 **Single-copy command.** This command runs at `BRAIN_ROOT` and is deliberately **not** synced
 downstream by `scripts/sync_downstream_harness.py` (it has no meaning inside a leaf repo) — a
 change here needs no `/sync-downstream-harness` pass.
@@ -27,7 +32,7 @@ change here needs no `/sync-downstream-harness` pass.
 | Flag | Required | Default | What it does |
 |---|---|---|---|
 | `<slug>` | **yes** | — | Roadmap slug. Becomes `planning/roadmaps/<slug>/`. Kebab-case, names the *outcome* not the date. |
-| `--from <path ...>` | no | — | Source documents: a review, an audit, an action register, a previous roadmap. Repeatable. A `consolidated-review.md` emitted by `/consolidate-run` is a valid source. |
+| `--from <path ...>` | no | — | Source documents: a review, an audit, an action register, a previous roadmap. Repeatable. A `consolidated-review.md` emitted by `/consolidate-run` is a valid source, and so is a **`sequence.md` from the pre-plan pipeline** — see "Pre-plan input" below, it is handled differently from the rest. |
 | `--supersedes <path>` | no | — | The roadmap this replaces. Adds the banner to both documents. |
 | `--lanes <n>` | no | `4` | Target concurrent lanes. The real ceiling is operator capacity, not repo count. |
 | `--dry-run` | no | off | Print the lane assignment and cut list; write nothing. |
@@ -57,7 +62,98 @@ in the opening paragraph.
 
 ---
 
+## Step 1b — Pre-plan input: when a `sequence.md` is among the sources
+
+Most `--from` sources are **bodies of findings** — this command inventories them and makes the cut.
+A `sequence.md` from `/assess` → `/seams` → `/sequence` is different in kind: **the cut has already
+been made, against evidence, with the operator's forks already answered.** Treat it as an authored
+input to carry through, not raw material to re-derive. Re-deriving it silently discards a pass that
+resolved decisions this command has no standing to reopen.
+
+When `--from` names a `sequence.md`, also read its siblings — `seams.md`, `assessment.md` and
+`verification.md` in the same folder. **Where `assessment.md` and `verification.md` disagree,
+verification wins**; no claim it marked REFUTED may reach a lane file or a block record.
+
+### What maps to what
+
+| From the pre-plan folder | Lands in the roadmap as |
+|---|---|
+| `sequence.md` wave headings (*what becomes true*) | The **outcomes** (Step 3) — already stated as observable statements |
+| Wave exit lines (a command + expected output) | The **Definition of done**, verbatim. They were authored as observations for exactly this |
+| Blocks marked `registered` | Lane table rows, ready to run |
+| Blocks marked `candidate`, and the Wave 0 table | **Wave 0** registration items, i.e. this command's `[*]` items (Step 6) |
+| `depends_on` edges crossing repos + the cross-repo contract table | **Cross-lane edges** (Step 5), with the contract author naming which side goes first |
+| Operator errands | The **operator lane** and its gates |
+| The cut list | The **cut list** — extend it, never replace it |
+| Repos-and-gate-weight table | Lane assignment and the heavy budget (Step 4) — verify the weights still hold, do not re-derive them |
+| Fork answers with dates | Wave 0 **operator ratifications** |
+| `seams.md` blast radius, half-built classification, what-to-delete-first | The lane table's **notes column** and the lane file's `#` comments. A blast radius is precisely the "trap that has cost a real run" class those comments exist for — it is read at execution time, not planning time |
+| Canonical block IDs (`<PFX>.<phase>.<block>`) | **The identity carried into every lane file, table and `state.json` row.** Take them as allocated; do not re-mint or renumber |
+| `SQ-nn` refs | The **coverage crosswalk** ref scheme only (Step 7), and `#` comments for traceability. Grep them exactly as the check greps `AR-nn` |
+
+### The rules for carrying it through
+
+- **Do not re-cut.** If you depart from `sequence.md`'s block boundaries, ordering, or repo
+  ownership, say so explicitly in the roadmap with the reason. A silent departure means the seam
+  analysis was done and then ignored.
+- **Do not re-open the forks.** They were answered by the operator with a date. If one now looks
+  wrong, stop and say so — do not quietly decide it the other way.
+- **Do not drop the ships-alone property.** Every block arrived carrying a "what the operator can do
+  the day this lands" line. Lane assignment must not merge two blocks into one lane row in a way
+  that loses it, and no wave may be re-cut into "plumbing first, value later."
+- **Never write `SQ-nn` where a block ID belongs.** A lane file's executable lines, a lane table's
+  block column, a `depends_on` edge and a `state.json` row all take the canonical
+  `<PFX>.<phase>.<block>` ID. `SQ-nn` is a row label local to `sequence.md`; it belongs in a `#`
+  comment at most. **Both crosswalks pass on a lane file full of `SQ-nn` lines** — they check that
+  refs appear, not that they resolve — so this defect ships silently and surfaces as a lane that
+  stops on its first block or improvises a spec. It has already shipped once.
+- **If `sequence.md` did not allocate canonical IDs**, stop and send it back rather than minting
+  them here. Allocation requires reading each owning repo's `state.json` for its highest phase, and
+  a roadmap that invents IDs against a graph it did not read produces collisions that only surface
+  at registration.
+- **You still own lane assignment, the heavy budget, isolation, Wave 0 mechanics and the crosswalk.**
+  `/sequence` decides *what* and *in what order*; this command decides *who runs it concurrently
+  without colliding*. That division is the whole reason both exist.
+
+### Freshness, not re-derivation
+
+`sequence.md` carries a date and its evidence carries commit SHAs. Step 2's re-verification still
+applies but changes shape: **re-check whether the pre-plan work has gone stale, rather than redoing
+it.** Concretely — has any repo moved since the SHAs in `assessment.md`; are the `registered` blocks
+still open in `state.json`; do the gate weights still hold; did a sibling roadmap adopt or close one
+of these blocks in the meantime. Record every drift as a Wave 0 correction so nothing downstream
+cites the stale version.
+
+If the pre-plan folder is more than a few weeks old, or its repos have moved substantially, say so
+and recommend a `/seams` refresh rather than building four concurrent lanes on it.
+
+### When there is no `sequence.md` — the floor
+
+This command stays fully usable without the pre-plan chain; most roadmaps are built from a review,
+an audit or a previous roadmap, and Steps 2–7 handle that unchanged. But a roadmap fans one cut out
+to four concurrent lanes, which multiplies a wrong assumption by four. Three questions are cheap and
+must be answered somewhere in the document, in proportion to the roadmap's size:
+
+1. **Built, half-built, or absent** — for every capability a lane *calls* rather than builds. A
+   capability that exists in source with no production call site is a rewrite wearing a wiring
+   block's clothes, and lane balancing built on that estimate is wrong by a lane.
+2. **The single writer per shared artifact.** Any file, table or state two lanes both touch. This
+   is the one the lane model cannot absorb — two lanes writing one artifact is the contention
+   failure lanes exist to prevent, and it does not surface until the merge.
+3. **What is being deleted first.** Dead surface inherited into four lanes is inherited four times.
+
+**Escalation trigger.** If question 1 cannot be answered for a capability on a lane's critical
+path, or question 2 comes back "unclear" for any shared artifact, **stop and recommend
+`/assess` + `/seams` on that area** rather than authoring lanes over the gap. Name the capability.
+A roadmap is the most expensive artifact to be wrong in — it is the one that dispatches concurrent
+sessions against the mistake.
+
+---
+
 ## Step 2 — Inventory, and re-verify before you plan on it
+
+**If a `sequence.md` is among the sources, Step 1b governs and this step narrows to freshness.**
+The inventory below is for roadmaps built from findings rather than from an authored cut.
 
 Collect candidate work from, in this order of trustworthiness:
 
@@ -79,6 +175,9 @@ Collect candidate work from, in this order of trustworthiness:
 ---
 
 ## Step 3 — Choose the outcomes, then cut everything else
+
+**If Step 1b applied, the outcomes are `sequence.md`'s wave headings** — they were authored as
+"what becomes true" statements for this purpose. Restate them here; do not invent a parallel set.
 
 **Three to five outcomes, each stated as something that becomes true**, not as an area of work.
 "The demo is live and browser-verified" is an outcome. "Demo hardening" is a theme, and themes do
@@ -159,6 +258,12 @@ graph does not degrade gracefully — the lane stops, or worse, improvises a spe
 So every `[*]` item from Step 2.3 must be **filed as a ticket and registered in its repo's
 `state.json` before any lane launches.** Make that Wave 0 and say it is a hard gate.
 
+**From a pre-plan folder, `[*]` is already computed for you:** every row `sequence.md` marks
+`candidate`, listed in its own Wave 0 table. Re-check each against the live `state.json` rather than
+trusting the column — a sibling lane may have registered or closed one since. A row marked
+`registered` whose ID is no longer in the graph is a Wave 0 item too, and a more urgent one, because
+nothing in the document will look wrong.
+
 Wave 0 also carries:
 - Any **claim correction** from Step 2's re-verification, before a downstream lane cites it.
 - The **operator ratifications** that gate a lane's first block.
@@ -188,7 +293,7 @@ superseded roadmap). Then, in order:
 | How to use this document | The generated table is authoritative; lane tables are execution order; `[*]` means filed in Wave 0 |
 | Wave 0 | The gate. A table of registration, corrections and operator ratifications |
 | Dependency graph | ASCII lane chains, then the cross-lane edges |
-| The lanes | One table per lane: block, engine, and a **notes column that carries the evidence** — file:line, `AR-nn`, the trap, the thing the last run got wrong |
+| The lanes | One table per lane: block, engine, and a **notes column that carries the evidence** — file:line, `AR-nn`/`SQ-nn`, the trap, the blast radius from `seams.md`, the thing the last run got wrong |
 | Isolation and CPU budget | The policy table plus the two-heavy rule |
 | Operator lane | Every gate, what it gates, and enough detail to act without re-reading a source doc |
 | Coverage crosswalk | **Required whenever `--from` includes a runbook or action register.** One row per source item → where it lands. See below |
@@ -209,8 +314,9 @@ for ref in $(grep -o 'AR-[0-9A-Z]*' <source>.md | sort -u); do
 done
 ```
 
-A citation-style ref (`AR-nn`, `OPEN-n`) in the source makes this a one-liner, which is a good
-reason to insist sources carry them. For items without a ref, grep a distinctive string from each.
+A citation-style ref (`AR-nn`, `OPEN-n`, `SQ-nn`) in the source makes this a one-liner, which is a
+good reason to insist sources carry them — `/sequence` assigns `SQ-nn` for exactly this check, so a
+pre-plan-sourced roadmap always runs it as the one-liner. For items without a ref, grep a distinctive string from each.
 
 **A row with no destination is a bug in the roadmap, not a decision.** If something should be
 dropped, it goes in the cut list with a reason — that is a different row, and a deliberate one.
@@ -248,6 +354,11 @@ that is running now. When a lane file adopts a block this way:
 - The reverse-crosswalk check above should treat any block ID with an `# ORIGIN:` comment as
   resolved, not undocumented, and its consolidation belongs to the roadmap the comment names, not
   to this one.
+
+**When Step 1b applied, the Definition of done is `sequence.md`'s wave exit lines, verbatim.**
+They were authored as commands with expected outputs precisely so they could land here unchanged.
+Add to them if a lane's completion needs an observation the sequence did not name; never replace
+them with block IDs.
 
 **Definition of done must be written as observations.** Not "block X closed" — a block closes when
 its spec is satisfied, which is not the same as the capability working. Prefer a command and its
@@ -300,6 +411,26 @@ was pointed at the right run:
 Then the traps, holds and spec sources as comments, then **bare block IDs, one per line, in
 execution order**. Blank lines and `#` comments are stripped by the reader.
 
+**Those lines are canonical `<PFX>.<phase>.<block>` IDs — `EN.12.A`, `MV.4.B` — and nothing else.**
+Not a `SQ-nn` row ref, not a slug, not a title. `/orchestrate` resolves each line against
+`state.json`; a line it cannot find stops the lane or makes it improvise a spec for work nobody
+specced. Verify mechanically before handing over, because neither crosswalk catches this:
+
+```bash
+for id in $(grep -vhE '^\s*#|^\s*$' lane-*.txt); do
+  echo "$id" | grep -qE '^[A-Z]{2,3}\.[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)?$' \
+    || echo "NOT A BLOCK ID: $id"
+done
+```
+
+The pattern is deliberately permissive about the segments after the prefix, because a block ID has
+three legitimate shapes — `EN.12.A` (roadmap block), `BT.ticket.<slug>`, `HQ.chore.<slug>` — plus
+legacy forms still live in the corpus (`OR.B`, `EN.1-plan.A`, `MV.3B.Q`, `BU.0.A-ccf`). Verified
+against all 792 registered IDs: zero false positives. What it is actually asserting is *a repo
+prefix followed by dot-separated segments*, which is what separates a real ID from `SQ-01`,
+`AR-12` or a bare slug. **Do not tighten it to `[0-9]+\.[0-9A-Za-z]+` — that rejects every ticket
+and chore block**, which is most of what a roadmap of small work contains.
+
 Three things belong in these comments and nowhere else, because they are read at the moment of
 execution rather than at planning time:
 
@@ -308,6 +439,11 @@ execution rather than at planning time:
   that cannot resolve a spec improvises one.
 - **The traps that have cost a real run in that repo.** Not general advice; specific, cited, and
   ideally with the failure it caused.
+- **The blast radius of any seam this lane touches**, when the roadmap came from a pre-plan folder.
+  `seams.md` states, per attachment point, what else breaks if it is wrong and who owns the write on
+  either side. That is read at the moment a block is implemented, not at planning time, which is
+  what these comments are for. A block touching a seam with a **single named writer** must say so —
+  two lanes writing one artifact is the contention failure the whole lane model exists to prevent.
 - **`# ORIGIN: <roadmap path>` above any adopted block** — a block ID that belongs to a *different*
   roadmap's outcomes and Wave 0, placed in this lane only because the lane already exists here. See
   "Cross-roadmap block adoption" above. Every block ID a lane file names either appears in this
@@ -363,6 +499,9 @@ bastion validate-brain --state
 
 Then check by hand:
 
+- [ ] **Every executable line in every lane file matches `<PFX>.<phase>.<block>`** — run the shape
+      check above. A `SQ-nn` ref, a slug or a title on one of those lines makes the lane unrunnable,
+      and both crosswalks pass anyway.
 - [ ] Every block ID in every lane file exists in a `state.json`, **or** is marked `[*]` and appears in Wave 0.
 - [ ] No lane has more than one heavy repo live at a time, given the stated ordering.
 - [ ] Every cross-lane edge in the ASCII appears in the lane file of the *waiting* lane.
@@ -378,9 +517,54 @@ Then check by hand:
 - [ ] The `# ROADMAP:` line in each lane file resolves to this roadmap.
 - [ ] The roadmap is registered in `epics[]` with a `plan` field pointing at `roadmap.md`'s new path.
 - [ ] The cut list is longer than you are comfortable with.
+- [ ] **The floor is answered** — carried from `seams.md`/`sequence.md`, or answered inline per
+      Step 1b: no capability on a lane's critical path is unclassified, and every artifact two lanes
+      touch has one named writer.
+- [ ] **If a `sequence.md` was a source:** every `SQ-nn` ref appears in the roadmap or a lane file
+      or has a cut-list row; every `candidate` row is in Wave 0; every wave exit line survived into
+      the Definition of done as a command; every departure from the authored cut is stated with a
+      reason; and no fork was silently re-decided.
 
 Report the lane assignment, the Wave 0 item count, and the cut list. **Do not run `/orchestrate`** —
 this command authors; `/begin-orchestration` executes.
+
+## Session boundary — end here, one fresh session per lane
+
+**This command ends its session, and it does not run anything.** Authoring the concurrency plan and
+driving a lane are different jobs, and the second is not one session but N.
+
+Each lane is **one fresh Opus session, held open for that lane's whole chain.** Fresh because the
+lane agent must read the lane file and the roadmap as written — it is the first reader, and if it
+needs context only this session has, the lane file is underspecified and every other lane has the
+same hole. Held open because the lane agent is the **single writer** for its repo: it owns the run
+record, resolves conflicts, decides the ordinary scope calls, and carries what block 1 taught it
+into block 7. That continuity is the job. The engines spawn their own agent stacks inside it.
+
+Never drive two lanes from one session. The lane model's entire premise is one repo per session.
+
+Close by telling the operator:
+
+```
+Roadmap authored: planning/roadmaps/<slug>/
+  roadmap.md · lane-<a>.txt · lane-<b>.txt · ... · lane-log.jsonl
+Registered in state.json epics[] as <slug>.
+
+Wave 0 is a HARD GATE — <n> items must be filed and registered before any lane
+launches. /orchestrate resolves block IDs from state.json; a lane naming an
+unregistered ID stops or improvises a spec.
+  <the Wave 0 items, or "none — lanes may launch">
+
+Then open ONE FRESH SESSION PER LANE — Opus — each in its own repo directory:
+  cd <repo-a> && /begin-orchestration --roadmap planning/roadmaps/<slug>/roadmap.md --lane <a>
+  cd <repo-b> && /begin-orchestration --roadmap planning/roadmaps/<slug>/roadmap.md --lane <b>
+
+Concurrency: at most 2 browser-automation lanes and 4 native-build lanes at once.
+Start with: <the lanes that may run together, and which repo waits and why>.
+
+Operator gates on this run: <each, with the block it gates>.
+
+I have not run anything. This command authors; /begin-orchestration executes.
+```
 
 ---
 

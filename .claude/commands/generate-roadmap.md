@@ -85,6 +85,7 @@ verification wins**; no claim it marked REFUTED may reach a lane file or a block
 | Operator errands | The **operator lane** and its gates |
 | The cut list | The **cut list** — extend it, never replace it |
 | Repos-and-gate-weight table | Lane assignment and the heavy budget (Step 4) — verify the weights still hold, do not re-derive them |
+| The 6b consistency sweep — cross-tree writers, single-writer calls, split-row edges | **Lane-assignment input, not commentary** (Step 4). A block whose files leave its own repo's tree cannot be scheduled from its `Repo` cell alone, and that is the one collision the lane model cannot see |
 | Fork answers with dates | Wave 0 **operator ratifications** |
 | `seams.md` blast radius, half-built classification, what-to-delete-first | The lane table's **notes column** and the lane file's `#` comments. A blast radius is precisely the "trap that has cost a real run" class those comments exist for — it is read at execution time, not planning time |
 | Canonical block IDs (`<PFX>.<phase>.<block>`) | **The identity carried into every lane file, table and `state.json` row.** Take them as allocated; do not re-mint or renumber |
@@ -202,6 +203,26 @@ repo can never run in parallel however a wave grid groups them. So:
 - "N concurrent agents" means N sessions in N *different* repos.
 - Balance lanes by the *longest repo chain*, not by block count.
 
+### Lane collisions are decided by files touched, not by the repo field
+
+The lane unit is the repo, but **the thing two lanes actually collide on is a path**. A
+`base-template` block that edits files under `core/mev/` runs concurrently with a live `mev` lane
+and nothing detects it: the registry was told two different repos are in flight, which is true and
+irrelevant. `fleet_concurrency_check.py` reasons about repos and cannot see this either.
+
+So before assigning lanes, read every block's `files[]` (or `sequence.md`'s `Files` column) and
+build the path → block map for the whole roadmap:
+
+- **A block whose files leave its own repo's tree** is a cross-tree writer. Name it in its lane
+  table's notes column and in its lane file, with the lane it may not run beside. Then sequence
+  those two lanes so they are not live together, and say so in the lane file of *both*.
+- **Two blocks in different repos naming the same path** is two writers on one artifact — the
+  contention failure the lane model exists to prevent. One of them is wrong; resolve it here,
+  before four sessions are dispatched against it.
+
+If `sequence.md` ran its 6b sweep, this is already computed — verify it still holds rather than
+re-deriving it. If it did not, this step is where it happens.
+
 ### The heavy budget is the real constraint
 
 **At most two heavy-gate repos concurrently.** Heavy = its `planning/harness.json` gates include a
@@ -262,6 +283,14 @@ So every `[*]` item from Step 2.3 must be **filed as a ticket and registered in 
 trusting the column — a sibling lane may have registered or closed one since. A row marked
 `registered` whose ID is no longer in the graph is a Wave 0 item too, and a more urgent one, because
 nothing in the document will look wrong.
+
+**Registration does not close until the initiative-wide consistency pass has run** —
+Step 7 of `.claude/workflows/block-registration.md`, once over every block in this roadmap, across
+every repo, never per block. A roadmap is exactly the case it exists for: N authoring agents, one
+row each, none of them able to see a second repo, a concurrent lane, an inherited edge, a prior
+sizing flag, or an ungrounded operator artifact. Its five checks (C1–C5) are the last point at
+which any of those is cheap to fix; after Wave 0 closes, four concurrent lanes are running on them.
+Record its findings in Wave 0 — including "none".
 
 Wave 0 also carries:
 - Any **claim correction** from Step 2's re-verification, before a downstream lane cites it.
@@ -443,6 +472,9 @@ execution rather than at planning time:
   either side. That is read at the moment a block is implemented, not at planning time, which is
   what these comments are for. A block touching a seam with a **single named writer** must say so —
   two lanes writing one artifact is the contention failure the whole lane model exists to prevent.
+- **Any block that writes outside its own repo's tree**, with the exact paths and the lane it may
+  not run beside. The lane agent is the single writer for its repo, and this is the one write it
+  cannot know about from the repo it is standing in.
 - **`# ORIGIN: <roadmap path>` above any adopted block** — a block ID that belongs to a *different*
   roadmap's outcomes and Wave 0, placed in this lane only because the lane already exists here. See
   "Cross-roadmap block adoption" above. Every block ID a lane file names either appears in this
@@ -512,6 +544,15 @@ Then check by hand:
       does mention it (cross-roadmap adoption).
 - [ ] **No multi-step operator sequence is collapsed into a single link.** A runbook referenced as
       one row loses its steps. Break it out; two of its items probably touch live traffic.
+- [ ] **The initiative-wide consistency pass ran over every block in this roadmap** (Step 7 of
+      `block-registration.md`) and its findings are recorded in Wave 0. In particular: no
+      `depends_on` edge is `{"type": "external"}` for work that lives in a fleet repo (that is an
+      unfiled block, not an external dependency); every block spanning two repos has a block record
+      in both; no two blocks split from one sequence row carry identical inherited `depends_on`;
+      every block flagged oversized carries a split-now-or-defer decision; and every operator
+      `exit` names an artifact that exists on disk or that a named block or command creates.
+- [ ] **No two concurrent lanes write the same path**, and every cross-tree writer (a block whose
+      files leave its own repo's tree) names the lane it may not run beside, in both lane files.
 - [ ] Every Definition-of-done item is an observation with a command, not a block ID.
 - [ ] The `# ROADMAP:` line in each lane file resolves to this roadmap.
 - [ ] The roadmap is registered in `epics[]` with a `plan` field pointing at `roadmap.md`'s new path.

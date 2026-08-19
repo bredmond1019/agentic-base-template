@@ -224,6 +224,140 @@ Then run `mev emit-state --write` to refresh the derived focus, wave tables, and
 
 ---
 
+## Step 7 — The initiative-wide consistency pass
+
+**Run once, after every block in the batch is authored, and before registration closes.
+Not per block.** For a single-block producer (`/ticket`, `/chore`) only C1 and C5 apply, and
+they are cheap.
+
+Every defect this step exists to catch was invisible to the agent that authored its block
+correctly. In the run that motivated it, five authoring agents each produced a defensible row and
+the initiative still registered with a dropped cross-repo half, an undetectable concurrency
+hazard, inherited dependency edges, a known-oversized block, and four invented operator artifacts.
+An agent working one row at a time cannot see a second repo, a concurrent lane, an inherited edge,
+a prior sizing flag, or an ungrounded fact. Only a pass that reads every block of the initiative
+at once can.
+
+Load every block record in this initiative — `planning/blocks/*.json` filtered by `initiative`,
+plus the other repos' records when the cut spans repos — and run all five checks. Each finding is
+a defect, not a preference: fix it, or state in the plan/roadmap why it is deliberate.
+
+### C1 — Two repos means two block records
+
+For every block, ask: does anything about it touch a repo other than its `repo` field? A Repo cell
+naming two, a `files[]` path resolving into another repo's tree, an acceptance criterion whose
+evidence lives in a sibling repo. If yes, that repo needs its own block record carrying its half
+of the work. Nothing downstream catches this — the block closes green and the other half was
+never filed.
+
+**`{"type": "external"}` is not a placeholder for a fleet repo.** An agent that knows the other
+half exists but has no ID for it is right to refuse to invent one — but `external` means a
+*non-block* dependency: hardware, a paid-API budget, a manual step. If its `what` names a repo
+listed in `brain.toml`, the edge is a `{"type": "block", "repo": ..., "id": ...}` and filing the
+other half is the work that produces that ID. **Treat every `external` edge naming a fleet repo as
+an unfiled block**, and file it before registration closes.
+
+```bash
+python3 - <<'PY'
+import json, glob
+for p in sorted(glob.glob("planning/blocks/*.json")):
+    b = json.load(open(p))
+    for d in b.get("depends_on", []):
+        if d.get("type") == "external":
+            print(f'{b["id"]:28} external: {d.get("what","")}')
+PY
+```
+
+Check each printed `what` against `brain.toml`'s repo list by hand. A hit is an unfiled block.
+
+### C2 — Concurrency is a files question, not a repo question
+
+The lane model and `fleet_concurrency_check.py` reason about **repos in flight**. Blocks do not
+respect that boundary: a `base-template` block that edits files under `core/mev/` collides with a
+live `mev` lane, and the registry cannot see it because it was told two *different* repos are
+running.
+
+Build the path→block map for the whole initiative and look for two things:
+
+- **A cross-tree writer** — a block whose `files[]` leave its own repo's tree. Legal, sometimes
+  the right cut, but it must be *declared*: lane assignment downstream is built on the `repo`
+  field and will otherwise schedule it beside the lane it collides with. Name the lane it may not
+  run beside, in the plan and in the lane file.
+- **Two writers, one file** — two blocks in different repos naming the same path. One of them is
+  wrong; give the artifact a single named writer.
+
+```bash
+python3 - <<'PY'
+import json, glob, collections
+m = collections.defaultdict(list)
+for p in glob.glob("planning/blocks/*.json"):
+    b = json.load(open(p))
+    for f in b.get("files", []):
+        path = f if isinstance(f, str) else f.get("path", "")
+        m[path].append((b["id"], b.get("repo")))
+for path, owners in sorted(m.items()):
+    if len({r for _, r in owners}) > 1:
+        print("TWO WRITERS", path, owners)
+PY
+```
+
+Cross-tree writers the script cannot judge for you: read each block's `files[]` against its own
+`repo` and say, per block, whether every path is inside that repo's tree.
+
+### C3 — A split row splits its edges too
+
+When one row becomes two blocks — the config half and the enforcement half, the read side and the
+write side — the halves inherit the row's `depends_on` wholesale. That is almost always wrong for
+at least one of them: the config half does not need what the enforcement half needs, and the false
+edge blocks it for the length of the run.
+
+**Re-derive each half's edges from what that half actually needs**, rather than copying the
+original row's. Two blocks tracing to the same source row with identical `depends_on` sets is the
+signature — treat it as unverified until both have been re-derived.
+
+### C4 — A sizing flag is a decision owed, not a note
+
+If anything upstream says a block is oversized — a red-team pass, a `/sequence` note, an internal
+decomposition listed in its own record ("T3–T9", "this is really four parts") — **registration is
+where that gets decided**, not carried forward. Write the decision and its reason into the block
+record: split it now, or defer with the trigger that would force the split later. A flag that is
+neither acted on nor resolved ships the oversized block, which is exactly what happened.
+
+### C5 — An `exit` artifact you cannot point at
+
+Step 2's rule is already right: `exit` names the artifact whose existence ends the gate. The
+failure mode is not ignorance of it — it is *satisfying* it with an artifact-shaped string. A
+plist path stated nowhere, a rule file that does not exist, a config key nothing reads. It passes
+every check available, because it looks exactly like a grounded answer.
+
+**If you cannot point at the file, or at the block or command that creates it, do not write a
+path.** Write what the operator must produce and leave the exit explicitly unresolved for them to
+name. `"exit": "UNRESOLVED — operator names the artifact; this gate cannot close until they do"`
+blocks visibly and gets fixed. An invented path closes the gate the moment anything with that name
+appears, or never, and nobody can tell which.
+
+```bash
+python3 - <<'PY'
+import json, glob
+for p in sorted(glob.glob("planning/blocks/*.json")):
+    b = json.load(open(p))
+    for d in b.get("depends_on", []):
+        if d.get("type") == "operator":
+            print(f'{b["id"]:28} {d.get("slug","?"):34} exit: {d.get("exit","")}')
+PY
+```
+
+For every row printed, point at the file on disk, or at the block or command that creates it.
+Any you cannot point at gets rewritten as unresolved.
+
+### Report the pass
+
+Say what it read and what it found: blocks scanned, defects per check, what was fixed, and
+anything left standing as deliberate with its reason. **A pass that reports nothing on a
+multi-repo initiative is a claim** — state it as one, so a reader can tell it ran.
+
+---
+
 ## Traps
 
 - **`planning/state.json` round-trips with `ensure_ascii=False`** plus a trailing newline. The

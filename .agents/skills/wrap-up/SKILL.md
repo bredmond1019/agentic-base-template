@@ -19,10 +19,45 @@ $ARGUMENTS — optional free-text note about what was done (passed straight thro
 ## Instructions
 
 1. **Drain any durable caveat first.** If this session surfaced something the next agent must not
-   lose — a constraint, a known-issue/don't-re-investigate fact, an environmental gotcha, or a
-   not-yet-ticketed deferred follow-on — append it to `planning/state.json` `carryover[]` (field shape
-   in `docs/state/state-schema.md`). `/wrap-up` writes no handoff file, so `carryover[]` is the only
-   place this kind of note survives. Skip if the session produced none or the repo has no `state.json`.
+   lose, append it to `planning/state.json` `carryover[]` (field shape in
+   `docs/state/state-schema.md`) with one of these `kind` values:
+
+   | kind | for |
+   |---|---|
+   | `defect` | a real unticketed bug with a fix — not yet filed as its own block |
+   | `deferred` | a real follow-on you haven't ticketed yet |
+   | `drift` | a doc, comment, block title or generated surface that has fallen out of step with the code or the graph |
+   | `env` | a transient environmental caveat ("installed binary is stale, rebuild first") |
+
+   `constraint` and `known_issue` are **retired** (HQ D72) — okf-core preserves them only through its
+   `Unknown(String)` fallback so legacy entries still round-trip. Do not mint new entries with either.
+
+   `/wrap-up` writes no handoff file, so `carryover[]` is the only place this kind of note
+   survives. Skip if the session produced none or the repo has no `state.json`.
+
+   **Route at write time — three destinations, not two.** Ask both questions before appending:
+
+   1. **Can only a human do this?** A decision only the operator can make, a credential only they
+      hold, a judgement call, a thing they must look at — that is **not** a `carryover[]` entry. File
+      it as a `{"type":"operator", slug, exit, start, what?}` edge on the block it gates, per the
+      operator-work rule below. **Why it matters here and not only there:** a carryover entry gates
+      nothing, so operator work parked in it is never forced; an operator edge blocks the work standing
+      behind it, which is what gets it done. Measured 2026-08-19 — **30 of the fleet's 202 `carryover[]`
+      entries are operator work misfiled this way**, filed as `defect` or `deferred` because the table
+      above offers no row meaning "not an agent's to do."
+   2. **Is it permanently true?** A gotcha still true next month, a deliberate non-fix nobody intends to
+      reverse, a load-bearing measured number someone will need again — that belongs in `reference[]`.
+      A fact with no `clears_when` because nothing will ever make it stop being true is the signal.
+      See `docs/state/reference-container-schema.md` for its field table and kind vocabulary.
+
+   Only what survives both questions is a `carryover[]` entry: work-class findings that eventually
+   clear — an unticketed defect, a deferred follow-on, a drifted surface, a transient env caveat.
+
+   **Run `mev validate-state planning/state.json` immediately after this step's write — this is
+   a mandatory step, not a suggestion to consider.** Treat a nonzero exit as blocking: read the
+   reported error, fix the entry, and re-run until it passes. Skip only if the repo has no
+   `planning/state.json`.
+
    **Cross-Repo Constraints Rule:** If a completed block spawns follow-up work in a different repo, **DO NOT** record it as a local `carryover`. You must actively open the downstream repo's `planning/state.json`, inject the new block into its `tracks` and `focus` arrays, and wire it into the `depends_on` DAG immediately.
 
    **File operator work as a graph edge, never as prose.** Anything this session is leaving for
