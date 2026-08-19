@@ -129,6 +129,15 @@ SESSION START
 BLOCK SETUP
   /start-block <spec>      → status.md
 
+UI FOUNDATIONS             ← only when the work has a visual surface. Beside the pipeline.
+  new UI, nothing to read  → /define-design-system  → design-system.md + tokens/theme/components
+                                                      (proved by building one real screen)
+                                     ↓ emits
+  existing UI              → /define-polish-standard → polish-standard.md
+                                                      (calibrated: 2 agents, 1 screenshot, agree)
+  A new page in an existing app needs neither — it inherits both.
+        ↓ polish-standard.md is read by /assess's polish scout, or a UI /ticket's AC
+
 PHASE 0 — PRE-PLAN         ← existing system, cut not obvious. Skip for a known block.
                            ← "|" = fresh session required.  "·" = same session continues.
   /assess <topic>          → planning/<slug>/assessment.md + verification.md + evidence/
