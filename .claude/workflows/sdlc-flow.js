@@ -1444,6 +1444,16 @@ STEP W4 — use the Write tool for both files. Do NOT run \`git add\`, \`git com
 }
 
 async function runTests(label, { gatingOnly, taskCommands = null, onPass = null, engineFiles = [] }) {
+  // Diff-window concurrent-sessions fix: the emoji gate scopes to the commit SHAs THIS run itself
+  // recorded in the run-state (state.tasks[N].commit — the in-memory object writeFlowState()
+  // persists to disk at stateFile), never to the whole prBase..HEAD range. Reading state.tasks
+  // in-memory (rather than re-reading stateFile off disk) is deliberate: disk writes only happen
+  // after a task fully passes, so by the time THIS task's own gate runs, its own just-made commit
+  // would not yet be on disk — only the in-memory object already reflects it at prompt-build time,
+  // right after `t.commit = stageResult.commit` in the caller.
+  const recordedCommits = Object.values(state.tasks).map(x => x.commit).filter(Boolean)
+  const recordedCommitsJson = JSON.stringify(recordedCommits)
+
   // D63 — pure substitute, unchanged: usingOverride still fully replaces the harness gating checks
   // for this task's per-task tripwire (not augmented, unlike sdlc-task.js). Safe here because the
   // end review below unconditionally re-runs the full gates:true suite over the integrated tree.
@@ -1460,37 +1470,49 @@ ${usingOverride
     ? renderTaskCheckList(taskCommands, worktreePath)
     : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath, engineFiles })}
 
-Then run the universal emoji gate (a harness rule, always) — DIFF-SCOPED: it judges only lines
-ADDED on this branch, never a whole changed file, so a legacy file's pre-existing emoji does not
-fail a diff that never touched it (the literal "🤖 Generated with Claude Code" PR footer is exempt
-— it lives in the PR body, not a file, but the check exempts the phrase defensively too):
+Then run the universal emoji gate (a harness rule, always) — DIFF-SCOPED to this run's OWN
+recorded commit SHAs, never the whole ${prBase}..HEAD range: it judges only lines ADDED by
+commits THIS run itself made, so neither a legacy file's pre-existing emoji nor a concurrent
+sibling session's commit can fail a diff this run never touched (the literal "🤖 Generated with
+Claude Code" PR footer is exempt — it lives in the PR body, not a file, but the check exempts the
+phrase defensively too):
   cd ${worktreePath} && python3 - <<'PYEOF'
 import subprocess, re, sys
 EMOJI = re.compile(r'[\\U0001F300-\\U0001FAFF\\U00002600-\\U000027BF]')
 FOOTER = 'Generated with Claude Code'
-diff = subprocess.run(['git','diff','-M','-U0','${prBase}..HEAD','--','*.md','*.mdx'], capture_output=True, text=True).stdout.splitlines()
+BASE_SHA = '${prBase}'
+STATE_FILE = '${stateFile}'
+RUN_COMMITS = ${recordedCommitsJson}
+if not RUN_COMMITS:
+    base_diff = subprocess.run(['git','diff','--name-only',f'{BASE_SHA}..HEAD'], capture_output=True, text=True).stdout.strip()
+    if base_diff:
+        print(f'EMOJI CHECK: cannot scope diff -- no commits recorded in the run-state ({STATE_FILE}) for this run, but {BASE_SHA}..HEAD is non-empty. Refusing to pass on an unscoped diff.')
+        sys.exit(1)
+    print('EMOJI CHECK: OK'); sys.exit(0)
 hits = []
-cur_file = None
-cur_line = None
-for line in diff:
-    if line.startswith('diff --git '):
-        cur_file = None; cur_line = None
-    elif line.startswith('+++ '):
-        p = line[4:]
-        cur_file = None if p == '/dev/null' else (p[2:] if p.startswith('b/') else p)
-    elif line.startswith('@@'):
-        m = re.match(r'@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@', line)
-        cur_line = int(m.group(1)) if m else None
-    elif cur_file and cur_line is not None and line.startswith('+') and not line.startswith('+++'):
-        content = line[1:]
-        if EMOJI.search(content) and FOOTER not in content:
-            hits.append(f'{cur_file}:{cur_line}: {content.rstrip()[:100]}')
-        cur_line += 1
+for commit in RUN_COMMITS:
+    diff = subprocess.run(['git','diff','-M','-U0',f'{commit}^..{commit}','--','*.md','*.mdx'], capture_output=True, text=True).stdout.splitlines()
+    cur_file = None
+    cur_line = None
+    for line in diff:
+        if line.startswith('diff --git '):
+            cur_file = None; cur_line = None
+        elif line.startswith('+++ '):
+            p = line[4:]
+            cur_file = None if p == '/dev/null' else (p[2:] if p.startswith('b/') else p)
+        elif line.startswith('@@'):
+            m = re.match(r'@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@', line)
+            cur_line = int(m.group(1)) if m else None
+        elif cur_file and cur_line is not None and line.startswith('+') and not line.startswith('+++'):
+            content = line[1:]
+            if EMOJI.search(content) and FOOTER not in content:
+                hits.append(f'{cur_file}:{cur_line}: {content.rstrip()[:100]}')
+            cur_line += 1
 if hits:
     print('EMOJI CHECK FAIL:'); [print(h) for h in hits[:25]]; sys.exit(1)
 print('EMOJI CHECK: OK'); sys.exit(0)
 PYEOF
-  A stray emoji ADDED in docs FAILS this gate.
+  A stray emoji ADDED in a commit THIS run made FAILS this gate.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
 ${onPass ? renderOnPassStateWriteRecipe(onPass) : ''}

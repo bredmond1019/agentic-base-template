@@ -1343,6 +1343,18 @@ async function runTests(label, { gatingOnly, taskCommands = null, onPass = null,
   const usingOverride = Array.isArray(taskCommands) && taskCommands.length > 0
   const cd = runDir ? `cd ${runDir} && ` : ''
 
+  // Diff-window concurrent-sessions fix: the emoji gate scopes to the commit SHAs THIS run itself
+  // recorded in the run-state (state.tasks[N].commit — the in-memory object writeTaskState()
+  // persists to disk at stateFile), never to the whole baseSha..HEAD range. On an in-place
+  // (--no-worktree) run the branch is shared, so baseSha..HEAD can legitimately contain a sibling
+  // session's concurrent commits, indistinguishable from this run's own. Reading state.tasks
+  // in-memory (rather than re-reading stateFile off disk) is deliberate: disk writes only happen
+  // after a task fully passes (see writeTaskState call sites), so by the time THIS task's own gate
+  // runs, its own just-made commit would not yet be on disk — only the in-memory object already
+  // reflects it at prompt-build time, right after `t.commit = stageResult.commit` in the caller.
+  const recordedCommits = Object.values(state.tasks).map(x => x.commit).filter(Boolean)
+  const recordedCommitsJson = JSON.stringify(recordedCommits)
+
   // D63 — augment-gating-only: a per-task validation_commands override NEVER causes a gates:true
   // harness check to be skipped. When present, the harness gating checks render FIRST (fast form,
   // gatingOnly:true, regardless of --test-depth — the cheap form is what augments, per the ADR),
@@ -1374,37 +1386,49 @@ checks. All Bash calls run from the run root (prefix each with: cd ${runDir} &&)
 
 ${checklistBody}
 
-Then run the universal emoji gate (a harness rule, always) — DIFF-SCOPED: it judges only lines
-ADDED by this task, never a whole changed file, so a legacy file's pre-existing emoji does not fail
-a diff that never touched it:
+Then run the universal emoji gate (a harness rule, always) — DIFF-SCOPED to this run's OWN
+recorded commit SHAs, never the whole ${baseSha}..HEAD range: it judges only lines ADDED by
+commits THIS run itself made, so neither a legacy file's pre-existing emoji nor a concurrent
+sibling session's commit on a shared in-place branch can fail a diff this run never touched:
   cd ${runDir} && python3 - <<'PYEOF'
 import subprocess, re, sys
 EMOJI = re.compile(r'[\\U0001F300-\\U0001FAFF\\U00002600-\\U000027BF]')
 FOOTER = 'Generated with Claude Code'
-diff = subprocess.run(['git','diff','-M','-U0','${baseSha}..HEAD','--','*.md','*.mdx'], capture_output=True, text=True).stdout.splitlines()
+BASE_SHA = '${baseSha}'
+STATE_FILE = '${stateFile}'
+RUN_COMMITS = ${recordedCommitsJson}
+if not RUN_COMMITS:
+    base_diff = subprocess.run(['git','diff','--name-only',f'{BASE_SHA}..HEAD'], capture_output=True, text=True).stdout.strip()
+    if base_diff:
+        print(f'EMOJI CHECK: cannot scope diff -- no commits recorded in the run-state ({STATE_FILE}) for this run, but {BASE_SHA}..HEAD is non-empty. Refusing to pass on an unscoped diff.')
+        sys.exit(1)
+    print('EMOJI CHECK: OK'); sys.exit(0)
 hits = []
-cur_file = None
-cur_line = None
-for line in diff:
-    if line.startswith('diff --git '):
-        cur_file = None; cur_line = None
-    elif line.startswith('+++ '):
-        p = line[4:]
-        cur_file = None if p == '/dev/null' else (p[2:] if p.startswith('b/') else p)
-    elif line.startswith('@@'):
-        m = re.match(r'@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@', line)
-        cur_line = int(m.group(1)) if m else None
-    elif cur_file and cur_line is not None and line.startswith('+') and not line.startswith('+++'):
-        content = line[1:]
-        if EMOJI.search(content) and FOOTER not in content:
-            hits.append(f'{cur_file}:{cur_line}: {content.rstrip()[:100]}')
-        cur_line += 1
+for commit in RUN_COMMITS:
+    diff = subprocess.run(['git','diff','-M','-U0',f'{commit}^..{commit}','--','*.md','*.mdx'], capture_output=True, text=True).stdout.splitlines()
+    cur_file = None
+    cur_line = None
+    for line in diff:
+        if line.startswith('diff --git '):
+            cur_file = None; cur_line = None
+        elif line.startswith('+++ '):
+            p = line[4:]
+            cur_file = None if p == '/dev/null' else (p[2:] if p.startswith('b/') else p)
+        elif line.startswith('@@'):
+            m = re.match(r'@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@', line)
+            cur_line = int(m.group(1)) if m else None
+        elif cur_file and cur_line is not None and line.startswith('+') and not line.startswith('+++'):
+            content = line[1:]
+            if EMOJI.search(content) and FOOTER not in content:
+                hits.append(f'{cur_file}:{cur_line}: {content.rstrip()[:100]}')
+            cur_line += 1
 if hits:
     print('EMOJI CHECK FAIL:'); [print(h) for h in hits[:25]]; sys.exit(1)
 print('EMOJI CHECK: OK'); sys.exit(0)
 PYEOF
-  A stray emoji ADDED in docs FAILS this gate; a pre-existing emoji in a file this task did not
-  touch a line of does not.
+  A stray emoji ADDED in a commit THIS run made FAILS this gate; a pre-existing emoji in a file
+  this task did not touch a line of, or an emoji added by a different, concurrent session's
+  commit on a shared branch, does not.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
 ${onPass ? renderOnPassStateWriteRecipe(onPass) : ''}
