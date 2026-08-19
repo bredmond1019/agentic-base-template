@@ -7,6 +7,21 @@ records changes to the **factory** — it is never copied into generated project
 
 ---
 
+## [run: 2026-08-19]
+
+Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` (retiring `/sdlc-block` and `/sdlc-run`). Task 1 re-derived the fleet-wide usage census and recorded the six baseline gated-check exit codes on `tasks.json`'s task 1 entry (all six exit 0). Task 2 proved all three D68 site-table gates (`check_prompt_templates.py`, `test_emoji_gate_diff_scoped.py`, `test_state_write_validation.py`) correctly go red on deliberate faults injected into the surviving `sdlc-task.js` engine, then restored the tree clean — proof-only, no commit. Task 3 deleted `sdlc-block.js`/`sdlc-run.js` and their `.agents/skills/` guides and unwired every gate reading those files by disk path (`planning/harness.json`'s `engines-parse` plus five scripts, including two — `test_engine_parse_gate_extension_filter.py` and `test_d16_tasks_json_fallback.py` — not named in the ticket's own file list but discovered to read the retired engines directly), keeping every gate green at the commit boundary; it stopped there because `roadmap-status-discovery-tests` (`roadmap_status_discovery.py --self-test`) hung past 5 minutes without finishing in this environment, a pre-existing corpus-wide process-timeout issue the block record itself already flags ("the full 20-check suite exceeds a 2-minute shell timeout and was not measured"), not a defect from this change. Tasks 4, 5, 6 (skill-manifest re-stamp, D39 supersession, README/doc updates) were not run. Verdict: **BAILED** at Task 3 on the hang; not independently re-verified against base state this run. Next: resume from Task 4 in a fresh environment (or with the hanging self-test isolated/skipped), then continue through Task 6.
+
+```
+7d1a4f1 feat: implement BT.ticket.retire-unused-engines-task3
+7bbc9c2 chore: init worktree BT.ticket.retire-unused-engines-flow
+fff3bcb feat(harness): distribute .claude/skills/ downstream
+af52cd0 feat: implement BT.ticket.fleet-lock-pid-liveness-task3
+00285e6 feat: implement BT.ticket.fleet-lock-pid-liveness-task2
+e5843d0 chore: init worktree bt.ticket.fleet-lock-pid-liveness-task
+b547551 fix(engines): populate t.commit from commitHash so the emoji gate can scope
+af68ca3 feat: implement BT.ticket.emoji-gate-diff-window-concurrent-sessions-task3
+```
+
 ## [2026-08-19]
 
 ### D69 — the initiative-wide consistency pass
