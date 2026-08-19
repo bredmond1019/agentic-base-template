@@ -26,7 +26,7 @@
   },
   ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
     "hash": "f770763a777629d611c5e7f01776c3ed81f3fde5d72c278f7d6059a932a8e09a",
-    "lines": "1968-2122",
+    "lines": "1975-2129",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   }
 }

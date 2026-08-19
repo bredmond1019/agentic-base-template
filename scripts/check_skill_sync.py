@@ -59,7 +59,7 @@ ANCHORS = [
      ".agents/skills/sdlc-flow/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "triage-bail-taxonomy", 1219, 1457,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 1968, 2122,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 1975, 2129,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

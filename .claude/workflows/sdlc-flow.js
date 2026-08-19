@@ -1808,7 +1808,14 @@ Return via StructuredOutput:
       }
       continue
     }
-    if (stageResult.commit) t.commit = stageResult.commit
+    // D-fix (BT.ticket.emoji-gate-diff-window-concurrent-sessions): the stage schema's field is
+    // `commitHash`, never `commit` — reading `.commit` here silently left t.commit unset on EVERY
+    // run in this fleet's history. Harmless while it only fed the state file's index; load-bearing
+    // now that the emoji gate scopes to these SHAs, where an empty set trips the cannot-scope abort.
+    // A stage occasionally returns a quoted empty string (observed live: commitHash === '""'), so
+    // require something that actually looks like a short hash rather than merely truthy.
+    const rawCommit = (stageResult.commitHash || '').replace(/["']/g, '').trim()
+    if (/^[0-9a-f]{7,40}$/i.test(rawCommit)) t.commit = rawCommit
     if (stageResult.summary) t.summary = stageResult.summary
     if (Array.isArray(stageResult.filesModified)) t.files_changed = [...new Set([...(t.files_changed || []), ...stageResult.filesModified])]
     if (Array.isArray(stageResult.decisions) && stageResult.decisions.length) t.decisions = [...(t.decisions || []), ...stageResult.decisions]

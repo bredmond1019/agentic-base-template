@@ -574,5 +574,64 @@ class ExtractionSanityTest(unittest.TestCase):
             self.assertIn(RUN_COMMITS_SENTINEL, script, f"{site}: sentinel not left for run-time substitution")
 
 
+class RunCommitPopulationTest(unittest.TestCase):
+    """The gate is only as good as the SHA list it is handed.
+
+    `RUN_COMMITS` is built from `state.tasks[N].commit`, which the engine sets from the
+    implement/fix stage's StructuredOutput. That payload's field is `commitHash` (see
+    STAGE_SCHEMA in both engines) -- it has never been called `commit`. Reading
+    `stageResult.commit` therefore left `t.commit` unset on every run in this fleet's
+    history: harmless while the field only fed the state file's at-a-glance index, and
+    load-bearing the moment the emoji gate started scoping to those SHAs, where an empty
+    set trips the cannot-scope abort and hard-fails every task after the first commit.
+
+    Caught live on this very ticket's own /sdlc-task run, where all four tasks reported
+    green while the shipped gate, executed verbatim, exits 1. These assertions exist so
+    that regression cannot recur silently.
+    """
+
+    ENGINES = ("sdlc-task.js", "sdlc-flow.js")
+
+    def _engine_source(self, engine: str) -> str:
+        return (REPO_ROOT / ".claude" / "workflows" / engine).read_text(encoding="utf-8")
+
+    def test_engines_read_commitHash_not_commit(self):
+        for engine in self.ENGINES:
+            src = self._engine_source(engine)
+            self.assertNotIn(
+                "stageResult.commit)", src,
+                f"{engine}: reads stageResult.commit, but the stage schema's field is "
+                "commitHash -- t.commit stays unset and the emoji gate's RUN_COMMITS is "
+                "always empty",
+            )
+            self.assertIn(
+                "stageResult.commitHash", src,
+                f"{engine}: must populate t.commit from the schema's commitHash field",
+            )
+
+    def test_commitHash_field_is_what_the_stage_schema_declares(self):
+        for engine in self.ENGINES:
+            src = self._engine_source(engine)
+            self.assertIn(
+                "commitHash:", src,
+                f"{engine}: STAGE_SCHEMA must still declare commitHash -- if this field is "
+                "ever renamed, the assignment above must be renamed in lockstep",
+            )
+
+    def test_only_hash_shaped_values_are_recorded(self):
+        """A stage has been observed returning the literal quoted empty string '""'.
+
+        Truthiness alone would record that as a commit SHA and hand the gate a range git
+        cannot resolve, so the assignment must validate the shape.
+        """
+        for engine in self.ENGINES:
+            src = self._engine_source(engine)
+            self.assertRegex(
+                src, r"\[0-9a-f\]\{7,40\}",
+                f"{engine}: must validate that a recorded commit actually looks like a "
+                "short hash, not merely that it is truthy",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
