@@ -87,7 +87,8 @@ verification wins**; no claim it marked REFUTED may reach a lane file or a block
 | Repos-and-gate-weight table | Lane assignment and the heavy budget (Step 4) — verify the weights still hold, do not re-derive them |
 | Fork answers with dates | Wave 0 **operator ratifications** |
 | `seams.md` blast radius, half-built classification, what-to-delete-first | The lane table's **notes column** and the lane file's `#` comments. A blast radius is precisely the "trap that has cost a real run" class those comments exist for — it is read at execution time, not planning time |
-| `SQ-nn` refs | The **coverage crosswalk** ref scheme (Step 7). Grep them exactly as the check greps `AR-nn` |
+| Canonical block IDs (`<PFX>.<phase>.<block>`) | **The identity carried into every lane file, table and `state.json` row.** Take them as allocated; do not re-mint or renumber |
+| `SQ-nn` refs | The **coverage crosswalk** ref scheme only (Step 7), and `#` comments for traceability. Grep them exactly as the check greps `AR-nn` |
 
 ### The rules for carrying it through
 
@@ -99,6 +100,16 @@ verification wins**; no claim it marked REFUTED may reach a lane file or a block
 - **Do not drop the ships-alone property.** Every block arrived carrying a "what the operator can do
   the day this lands" line. Lane assignment must not merge two blocks into one lane row in a way
   that loses it, and no wave may be re-cut into "plumbing first, value later."
+- **Never write `SQ-nn` where a block ID belongs.** A lane file's executable lines, a lane table's
+  block column, a `depends_on` edge and a `state.json` row all take the canonical
+  `<PFX>.<phase>.<block>` ID. `SQ-nn` is a row label local to `sequence.md`; it belongs in a `#`
+  comment at most. **Both crosswalks pass on a lane file full of `SQ-nn` lines** — they check that
+  refs appear, not that they resolve — so this defect ships silently and surfaces as a lane that
+  stops on its first block or improvises a spec. It has already shipped once.
+- **If `sequence.md` did not allocate canonical IDs**, stop and send it back rather than minting
+  them here. Allocation requires reading each owning repo's `state.json` for its highest phase, and
+  a roadmap that invents IDs against a graph it did not read produces collisions that only surface
+  at registration.
 - **You still own lane assignment, the heavy budget, isolation, Wave 0 mechanics and the crosswalk.**
   `/sequence` decides *what* and *in what order*; this command decides *who runs it concurrently
   without colliding*. That division is the whole reason both exist.
@@ -399,6 +410,18 @@ was pointed at the right run:
 Then the traps, holds and spec sources as comments, then **bare block IDs, one per line, in
 execution order**. Blank lines and `#` comments are stripped by the reader.
 
+**Those lines are canonical `<PFX>.<phase>.<block>` IDs — `EN.12.A`, `MV.4.B` — and nothing else.**
+Not a `SQ-nn` row ref, not a slug, not a title. `/orchestrate` resolves each line against
+`state.json`; a line it cannot find stops the lane or makes it improvise a spec for work nobody
+specced. Verify mechanically before handing over, because neither crosswalk catches this:
+
+```bash
+for id in $(grep -vhE '^\s*#|^\s*$' lane-*.txt); do
+  echo "$id" | grep -qE '^[A-Z]{2,3}\.[0-9]+\.[0-9A-Za-z]+$' \
+    || echo "NOT A BLOCK ID: $id"
+done
+```
+
 Three things belong in these comments and nowhere else, because they are read at the moment of
 execution rather than at planning time:
 
@@ -467,6 +490,9 @@ bastion validate-brain --state
 
 Then check by hand:
 
+- [ ] **Every executable line in every lane file matches `<PFX>.<phase>.<block>`** — run the shape
+      check above. A `SQ-nn` ref, a slug or a title on one of those lines makes the lane unrunnable,
+      and both crosswalks pass anyway.
 - [ ] Every block ID in every lane file exists in a `state.json`, **or** is marked `[*]` and appears in Wave 0.
 - [ ] No lane has more than one heavy repo live at a time, given the stated ordering.
 - [ ] Every cross-lane edge in the ASCII appears in the lane file of the *waiting* lane.
