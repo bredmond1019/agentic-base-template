@@ -4,9 +4,10 @@ validates-before-commit).
 
 WHY THIS EXISTS
 ----------------
-Tasks 1-3 of this ticket made `sdlc-task.js`'s bookkeep stage, `sdlc-flow.js`'s wrap-up stage,
-`sdlc-run.js`'s wrap-up stage, and `sdlc-block.js`'s `syncBlockState()` each embed the SAME scripted
-Python mutation: capture the pre-write bytes of `planning/state.json`, flip one block's `status`
+Tasks 1-3 of this ticket made `sdlc-task.js`'s bookkeep stage and `sdlc-flow.js`'s wrap-up stage
+each embed the SAME scripted Python mutation (two other engines got the same embed at the time but
+have since been retired as effectively unused -- BT.ticket.retire-unused-engines): capture the
+pre-write bytes of `planning/state.json`, flip one block's `status`
 field in memory, run `mev validate-brain --state` BEFORE and AFTER writing the mutated bytes to
 disk, and reject (byte-exact rollback) any write that introduces diagnostic lines NOT present in
 the BEFORE baseline (D64-style delta attribution). Before this ticket, the only check was
@@ -56,12 +57,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = REPO_ROOT / ".claude" / "workflows"
 
-# Every engine confirmed (task 3 audit) to embed the validate-then-commit mutation script.
-# sdlc-block.js's variant takes a second argv (the target status) instead of hardcoding 'closed' --
-# a deliberate, commented difference (it syncs a status the orchestrator supplies, not always a
-# close) -- so it is exercised with argv=[id, status] while the other three use argv=[id] only.
-ENGINE_FILES = ["sdlc-task.js", "sdlc-flow.js", "sdlc-run.js", "sdlc-block.js"]
-PARAMETRIC_STATUS_ENGINES = {"sdlc-block.js"}
+# Every surviving engine confirmed (task 3 audit) to embed the validate-then-commit mutation
+# script. Two other engines formerly embedded it too but have since been retired as
+# effectively unused (see the block record superseding D39 for the retirement rationale).
+ENGINE_FILES = ["sdlc-task.js", "sdlc-flow.js"]
+PARAMETRIC_STATUS_ENGINES: set[str] = set()
 
 SCRIPT_START_MARKER = "import json, subprocess, sys, shutil"
 SCRIPT_END_MARKER = "print('FLIPPED:' + bid)"

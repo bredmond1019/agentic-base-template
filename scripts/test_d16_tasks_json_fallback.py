@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Regression tests for the D16 preflight's derive-from-tasks.md fallback.
 
-RED-FIRST (ticket-generate-tasks-json-on-ticket, task 1): at this commit none of the four SDLC
-engines carry the fallback yet, so this script MUST FAIL. It is deliberately NOT registered in
-planning/harness.json yet (that happens in task 5) — a red test at task 1 must not gate the rest
-of the chain.
+RED-FIRST (ticket-generate-tasks-json-on-ticket, task 1): at this commit none of the SDLC engines
+carried the fallback yet, so this script MUST FAIL. It was deliberately NOT registered in
+planning/harness.json yet (that happened in task 5) — a red test at task 1 must not gate the rest
+of the chain. Two of the four engines this suite originally covered (sdlc-run.js, sdlc-block.js)
+were later retired as effectively unused (BT.ticket.retire-unused-engines); this suite now covers
+only the two surviving engines.
 
 This is a source-assertion suite, not a live-agent suite: the derivation itself is performed by an
 LLM agent at runtime (mirroring /generate-tasks --from mode), so there is no pure function to
@@ -15,27 +17,22 @@ plus assertions over the real engine/doc sources, stdlib only, non-zero exit on 
 
 THE CONTRACT (what tasks 2-4 must land for this file to go green):
 
-  1. `.claude/workflows/sdlc-task.js`, `sdlc-flow.js` and `sdlc-run.js` must each contain the
-     literal marker comment:
+  1. `.claude/workflows/sdlc-task.js` and `sdlc-flow.js` must each contain the literal marker
+     comment:
          D16 derive-from-tasks.md fallback
-     positioned BEFORE the abort line `'No tasks.json (D16)'` in the same file (sdlc-run.js
-     currently has neither — task 3 adds both the preflight and the fallback to reach parity).
+     positioned BEFORE the abort line `'No tasks.json (D16)'` in the same file.
 
-  2. Between that marker and the abort, each of the three files must read tasks.md (substring
-     "tasks.md") and must name the D45 shape it writes: substrings "D45", "bare array", "task_id".
+  2. Between that marker and the abort, each file must read tasks.md (substring "tasks.md") and
+     must name the D45 shape it writes: substrings "D45", "bare array", "task_id".
 
-  3. Each of the three files must contain a log line distinguishing a derived run from an authored
-     one, substring:
+  3. Each file must contain a log line distinguishing a derived run from an authored one,
+     substring:
          Derived tasks.json from tasks.md
 
   4. The abort itself must survive, unchanged in spirit: `.claude/workflows/sdlc-task.js` and
-     `sdlc-flow.js` keep their existing `'No tasks.json (D16)'` abort; sdlc-run.js gains one.
+     `sdlc-flow.js` keep their existing `'No tasks.json (D16)'` abort.
 
-  5. `.claude/workflows/sdlc-block.js` keeps its pre-existing generator (the
-     "no tasks.json - generating from the plan's block" line) intact, and gains a comment
-     cross-referencing the three sibling engines by filename (task 3's parity note).
-
-  6. `.claude/commands/ticket.md` and `.agents/skills/ticket/SKILL.md` must both require a
+  5. `.claude/commands/ticket.md` and `.agents/skills/ticket/SKILL.md` must both require a
      read-back verification of the written tasks.json (not merely an assertion): both must contain
      `json.load(open(`, `non-empty bare array`, and cite `D16`, and must not have drifted from each
      other on that instruction (same required-phrase set present in both).
@@ -54,8 +51,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = REPO_ROOT / ".claude" / "workflows"
 
-SEQUENTIAL_ENGINES = ["sdlc-task.js", "sdlc-flow.js", "sdlc-run.js"]
-ALL_ENGINES = SEQUENTIAL_ENGINES + ["sdlc-block.js"]
+SEQUENTIAL_ENGINES = ["sdlc-task.js", "sdlc-flow.js"]
+ALL_ENGINES = SEQUENTIAL_ENGINES
 
 MARKER_COMMENT = "D16 derive-from-tasks.md fallback"
 ABORT_SUBSTR = "No tasks.json (D16)"
@@ -107,7 +104,7 @@ def _read(path: Path) -> str:
 
 
 class EngineDerivationBranch(unittest.TestCase):
-    """Each of the three sequential engines must derive tasks.json before it aborts."""
+    """Each of the sequential engines must derive tasks.json before it aborts."""
 
     def test_all_engine_files_exist(self):
         for name in ALL_ENGINES:
@@ -169,39 +166,6 @@ class AbortSurvives(unittest.TestCase):
         for name in ("sdlc-task.js", "sdlc-flow.js"):
             src = _read(WORKFLOWS / name)
             self.assertIn(ABORT_SUBSTR, src, f"{name} must keep its 'No tasks.json (D16)' abort")
-
-    def test_sdlc_run_gains_the_same_abort(self):
-        src = _read(WORKFLOWS / "sdlc-run.js")
-        self.assertIn(
-            ABORT_SUBSTR, src,
-            "sdlc-run.js has no D16 preflight at all today (no hasTasks check, no abort) — "
-            "task 3 must add one so all three sequential engines refuse to guess identically",
-        )
-
-
-class BlockEngineParity(unittest.TestCase):
-    """sdlc-block.js already generates tasks.json — assert it stays intact and cross-references
-    its three siblings (task 3's parity note)."""
-
-    def test_existing_generator_intact(self):
-        src = _read(WORKFLOWS / "sdlc-block.js")
-        self.assertIn(
-            "no tasks.json", src.lower(),
-            "sdlc-block.js's pre-existing tasks.json generator appears to have been removed",
-        )
-
-    def test_cross_references_sibling_engines(self):
-        src = _read(WORKFLOWS / "sdlc-block.js")
-        gen_idx = src.lower().find("no tasks.json")
-        self.assertNotEqual(gen_idx, -1)
-        # Look at a generous window around the generator for the cross-reference comment.
-        window = src[max(0, gen_idx - 2000):gen_idx + 4000]
-        missing = [f for f in SEQUENTIAL_ENGINES if f not in window]
-        if missing:
-            self.fail(
-                "sdlc-block.js's generator does not cross-reference its sibling engine(s) by "
-                f"filename: {missing}"
-            )
 
 
 class TicketSelfCheckHardened(unittest.TestCase):

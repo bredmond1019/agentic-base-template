@@ -47,8 +47,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ENGINES = [
     ".claude/workflows/sdlc-task.js",
     ".claude/workflows/sdlc-flow.js",
-    ".claude/workflows/sdlc-block.js",
-    ".claude/workflows/sdlc-run.js",
 ]
 
 # `const x = await tracedAgent(` / `await agent(` immediately followed by a backtick.

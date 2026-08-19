@@ -4,17 +4,18 @@ BT.ticket.engine-parse-gate-non-js-false-positive).
 
 WHY THIS EXISTS
 ----------------
-`renderEngineParseChecks()` in sdlc-task.js, sdlc-flow.js, and sdlc-run.js renders one `node
---check` CHECK per `.claude/workflows/` file a task's `files[]` names. `node --check` throws
+`renderEngineParseChecks()` in sdlc-task.js and sdlc-flow.js renders one `node --check` CHECK per
+`.claude/workflows/` file a task's `files[]` names (a third copy lived in sdlc-run.js, retired by
+BT.ticket.retire-unused-engines as effectively unused). `node --check` throws
 ERR_UNKNOWN_FILE_EXTENSION on any non-.js path regardless of content, so before this ticket a task
 that merely touched block-registration.md, block.schema.json, or harness.schema.json (the three
 non-JS files that currently live under `.claude/workflows/`) bailed the whole verdict on a false
 positive unrelated to its actual change. Tasks 1-3 added an identical one-line filter
-(`files = (files || []).filter(f => f.endsWith('.js'))`) to the top of all three copies of the
-function. This suite extracts each engine's live `renderEngineParseChecks()` source by content
+(`files = (files || []).filter(f => f.endsWith('.js'))`) to the top of each copy of the function.
+This suite extracts each surviving engine's live `renderEngineParseChecks()` source by content
 marker (mirroring test_state_write_validation.py's extraction pattern) and actually executes it
-under Node against fixture inputs, so a regression in any of the three copies goes red here rather
-than silently reappearing at spec-authoring time.
+under Node against fixture inputs, so a regression in either copy goes red here rather than
+silently reappearing at spec-authoring time.
 
 Run: python3 scripts/test_engine_parse_gate_extension_filter.py
 """
@@ -37,10 +38,9 @@ WORKFLOWS = REPO_ROOT / ".claude" / "workflows"
 FUNCTION_START_MARKER = "function renderEngineParseChecks("
 FUNCTION_NAME = "renderEngineParseChecks"
 
-# sdlc-task.js/sdlc-flow.js: (files, cd, startIndex). sdlc-run.js: (files, startIndex) -- no `cd`.
+# sdlc-task.js/sdlc-flow.js: (files, cd, startIndex).
 ENGINES_WITH_CD = {"sdlc-task.js", "sdlc-flow.js"}
-ENGINES_WITHOUT_CD = {"sdlc-run.js"}
-ALL_ENGINES = sorted(ENGINES_WITH_CD | ENGINES_WITHOUT_CD)
+ALL_ENGINES = sorted(ENGINES_WITH_CD)
 
 NON_JS_PATHS = [
     ".claude/workflows/block-registration.md",

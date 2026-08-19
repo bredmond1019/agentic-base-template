@@ -25,11 +25,11 @@ provably wrong for two of them:
                          never `<base>..HEAD` as a whole. An anti-vacuous guard fires if the
                          recorded commit set is empty while `<base>..HEAD` is non-empty, rather
                          than silently passing on an unscoped diff.
-  - BASE_REF_SITES    -- `.claude/commands/test.md`, `.claude/workflows/sdlc-block.js`, and
-                         `.claude/commands/close-out.md` are operator-invoked against a feature
-                         branch cut FROM the base, with no run-state to scope by and no shared-
-                         branch window to be exposed to (see the block record's "Out of Scope").
-                         These three keep diffing `<base>..HEAD` as a whole, exactly as before.
+  - BASE_REF_SITES    -- `.claude/commands/test.md` and `.claude/commands/close-out.md` are
+                         operator-invoked against a feature branch cut FROM the base, with no
+                         run-state to scope by and no shared-branch window to be exposed to (see
+                         the block record's "Out of Scope"). These two keep diffing
+                         `<base>..HEAD` as a whole, exactly as before.
 
 Cross-site agreement is therefore asserted WITHIN each class, not across all five: the whole
 point of the concurrent-sibling scenario below is that the two classes are now EXPECTED to
@@ -69,7 +69,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SOURCE_FILES = {
     "test.md": REPO_ROOT / ".claude" / "commands" / "test.md",
-    "sdlc-block.js": REPO_ROOT / ".claude" / "workflows" / "sdlc-block.js",
     "sdlc-task.js": REPO_ROOT / ".claude" / "workflows" / "sdlc-task.js",
     "sdlc-flow.js": REPO_ROOT / ".claude" / "workflows" / "sdlc-flow.js",
     "close-out.md": REPO_ROOT / ".claude" / "commands" / "close-out.md",
@@ -79,7 +78,6 @@ SOURCE_FILES = {
 # test.md has none -- it hardcodes `main..HEAD` directly. close-out.md has none either --
 # it takes its range as `sys.argv[1]` (see ARGV_SITES below) rather than a substituted literal.
 BASE_REF_PLACEHOLDER = {
-    "sdlc-block.js": "${baseRef}",
     "sdlc-task.js": "${baseSha}",
     "sdlc-flow.js": "${prBase}",
 }
@@ -88,12 +86,12 @@ BASE_REF_PLACEHOLDER = {
 # script text -- these get the range passed as an extra command-line argument at run time.
 ARGV_SITES = {"close-out.md": "main...HEAD"}
 
-SITE_NAMES = ["test.md", "sdlc-block.js", "sdlc-task.js", "sdlc-flow.js", "close-out.md"]
+SITE_NAMES = ["test.md", "sdlc-task.js", "sdlc-flow.js", "close-out.md"]
 
 # The two-class split (BT.ticket.emoji-gate-diff-window-concurrent-sessions, task 2). See the
 # module docstring for why cross-class agreement is no longer asserted.
 RUN_STATE_SITES = ["sdlc-task.js", "sdlc-flow.js"]
-BASE_REF_SITES = ["test.md", "sdlc-block.js", "close-out.md"]
+BASE_REF_SITES = ["test.md", "close-out.md"]
 assert set(RUN_STATE_SITES) | set(BASE_REF_SITES) == set(SITE_NAMES)
 assert set(RUN_STATE_SITES) & set(BASE_REF_SITES) == set()
 
