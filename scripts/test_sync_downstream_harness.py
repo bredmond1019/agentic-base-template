@@ -225,7 +225,13 @@ class MirroredSkillBodiesMatch(unittest.TestCase):
     filename - `CLAUDE.md` in the corpus-membership rule, `.claude` in skip_dirs. Substituting them
     makes the documented rules false. This test is what catches that."""
 
-    MIRRORED = ["write-okf-markdown", "edit-state-json"]
+    MIRRORED = [
+        "write-okf-markdown",
+        "edit-state-json",
+        "commit-in-this-fleet",
+        "derive-state-safely",
+        "run-the-gates",
+    ]
 
     def _body(self, path: Path) -> str:
         return path.read_text(encoding="utf-8").split("---", 2)[2]

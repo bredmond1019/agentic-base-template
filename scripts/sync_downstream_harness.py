@@ -324,6 +324,9 @@ AGENT_SKILL_SLUGS: list[str] = [
     # skip_dirs), and rewriting them would make the rules they state false.
     "write-okf-markdown",
     "edit-state-json",
+    "commit-in-this-fleet",
+    "derive-state-safely",
+    "run-the-gates",
 ]
 
 
@@ -338,7 +341,13 @@ AGENT_SKILL_SLUGS: list[str] = [
 #
 # Both are deliberately path-portable: they carry a "paths are relative to the brain root" banner
 # instead of repo-relative links, because a ../../../ link is correct in exactly one of 17 repos.
-CLAUDE_SKILL_SLUGS: list[str] = ["write-okf-markdown", "edit-state-json"]
+CLAUDE_SKILL_SLUGS: list[str] = [
+    "write-okf-markdown",
+    "edit-state-json",
+    "commit-in-this-fleet",
+    "derive-state-safely",
+    "run-the-gates",
+]
 
 
 def agent_skill_files(root: Path) -> list[Path]:
