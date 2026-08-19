@@ -133,8 +133,7 @@ The typical flow for one spec (here `my-feature`):
 Or run it all unattended:
 
 ```
-/sdlc-run my-feature           # single sequential run
-/sdlc-block my-feature         # parallel waves with retries and auto-merge
+/sdlc-flow my-feature          # sequential run, terminates in a PR
 ```
 
 ### Experimental features (kept out of the roadmap)

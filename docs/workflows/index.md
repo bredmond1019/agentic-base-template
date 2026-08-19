@@ -1,13 +1,13 @@
 ---
 type: Index
 title: SDLC Workflows — reference hub
-description: Navigation + shared concepts for the four SDLC orchestration engines (sdlc-flow, sdlc-run, sdlc-task, sdlc-block) and the manual command lifecycle.
+description: Navigation + shared concepts for the two SDLC orchestration engines (sdlc-flow, sdlc-task) and the manual command lifecycle.
 doc_id: base-template-workflows-index
 layer: [factory]
 project: base-template
 status: active
 keywords: [SDLC workflows, engines, orchestration, harness, pipeline reference]
-related: [base-template-docs-index, sdlc-run, sdlc-task, sdlc-flow, sdlc-block, sdlc-commands]
+related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-commands]
 ---
 
 # SDLC Workflows
@@ -28,19 +28,20 @@ slash-command lifecycle they automate.
 ```
 /patch          trivial hotfix · no tests · in-place
 /sdlc-task      small tested change · implement→test→fix→commit · in-place or --worktree
-/sdlc-run       full spec · sequential · in-place · no PR
 /sdlc-flow      full spec · sequential · branch (or --worktree) · terminates in PR   ← default for non-trivial work
-/sdlc-block     roadmap · one /sdlc-flow per block · branch train of PRs
+/orchestrate    roadmap · one /sdlc-flow per block · branch train of PRs
 ```
 
-## The four engines at a glance
+## The two engines at a glance
 
 | Engine | Scope | Isolation | Pairs with | You reach for it when… |
 |---|---|---|---|---|
 | [`/sdlc-task`](sdlc-task.md) | **one small unit** | in-place / `--worktree` | `/chore`, `/ticket` | small tested change — fast implement→test→commit |
-| [`/sdlc-run`](sdlc-run.md) | one task **or** a full spec, **sequential** | none — runs on the current branch | `/generate-tasks` | sequential full pipeline on the current branch; resuming a spec |
 | [`/sdlc-flow`](sdlc-flow.md) | **a whole spec**, **sequential** | plain branch in the main tree (one shared for the whole spec), or `--worktree` | `/generate-tasks` | **the default for non-trivial feature work** — sequential, conflict-free, terminates in a PR |
-| [`/sdlc-block`](sdlc-block.md) | **a roadmap** (master-plan-format file) | per-block worktrees driving `/sdlc-flow` | `/generate-master-plan`, `/plan` | a whole roadmap fanned out as a branch train of reviewable PRs |
+
+A whole roadmap (master-plan-format file) is driven by `/orchestrate` / `/begin-orchestration`,
+which fan out one `/sdlc-flow` per independent block across dependency-ordered waves — see
+[`.claude/commands/README.md`](../../.claude/commands/README.md) for that command's reference.
 
 For step-by-step **manual** control (run `/implement`, then inspect, then `/test`, …), see the
 [manual command lifecycle](commands.md). The engines automate exactly those commands.
@@ -51,36 +52,34 @@ flowchart TD
     roadmap["planning/master-plan.md<br/>(written by /generate-master-plan or /plan)"]
 
     plan --> flow["/sdlc-flow<br/>whole spec, branch (or --worktree), PR"]
-    plan --> run["/sdlc-run<br/>sequential, on current branch"]
     plan --> task["/sdlc-task<br/>small unit, in-place or --worktree"]
 
-    roadmap --> block["/sdlc-block<br/>roadmap → one /sdlc-flow per block"]
-    block --> flow
+    roadmap --> orch["/orchestrate<br/>roadmap → one /sdlc-flow per block"]
+    orch --> flow
 
     flow -. "open PR (default)" .-> pr["PR — /review-PR → /merge-train"]
-    block -. "PR per block" .-> pr
+    orch -. "PR per block" .-> pr
 
     classDef engine fill:#1f2937,stroke:#60a5fa,color:#e5e7eb;
-    class flow,run,task,block engine;
+    class flow,task,orch engine;
 ```
 
 - `/sdlc-flow` is the **default for non-trivial feature work**: one shared branch eliminates
   inter-task merge conflicts; a single end-review over the integrated tree replaces per-task reviews;
   the terminal step is a PR. Runs on a plain branch in the main tree by default (keeps a relative
   `planning/` symlink intact), or in an isolated worktree with `--worktree`.
-- `/sdlc-block` is the **roadmap orchestrator**: it fans out one `/sdlc-flow` per independent block
+- `/orchestrate` is the **roadmap driver**: it fans out one `/sdlc-flow` per independent block
   across dependency-ordered waves, producing a branch train of reviewable PRs.
 - `/sdlc-task` is the **fast path** for small work: a real implement→test→fix loop but no
   review/document/wrap-up agents. Pairs with `/chore` and `/ticket`.
-- `/sdlc-run` is the **sequential workhorse** when you don't need isolation or a PR.
 
 ### Decomposition differs by engine: disjoint files vs. compilable boundaries
 
 `/generate-tasks` decomposes a block **before** the consuming engine is chosen, so it applies one of
 two mutually-exclusive rules depending on which engine will run the spec:
 
-- **`/sdlc-block`** runs each task as its own pipeline in parallel worktrees that merge independently
-  — so tasks must own **disjoint files**; an undeclared overlap escalates the whole block at merge.
+- **`/orchestrate`** runs each block as its own pipeline in parallel worktrees that merge independently
+  — so blocks must own **disjoint files**; an undeclared overlap escalates the whole roadmap at merge.
 - **`/sdlc-flow` and `/sdlc-task`** run every task sequentially on one branch/worktree with no
   inter-task merge step, but gate the project's checks after **every single task** — so **every task
   boundary must leave the gating suite passing** (for a compiled/type-checked stack, the repo must
@@ -107,16 +106,14 @@ Each engine writes a committed JSON state file under `planning/<spec>/sdlc/`:
 
 | Engine | State file | Status |
 |---|---|---|
-| `/sdlc-run` | `sdlc-run-state.json` | committed — phases + token roll-up (D37) |
 | `/sdlc-task` | `sdlc-task-state.json` | committed — per-task status + token roll-up (D38) |
 | `/sdlc-flow` | `sdlc-flow-state.json` | committed — authoritative run index; drives `--resume` (D31) |
-| `/sdlc-block` | `block-orchestration-state.json` | committed — per-block status + child token roll-up (D39) |
 
 `/sdlc-flow` also writes a human-readable `worklog.md` alongside its state file. The other engines
 use per-stage report files (see below) as the primary resume signal; their state files are the
 at-a-glance index and token accounting artifact.
 
-### Report-file contract (sdlc-run / sdlc-task)
+### Report-file contract (Phase 2-5 commands invoked by hand)
 Reports are named `[taskN-]<stage>.md` under `sdlc/reports/`. `/sdlc-flow` does not use this
 contract — it uses `sdlc-flow-state.json` + `worklog.md` instead (see
 [D31](../../planning/decisions/D31-committed-authoritative-state.md)).
@@ -127,7 +124,6 @@ contract — it uses `sdlc-flow-state.json` + `worklog.md` instead (see
 | `[taskN-]test.md` | test | review |
 | `[taskN-]review.md` | review | fix, document |
 | `[taskN-]document.md` | document | — |
-| `[taskN-]workflow.md` | wrap-up (sdlc-run) | humans |
 | `sdlc-flow-state.json` | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | `--resume`, end-review localization, PR body — **committed** |
 | `worklog.md` | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | human-readable run trail — **committed** |
 
@@ -139,8 +135,8 @@ contract — it uses `sdlc-flow-state.json` + `worklog.md` instead (see
 
 ### `/close-out`'s diff base is resolved, never hard-coded
 
-`/close-out` — the manual quality-close command every engine points to on completion (`sdlc-flow.js`,
-`sdlc-run.js`: "Next: run `/close-out` to verify coverage + patch docs before handing off") — scopes
+`/close-out` — the manual quality-close command every engine points to on completion (`sdlc-flow.js`:
+"Next: run `/close-out` to verify coverage + patch docs before handing off") — scopes
 its universal emoji gate and its source-file coverage sweep to the **same resolved base**, never the
 literal string `main`. A hard-coded `main..HEAD` is empty by definition whenever `HEAD` **is** `main`
 — the default state after an in-place `/sdlc-task` run, a plain-branch `/sdlc-flow` run (D51), or
@@ -153,7 +149,7 @@ files instead of "nothing considered."
 commit's first parent (`HEAD^1..HEAD`) when one exists (e.g. right after `--auto-merge`); with no
 merge commit to scope from, it **refuses to run** rather than proceed with an empty file list. This
 mirrors the pattern the engines already use for their own diff scoping — `sdlc-task.js`'s committed
-`baseSha`, `sdlc-flow.js`'s configured `${prBase}`, `sdlc-block.js`'s three-dot `${baseRef}...HEAD` —
+`baseSha`, `sdlc-flow.js`'s configured `${prBase}` —
 `/close-out` is the one caller-facing command that previously had none of that context available to
 it. Full flag reference: the `/close-out` entry in [`.claude/commands/README.md`](../../.claude/commands/README.md).
 
@@ -178,7 +174,7 @@ Opus and the purely-procedural stages drop to Haiku.
 | **Sonnet** | `implement`, `fix`, `triage`, `review`, `ui-test`, `document`, `wrap-up`, `pre-flight`, `PR` | judgment work |
 | **Haiku** | `scout`, `setup`, `test`, `update-task`, `state-writers` | fixed procedures, no judgment |
 
-**Staged escalation:** inside `/sdlc-run`, `/sdlc-task`, and `/sdlc-flow`, the *final* fix pass and
+**Staged escalation:** inside `/sdlc-task` and `/sdlc-flow`, the *final* fix pass and
 *final* review attempt run on `ESCALATION_MODEL` (`opus`). A hard task that has already failed gets one
 strong shot before the pipeline wraps up `FAIL`. Set `ESCALATION_MODEL = null` to disable.
 
@@ -186,8 +182,8 @@ The real planning leverage is **upstream**: `/generate-tasks` and `/breakdown` r
 model, so author specs on an Opus session, then let the pipeline grind on Sonnet.
 
 ### The retry loop (max 3 attempts)
-`implement → test → review →` `PASS: document` **or** `FAIL/PARTIAL: fix → test → review` (up to 3
-review attempts — `/sdlc-run`). `/sdlc-flow` and `/sdlc-task` use a triage-gated bail instead of a
+`implement → test → review →` `PASS: document` **or** `FAIL/PARTIAL: fix → test → review`.
+`/sdlc-flow` and `/sdlc-task` use a triage-gated bail instead of a
 simple counter: triage classifies each failure as `RETRYABLE` or stuck, and stops early on stuck. Each
 fix pass is its own commit, so the diff from each pass is auditable. After max failures the pipeline
 wraps up `FAIL`.
@@ -202,9 +198,8 @@ each engine's committed state file — check the state JSON for real figures fro
 | Workflow | Typical agents per run | Notes |
 |---|---|---|
 | `/sdlc-task` (one task, PASS first try) | ~4–6 | scout + implement + test + commit |
-| `/sdlc-run` (one task, PASS first try) | ~6–8 | scout → implement → test → review → document → wrap-up |
 | `/sdlc-flow` (5-task spec, PASS first try) | ~30–40 | setup + per-task update/implement/test + end-review + docs + wrap-up + PR |
-| `/sdlc-block` (5-block roadmap) | N × `/sdlc-flow` + orchestration | dominated by child flow costs; roll-up in `block-orchestration-state.json` |
+| `/orchestrate` (5-block roadmap) | N × `/sdlc-flow` + orchestration | dominated by child flow costs |
 
 > **Token roll-up note:** all engines record **substantive-stages-only** totals — cheap Haiku helper
 > agents (state writers, enumerate, update-task) are excluded. See
@@ -216,10 +211,13 @@ each engine's committed state file — check the state JSON for real figures fro
 
 - **[sdlc-flow.md](sdlc-flow.md)** — the default for non-trivial feature work (D30). Shared worktree,
   per-task test-fix loop, triage-gated bail (D32), committed state model (D31), PR wrap-up (D33).
-- **[sdlc-run.md](sdlc-run.md)** — the sequential engine. Parameters, `--from`, stages, resumption, gates.
 - **[sdlc-task.md](sdlc-task.md)** — lean single-unit engine (D38). In-place or `--worktree`, implement→test→fix→commit, pairs with `/chore`/`/ticket`.
-- **[sdlc-block.md](sdlc-block.md)** — roadmap orchestrator (D39/D40/D43). Pre-flight, enumerate-blocks, per-block `/sdlc-flow`, branch train, `/review-PR`, `/merge-train`.
 - **[commands.md](commands.md)** — the manual command lifecycle the engines automate (Phase 1 → 7).
+
+> A whole roadmap is driven by `/orchestrate` / `/begin-orchestration` (one `/sdlc-flow` per block,
+> branch train of PRs, `/review-PR` → `/merge-train`) — see
+> [`.claude/commands/README.md`](../../.claude/commands/README.md); block-level roadmap orchestration
+> no longer has a dedicated engine of its own (D39 superseded).
 
 ## Related
 

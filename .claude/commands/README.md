@@ -206,7 +206,7 @@ to report to the operator on close. The map:
 | `/chore` · `/ticket` | one session — authors **and** decomposes; the engine runs fresh | Sonnet; Opus for a subtle `/ticket` |
 | `/capture` | inline in whatever session found the thing — **never a subagent** | whatever is already running |
 | `/begin-orchestration` | fresh, **one per lane**, held open for the chain | Opus |
-| `/sdlc-task` · `/sdlc-flow` · `/sdlc-run` | fresh | per-engine — the engines tier their own internal agents (Sonnet on mechanical stages, Opus escalation on hard retries) |
+| `/sdlc-task` · `/sdlc-flow` | fresh | per-engine — the engines tier their own internal agents (Sonnet on mechanical stages, Opus escalation on hard retries) |
 
 **Fresh** where the next step must be able to disagree with this one, or must prove an artifact
 stands alone. **Continuous** where the work is one sustained act of judgement. The `/sequence` →
@@ -230,8 +230,8 @@ the task loop is enumerated from `tasks.json`, and a missing or unparseable one 
 (D16).
 
 Split on the last space. Trailing number = task N (scope to that task only). No number = full
-spec. Use the **same `N`** throughout the pipeline — under `/sdlc-run` and the hand-invoked
-Phase 2–5 commands it determines every report filename (see Run Artifacts below).
+spec. Use the **same `N`** throughout the pipeline — under the hand-invoked Phase 2–5 commands
+it determines every report filename (see Run Artifacts below).
 
 ### Directory Layout
 
@@ -250,7 +250,7 @@ planning/
     sdlc/
       sdlc-<engine>-state.json   <- authoritative run state, committed
       worklog.md                 <- human-readable trail, one section per task (D31)
-      reports/                   <- /sdlc-run only; plus gate baselines for the other engines
+      reports/                   <- Phase 2-5 commands invoked by hand; plus gate baselines for the other engines
 ```
 
 **The two files people confuse.** `tasks.json` is what runs — a bare array, never a
@@ -267,8 +267,7 @@ says so. Their `sdlc/reports/` path survives only for gate baselines (`<slug>-ba
 `<slug>-skip-baseline.txt`), not step output. Measured across the fleet: **0 `sdlc/reports/`
 directories exist; 18 `worklog.md` files do.**
 
-**`/sdlc-run` still writes the report-per-step layout**, and the table below is accurate for it and
-for the Phase 2-5 commands invoked by hand.
+**The Phase 2-5 commands invoked by hand still write the report-per-step layout** below.
 
 | Step | Full-spec | Task-scoped |
 |---|---|---|
@@ -277,8 +276,6 @@ for the Phase 2-5 commands invoked by hand.
 | test | `test.md` | `task3-test.md` |
 | review | `review.md` | `task3-review.md` |
 | document | `document.md` | `task3-document.md` |
-| workflow (`/sdlc-run`) | `workflow.md` | `task3-workflow.md` |
-| workflow-review | `workflow-review.md` | `task3-workflow-review.md` |
 
 Pattern: `[taskN-]{step}.md` inside `planning/<BlockID>/sdlc/reports/`. `/fix` writes to the same
 slot as `/implement` — it is the current state of Phase 2 work, and git history holds the rest.
@@ -292,39 +289,11 @@ unattended.
 
 | Workflow | Scope | Isolation |
 |---|---|---|
-| `/sdlc-run <name> [N]` | one task or a **full spec**, sequential | none — runs on the current branch, updates STATUS/Log directly |
 | `/sdlc-task <name> N` | **one** task, parallel-safe | own git worktree; defers STATUS/Log to merge time |
 | `/sdlc-flow <name> [range]` | a **full spec** on one shared branch, per-task test→fix loop, one end review, a PR | plain branch in the main tree (or `--worktree` for isolation); terminates in a PR |
-| `/sdlc-block [plan-file]` | a **whole roadmap** (master-plan) as a branch train — one `/sdlc-flow` per independent block, in dependency-ordered waves | each block its own worktree + PR; orchestrator owns the train branch and merges in dependency order |
 
 > **Full reference with mermaid diagrams, per-stage detail, and token usage:**
 > [`docs/workflows/`](../../docs/workflows/index.md) — one page per engine plus the manual lifecycle.
-
-### `/sdlc-block` — roadmap orchestration (branch train)
-
-**Drive a whole master-plan roadmap to completion in one invocation.** Fans out **one `/sdlc-flow` per
-independent block** over dependency-ordered waves, producing a **branch train of reviewable PRs**.
-Blocks in a wave are independent *by construction* (the master-plan's per-block **Files** + **Out of
-scope** contract). A **pre-flight** guarantees a clean tree with the plan committed and sets up the train
-branch off the base; **enumerate** parses the `## Phase N` / `### Block X` sections into blocks + a
-dependency graph. Per wave it ensures each block's `tasks.md`, fans out the child flows (each `--no-pr`),
-runs a **per-block close-out gap-check** (scoped to the whole block, `<train>...HEAD`), then opens the PR
-(default) or merges into the base (`--auto-merge`), advancing the train in dependency order. A final
-`/close-out --gap-check-only` runs over the full train. See
-[D34](../../planning/decisions/D34-adhoc-planning-seam.md).
-
-| Arg | Meaning | Default |
-|---|---|---|
-| `[plan-file]` | Optional 1st positional — a master-plan-format path, or a slug → `planning/<slug>/plan.md`. | `planning/master-plan.md` |
-| `--base <branch>` | Base branch the train forks from / merges into. | `main` |
-| `--auto-merge` | Merge each block into `<base>` in dependency order (no PRs). | off |
-| `--no-pr` | Branch train only — no PRs anywhere. | off |
-| `--max-parallel-blocks N` | Max `/sdlc-flow` runs in flight per wave (default from `harness.json` `block.maxParallelBlocks`). | `3` |
-| `--blocks <sel>` | Phase selection: `0`, `0-1`, `0,2` — only those phases' blocks run. | all phases |
-| `--resume` | Re-read `block-orchestration-state.json`, skip done blocks, continue. | — |
-
-After the train is built, review each PR with **`/review-PR <PR#>`** and land them bottom-up with
-**`/merge-train`** (below).
 
 ### `/review-PR <PR#> [plan-slug]`
 Spec-aware review for a branch-train PR. Locates the block's `block-orchestration-state.json`, checks
@@ -432,7 +401,7 @@ into the handoff's `## Open questions / choices` section as prose** — that sec
 slugs already filed, it does not hold decisions itself.
 
 ### `/close-out [--base <ref>] [--gap-check-only] [--skip-coverage] [--clean-worktree | --merge-branch] [note]`
-Quality-close pipeline for the end of an `sdlc-run` or `sdlc-flow` session. Runs **(0.5)**
+Quality-close pipeline for the end of an `sdlc-flow` or `sdlc-task` session. Runs **(0.5)**
 diff-base resolution before anything else: the emoji gate and the coverage sweep must scope to
 the **same** base, resolved from real evidence — an explicit `--base <ref>`, else
 `planning/harness.json`'s `flow.prBase`, else `origin/HEAD`, else a local `main`/`master` — never
@@ -800,7 +769,7 @@ and for most chores.
 
 `/chore` and `/ticket` write a runnable `tasks.md` **directly** and route to lean `/sdlc-task`
 (the fast path). `/plan` writes a `plan.md` in the **master-plan format** (phases/blocks/Quick
-Reference table), so `/sdlc-block` can orchestrate it as a branch train or `/generate-tasks --from
+Reference table), so `/orchestrate` can drive it as a branch train or `/generate-tasks --from
 planning/plan-<slug>/plan.md` can decompose a single block into a `tasks.md` → `/sdlc-flow`, all
 **without** touching `master-plan.md`. See `planning/decisions/D34-adhoc-planning-seam.md`.
 
@@ -903,11 +872,10 @@ Finds the target spec (defaulting to the first non-done spec), checks that all p
 are `Done`, then flips it to `In progress` and updates Current focus + Last updated.
 
 ### `/init-worktree` · `/clean-worktree`
-Manual entry points for the isolated-worktree lifecycle that `/sdlc-task` and `/sdlc-block`
+Manual entry points for the isolated-worktree lifecycle that `/sdlc-task` and `/orchestrate`
 automate. `/init-worktree` derives a branch/worktree from the spec slug and creates an isolated
 sparse checkout; `/clean-worktree` **merges before delete** — fast-forward-merges the branch
-into `main`, applies deferred STATUS/Log updates, then removes the worktree. Do **not** run
-`/clean-worktree` for `/sdlc-block` tasks — that orchestrator merges each wave for you.
+into `main`, applies deferred STATUS/Log updates, then removes the worktree.
 
 ### `/update-docs [--patch] [--since <ref>]`
 Documentation health sweep — audits all `docs/` files and `.claude/commands/README.md` against

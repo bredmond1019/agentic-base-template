@@ -7,12 +7,12 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [SDLC commands, manual pipeline, slash commands, human checkpoint, phase 1-7]
-related: [base-template-workflows-index, sdlc-run, sdlc-task, sdlc-flow, sdlc-block]
+related: [base-template-workflows-index, sdlc-task, sdlc-flow]
 ---
 
 # Manual SDLC command lifecycle
 
-The four engines ([`/sdlc-run`](sdlc-run.md), [`/sdlc-task`](sdlc-task.md), [`/sdlc-flow`](sdlc-flow.md), [`/sdlc-block`](sdlc-block.md))
+The two engines ([`/sdlc-task`](sdlc-task.md), [`/sdlc-flow`](sdlc-flow.md))
 **automate** the manual slash-command pipeline below. Run the commands by hand when you want a human
 checkpoint between stages — inspect each report before proceeding, intervene, or cherry-pick stages.
 
@@ -119,7 +119,7 @@ Phase 2–6 pipeline (downstream commands derive report paths from the spec's pa
 ```
 /chore <desc>    → planning/chore-<slug>/tasks.md   ─→ lean /sdlc-task (fast path)
 /ticket <desc>   → planning/ticket-<slug>/tasks.md  ─→ lean /sdlc-task (fast path)
-/plan <desc>     → planning/plan-<slug>/plan.md     ─→ /sdlc-block (multi-block)
+/plan <desc>     → planning/plan-<slug>/plan.md     ─→ /orchestrate (multi-block)
                                                         or /generate-tasks --from + /sdlc-flow (single block)
 ```
 
@@ -128,18 +128,16 @@ Phase 2–6 pipeline (downstream commands derive report paths from the spec's pa
 ## Worktree commands (manual isolation)
 
 `/init-worktree` and `/clean-worktree` are the manual entry points to the isolated-worktree lifecycle
-that [`/sdlc-task`](sdlc-task.md) and [`/sdlc-block`](sdlc-block.md) automate.
+that [`/sdlc-task`](sdlc-task.md) and `/orchestrate` automate.
 
 - **`/init-worktree <spec> [N]`** — derive a branch/worktree from the spec slug and create an isolated
   cone-mode sparse checkout. Open it as a new Claude Code session and run the pipeline (manual or
-  `/sdlc-run`) inside it.
+  automated) inside it.
 - **`/clean-worktree <branch>`** — **merge before delete**: fast-forward the branch into `main`, apply the
   deferred `status.md`/`log.md` updates from the task log, run `mev emit-state --write` to regenerate
   derived surfaces from any `planning/state.json` block-status flip the branch carried
   ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)), then remove the
   worktree and branch.
-
-> Do **not** run `/clean-worktree` for `/sdlc-block` tasks — the orchestrator merges each wave for you.
 
 ---
 
@@ -149,6 +147,5 @@ that [`/sdlc-task`](sdlc-task.md) and [`/sdlc-block`](sdlc-block.md) automate.
 |---|---|
 | Step-by-step with a human checkpoint between stages | manual commands (this page) |
 | Small tested change — a `/chore` or `/ticket` spec | [`/sdlc-task`](sdlc-task.md) |
-| One task / full spec, sequential, no isolation | [`/sdlc-run`](sdlc-run.md) |
 | Non-trivial feature work, branch-isolated, terminates in PR | [`/sdlc-flow`](sdlc-flow.md) |
-| Drive a whole roadmap as a branch train of PRs | [`/sdlc-block`](sdlc-block.md) |
+| Drive a whole roadmap as a branch train of PRs | `/orchestrate` |

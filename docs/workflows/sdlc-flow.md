@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [sdlc-flow, branch mode, worktree, PR, test-fix loop, end-review, D46]
-related: [base-template-workflows-index, sdlc-block, D30-sdlc-flow-engine, D31-committed-authoritative-state, D33-pr-based-wrap-up]
+related: [base-template-workflows-index, D30-sdlc-flow-engine, D31-committed-authoritative-state, D33-pr-based-wrap-up]
 ---
 
 # `/sdlc-flow` — single-branch, PR-terminating SDLC engine
@@ -17,10 +17,9 @@ shared branch** — so there are no inter-task merge conflicts — with a per-ta
 `implement → fast-test → fix` loop, **one** consolidated review over the integrated tree at the end,
 a surgical docs patch, and a **pull request** as the terminal step.
 
-Compared with `/sdlc-block`, `/sdlc-flow` trades task-level parallelism for reliability: one
-shared branch means zero inter-task merge conflicts, one end-review instead of a per-task pile, and
-a PR handoff rather than an in-place landing. Compared with `/sdlc-run`, it works on a dedicated
-`<spec>-flow` branch and terminates with a PR rather than committing directly to the current branch.
+Compared with `/sdlc-task`, `/sdlc-flow` trades per-task independence for a single consolidated
+review over the integrated tree, a docs patch, and a PR as the terminal step rather than a bare
+commit.
 
 ## Isolation mode — branch (default) vs `--worktree`
 
@@ -31,7 +30,7 @@ until the PR merges; a fresh run refuses to start on a **dirty** working tree (c
 or use `--worktree`).
 
 Pass **`--worktree`** to run in an isolated sparse-checkout worktree under `trees/<spec>-flow/`
-instead — the original behavior. Reach for it when you need true isolation: notably `/sdlc-block`,
+instead — the original behavior. Reach for it when you need true isolation: notably `/orchestrate`,
 which fans out concurrent `/sdlc-flow` children and therefore always passes `--worktree` so parallel
 blocks don't collide in one working tree.
 
@@ -65,7 +64,7 @@ Engine: [`.claude/workflows/sdlc-flow.js`](../../.claude/workflows/sdlc-flow.js)
 | `--tasks <range>` | Equivalent to the positional range. | — |
 | `--auto-merge` | After a clean PASS, merge the PR, delete the branch (tear down the worktree too under `--worktree`), and run `mev emit-state --write` on the base. Only fires on a non-draft PR with a PASS verdict and an independently-verified `prOutcome === 'created'` — never on bail. See [PR-stage outcome vocabulary](#pr-stage-outcome-vocabulary). | off |
 | `--no-pr` | Stop after wrap-up; leave the branch for a manual PR (or `/close-out --merge-branch`). | off (create PR) |
-| `--worktree` | Run in an isolated sparse-checkout worktree under `trees/<spec>-flow/` instead of a plain branch in the main tree. Needed for concurrent runs (e.g. `/sdlc-block` children). | off (plain branch) |
+| `--worktree` | Run in an isolated sparse-checkout worktree under `trees/<spec>-flow/` instead of a plain branch in the main tree. Needed for concurrent runs (e.g. `/orchestrate` children). | off (plain branch) |
 | `--resume` | Re-attach the existing branch/worktree and skip tasks whose `state.json` status is `passed`. | off |
 | `--test-depth fast\|full` | Per-task validation depth. `fast` runs only `gates:true` checks (the tripwire); `full` runs the whole suite per task. | `fast` |
 
@@ -430,9 +429,8 @@ in-memory task history from that on-disk file before the per-task loop runs, so 
 |---|---|
 | `/patch` | Trivial hotfix with no tests needed. |
 | `/sdlc-task` | Small tested change — a `/chore` or `/ticket` spec. Fast implement → test → commit. |
-| `/sdlc-run` | One task or a full spec on the current branch — no isolation or PR needed. |
 | `/sdlc-flow` | **Default for non-trivial feature work** — sequential, conflict-free, terminates in a PR. |
-| `/sdlc-block` | A whole roadmap — fans out one `/sdlc-flow` per independent block, branch train of PRs. |
+| `/orchestrate` | A whole roadmap — drives an ordered chain of blocks through the engines, one `/sdlc-flow` per independent block. |
 
 ---
 

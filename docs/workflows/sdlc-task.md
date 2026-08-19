@@ -18,7 +18,7 @@ authoritative reconcile ([D56](../../planning/decisions/D56-sdlc-task-authoritat
 either in-place on the current branch (default) or in an isolated worktree (`--worktree`).
 
 Think of it as the middle rung of the pipeline ladder — more ceremony than `/patch` (real test
-loop), less than `/sdlc-run` (no review/document/wrap-up agents). Pairs with `/chore` and
+loop), less than `/sdlc-flow` (no review/document/wrap-up agents). Pairs with `/chore` and
 `/ticket`.
 
 Engine: [`.claude/workflows/sdlc-task.js`](../../.claude/workflows/sdlc-task.js)
@@ -211,9 +211,8 @@ deserializes `state.json` into typed structs, so a scalar where a struct belongs
 `origin` where the schema types it as `{type, slug}`) parses fine and fails deserialization for
 the **whole file**. That exact shape mismatch happened 2026-08-09, produced `E_STATE_MALFORMED_JSON`
 plus 30 cascading errors, and blocked every other repo's push gate — the incident this contract
-exists to prevent from recurring. `sdlc-flow.js`'s wrap-up equivalent, and the analogous writes in
-`sdlc-run.js` (step 5b) and `sdlc-block.js`'s `syncBlockState()` helper, all follow the identical
-contract below — none of the four engines is excluded.
+exists to prevent from recurring. `sdlc-flow.js`'s wrap-up equivalent follows the identical
+contract below — neither of the two surviving engines is excluded.
 
 **What runs, in order:**
 
@@ -366,9 +365,8 @@ Reach for `/sdlc-task` when:
 |---|---|
 | `/patch` | Trivial hotfix with no tests needed |
 | `/sdlc-task` | **Small tested change** — `/chore` or `/ticket` work |
-| `/sdlc-run` | Full spec with review/document/wrap-up, on the current branch |
 | `/sdlc-flow` | Non-trivial feature work with a PR handoff |
-| `/sdlc-block` | Whole roadmap — one `/sdlc-flow` per block, branch train |
+| `/orchestrate` | Whole roadmap — one `/sdlc-flow` per block, branch train |
 
 ---
 
