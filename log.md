@@ -9,6 +9,21 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-19]
 
+Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` a third time (tasks 1-6). Tasks 1 and 2 re-verified clean again. Task 3 re-verified the prior attempt's deletion of `sdlc-block.js`/`sdlc-run.js` (commit a547258, already on this worktree's HEAD) is correct and complete, but hit the same CHECK 21/22 engine-parse-safety failure as attempt 1 — byte-identical text, no progress made. Re-ran the guarded shell snippet exactly as rendered by `sdlc-flow.js`/`sdlc-task.js`'s `renderEngineParseChecks` for `sdlc-block.js` and `sdlc-run.js`: it exits 0 (file absent → "nothing to parse", not an error). A plain unguarded `node --check` on the same deleted paths reproduces the exact `MODULE_NOT_FOUND` text seen in CHECK 21/22, so the failure is coming from how the test/triage stage evaluates a deleted file, not from the actual gate mechanism, which already passes. This is the same structural gap the ticket already bailed on once before — `sdlc-flow.js`'s own hardcoded per-task-file engine-parse-safety gate runs `node --check` on every `.js` path listed in task 3's `tasks.json` `files[]`, and no bounded fix exists within this ticket's scope. Tasks 4, 5, 6 were not run. Verdict: **BAILED** — needs an operator decision on how to reconcile a file-deleting task's `files[]` with this gate; a third identical retry will not resolve it. Next: operator decides the reconciliation approach, then resume from Task 3 (or later) accordingly.
+
+```
+619d5f5 chore: wrap up BT.ticket.retire-unused-engines
+5fd9cda chore: wrap up BT.ticket.retire-unused-engines
+a547258 feat: implement BT.ticket.retire-unused-engines-task3
+427c7fa chore: init worktree BT.ticket.retire-unused-engines-flow
+cd15c51 fix(engines): a task that deletes an engine can now pass its own parse gate
+501d21e perf(harness): stop roadmap-status-discovery-tests SIGKILLing its caller
+31d48da feat(harness): three more authoring skills — commit, derive, gates
+a4c12f8 feat(harness): mirror the authoring skills onto the vendor-neutral surface
+```
+
+## [run: 2026-08-19]
+
 Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` again (tasks 1-6, resuming after the prior run's timeout bail). Tasks 1 and 2 re-verified clean (usage census/baseline recorded, D68 site-table fault-injection proof). Task 3 re-confirmed the prior attempt's deletion of `sdlc-block.js`/`sdlc-run.js` plus their skill guides and gate unwiring was already committed (91f71d4) and gates green, then hit a different, structural blocker on re-verification: `sdlc-flow.js`'s own hardcoded per-task-file engine-parse-safety gate (`renderEngineParseChecks`, lines 701-717 — independent of `planning/harness.json` by design) runs `node --check` on every `.js` path listed in task 3's `tasks.json` `files[]`, which legitimately names `sdlc-block.js` and `sdlc-run.js` since those are exactly the files the task deletes; `node --check` on a now-deleted path throws `MODULE_NOT_FOUND`, reproduced directly and matching CHECK 21/22 verbatim. No bounded fix exists within this ticket's scope — resolving it means either editing `tasks.json`'s `files[]` to omit files the task's own acceptance criteria requires confirming are gone, or modifying the shared `sdlc-flow.js` gate mechanism itself, which is out of scope for a ticket about retiring two other engines. Tasks 4, 5, 6 were not run. Verdict: **BAILED** — this is a structural spec gap the ticket did not anticipate; needs an operator decision on how to reconcile a file-deleting task with sdlc-flow.js's own file-existence gate. Next: operator decides the reconciliation approach (amend tasks.json's files[] scoping vs. amend the shared engine gate), then resume from Task 3 (or later) accordingly.
 
 ```
