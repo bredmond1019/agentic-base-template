@@ -163,17 +163,25 @@ class EnginesOnlyGuard(unittest.TestCase):
     def test_invoked_scripts_sync_but_base_template_own_tooling_does_not(self):
         """Only scripts a downstream command actually invokes propagate.
 
-        /ticket, /chore and /generate-tasks shell out to render_spec.py; without it they fail
-        at their render step in every scaffolded repo. The rest of scripts/ is base-template's
-        own gate and test tooling — project fact, and propagating it would drop dead checks
-        into 17 repos.
+        check_block_records.py is the interim block-record gate a downstream command runs, so it
+        must reach every scaffolded repo. The rest of scripts/ is base-template's own gate and
+        test tooling — project fact, and propagating it would drop dead checks into 17 repos.
+
+        render_spec.py is asserted ABSENT, not present: BT.ticket.engines-read-block-record
+        deleted it on 2026-08-20 when the engines moved to reading the block record directly, so
+        /ticket, /chore and /generate-tasks no longer have a render step. Shipping a renderer that
+        no longer exists to 17 repos would be the drift this whole list exists to prevent.
         """
-        _write(self.bt / "scripts" / "render_spec.py", "# renderer\n")
+        _write(self.bt / "scripts" / "check_block_records.py", "# block-record gate\n")
+        _write(self.bt / "scripts" / "render_spec.py", "# retired renderer\n")
         _write(self.bt / "scripts" / "test_sync_downstream_harness.py", "# own tooling\n")
         for engines_only in (False, True):
             names = {p.name for p in sync.harness_files(self.bt, engines_only=engines_only)}
-            self.assertIn("render_spec.py", names,
+            self.assertIn("check_block_records.py", names,
                           f"missing with engines_only={engines_only}")
+            self.assertNotIn("render_spec.py", names,
+                             "the retired renderer must not propagate, even if a stale copy "
+                             "still sits in base-template's scripts/")
             self.assertNotIn("test_sync_downstream_harness.py", names,
                              "base-template's own tooling must never propagate")
 

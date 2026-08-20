@@ -277,10 +277,13 @@ def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
 # propagate. Only scripts a downstream command actually invokes belong here, and each addition
 # is a deliberate widening.
 #
-# render_spec.py is invoked by /ticket, /chore and /generate-tasks to render tasks.md from the
-# block record. Without it those commands fail at their render step in every scaffolded repo.
+# render_spec.py was REMOVED from this list on 2026-08-20 by BT.ticket.engines-read-block-record:
+# the engines now read planning/blocks/<BlockID>.json + tasks.json directly, /ticket, /chore and
+# /generate-tasks no longer have a render step, and the script itself is deleted. Dropping it here
+# makes this script REMOVE the stale downstream copies on the next sync (it reconciles removals,
+# not just copies -- the same pass that retires sdlc-block.js and sdlc-run.js). Do not re-add it.
 # check_block_records.py is the interim block-record gate until mev's W_BLOCK_* checks ship.
-SCRIPT_FILENAMES: list[str] = ["render_spec.py", "check_block_records.py"]
+SCRIPT_FILENAMES: list[str] = ["check_block_records.py"]
 
 
 def collect_script_files(root: Path) -> list[Path]:
