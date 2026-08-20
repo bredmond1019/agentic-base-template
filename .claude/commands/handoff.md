@@ -239,8 +239,10 @@ target this repo feeds, report it rather than inventing the missing sentinel pai
 
 **4d — Commit.** Stage `planning/handoff.md`, the `state.json` edits, `log.md`, `status.md`, and
 any other uncommitted work. Write a conventional-commit message. Show the staged file list and
-get confirmation before committing. Branch first if on the default branch. Do not push unless
-asked.
+get confirmation before committing. **Commit on whatever branch you are already on — do not
+create one.** `/handoff` is called at the end of finished work, which is normally already on
+`main`; branching there strands the handoff off the branch the next session opens. Do not push
+unless asked.
 
 ### Step 5 — Report
 
