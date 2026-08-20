@@ -14,10 +14,12 @@ related: [base-template-workflows-index, sdlc-task, sdlc-flow]
 
 The two engines ([`/sdlc-task`](sdlc-task.md), [`/sdlc-flow`](sdlc-flow.md))
 **automate** the manual slash-command pipeline below. Run the commands by hand when you want a human
-checkpoint between stages — inspect each report before proceeding, intervene, or cherry-pick stages.
+checkpoint between stages — inspect `sdlc/worklog.md` before proceeding, intervene, or cherry-pick
+stages.
 
 Every step from Phase 2 onward takes the same argument form: `planning/<spec>/tasks.md [N]` (trailing
-number = scope to task N; omit for the full spec — use the **same N** throughout, it names every report).
+number = scope to task N; omit for the full spec — use the **same N** throughout, it scopes every
+`sdlc/state.json` task entry and worklog section).
 
 > The full per-command catalog (every flag, every input/output) lives in
 > [`.claude/commands/README.md`](../../.claude/commands/README.md). This page is the **lifecycle view**:
@@ -76,7 +78,7 @@ flowchart TD
 flowchart LR
     gt["/generate-tasks"] --> spec[("tasks.md")]
     spec --> impl["/implement<br/>(scope + criteria)"]
-    spec --> test["/test<br/>(report naming)"]
+    spec --> test["/test<br/>(state.json + worklog)"]
     spec --> rev["/review-task<br/>(acceptance criteria)"]
     spec --> doc["/document"]
 ```
@@ -84,29 +86,36 @@ flowchart LR
 - **`tasks.md` is authoritative for WHAT** (scope + acceptance criteria). When `/breakdown` has run,
   **`breakdown.md` is authoritative for HOW** (exact file paths, atomic change boundaries) — `/implement`
   and `/fix` auto-detect it and use the matching `### Step N:` section.
-- **The `[N]` task number scopes the whole pipeline** to one task and prefixes every report `taskN-`. Use
-  the same N at every step.
+- **The `[N]` task number scopes the whole pipeline** to one task — every command reads/writes only
+  that task's entry in `sdlc/state.json` and appends only that task's section to `sdlc/worklog.md`.
+  Use the same N at every step.
 
 ---
 
-## Reports, directories, gates
+## State, directories, gates
 
-Reports live at `planning/<spec>/sdlc/reports/`, named `[taskN-]<stage>.md`. Each stage reads the prior
-stage's report as historical context; **only `/review-task` re-runs live tests** (authoritative).
+Each Phase 2-5 command reads and updates one shared `planning/<spec>/sdlc/state.json` (per-task
+status, attempts, files changed, commit, validation result — same shape `/sdlc-task` uses, D31) and
+appends a human-readable section to `planning/<spec>/sdlc/worklog.md`. There is no per-stage prose
+report file: each stage reads the prior stage's `state.json` fields and worklog sections as
+historical context; **only `/review-task` re-runs live tests** (authoritative). Both files are
+write-only artifacts — never `git add`/`git commit`ed (D46 vault reasoning) — and are read back off
+disk, not out of git history.
 
 ```
 planning/<spec>/
   tasks.md          ← /generate-tasks
   breakdown.md      ← /breakdown (optional)
-  sdlc/reports/
-    [taskN-]implement.md   test.md   review.md   document.md   workflow-review.md
+  sdlc/
+    state.json      ← implement, test, fix, review-task, document (shared, per-task keyed)
+    worklog.md       ← same commands, appended section per task per stage
 ```
 
 | Gate | Enforced by | On failure |
 |---|---|---|
-| Review must PASS before Document | `/document` reads the review verdict | hard-stops on FAIL/PARTIAL |
+| Review must PASS before Document | `/document` reads `state.json`'s review verdict | hard-stops on FAIL/PARTIAL |
 | Fresh tests must pass for a PASS verdict | `/review-task` runs the gating checks live | a failed check forces FAIL/PARTIAL regardless of the code reading |
-| Review report must exist + be non-PASS to run Fix | `/fix` reads the verdict | hard-stops if absent; soft-stops if already PASS |
+| A review result must exist + be non-PASS to run Fix | `/fix` reads `state.json`'s review verdict (falling back to the latest `## Task <N> — REVIEW ...` worklog section) | hard-stops if absent; soft-stops if already PASS |
 
 ---
 
