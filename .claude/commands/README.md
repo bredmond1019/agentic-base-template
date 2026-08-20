@@ -109,14 +109,14 @@ predictably-named output file.
 | **1 — Plan** | `/generate-tasks <name>` · `/generate-tasks --from <path>` | Write the full task spec from a master-plan block, **or** from a standalone block file (`--from`) | `planning/<name>/tasks.md` |
 | **1 — Plan (ad-hoc)** | `/chore` · `/ticket` · `/plan <desc>` | Plan ad-hoc work from a free-text description (not a roadmap block). `/ticket` reproduces the failure first and orders the test before the fix; `/chore` takes a pre-change gate baseline | `planning/blocks/<BlockID>.json` + `planning/<BlockID>/tasks.json` — or `planning/<slug>/plan.md` for `/plan` |
 | **1 — Plan (opt.)** | `/breakdown <spec>` | Decompose spec into atomic, agent-executable sub-steps | `planning/<name>/breakdown.md` |
-| **2 — Implement** | `/implement <spec> [N]` | Execute every task (or task N) in the spec | `planning/<name>/sdlc/reports/[taskN-]implement.md` |
+| **2 — Implement** | `/implement <spec> [N]` | Execute every task (or task N) in the spec | `sdlc/state.json` + `sdlc/worklog.md` |
 | **2 — Hotfix** | `/patch` | Implement → validate → commit for low-risk single-file fixes; skips test/review/document | git history |
-| **2 — Fix** | `/fix <spec> [N]` | Targeted fixes for FAIL/PARTIAL verdict; reads review report; overwrites implement report | `planning/<name>/sdlc/reports/[taskN-]implement.md` |
+| **2 — Fix** | `/fix <spec> [N]` | Targeted fixes for FAIL/PARTIAL verdict; reads review worklog entry; appends a fix-pass entry | `sdlc/state.json` + `sdlc/worklog.md` |
 | **2 — Track** | `/update-task [name] <step> [note]` | Mark a step done and/or append a dated note mid-implementation | spec file (in-place) |
 | **2 — Commit** | `/commit [hint]` | Stage + commit with a conventional message | git history |
-| **3 — Test** | `/test <spec> [N]` | Run the project's validation suite; write snapshot | `planning/<name>/sdlc/reports/[taskN-]test.md` |
-| **4 — Review** | `/review-task <spec> [N]` | Verify all criteria; run fresh tests; issue verdict | `planning/<name>/sdlc/reports/[taskN-]review.md` |
-| **5 — Document** | `/document <spec> [N]` | Surgically patch `docs/`; gates on PASS verdict | `planning/<name>/sdlc/reports/[taskN-]document.md` |
+| **3 — Test** | `/test <spec> [N]` | Run the project's validation suite; write snapshot | `sdlc/state.json` + `sdlc/worklog.md` |
+| **4 — Review** | `/review-task <spec> [N]` | Verify all criteria; run fresh tests; issue verdict | `sdlc/state.json` + `sdlc/worklog.md` |
+| **5 — Document** | `/document <spec> [N]` | Surgically patch `docs/`; gates on PASS verdict | `sdlc/state.json` + `sdlc/worklog.md` |
 | **6 — Wrap-up** | `/log-work [notes]` | Update status.md + append Log entry + sync company brain | status.md, log.md, brain `docs/projects/<slug>.md`, brain `README.md` |
 
 ### Pipeline Flow
@@ -162,26 +162,26 @@ PHASE 1 — PLAN             ← fresh session, ONE PER BLOCK
 
 PHASE 2 — IMPLEMENT
   /implement planning/<spec>/tasks.md [N]
-        → planning/<spec>/sdlc/reports/[taskN-]implement.md
+        → planning/<spec>/sdlc/state.json + sdlc/worklog.md
   (/update-task and /commit can be called any number of times during this phase)
 
 PHASE 3 — TEST
   /test planning/<spec>/tasks.md [N]
-        → planning/<spec>/sdlc/reports/[taskN-]test.md
+        → planning/<spec>/sdlc/state.json + sdlc/worklog.md
 
 PHASE 4 — REVIEW                   ← runs fresh tests; verdict gates next step
   /review-task planning/<spec>/tasks.md [N]
-        → planning/<spec>/sdlc/reports/[taskN-]review.md
+        → planning/<spec>/sdlc/state.json + sdlc/worklog.md
 
         if PASS → continue to PHASE 5 — DOCUMENT
         if FAIL/PARTIAL → PHASE 2 — FIX:
   /fix planning/<spec>/tasks.md [N]
-        → planning/<spec>/sdlc/reports/[taskN-]implement.md  (overwritten)
+        → planning/<spec>/sdlc/state.json + sdlc/worklog.md  (appends a fix-pass entry)
   then repeat: /test [N] → /review-task [N] until PASS
 
 PHASE 5 — DOCUMENT                 ← gates on PASS verdict
   /document planning/<spec>/tasks.md [N]
-        → planning/<spec>/sdlc/reports/[taskN-]document.md
+        → planning/<spec>/sdlc/state.json + sdlc/worklog.md
 
 PHASE 6 — WRAP-UP
   /log-work [notes]        → status.md, log.md
@@ -231,7 +231,8 @@ the task loop is enumerated from `tasks.json`, and a missing or unparseable one 
 
 Split on the last space. Trailing number = task N (scope to that task only). No number = full
 spec. Use the **same `N`** throughout the pipeline — under the hand-invoked Phase 2–5 commands
-it determines every report filename (see Run Artifacts below).
+it determines which `tasks["<N>"]` entry in `sdlc/state.json` and which `## Task <N> — ...`
+worklog section this run reads and writes (see Run Artifacts below).
 
 ### Directory Layout
 
@@ -248,9 +249,10 @@ planning/
     tasks.md          <- GENERATED from the record by scripts/render_spec.py. Never hand-edit.
     breakdown.md      <- optional (written by /breakdown)
     sdlc/
-      sdlc-<engine>-state.json   <- authoritative run state, committed
-      worklog.md                 <- human-readable trail, one section per task (D31)
-      reports/                   <- Phase 2-5 commands invoked by hand; plus gate baselines for the other engines
+      sdlc-<engine>-state.json   <- authoritative run state for /sdlc-task or /sdlc-flow, committed
+      state.json                 <- run state for the hand-invoked Phase 2-5 commands, write-only (not committed)
+      worklog.md                 <- human-readable trail, one section per task (D31); shared by engines and hand-invoked commands
+      reports/                   <- gate baselines only (<slug>-baseline.json, <slug>-skip-baseline.txt)
 ```
 
 **The two files people confuse.** `tasks.json` is what runs — a bare array, never a
@@ -261,24 +263,28 @@ once the engines read the record directly.
 
 ### Run Artifacts
 
-**`/sdlc-flow` and `/sdlc-task` do not write per-step reports.** D31 replaced the 5xN report files
-with one committed `sdlc-<engine>-state.json` plus one `worklog.md` — `sdlc-flow.js`'s own header
-says so. Their `sdlc/reports/` path survives only for gate baselines (`<slug>-baseline.json`,
-`<slug>-skip-baseline.txt`), not step output. Measured across the fleet: **0 `sdlc/reports/`
-directories exist; 18 `worklog.md` files do.**
+**No command in the pipeline writes a per-step prose report.** D31 replaced the old 5xN report
+files with one run-state file plus one worklog for `/sdlc-flow` and `/sdlc-task` — `sdlc-flow.js`'s
+own header says so — and the five hand-invoked Phase 2-5 commands (`/implement`, `/fix`, `/test`,
+`/review-task`, `/document`) now follow the same shape instead of the older `sdlc/reports/`
+convention. `sdlc/reports/` survives only for gate baselines (`<slug>-baseline.json`,
+`<slug>-skip-baseline.txt`), never step output.
 
-**The Phase 2-5 commands invoked by hand still write the report-per-step layout** below.
+Each of the five commands, on every call:
 
-| Step | Full-spec | Task-scoped |
-|---|---|---|
-| implement | `implement.md` | `task3-implement.md` |
-| fix | *(overwrites the implement slot)* | *(overwrites the implement slot)* |
-| test | `test.md` | `task3-test.md` |
-| review | `review.md` | `task3-review.md` |
-| document | `document.md` | `task3-document.md` |
+1. Reads `planning/<BlockID>/sdlc/state.json` (starts from `{}` if absent) and preserves every
+   field it isn't updating — the file accumulates across `/implement` → `/test` → `/review-task` →
+   `/fix` → `/document` calls on the same spec.
+2. Updates that file's `tasks["<N>"]` entry (or the spec-wide fields, for a full run) with its
+   outcome — status, attempts, files touched, commit hash, and (for `/review-task`) the verdict.
+3. Appends one section to `planning/<BlockID>/sdlc/worklog.md` — `## Task <N> — IMPLEMENTED`,
+   `TEST`, `REVIEW`, `FIX`, or `DOCUMENT` — a few key:value lines, never a narrative. `/fix` appends
+   a new fix-pass section; it does not overwrite the prior one.
 
-Pattern: `[taskN-]{step}.md` inside `planning/<BlockID>/sdlc/reports/`. `/fix` writes to the same
-slot as `/implement` — it is the current state of Phase 2 work, and git history holds the rest.
+Both files are **write-only artifacts**: read back off disk by the next command in the chain,
+never `git add`/`git commit`ed — `planning/` is a symlink into a brain vault in a vaulted repo, so
+committing under it can fail "beyond a symbolic link" (same D46 reasoning the engines use). The
+actual code/test changes still get a real git commit per the spec's own instructions.
 
 
 ## Automated & Orchestrated Pipelines
@@ -798,13 +804,14 @@ record's incompleteness would never surface. **Model:** Opus.
 
 ### `/implement`
 Runs `/prime`, reads the plan file, executes every step (or task N) following CLAUDE.md
-conventions, runs the relevant Validation Commands, and writes
-`planning/<name>/sdlc/reports/[taskN-]implement.md`.
+conventions, runs the relevant Validation Commands, and records the outcome in
+`sdlc/state.json` + `sdlc/worklog.md` (see Run Artifacts above).
 
 ### `/fix`
-Reads the review report to extract every failing criterion, orients via `/prime`, and applies
-targeted changes addressing only the failures. Overwrites the `implement.md` slot. Hard-errors
-if the review report is absent; soft-stops if the verdict is already PASS.
+Reads the review verdict's failing criteria from `sdlc/state.json` and `sdlc/worklog.md`, orients
+via `/prime`, and applies targeted changes addressing only the failures. Appends a new fix-pass
+worklog section rather than overwriting the implement one. Hard-errors if no review entry is
+present; soft-stops if the verdict is already PASS.
 
 ### `/update-task`
 Optionally marks a step done (prepends `[done]`) and/or appends a dated note to the spec's `## Notes`
@@ -822,7 +829,7 @@ pushes, never `--no-verify`, never `git add -A`.
 ### `/test`
 Runs `/prime`, then the project's validation suite (lint, type-check, tests, build, and any
 project-specific gates), returning results as a JSON array sorted failed-first. With a spec path,
-also writes `planning/<name>/sdlc/reports/[taskN-]test.md`.
+also records the outcome in `sdlc/state.json` + `sdlc/worklog.md`.
 
 > **Stack note:** the test stage runs the checks defined in `planning/harness.json`
 > (`validation.checks[]`). The harness ships no stack defaults — define your project's actual
@@ -834,18 +841,18 @@ also writes `planning/<name>/sdlc/reports/[taskN-]test.md`.
 ## Phase 4 — Review
 
 ### `/review-task`
-Runs `/prime`, reads the `implement.md`/`test.md` reports as context, then runs a **fresh test
-suite** as authoritative verification. Verdict is PASS only if all criteria are MET **and** the
-fresh tests pass. Writes a review report.
+Runs `/prime`, reads the implement/test worklog sections and `sdlc/state.json` as context, then
+runs a **fresh test suite** as authoritative verification. Verdict is PASS only if all criteria
+are MET **and** the fresh tests pass. Records the verdict in `sdlc/state.json` + `sdlc/worklog.md`.
 
 ---
 
 ## Phase 5 — Document
 
 ### `/document`
-Gates strictly on the review verdict being PASS. Reads the implement report's **Files Created
-or Modified** table to scope updates, then surgically patches only affected sections of
-`docs/*.md`. Flags architecture-level changes as `NEEDS_REVIEW`. Never touches `planning/`,
+Gates strictly on the review verdict being PASS. Reads `sdlc/state.json`'s `files_changed` list
+(cross-checked against the diff) to scope updates, then surgically patches only affected sections
+of `docs/*.md`. Flags architecture-level changes as `NEEDS_REVIEW`. Never touches `planning/`,
 `log.md`, `status.md`, or `CLAUDE.md`.
 
 ---
