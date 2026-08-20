@@ -302,7 +302,14 @@ not persist between calls.
    - Missing/invalid → log that no valid state was found and run every selected task fresh.
    - Valid → collect every task number whose `tasks["<N>"].status == "passed"` into a skip-set; those
      tasks are skipped entirely in the per-task loop (logged, not re-run). Also read `bail_reason` for
-     context.
+     context. **Also copy the file's entire top-level `tasks` object verbatim into the in-memory
+     `state.tasks` map before the per-task loop starts** — the loop below only ever writes
+     `state.tasks[N]` for tasks it actually runs this invocation, so a skipped/already-passed task
+     never re-enters it on its own. Without this seed, the very next state write (Step 3.3) would
+     serialize `state` wholesale and silently drop every earlier-passed task from the committed file,
+     and a *second* resume would then see them as never-passed and re-run them. This is the same fix
+     `sdlc-flow.js`/its SKILL.md already carry; `tasks_run` is a different field and is NOT merged this
+     way — it stays per-invocation telemetry (see Step 3.3).
 4. **Load `planning/harness.json`** (from `runDir`) if present and valid JSON — this project's
    validation policy, `validation.checks[]`. Each check has a `kind` (default `command`; also
    `baseline-diff`, `count-delta`, `warning-scan`, `forbidden-pattern-scan`,
@@ -479,8 +486,13 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
    mode, branch, worktree_path, status, current_task, tasks_run, the per-task `tasks{}` map,
    bail_reason, and the token roll-up) to `<stateFile>` via a plain file write — `mkdir -p
    <blockDir>/sdlc` first, preserve `started_at` from the file if one already exists (else stamp now),
-   always refresh `updated_at`. **Never run `git add`/`git commit`/`git checkout`/`git switch`/`git
-   branch` on this file** — it is read back off disk only, by `--resume`, never out of git history.
+   always refresh `updated_at`. **`tasks{}` must be the merged map** — the tasks carried forward from
+   Step 2.3's resume-load (already-passed tasks from a prior invocation) union the tasks this
+   invocation actually ran, keyed by task number; never write only this invocation's tasks. `tasks_run`
+   is the opposite — it is deliberately PER-INVOCATION telemetry ("what did THIS invocation run") and
+   is never unioned with a prior invocation's `tasks_run`; only `tasks` is the cumulative resume
+   breadcrumb. **Never run `git add`/`git commit`/`git checkout`/`git switch`/`git branch` on this
+   file** — it is read back off disk only, by `--resume`, never out of git history.
 4. If this task bailed, stop the per-task loop entirely (do not proceed to the next `taskNum`).
 
 ### Step 3.5 — Terminal authoritative reconcile (D56)

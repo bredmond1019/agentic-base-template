@@ -359,6 +359,7 @@ const STATE_LOAD_SCHEMA = {
     startedAt:   { type: 'string',  description: "the file's started_at value, or '' when absent" },
     passedTasks: { type: 'array', items: { type: 'integer' }, description: 'task numbers whose status is "passed"' },
     bailReason:  { type: 'string',  description: 'the prior bail_reason, or "" when none' },
+    tasksJson:   { type: 'string',  description: 'Verbatim JSON (as a string) of the state file\'s top-level "tasks" object, so the engine can carry the full prior task history forward. "{}" when absent/no state.' },
     notes:       { type: 'string' }
   }
 }
@@ -800,6 +801,11 @@ const state = {
   worktree_path: '',
   status: 'running',
   current_task: null,
+  // DELIBERATE (ticket-sdlc-task-resume-truncates-run-state): tasks_run stays PER-INVOCATION
+  // telemetry — "what did THIS invocation run" — and is never unioned across a resume, because
+  // doing so would erase the record of which run did what. `tasks` below is the opposite: it is
+  // the resume breadcrumb and must answer "has this task ever passed?", so it is seeded from the
+  // prior state file's tasks object on --resume (see the state-load block) and is CUMULATIVE.
   tasks_run: [],
   tasks: {},        // "N": { status, attempts, summary, issues, fixes, decisions, files_changed, commit, validated }
   bail_reason: null,
@@ -1257,19 +1263,32 @@ if (taskEngineFilesMap.size) {
   log(`Engine-parse gate (hardcoded, unconditional): task(s) touching .claude/workflows/ → ${[...taskEngineFilesMap.keys()].sort((a, b) => a - b).join(', ')}.`)
 }
 
-// Resume: load the committed state.json to skip already-passed tasks.
+// Resume: load the committed state.json to skip already-passed tasks. Also seeds the in-memory
+// `state.tasks` with the FULL prior tasks object — writeTaskState() serializes `state` wholesale on
+// every write, and the per-task loop below only ever populates `state.tasks[N]` for tasks it actually
+// runs (skipped/already-passed tasks never re-enter it) — so without this seed, the first write after
+// a resume would silently drop the earlier-passed tasks from the committed file, and the *next*
+// resume would see them as never-passed and re-run them.
 const passedFromState = new Set()
 if (resumeMode) {
   const loaded = await tracedAgent(`${W}
 You read the COMMITTED run-state for an /sdlc-task resume. Do NOT modify anything.
   cd ${runDir} && cat ${stateFile} 2>/dev/null || echo "__NO_STATE__"
-If "__NO_STATE__" or invalid JSON → exists=false. Otherwise exists=true, startedAt = its started_at,
-passedTasks = the task numbers whose tasks[N].status == "passed", bailReason = its bail_reason or "".
+If "__NO_STATE__" or invalid JSON → exists=false, tasksJson="{}". Otherwise exists=true, startedAt =
+its started_at, passedTasks = the task numbers whose tasks[N].status == "passed", bailReason = its
+bail_reason or "", tasksJson = the exact JSON (as a string) of its top-level "tasks" object, verbatim
+— this is how the engine carries the full prior task history forward across a resume.
 Return via StructuredOutput.
 `, withModel({ label: 'state-load', schema: STATE_LOAD_SCHEMA, phase: 'Plan' }, MODEL.stateLoad))
   if (loaded && loaded.exists) {
     for (const n of (loaded.passedTasks || [])) passedFromState.add(n)
     log(`Resume: ${passedFromState.size} task(s) already passed (${[...passedFromState].sort((a, b) => a - b).join(', ') || 'none'}); skipping them.`)
+    try {
+      const priorTasks = JSON.parse(loaded.tasksJson || '{}')
+      if (priorTasks && typeof priorTasks === 'object') Object.assign(state.tasks, priorTasks)
+    } catch {
+      log('(resume) could not parse prior tasks JSON from state.json — already-passed tasks may drop out of the committed history on the next write.')
+    }
   } else {
     log('Resume requested but no valid state.json found — running all selected tasks fresh.')
   }
