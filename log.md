@@ -9,6 +9,34 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-20]
 
+### BT.5.A — the lane record contract and its gate
+
+- **What:** Ran `/sdlc-flow` on `BT.5.A` through all 5 tasks; all passed, review verdict PASS.
+  Task 1 authored `.claude/workflows/lane.schema.json` (sibling to `block.schema.json`),
+  requiring `origin_roadmap` AND `repo` on every `blocks[]` entry (a lane can span multiple
+  repos — measured `lane-substrate.txt` spans 7), no comment/free-text/prose-briefing property,
+  and no `category` field under `budget` (derived, not authored). Task 2 authored
+  `scripts/check_lane_records.py`, discovering `lane*.json` under both `planning/roadmaps/<slug>/`
+  and the legacy `planning/<slug>/` layout, cross-checking `budget.heavy` against
+  `fleet_concurrency_check.py is-heavy --repo-path <abs>` (nonexistent path reported as a named
+  error, never silently `heavy:false`), plus `scripts/test_check_lane_records.py` with 18 passing
+  checks including all four required negative fixtures. Task 3 registered `lane-record-schema` and
+  `check-lane-records-tests` as gating checks in `planning/harness.json`. Task 4 authored
+  `planning/decisions/D71-lane-json-replaces-the-lane-file-grammar.md`, stating it IMPLEMENTS
+  (not supersedes) HQ's D74 forced-consequence assignment, and confirmed D65/D57 still accurate.
+  Task 5 validated all 22 `gates:true` `harness.json` checks pass individually.
+- **Why:** Settles the lane record contract in a schema (not prose) before mev's parser (MV.17.A)
+  and the emitter (BT.5.B) are written against it, so the two agree by construction rather than by
+  review.
+- **Next:** None for this block — BT.5.B (emitter across orchestration commands) is next in the
+  initiative.
+
+```
+225066f feat: implement BT.5.A-task2
+1f9caa7 feat: implement BT.5.A-task1
+b22733d chore: init worktree BT.5.A-flow
+```
+
 ### Command-hardening chain — 8 blocks closed, and five harness defects that had to be fixed to close them
 
 - **What:** Drove the 9-block `command-hardening` chain through `/orchestrate`. Eight closed:
