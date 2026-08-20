@@ -171,7 +171,7 @@ Build the review body:
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| 1 | <criterion text, ~80 chars> | MET / PARTIAL / NOT MET | file:line or test name |
+| 1 | <criterion text, ~80 chars> | MET / PARTIAL / NOT MET | symbol name or test name (line number optional, secondary) |
 
 ### Gating Results
 

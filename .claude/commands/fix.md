@@ -30,7 +30,8 @@ Examples:
 6. Extract from the review report:
    a. Every row in the **Acceptance Criteria** table where Status is NOT MET or PARTIAL —
       collect criterion text and evidence.
-   b. Every item listed under **Issues Found** — collect file:line references and descriptions.
+   b. Every item listed under **Issues Found** — collect the symbol reference (function, struct,
+      type, or test name; a line number only as a secondary hint) and descriptions.
    c. The full **Verdict** paragraph — understand the blocking rationale.
 
 7. Run `/prime` to orient to the codebase.
@@ -139,7 +140,7 @@ Status: PASSED / FAILED
 
 ## Changes Made
 
-- <bullet per logical change with file:line reference>
+- <bullet per logical change with symbol reference (function/struct/type/test name), line number optional>
 
 ## Decisions and Trade-offs
 
