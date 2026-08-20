@@ -5,7 +5,11 @@
   "description": "The authored definition of one orchestration lane — an ordered chain of blocks, possibly spanning multiple repos, that /orchestrate drives together. File layout: one record per lane, at <roadmap_dir>/lane-<name>.json (a mechanical rename of the legacy lane-<name>.txt layout). Sibling to block.schema.json. Governed by D71.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["lane", "repo", "roadmap", "blocks"],
+  "required": [
+    "lane",
+    "roadmap",
+    "blocks"
+  ],
   "properties": {
     "lane": {
       "type": "string",
@@ -14,7 +18,7 @@
     },
     "repo": {
       "type": "string",
-      "description": "Documented as an OPTIONAL DEFAULT only — a lane is not single-repo in this corpus. Never inherited by blocks[] entries: each block requires its own repo regardless of this value.",
+      "description": "OPTIONAL lane-level default repo. A lane is NOT single-repo in this corpus (planning/close-the-loop/lane-substrate.txt spans seven repo prefixes), so this key is not required and carries no meaning for blocks[]: each block entry requires its own `repo` regardless of this value. Present only so a single-repo lane can name itself once.",
       "pattern": "^[a-z0-9][a-z0-9-]*$"
     },
     "roadmap": {
@@ -29,7 +33,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "origin_roadmap", "repo"],
+        "required": [
+          "id",
+          "origin_roadmap",
+          "repo"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -61,7 +69,10 @@
         "not_with": {
           "type": "array",
           "description": "Slugs of other lanes this lane must not run concurrently with.",
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
@@ -78,7 +89,10 @@
     "exclusive_repos": {
       "type": "array",
       "description": "Repos this lane must run exclusively in — no other lane may touch them concurrently. Authored lane metadata with no state.json representation.",
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "spec_source": {
       "type": "string",
@@ -88,7 +102,10 @@
     "cut_blocks": {
       "type": "array",
       "description": "Block IDs originally planned for this lane but cut. Authored lane metadata with no state.json representation.",
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     }
   }
 }

@@ -50,7 +50,10 @@ BLOCK_ID_RE = re.compile(r"^[A-Z]{2,3}\.(?:\d+[A-Z]?|ticket|chore)\.[A-Za-z0-9][
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 LANE_FILE_RE = re.compile(r"^lane-.*\.json$")
 
-TOP_LEVEL_REQUIRED = ["lane", "repo", "roadmap", "blocks"]
+TOP_LEVEL_REQUIRED = ["lane", "roadmap", "blocks"]
+# `repo` is deliberately NOT required at the top level: a lane is not single-repo in this
+# corpus, so a lane-level repo is an optional default and never a source of inheritance.
+# Every blocks[] entry carries its own required `repo` (BLOCK_ENTRY_REQUIRED below).
 TOP_LEVEL_ALLOWED = {
     "lane", "repo", "roadmap", "blocks", "budget",
     "held_until", "isolation", "exclusive_repos", "spec_source", "cut_blocks",

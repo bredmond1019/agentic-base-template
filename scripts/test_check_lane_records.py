@@ -194,6 +194,28 @@ def check_legacy_and_roadmaps_discovery() -> None:
               len(names) == 3, f"found: {names}")
 
 
+def check_positive_no_top_level_repo() -> None:
+    """A lane record with NO top-level `repo` validates.
+
+    A lane is not single-repo in this corpus, so a lane-level repo is an optional default and
+    never a source of inheritance -- requiring it would force every genuinely multi-repo lane to
+    name one repo as if it owned the lane. Every blocks[] entry carries its own required `repo`.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "lane-multi.json"
+        _write_json(path, {
+            "lane": "multi",
+            "roadmap": "my-roadmap",
+            "blocks": [
+                {"id": "BT.1.A", "origin_roadmap": "my-roadmap", "repo": "consumer-repo"},
+                {"id": "OK.2.C", "origin_roadmap": "my-roadmap", "repo": "other-repo"},
+            ],
+        })
+        problems, _ = check_lane_records.check(path, {})
+        check("a lane record with no top-level repo validates",
+              not problems, f"problems: {problems}")
+
+
 def check_negative_missing_origin_roadmap() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -326,6 +348,7 @@ def main() -> int:
     check_dependency_free()
     check_positive_well_formed()
     check_positive_two_repos()
+    check_positive_no_top_level_repo()
     check_legacy_and_roadmaps_discovery()
     check_negative_missing_origin_roadmap()
     check_negative_duplicate_block_id()
