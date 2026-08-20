@@ -803,8 +803,30 @@ def case_live_measured_snapshot() -> None:
     trees_hits = [h for h in raw if "/trees/" in h]
     non_collapsing = [h for h in trees_hits if "/trees/" in str(Path(os.path.realpath(root / h)))]
 
+    # SCOPED TO THIS REPO ON PURPOSE (2026-08-20). The collapse property holds only for a repo
+    # whose worktrees carry the vault `planning/` symlink; a sibling repo whose worktree has a
+    # REAL planning/ directory breaks it, and that is a fact about that repo's checkout, not about
+    # this module. Measured that day: this case went red in every concurrent lane because
+    # core/engine-rs and core/bastion each had a live worktree -- i.e. a gating check failed
+    # precisely BECAUSE other lanes were running, which is the condition it normally runs under.
+    # A cross-repo hygiene assertion does not belong in this module's unit self-test; it is filed
+    # as BT.ticket.fleet-worktree-planning-symlink-hygiene. Foreign hits are still PRINTED, so the
+    # signal is not lost -- only its power to red-gate an unrelated lane is.
+    try:
+        own_prefix = str(REPO_ROOT.resolve().relative_to(root)) + os.sep
+    except ValueError:
+        own_prefix = ""
+    own_non_collapsing = [h for h in non_collapsing if own_prefix and h.startswith(own_prefix)]
+    foreign = [h for h in non_collapsing if h not in own_non_collapsing]
+    if foreign:
+        foreign_repos = sorted({h.split("/trees/")[0] for h in foreign})
+        print(f"  note: {len(foreign)} non-collapsing /trees/ hit(s) in other repos "
+              f"({', '.join(foreign_repos)}) -- reported, not gated (see "
+              f"BT.ticket.fleet-worktree-planning-symlink-hygiene)")
+
     check("(8) naive raw count exceeds realpath-distinct count", naive > len(distinct))
-    check("(8) every /trees/-routed hit collapses onto a non-trees/ realpath", len(non_collapsing) == 0)
+    check("(8) every /trees/-routed hit in THIS repo collapses onto a non-trees/ realpath",
+          len(own_non_collapsing) == 0)
 
 
 def case_no_writes() -> None:
