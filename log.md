@@ -9,6 +9,33 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-20]
 
+### Command-hardening chain — 8 blocks closed, and five harness defects that had to be fixed to close them
+
+- **What:** Drove the 9-block `command-hardening` chain through `/orchestrate`. Eight closed:
+  emoji-gate concurrency scoping, fleet-lock PID liveness, retiring `/sdlc-block` + `/sdlc-run`,
+  two command-correctness/evidence chores, D65 stage 2 (engines read the block record; `tasks.md`
+  and `render_spec.py` retired), the Phase 2-5 worklog migration, and structured lane directives in
+  `/generate-roadmap`. `BT.ticket.spec-metadata-header-is-derived` stayed HELD — unmet dependency
+  plus an operator gate, and stage 2 likely made its premise obsolete.
+  Five harness defects blocking the chain were fixed on `main`, outside any block: three corpus
+  checks whose `rg`-fallback walked the whole fleet (195s/105s/123s -> 2.4s/2.6s/3s, output
+  identical); `t.commit` never populated because both engines read `stageResult.commit` when the
+  schema field is `commitHash`; the engine-parse gate running `node --check` on files a task had
+  just deleted; and `check_skill_sync.py --update` re-stamping moved anchors instead of relocating
+  them (new `--relocate`). Then relocated the Response Style rule from a 41-line CLAUDE.md block
+  (loaded twice per session, ignored for 10 days) into an 18-line hard contract plus a new
+  `report-to-the-operator` skill and capped Report sections in the 11 most-used commands. Retired
+  `/merge-train`. Propagated everything across 18 repos.
+- **Why:** The chain kept bailing on things that were not the blocks' fault, and the reason was
+  self-concealing: the Workflow harness snapshots the engine `.js` at launch, so two runs executed
+  engines that were one and two fixes stale even with the fix on `main` and in the worktree. That
+  reads as an unreliable agent, and this record originally said so before the snapshots were
+  hashed — the correction is in the run notes and is now standing rule 10 plus a `knowledge.md`
+  Gotcha. The Response Style work came from the same root: a rule stated once where agents read it
+  at session start loses to the command file read seconds before the reply.
+- **Refs:** `planning/orchestration-run/command-hardening/{notes.md,review.md}`; `CLAUDE.md`
+  standing rules 10-11; `planning/knowledge.md` Gotchas; PRs #3 and #5.
+
 Ran `/sdlc-flow` on `BT.ticket.phase-commands-adopt-worklog` through all 6 tasks — all passed, review verdict PASS. Task 1 recorded the D31 worklog/state-write target shape (sourced from `sdlc-flow.js`) plus three open questions as a research field on the spec. Task 2 rewrote `/implement`, `/test`, `/fix`, `/review-task`, and `/document` to append structured sections to `sdlc/worklog.md` and update `sdlc/state.json` instead of writing prose reports into `sdlc/reports/`, with `/fix` appending a `FIX PASS` section rather than overwriting the implement slot; neither file is ever git-committed by these commands (write-only, matching `writeFlowState()`'s own convention). Task 3 rewrote the five `.agents/skills/*/SKILL.md` manual-replication guides to be byte-identical to their now-current commands (verified with `diff`). Task 4 repointed `update-docs.md`'s one stale reference to `/document`'s output; `close-out.md`, `patch.md`, and `conditional_docs.md` needed no change since they never literally read the old report path. Task 5 rewrote `.claude/commands/README.md`'s Run Artifacts section and every remaining per-step-report reference, and re-stamped `check_skill_sync.py`'s manifest (hashes unchanged, no anchor drift). Task 6 validated the migration end-to-end: all 3 spec validation commands and all 20 gated `harness.json` checks pass; `sdlc/reports` references in `.claude/commands/` dropped from a baseline of 49 to 7 (remaining are legit legacy/gate-baseline mentions in `clean-worktree.md` and `README.md`, out of scope). Next: none — spec closed.
 
 ```
