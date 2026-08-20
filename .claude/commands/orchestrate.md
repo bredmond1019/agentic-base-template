@@ -115,6 +115,18 @@ Each of these exists because it has already caused a real failure in this fleet.
    restate it here. In short: unresolved items never carry into a successor file — at lane close,
    promote any item still `OPEN` into `state.json` `carryover[]`.
 
+   **Adopting a block not on this chain?** Append its ledger row **at adoption time, not at lane
+   close**, with `origin_roadmap` set explicitly to that block's own driving roadmap (Rule 5's
+   ledger schema — do not restate it here). A block adopted and never given a row leaves its
+   home-roadmap attribution unrecoverable: it has already happened once, silently, and broke a
+   downstream consolidation pass that depends on the column.
+
+   **At lane close, reconcile the ledger against the repo's live `state.json` before stamping any
+   lifecycle field.** `state.json` is the authority on which blocks are actually closed; a ledger
+   row still marked `held` or `open` for a block `state.json` shows closed is stale and must be
+   corrected first. Do not stamp `lane-complete` or `consolidated` over a ledger that disagrees
+   with `state.json`.
+
    **Verify what you just wrote, before continuing** — and before the commit in rule 7/8 below.
    After every write or append to `notes.md` (and after writing the terminal `review.md`), run
    `python3 <path-to-base-template>/scripts/test_orchestration_run_contract.py` and confirm it
