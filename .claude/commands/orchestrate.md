@@ -78,7 +78,11 @@ Each of these exists because it has already caused a real failure in this fleet.
    The log lives beside the roadmap driving the run, at `<roadmap_dir>/lane-log.jsonl` — resolve
    `<roadmap_dir>` from the driving roadmap's slug via `/begin-orchestration`'s Step 1C rule (new
    location `planning/roadmaps/<slug>/` first, then legacy `planning/<slug>/`; both existing is an
-   error), never a hardcoded `planning/<slug>/`. If the chain has no roadmap, skip it.
+   error), never a hardcoded `planning/<slug>/`. **If the chain has no driving roadmap, a run slug
+   fills the same `<slug>` position** — `<roadmap_dir>` becomes `planning/orchestration-run/<run-
+   slug>/`, the same convention already on disk for `harness-hardening` and
+   `carryover-improvements`, both run with no roadmap. A run with no roadmap is still a run and
+   still leaves evidence — do not skip the lane log.
 
    **Do not hand-edit a roadmap's generated regions.** Run `mev emit-state --write` and let the
    sequence table regenerate from `state.json`, which is the authority. Four concurrent sessions
@@ -90,8 +94,11 @@ Each of these exists because it has already caused a real failure in this fleet.
 9. **Keep a running notes file — `planning/orchestration-run/<roadmap-slug>/notes.md` in this
    repo**, where `<roadmap-slug>` is the driving roadmap's directory name (the one from `$ARGUMENTS`
    or the list file this chain runs from) — the same directory name `/begin-orchestration` resolves
-   as its `run_record_dir`, so both commands address the same record. If the chain has no roadmap,
-   skip this rule (same as the lane log above). The lane log carries one line per block for
+   as its `run_record_dir`, so both commands address the same record. **If the chain has no
+   driving roadmap, use the same run slug that fills rule 8's `<roadmap_dir>` position** —
+   `planning/orchestration-run/<run-slug>/notes.md` — so the record path and the lane-log path
+   resolve from the same slug. Do not skip this rule; a run with no roadmap still leaves evidence.
+   The lane log carries one line per block for
    *sibling lanes*; this file carries everything else, for the *next session in this repo*. Defects
    found in passing, deferred fixes, decisions you took, traps re-confirmed, whatever the roadmap
    got wrong. None of it survives the session transcript otherwise, and the next agent starts blind
