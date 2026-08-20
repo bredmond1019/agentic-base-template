@@ -147,8 +147,9 @@ if (rangeSpec) {
   selectedTasks = new Set(parsed)
 }
 
-const blockDir      = `planning/${blockId}`
-const specFile      = `${blockDir}/tasks.md`
+const blockDir       = `planning/${blockId}`
+const blockRecordFile = `planning/blocks/${blockId}.json`   // D65: the authored block record — preferred spec source
+let specFile         = `${blockDir}/tasks.md`                // legacy fallback for a spec with no block record (reassigned once setup reports which source exists)
 const tasksJsonFile = `${blockDir}/tasks.json`
 const breakdownFile = `${blockDir}/breakdown.md`
 const reportsDir    = `${blockDir}/sdlc/reports`
@@ -268,7 +269,7 @@ function vaultRelPathsFrom(filesModified, vault) {
 }
 
 log(`Target: ${blockId} (${selectedTasks ? [...selectedTasks].sort((a, b) => a - b).join(', ') : 'all tasks'})`)
-log(`Spec: ${specFile} | mode: ${useWorktree ? 'worktree' : 'in-place'}${resumeMode ? ' | RESUME' : ''}`)
+log(`Spec: ${blockId} (resolving block record first, tasks.md fallback) | mode: ${useWorktree ? 'worktree' : 'in-place'}${resumeMode ? ' | RESUME' : ''}`)
 
 // ================================================================
 // Schemas
@@ -281,7 +282,8 @@ const SETUP_SCHEMA = {
     branchName:     { type: 'string', description: 'The branch commits land on (a new worktree branch under --worktree; else the current branch)' },
     baseSha:        { type: 'string', description: 'The HEAD short sha AFTER setup, BEFORE any task commit — the emoji-gate diff base' },
     wasCreated:     { type: 'boolean', description: 'true if a new worktree was created (--worktree only)' },
-    specFileExists: { type: 'boolean', description: 'true if the task spec file exists' },
+    specFileExists: { type: 'boolean', description: 'true if EITHER the block record or the legacy tasks.md exists (D65 stage 2)' },
+    specSource:     { type: 'string', enum: ['block-record', 'tasks-md', 'missing'], description: "D65 stage 2: 'block-record' if planning/blocks/<BlockID>.json exists (preferred), else 'tasks-md' if the legacy spec file exists, else 'missing'" },
     blockStatus:    { type: 'string', description: "This spec's Status in status.md (title-case), or 'Unknown'" },
     specThin:       { type: 'boolean', description: 'D19: true on a fresh (non-resume) run with a structurally-valid but substantively-thin spec; false on resume or a healthy spec.' },
     thinReason:     { type: 'string', description: 'D19: the specific thin-spec failures when specThin; empty string otherwise.' },
@@ -901,8 +903,9 @@ You are the setup agent for the lean /sdlc-task pipeline. ${useWorktree
 from the MAIN REPO ROOT (your current CWD).
 
 Target:
-  Spec:       ${blockId}
-  Spec file:  ${specFile}
+  Spec:              ${blockId}
+  Block record:      ${blockRecordFile} (preferred spec source, D65 stage 2)
+  Legacy spec file:  ${specFile} (fallback — only used when the block record is absent)
 ${useWorktree ? `  Base name:  ${baseBranchName}` : ''}
 
 STEP 1 — Get the absolute repo root and the current branch:
@@ -970,16 +973,21 @@ STEP 3 — Compute runDir:
   ${useWorktree ? 'runDir = repoRoot + "/trees/" + branchName' : 'runDir = repoRoot'}
 
 STEP 4 — Report pipeline-start inputs (run these from runDir):
-  a. Spec file:
-       cd <runDir> && ls ${specFile} 2>/dev/null && echo "SPEC_EXISTS" || echo "SPEC_MISSING"
-     specFileExists = true iff "SPEC_EXISTS" printed.
+  a. Spec source (D65 stage 2) — the block record is checked FIRST and is preferred; tasks.md is only
+     a fallback for a legacy spec that predates the block-record migration:
+       cd <runDir> && ls ${blockRecordFile} 2>/dev/null && echo "RECORD_EXISTS" || echo "RECORD_MISSING"
+       cd <runDir> && ls ${specFile} 2>/dev/null && echo "LEGACY_EXISTS" || echo "LEGACY_MISSING"
+     specSource = "block-record" if RECORD_EXISTS (regardless of the legacy file); else "tasks-md" if
+     LEGACY_EXISTS; else "missing". specFileExists = true iff specSource != "missing".
   b. Block status — find this spec's row in status.md:
        cd <runDir> && grep -iE "${blockId}" planning/status.md | head -5
      blockStatus = the title-case Status value (Not started / In progress / Done / Blocked / Skipped),
      or "Unknown" if no row is found.
-  c. Thin-spec check (D19) — evaluate ONLY when specFileExists AND this is NOT a resume run (a fresh run
-     about to spend implement tokens). Set specThin=true ONLY on these high-confidence signals (a blocked
-     valid spec is far costlier than a missed thin one — when in doubt do NOT flag):
+  c. Thin-spec check (D19) — evaluate ONLY when specSource == "tasks-md" (the legacy path — a
+     block-record spec is authored structured JSON, not markdown prose, so the {{TOKEN}}/section checks
+     below do not apply to it) AND this is NOT a resume run (a fresh run about to spend implement
+     tokens). Set specThin=true ONLY on these high-confidence signals (a blocked valid spec is far
+     costlier than a missed thin one — when in doubt do NOT flag):
        - cd <runDir> && grep -n '{{' ${specFile}  → any unfilled {{TOKEN}} is thin.
        - The '## Acceptance Criteria' section has no real '- ' bullet (empty, or only a template seed) → thin.
      Do NOT flag bare 'TODO'/'TBD' prose, do NOT treat '<...>' as a token (legitimate in 'Vec<T>', globs),
@@ -996,7 +1004,7 @@ STEP 5 — Capture the emoji-gate diff base — the HEAD short sha as it stands 
   cd <runDir> && git rev-parse --short HEAD     (store as baseSha)
 
 Return your result using the StructuredOutput tool:
-  runDir, branchName, baseSha, wasCreated, specFileExists, blockStatus, specThin, thinReason,${useWorktree ? ' envFilesCopied,' : ''} notes.
+  runDir, branchName, baseSha, wasCreated, specFileExists, specSource, blockStatus, specThin, thinReason,${useWorktree ? ' envFilesCopied,' : ''} notes.
 `, withModel({ label: 'setup', schema: SETUP_SCHEMA, phase: 'Setup' }, MODEL.setup))
 
 if (!setupResult) {
@@ -1016,13 +1024,27 @@ if (useWorktree) {
   log(`Worktree path derives from the spec slug (trees/${branchName}), not any block ID — use "git worktree list" to locate it, never guess.`)
 }
 
+// D65 stage 2: resolve which spec source this run actually has. specSource defaults to 'tasks-md'
+// only if the setup agent omitted the field (older cached run) — never silently prefer a source
+// that was not actually checked.
+const specSource = setupResult.specSource || (setupResult.specFileExists ? 'tasks-md' : 'missing')
+if (specSource === 'block-record') {
+  specFile = blockRecordFile
+  log(`Spec source: block record (${specFile})`)
+} else if (specSource === 'tasks-md') {
+  log(`Spec source: legacy tasks.md (${specFile}) — no block record found at ${blockRecordFile}`)
+}
+const specDesc = specSource === 'block-record'
+  ? '(JSON block record — what/why/acceptance_criteria/testing_strategy/validation_commands fields)'
+  : '(prose — Goal, Acceptance Criteria, Validation Commands)'
+
 if (!setupResult.specFileExists) {
-  log(`Spec file ${specFile} not found. /sdlc-task expects an authored spec.`)
+  log(`Neither the block record (${blockRecordFile}) nor the legacy spec file (${specFile}) was found. /sdlc-task expects an authored spec.`)
   log(`Fix: run /generate-tasks ${blockId} (and /breakdown) on main, commit, then re-run /sdlc-task ${blockId}.`)
-  return { error: 'Missing spec', blockId, specFile }
+  return { error: 'Missing spec', blockId, specFile, blockRecordFile }
 }
 
-// D19 — thin-spec guard for a fresh run.
+// D19 — thin-spec guard for a fresh run (legacy tasks.md path only — see STEP 4c above).
 if (setupResult.specThin && !resumeMode) {
   log(`ABORTED (D19) — spec is structurally valid but substantively thin: ${setupResult.thinReason || '(no reason given)'}`)
   log(`Fix: flesh out ${specFile} (run /generate-tasks --force to regenerate, or edit + commit), then re-run.`)
@@ -1525,7 +1547,7 @@ Task ${taskNum} of this spec.
 Target:
   Spec:        ${blockId}
   Task:        Task ${taskNum} only
-  Spec file:   ${specFile} (prose — Goal, Acceptance Criteria, Validation Commands)
+  Spec file:   ${specFile} ${specDesc}
   Tasks file:  ${tasksJsonFile} (the task list — find the entry with "task_id": ${taskNum})
 
 1. Read CLAUDE.md and planning/context.md — internalize the project's standing rules (CLAUDE.md is the
