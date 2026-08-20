@@ -191,14 +191,17 @@ If `planning/<spec-slug>/tasks.md` is missing for block 1, run **`/generate-task
 Run **`/breakdown planning/<spec-slug>/tasks.md`** *only* when it flagged that spec. Never break
 down on your own judgment — an unnecessary breakdown multiplies engine runs for no benefit.
 
-**Two authoring-time rules for any spec or OKF frontmatter this step produces or edits** —
-generalized from a lane that hit both in one day: a `related:` target must resolve to a real
-`doc_id` on a document that has actually been crawled, never a carryover slug or an invented id
-— an unresolved edge red-gates the whole corpus for every concurrent lane when `--graph` gates,
-not just the authoring one. And a `validation_command` must be scoped to the task's own changes,
-never the whole working tree (e.g. never a working-tree-wide `git diff | grep` guard) — a
-tree-wide guard can never pass in a shared index with concurrent lanes and bails the block on an
-unrelated lane's uncommitted files.
+**Two authoring-time rules for any spec or OKF frontmatter this step (or `/generate-tasks`,
+or hand-editing) produces or edits** — generalized from a lane that hit both in one day: a
+`related:` target must resolve to a real `doc_id` on a document that has actually been crawled,
+never a carryover slug or an invented id — an unresolved edge red-gates the whole corpus for
+every concurrent lane when `--graph` gates, not just the authoring one. A cross-repo target must
+be qualified `<repo>:<doc_id>` (e.g. `base-template:D48-downstream-harness-sync-script`); a bare
+`doc_id` resolves only within the authoring repo and is treated as unresolved everywhere else —
+see `docs/okf-frontmatter.md` for the full syntax. And a `validation_command` must be scoped to
+the task's own changes, never the whole working tree (e.g. never a working-tree-wide `git diff |
+grep` guard) — a tree-wide guard can never pass in a shared index with concurrent lanes and bails
+the block on an unrelated lane's uncommitted files.
 
 ### 5. Decide engine and isolation
 
