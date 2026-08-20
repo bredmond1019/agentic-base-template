@@ -9,6 +9,21 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-19]
 
+Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` to completion — all 6 tasks passed, verdict PASS. Deleted `.claude/workflows/sdlc-block.js` and `sdlc-run.js` plus their `.agents/skills/sdlc-block/` and `sdlc-run/` guides; rescoped `engines-parse`, `prompt-template-parse`, `emoji-gate-diff-scoped-tests`, `state-write-validation-tests`, and two gated checks not named in the original spec but found to read the retired engines directly from disk (`engine-parse-gate-extension-filter-tests`, `d16-tasks-json-fallback-tests`) to the two surviving engines only. `skill_sync_manifest.json` needed no re-stamp — its ANCHORS never referenced `sdlc-block`/`sdlc-run`. Wrote `planning/decisions/D70-orchestrate-supersedes-sdlc-block.md`, marking `D39-sdlc-block-block-level-orchestrator.md` superseded and citing HQ D74; updated the live documentation surface (`.claude/commands/README.md`, `docs/using-the-template.md`, `docs/index.md`, `docs/workflows/*`) to drop references to both retired engines, deleting `docs/workflows/sdlc-block.md` and `sdlc-run.md`. Task 6 fault-injected real defects into a surviving engine for each of the three affected test scripts (a stray backtick, a no-op emoji regex, a skipped rollback write) and confirmed each still goes red against the reduced site tables, per D68. All spec validation commands and the task-1 baseline checks pass at commit 937d6e9. Historical references (381 across archives and logs) were explicitly left untouched, per the spec's Acceptance Criteria. Left `.claude/commands/merge-train.md` and `review-PR.md` untouched even though both are built around `/sdlc-block`'s `block-orchestration-state.json` output — a real gap, noted as a follow-up rather than scope creep into command semantics. Next: none — spec closed.
+
+```
+937d6e9 fix: review pass 1 for BT.ticket.retire-unused-engines
+abd5ee1 docs: retire /sdlc-block and /sdlc-run from the live documentation surface
+eb3cfae feat: implement BT.ticket.retire-unused-engines-task5
+954afe1 chore: wrap up BT.ticket.retire-unused-engines
+48dc4c2 chore: wrap up BT.ticket.retire-unused-engines
+a4ff406 chore: wrap up BT.ticket.retire-unused-engines
+7ff26ec chore: wrap up BT.ticket.retire-unused-engines
+86fd6fd feat: implement BT.ticket.retire-unused-engines-task3
+```
+
+## [run: 2026-08-19]
+
 Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` a fourth time (tasks 1-6). Tasks 1 and 2 re-verified clean again. Task 3 re-verified the prior deletion of `sdlc-block.js`/`sdlc-run.js` (commit a547258) is correct and complete, but the run again hit the CHECK engine-parse-safety failure quoting `Cannot find module .../sdlc-block.js` and `.../sdlc-run.js`, with no progress since the prior attempt's byte-identical failure. Re-ran the guarded shell snippet exactly as rendered by `sdlc-flow.js`'s `renderEngineParseChecks` against worktree HEAD (48dc4c2): both files print "does not exist (deleted by this task) -- nothing to parse" and exit 0, confirming the guarded gate itself already passes. A bare unguarded `node --check` on the same deleted paths reproduces the exact `MODULE_NOT_FOUND` text quoted in the failure, so the failure is coming from something bypassing the guarded template rather than from the gate mechanism. Tasks 4, 5, 6 were not run. Verdict: **BAILED** — needs an operator to confirm which command the test stage is actually executing for this check, since the guarded rendering path is confirmed clean. Next: operator investigates the test-stage command path, then resume from Task 3 (or later) accordingly.
 
 ```
