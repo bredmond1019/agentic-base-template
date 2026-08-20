@@ -178,9 +178,10 @@ created: YYYY-MM-DD
 would otherwise re-derive. Cite file paths and decision numbers.>
 
 ## Completed this session
-<Concrete things done — commits, files changed, decisions reached. "bumped harness-config
-loader to sonnet in both engines (sdlc-flow.js:473, sdlc-task.js:455)",
-not "fixed engine".>
+<Concrete things done — commits, files changed, decisions reached. "bumped the harness-config
+loader to sonnet in both engines (`loadHarnessConfig` in sdlc-flow.js and sdlc-task.js)",
+not "fixed engine". Name the symbol, not a line number — it drifts the moment the file is
+next edited.>
 
 ## Remaining work
 <What's left, in priority order. Mark blockers explicitly.>

@@ -1,7 +1,7 @@
 # Document — Update docs to reflect a completed, reviewed implementation.
 
-Gates on the review verdict being PASS. Uses the implement report's file list to scope
-doc updates surgically, without relying on git diff alone.
+Gates on the review verdict being PASS. Scopes doc updates surgically from the real diff, scoped
+to this task's branch/commit, with the implement report's file list as a cross-check.
 
 ## Variables
 
@@ -33,8 +33,18 @@ Examples:
    - Plan only: `planning/<spec-slug>/tasks.md` → `planning/<spec-slug>/sdlc/reports/implement.md`
    - Plan + task N: `planning/<spec-slug>/tasks.md 3` → `planning/<spec-slug>/sdlc/reports/task3-implement.md`
 
-7. Read the implement report. Extract the **Files Created or Modified** table. This is the
-   authoritative list of changed source files — do not guess from git or the spec.
+7. **Derive the changed-file list from the real diff, scoped to this task's branch/commit —
+   not the whole working tree, which may hold unrelated concurrent-session noise in a shared
+   index.** Run `git diff --name-only <base>...HEAD` (or, for an uncommitted worktree,
+   `git diff --name-only HEAD`) against the branch or commit this implement/review pass produced,
+   not a bare `git status` over the shared index. This diff is the authoritative list of changed
+   source files.
+
+   Then read the implement report's **Files Created or Modified** table as a cross-check. If the
+   two disagree — a file the report claims but the diff doesn't show, or vice versa — treat the
+   mismatch itself as a finding: note it in the document report's **Docs Checked** section rather
+   than silently trusting either side, and prefer the diff's list for scoping the doc-update work
+   in step 8.
 
 8. Read every file in `docs/`. For each doc, check whether it references any of the changed
    source files (look for `**Source:**` annotations, code paths, class/function/component names that
@@ -64,7 +74,8 @@ Examples:
 ## Context / Files to Read
 
 - Review report (derived from $ARGUMENTS) — read first; gate on PASS
-- Implement report (derived from $ARGUMENTS) — for the changed file list
+- `git diff --name-only` output scoped to this task's branch/commit — the authoritative changed-file list
+- Implement report (derived from $ARGUMENTS) — cross-check against the diff's file list
 - `docs/` — all existing reference docs
 - Changed source files identified from the implement report
 

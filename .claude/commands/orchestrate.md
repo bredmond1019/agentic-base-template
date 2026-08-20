@@ -78,7 +78,11 @@ Each of these exists because it has already caused a real failure in this fleet.
    The log lives beside the roadmap driving the run, at `<roadmap_dir>/lane-log.jsonl` — resolve
    `<roadmap_dir>` from the driving roadmap's slug via `/begin-orchestration`'s Step 1C rule (new
    location `planning/roadmaps/<slug>/` first, then legacy `planning/<slug>/`; both existing is an
-   error), never a hardcoded `planning/<slug>/`. If the chain has no roadmap, skip it.
+   error), never a hardcoded `planning/<slug>/`. **If the chain has no driving roadmap, a run slug
+   fills the same `<slug>` position** — `<roadmap_dir>` becomes `planning/orchestration-run/<run-
+   slug>/`, the same convention already on disk for `harness-hardening` and
+   `carryover-improvements`, both run with no roadmap. A run with no roadmap is still a run and
+   still leaves evidence — do not skip the lane log.
 
    **Do not hand-edit a roadmap's generated regions.** Run `mev emit-state --write` and let the
    sequence table regenerate from `state.json`, which is the authority. Four concurrent sessions
@@ -90,8 +94,11 @@ Each of these exists because it has already caused a real failure in this fleet.
 9. **Keep a running notes file — `planning/orchestration-run/<roadmap-slug>/notes.md` in this
    repo**, where `<roadmap-slug>` is the driving roadmap's directory name (the one from `$ARGUMENTS`
    or the list file this chain runs from) — the same directory name `/begin-orchestration` resolves
-   as its `run_record_dir`, so both commands address the same record. If the chain has no roadmap,
-   skip this rule (same as the lane log above). The lane log carries one line per block for
+   as its `run_record_dir`, so both commands address the same record. **If the chain has no
+   driving roadmap, use the same run slug that fills rule 8's `<roadmap_dir>` position** —
+   `planning/orchestration-run/<run-slug>/notes.md` — so the record path and the lane-log path
+   resolve from the same slug. Do not skip this rule; a run with no roadmap still leaves evidence.
+   The lane log carries one line per block for
    *sibling lanes*; this file carries everything else, for the *next session in this repo*. Defects
    found in passing, deferred fixes, decisions you took, traps re-confirmed, whatever the roadmap
    got wrong. None of it survives the session transcript otherwise, and the next agent starts blind
@@ -107,6 +114,18 @@ Each of these exists because it has already caused a real failure in this fleet.
    per `planning/decisions/D57-orchestration-run-artifact-contract.md`. Follow that contract; do not
    restate it here. In short: unresolved items never carry into a successor file — at lane close,
    promote any item still `OPEN` into `state.json` `carryover[]`.
+
+   **Adopting a block not on this chain?** Append its ledger row **at adoption time, not at lane
+   close**, with `origin_roadmap` set explicitly to that block's own driving roadmap (Rule 5's
+   ledger schema — do not restate it here). A block adopted and never given a row leaves its
+   home-roadmap attribution unrecoverable: it has already happened once, silently, and broke a
+   downstream consolidation pass that depends on the column.
+
+   **At lane close, reconcile the ledger against the repo's live `state.json` before stamping any
+   lifecycle field.** `state.json` is the authority on which blocks are actually closed; a ledger
+   row still marked `held` or `open` for a block `state.json` shows closed is stale and must be
+   corrected first. Do not stamp `lane-complete` or `consolidated` over a ledger that disagrees
+   with `state.json`.
 
    **Verify what you just wrote, before continuing** — and before the commit in rule 7/8 below.
    After every write or append to `notes.md` (and after writing the terminal `review.md`), run
@@ -191,14 +210,17 @@ If `planning/<spec-slug>/tasks.md` is missing for block 1, run **`/generate-task
 Run **`/breakdown planning/<spec-slug>/tasks.md`** *only* when it flagged that spec. Never break
 down on your own judgment — an unnecessary breakdown multiplies engine runs for no benefit.
 
-**Two authoring-time rules for any spec or OKF frontmatter this step produces or edits** —
-generalized from a lane that hit both in one day: a `related:` target must resolve to a real
-`doc_id` on a document that has actually been crawled, never a carryover slug or an invented id
-— an unresolved edge red-gates the whole corpus for every concurrent lane when `--graph` gates,
-not just the authoring one. And a `validation_command` must be scoped to the task's own changes,
-never the whole working tree (e.g. never a working-tree-wide `git diff | grep` guard) — a
-tree-wide guard can never pass in a shared index with concurrent lanes and bails the block on an
-unrelated lane's uncommitted files.
+**Two authoring-time rules for any spec or OKF frontmatter this step (or `/generate-tasks`,
+or hand-editing) produces or edits** — generalized from a lane that hit both in one day: a
+`related:` target must resolve to a real `doc_id` on a document that has actually been crawled,
+never a carryover slug or an invented id — an unresolved edge red-gates the whole corpus for
+every concurrent lane when `--graph` gates, not just the authoring one. A cross-repo target must
+be qualified `<repo>:<doc_id>` (e.g. `base-template:D48-downstream-harness-sync-script`); a bare
+`doc_id` resolves only within the authoring repo and is treated as unresolved everywhere else —
+see `docs/okf-frontmatter.md` for the full syntax. And a `validation_command` must be scoped to
+the task's own changes, never the whole working tree (e.g. never a working-tree-wide `git diff |
+grep` guard) — a tree-wide guard can never pass in a shared index with concurrent lanes and bails
+the block on an unrelated lane's uncommitted files.
 
 ### 5. Decide engine and isolation
 

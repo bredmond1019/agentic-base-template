@@ -65,6 +65,10 @@ Examples:
 
 **Write the review report file** in this exact format:
 
+**Evidence format:** name the symbol first — function, struct, type, or test name — not a bare
+line number. A line number moves the moment the file is next edited; a symbol can still be
+grepped weeks later when this report is read. A line number may follow as a secondary hint.
+
 ```markdown
 # Review Report — <plan filename> [Task <N> | All Tasks]
 
@@ -79,7 +83,7 @@ Examples:
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| 1 | <criterion text, truncated to ~80 chars> | MET / PARTIAL / NOT MET | file:line or test name or command output |
+| 1 | <criterion text, truncated to ~80 chars> | MET / PARTIAL / NOT MET | symbol name or test name or command output (line number optional, secondary) |
 | 2 | … | … | … |
 
 ## Fresh Test Run
