@@ -200,14 +200,17 @@ Each has already cost a real run in this fleet.
    spec, no gate, no state write and no review, and the chain's own verification will still look
    fine, so nothing catches it.
 
-   **Two authoring-time rules for any spec or OKF frontmatter `/generate-tasks` (or you, editing
-   one by hand) produces** — generalized from a lane that hit both the same day: a `related:`
-   target must resolve to a real `doc_id` on a document that has actually been crawled, never a
-   carryover slug or an invented id — one bad edge red-gates the whole corpus for every concurrent
-   lane when `--graph` gates, not just the authoring one. And a `validation_command` must be
-   scoped to the task's own changes, never the whole working tree (e.g. never a
-   working-tree-wide `git diff | grep` guard) — it can never pass in a shared index with
-   concurrent lanes and bails the block on an unrelated lane's uncommitted files.
+   **Two authoring-time rules for any spec or OKF frontmatter this step (or `/generate-tasks`,
+   or hand-editing) produces or edits** — generalized from a lane that hit both in one day: a
+   `related:` target must resolve to a real `doc_id` on a document that has actually been crawled,
+   never a carryover slug or an invented id — an unresolved edge red-gates the whole corpus for
+   every concurrent lane when `--graph` gates, not just the authoring one. A cross-repo target must
+   be qualified `<repo>:<doc_id>` (e.g. `base-template:D48-downstream-harness-sync-script`); a bare
+   `doc_id` resolves only within the authoring repo and is treated as unresolved everywhere else —
+   see `docs/okf-frontmatter.md` for the full syntax. And a `validation_command` must be scoped to
+   the task's own changes, never the whole working tree (e.g. never a working-tree-wide `git diff |
+   grep` guard) — a tree-wide guard can never pass in a shared index with concurrent lanes and bails
+   the block on an unrelated lane's uncommitted files.
 
 2. **Commit after every `mev` command and every roadmap or plan edit**, before launching the next
    engine. Sibling lanes read those files; an uncommitted state change is invisible to them and gets

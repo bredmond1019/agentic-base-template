@@ -43,6 +43,16 @@ a subagent round trip adds latency without adding value.
 
    **gist** — 1–3 sentences: what it is and why it matters. Be specific. Do not pad.
 
+   **routing** — what kind of unknown is blocking this item, using the same vocabulary as
+   `/capture`'s Open Questions:
+     - `READ` — answerable by reading source or docs
+     - `SPIKE` — cheaper to settle by writing ~30 lines or running the thing once
+     - `ASK` — only the operator can answer (a decision, a preference, a credential)
+     - `ASSESS` — too many unknowns to answer one at a time; needs a full `/assess` pass
+   This decides where the item goes when it is picked up — READ/ASK usually go straight to
+   `/ticket` or `/plan`; SPIKE gets a quick spike first; ASSESS routes to `/assess` before any
+   plan is written.
+
    Also infer a **slug** — a stable kebab-case key (2–4 words from the title). This is the node key
    shared by the markdown ticket and the structured node.
 
@@ -51,7 +61,7 @@ a subagent round trip adds latency without adding value.
 
    ```
    ### [YYYY-MM-DD] <title>
-   `repo:<repo>` `type:<type>` `status:<status>`
+   `repo:<repo>` `type:<type>` `status:<status>` `routing:<routing>`
    **related:** <related> (omit this line entirely if no related items)
 
    <gist>
@@ -67,7 +77,7 @@ a subagent round trip adds latency without adding value.
 
    ```json
    { "slug": "<slug>", "title": "<title>", "repo": "<repo>", "type": "<type>",
-     "status": "<status>", "created": "<YYYY-MM-DD>",
+     "status": "<status>", "routing": "<READ|SPIKE|ASK|ASSESS>", "created": "<YYYY-MM-DD>",
      "origin": { "type": "backlog" } }
    ```
 

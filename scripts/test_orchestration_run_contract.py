@@ -518,6 +518,13 @@ def _sweep_with_rg(root: Path) -> Optional[list[Path]]:
     return [root / line for line in result.stdout.splitlines() if line.strip()]
 
 
+_WALK_PRUNE_DIRS = frozenset({
+    ".git", "node_modules", "target", ".venv", "venv", "__pycache__",
+    ".next", "dist", "build", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+    ".cargo", ".rustup", "site-packages",
+})
+
+
 def _sweep_with_walk(root: Path) -> list[Path]:
     """Pure-Python fallback sweep, used when no `rg` binary is on PATH.
 
@@ -527,6 +534,12 @@ def _sweep_with_walk(root: Path) -> list[Path]:
     """
     found: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
+        # Prune build/VCS trees: none can hold an orchestration-run/ record, so this changes no
+        # result. Same fix and same reason as roadmap_status_discovery.py and
+        # test_consolidator_discovery.py -- with `rg` unavailable as a real binary in the agent
+        # sandbox this walk is the only code path, and unpruned it ran 123s, well into the range
+        # that SIGKILLs an SDLC test stage.
+        dirnames[:] = [d for d in dirnames if d not in _WALK_PRUNE_DIRS]
         if Path(dirpath).name == "orchestration-run" or "orchestration-run" in Path(dirpath).parts:
             for name in filenames:
                 found.append(Path(dirpath) / name)

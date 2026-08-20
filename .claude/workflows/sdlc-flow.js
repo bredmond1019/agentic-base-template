@@ -239,8 +239,9 @@ if (rangeSpec) {
   selectedTasks = new Set(parsed)
 }
 
-const blockDir      = `planning/${blockId}`
-const specFile      = `${blockDir}/tasks.md`
+const blockDir       = `planning/${blockId}`
+const blockRecordFile = `planning/blocks/${blockId}.json`   // D65: the authored block record — preferred spec source
+let specFile         = `${blockDir}/tasks.md`                // legacy fallback for a spec with no block record (reassigned once setup reports which source exists)
 const tasksJsonFile = `${blockDir}/tasks.json`
 const breakdownFile = `${blockDir}/breakdown.md`
 const reportsDir    = `${blockDir}/sdlc/reports`
@@ -252,7 +253,7 @@ const MAX_TASK_ATTEMPTS   = 3   // implement→test→fix attempts per task befo
 const MAX_REVIEW_ATTEMPTS = 3   // consolidated-review fix passes before bail
 
 log(`Target: ${blockId} (${selectedTasks ? [...selectedTasks].sort((a, b) => a - b).join(', ') : 'all tasks'})`)
-log(`Spec: ${specFile} | branch: ${baseBranchName} | mode: ${useWorktree ? 'worktree' : 'branch'}${resumeMode ? ' | RESUME' : ''}`)
+log(`Spec: ${blockId} (resolving block record first, tasks.md fallback) | branch: ${baseBranchName} | mode: ${useWorktree ? 'worktree' : 'branch'}${resumeMode ? ' | RESUME' : ''}`)
 
 // ================================================================
 // Schemas
@@ -264,7 +265,8 @@ const SETUP_SCHEMA = {
     branchName:     { type: 'string', description: 'Actual branch name used (may have -2, -3 suffix if base was taken)' },
     worktreePath:   { type: 'string', description: 'Absolute path to the worktree directory' },
     wasCreated:     { type: 'boolean', description: 'true if a new worktree was created, false if an existing one was reused' },
-    specFileExists: { type: 'boolean', description: 'true if the task spec file exists in the worktree' },
+    specFileExists: { type: 'boolean', description: 'true if EITHER the block record or the legacy tasks.md exists (D65 stage 2)' },
+    specSource:     { type: 'string', enum: ['block-record', 'tasks-md', 'missing'], description: "D65 stage 2: 'block-record' if planning/blocks/<BlockID>.json exists (preferred), else 'tasks-md' if the legacy spec file exists, else 'missing'" },
     blockStatus:    { type: 'string', description: "This spec's Status in status.md (title-case), or 'Unknown'" },
     specThin:       { type: 'boolean', description: 'D19: true ONLY on a fresh run (wasCreated && specFileExists) with a structurally-valid but substantively-thin spec. false on resume or a healthy spec.' },
     thinReason:     { type: 'string', description: 'D19: the specific thin-spec failures when specThin; empty string otherwise.' },
@@ -1118,7 +1120,9 @@ You are the setup agent. ${useWorktree
 All bash commands run from the MAIN REPO ROOT (your current CWD).
 
 Target:
-  Spec:       ${blockId}
+  Spec:              ${blockId}
+  Block record:      ${blockRecordFile} (preferred spec source, D65 stage 2)
+  Legacy spec file:  ${specFile} (fallback — only used when the block record is absent)
   Base name:  ${baseBranchName}
 
 STEP 1 — Get the absolute repo root:
@@ -1127,16 +1131,21 @@ STEP 1 — Get the absolute repo root:
 ${useWorktree ? worktreeRecipe : branchRecipe}
 
 STEP 6 — Report pipeline-start inputs (run these from the live checkout):
-  a. Spec file:
-       cd ${setupWorkdir} && ls ${specFile} 2>/dev/null && echo "SPEC_EXISTS" || echo "SPEC_MISSING"
-     specFileExists = true iff "SPEC_EXISTS" printed.
+  a. Spec source (D65 stage 2) — the block record is checked FIRST and is preferred; tasks.md is only
+     a fallback for a legacy spec that predates the block-record migration:
+       cd ${setupWorkdir} && ls ${blockRecordFile} 2>/dev/null && echo "RECORD_EXISTS" || echo "RECORD_MISSING"
+       cd ${setupWorkdir} && ls ${specFile} 2>/dev/null && echo "LEGACY_EXISTS" || echo "LEGACY_MISSING"
+     specSource = "block-record" if RECORD_EXISTS (regardless of the legacy file); else "tasks-md" if
+     LEGACY_EXISTS; else "missing". specFileExists = true iff specSource != "missing".
   b. Block status — find this spec's row in status.md:
        cd ${setupWorkdir} && grep -iE "${blockId}" planning/status.md | head -5
      blockStatus = the title-case Status value (Not started / In progress / Done / Blocked / Skipped),
      or "Unknown" if no row is found.
-  c. Thin-spec check (D19) — ONLY when wasCreated AND specFileExists (a fresh run about to spend
-     implement tokens; skip on resume). Set specThin=true ONLY on these high-confidence signals (a
-     blocked valid spec is far costlier than a missed thin one — when in doubt do NOT flag):
+  c. Thin-spec check (D19) — ONLY when wasCreated AND specSource == "tasks-md" (the legacy path — a
+     block-record spec is authored structured JSON, not markdown prose, so the {{TOKEN}}/section checks
+     below do not apply to it) (a fresh run about to spend implement tokens; skip on resume). Set
+     specThin=true ONLY on these high-confidence signals (a blocked valid spec is far costlier than a
+     missed thin one — when in doubt do NOT flag):
        - cd ${setupWorkdir} && grep -n '{{' ${specFile}  → any unfilled {{TOKEN}} is thin.
        - The '## Acceptance Criteria' section has no real '- ' bullet (empty, or only a template seed) → thin.
      Do NOT flag bare 'TODO'/'TBD' prose, do NOT treat '<...>' as a token (legitimate in 'Vec<T>', globs),
@@ -1172,7 +1181,21 @@ if (useWorktree) {
   log(`Worktree path derives from the spec slug (trees/${branchName}), not any block ID — use "git worktree list" to locate it, never guess.`)
 }
 
-// D19 — thin-spec guard for a fresh run.
+// D65 stage 2: resolve which spec source this run actually has. specSource defaults to 'tasks-md'
+// only if the setup agent omitted the field (older cached run) — never silently prefer a source
+// that was not actually checked.
+const specSource = setupResult.specSource || (setupResult.specFileExists ? 'tasks-md' : 'missing')
+if (specSource === 'block-record') {
+  specFile = blockRecordFile
+  log(`Spec source: block record (${specFile})`)
+} else if (specSource === 'tasks-md') {
+  log(`Spec source: legacy tasks.md (${specFile}) — no block record found at ${blockRecordFile}`)
+}
+const specDesc = specSource === 'block-record'
+  ? '(JSON block record — what/why/acceptance_criteria/testing_strategy/validation_commands fields)'
+  : '(prose — Goal, Acceptance Criteria, Validation Commands)'
+
+// D19 — thin-spec guard for a fresh run (legacy tasks.md path only — see STEP 6c above).
 if (setupResult.specThin) {
   log(`ABORTED (D19) — spec is structurally valid but substantively thin: ${setupResult.thinReason || '(no reason given)'}`)
   log(`Fix: flesh out ${specFile} (run /generate-tasks --force to regenerate, or edit + commit), then re-run.`)
@@ -1198,9 +1221,9 @@ build/test/validation from the repo root; relative paths (planning/...) resolve 
 phase('Plan')
 
 if (!setupResult.specFileExists) {
-  log(`Spec file ${specFile} not found in the worktree. /sdlc-flow expects an authored spec.`)
+  log(`Neither the block record (${blockRecordFile}) nor the legacy spec file (${specFile}) was found in the worktree. /sdlc-flow expects an authored spec.`)
   log(`Fix: run /generate-tasks ${blockId} (and /breakdown) on main, commit, then re-run /sdlc-flow ${blockId}.`)
-  return { error: 'Missing spec', blockId, specFile }
+  return { error: 'Missing spec', blockId, specFile, blockRecordFile }
 }
 
 const ENUMERATE_PROMPT = `${W}
@@ -1722,7 +1745,7 @@ on Task ${taskNum} of this spec.
 Target:
   Spec:        ${blockId}
   Task:        Task ${taskNum} only
-  Spec file:   ${specFile} (prose — Goal, Acceptance Criteria, Validation Commands)
+  Spec file:   ${specFile} ${specDesc}
   Tasks file:  ${tasksJsonFile} (the task list — find the entry with "task_id": ${taskNum})
 
 1. Read CLAUDE.md and planning/context.md — internalize the project's standing rules (CLAUDE.md is the
@@ -1971,7 +1994,7 @@ the ACTUAL code and issue a verdict. All Bash calls run from the worktree root.
 
 Target:
   Spec:        ${blockId}
-  Spec file:   ${specFile}
+  Spec file:   ${specFile} ${specDesc}
   Tasks run:   ${taskList.join(', ')}
   Base branch: ${prBase}
 
@@ -1979,7 +2002,8 @@ The committed run-state is your INDEX (per-task summary/issues/fixes/decisions/f
 but it does NOT replace verifying the criteria against the code:
   cd ${worktreePath} && cat ${stateFile}
 
-1. Read the spec's COMPLETE "## Acceptance Criteria" — this is your checklist.
+1. Read the spec's COMPLETE acceptance criteria — this is your checklist (the "## Acceptance Criteria"
+   section in prose, or the "acceptance_criteria" array in a JSON block record).
    Run: cd ${worktreePath} && cat ${specFile}
 
 2. Read the actual integrated diff (every task's work is sequential commits on this branch):

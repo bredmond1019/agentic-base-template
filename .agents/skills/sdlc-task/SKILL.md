@@ -103,7 +103,11 @@ only this section — not the `.js` — should end up doing exactly what the rea
 
 - `<spec-slug>` (required) — call it `blockId`. Paths derived from it:
   - `blockDir` = `planning/<blockId>`
-  - `specFile` = `<blockDir>/tasks.md`
+  - `blockRecordFile` = `planning/blocks/<blockId>.json` — the authored block record (D65 stage 2):
+    preferred spec source when present.
+  - `specFile` = `<blockDir>/tasks.md` — legacy fallback, only used when `blockRecordFile` is absent.
+    (`specFile` is reassigned to `blockRecordFile` once Step 1 determines the block record exists —
+    every later step that reads `<specFile>` is reading whichever source actually won.)
   - `tasksJsonFile` = `<blockDir>/tasks.json`
   - `breakdownFile` = `<blockDir>/breakdown.md` (optional, from `/breakdown`)
   - `reportsDir` = `<blockDir>/sdlc/reports`
@@ -197,12 +201,18 @@ Run everything below from the **main repo root** unless noted.
    `runDir = repoRoot`. Skip Steps 1b/1c entirely.
 6. **Compute `runDir`**: `repoRoot/trees/<branchName>` under `--worktree`, else `repoRoot`.
 7. **Report pipeline-start inputs**, all run from `runDir`:
-   - Spec file exists? `ls <specFile>`.
+   - **Spec source (D65 stage 2)** — the block record is checked FIRST and is preferred; `tasks.md`
+     is only a fallback for a legacy spec that predates the block-record migration:
+     `ls <blockRecordFile>` then `ls <specFile>`. `specSource` = `"block-record"` if the record
+     exists (regardless of whether the legacy file also exists); else `"tasks-md"` if the legacy
+     file exists; else `"missing"`. `specFileExists` = true iff `specSource != "missing"`. When
+     `specSource == "block-record"`, reassign `specFile := blockRecordFile` for every step below.
    - Block status: `grep -iE "<blockId>" planning/status.md | head -5` (title-case Status, or
      `"Unknown"` if no row found).
-   - **D19 thin-spec gate** — evaluate ONLY when the spec file exists AND this is a **fresh** run
-     (never on `--resume`). Flag thin ONLY on high-confidence signals — a false positive blocking a
-     valid spec is far costlier than a missed one:
+   - **D19 thin-spec gate** — evaluate ONLY when `specSource == "tasks-md"` (the legacy prose path —
+     a block-record spec is authored structured JSON, so the `{{TOKEN}}`/section checks below do not
+     apply to it) AND this is a **fresh** run (never on `--resume`). Flag thin ONLY on high-confidence
+     signals — a false positive blocking a valid spec is far costlier than a missed one:
      - Any unfilled `{{TOKEN}}` in `<specFile>` (`grep -n '{{' <specFile>`).
      - The `## Acceptance Criteria` section has no real `- ` bullet (empty, or only a template seed).
      - Do NOT flag bare `TODO`/`TBD` prose, do NOT treat `<...>` as a token (legitimate in `Vec<T>` /
@@ -214,8 +224,8 @@ Run everything below from the **main repo root** unless noted.
      own recorded commit SHAs against its own parent, not `baseSha..HEAD`; `baseSha` survives only
      as the cannot-scope fallback check (Step 6 below) and as `state.base_sha` for `/close-out`'s
      in-place fallback.
-- If the spec file is missing entirely: abort — `Missing spec`, tell the user to run
-  `/generate-tasks <blockId>` (and `/breakdown`), commit, then re-run.
+- If neither the block record nor the legacy spec file is found: abort — `Missing spec`, tell the
+  user to run `/generate-tasks <blockId>` (and `/breakdown`), commit, then re-run.
 
 From here on, every Bash call in every later step is prefixed with `cd <runDir> &&` — shell state does
 not persist between calls.
@@ -224,21 +234,39 @@ not persist between calls.
 
 1. **D16 preflight lint.** Read `<tasksJsonFile>`. It MUST parse as a **non-empty bare JSON array** of
    task objects (each with at least `task_id`; matches the SDLCTask shape, not wrapped in an object).
-   If it's missing, invalid, or an empty array: **before aborting, check the D16 derive-from-tasks.md
-   fallback.** If `<specFile>` (`tasks.md`) exists and carries a `## Step-by-Step Tasks` /
-   `## Step by Step Tasks` section with at least one numbered step, author a FRESH D45-shaped
-   `tasks.json` from that decomposition plus the spec's Acceptance Criteria / Validation Commands
-   (a real decomposition, never a verbatim copy of the prose, never the superseded D44
-   `{"tasks": [...]}` wrapper — bare array, 1-indexed integer `task_id`, `description` a single
-   string, `max_attempts: 3`, never author `status`/`attempt_count`), write it, and commit it on the
-   current branch with an explicit pathspec (`git add <tasksJsonFile>`,
-   `git commit -m "chore: derive tasks.json from tasks.md (D16 fallback)"`). Log a distinct line —
-   `Derived tasks.json from tasks.md (D16 derive-from-tasks.md fallback) — <N> task(s), commit
-   <hash>.` — so a derived spec is distinguishable from an authored one, then re-run this lint.
-   **Only if `tasks.md` is also missing, or has no derivable step content, abort** —
-   `ABORTED (D16)`, tell the user to run `/generate-tasks <blockId>` to author `tasks.json`, commit,
-   then re-run. Deriving from an authored `tasks.md` is not guessing the task structure; fabricating
-   one from nothing is what D16 still refuses to do.
+   If it's missing, invalid, or an empty array: **before aborting, check the matching D16 derive
+   fallback for this run's `specSource`** (from Step 1 above) — the two fallbacks are mutually
+   exclusive per run, not tried in sequence:
+
+   - **`specSource == "block-record"` → derive-from-block-record fallback.** Read
+     `<blockRecordFile>` (`planning/blocks/<blockId>.json`, per `block.schema.json`). If it parses as
+     JSON and carries a non-empty `what` plus a non-empty `acceptance_criteria` array, author a FRESH
+     D45-shaped `tasks.json` from the record's `what` (scope), `why` (intent), `files.new`/
+     `files.modified` (task ownership — keep tasks disjoint), `acceptance_criteria`,
+     `testing_strategy`, and `validation_commands` fields (a real decomposition, never a verbatim
+     copy of the record's prose, never the superseded D44 `{"tasks": [...]}` wrapper — bare array,
+     1-indexed integer `task_id`, `description` a single string, `max_attempts: 3`, never author
+     `status`/`attempt_count`), write it, and commit it on the current branch with an explicit
+     pathspec (`git add <tasksJsonFile>`,
+     `git commit -m "chore: derive tasks.json from block record (D16 fallback)"`). Log a distinct
+     line — `Derived tasks.json from block record (D16 derive-from-block-record fallback) — <N>
+     task(s), commit <hash>.` — then re-run this lint. **Only if the block record is also missing,
+     invalid, or has no derivable `what`/`acceptance_criteria`, abort** — `ABORTED (D16)`.
+
+   - **`specSource == "tasks-md"` → derive-from-tasks.md fallback (legacy path).** If `<specFile>`
+     (`tasks.md`) exists and carries a `## Step-by-Step Tasks` / `## Step by Step Tasks` section with
+     at least one numbered step, author a FRESH D45-shaped `tasks.json` from that decomposition plus
+     the spec's Acceptance Criteria / Validation Commands (same D45 shape rules as above), write it,
+     and commit it on the current branch with an explicit pathspec (`git add <tasksJsonFile>`,
+     `git commit -m "chore: derive tasks.json from tasks.md (D16 fallback)"`). Log a distinct line —
+     `Derived tasks.json from tasks.md (D16 derive-from-tasks.md fallback) — <N> task(s), commit
+     <hash>.` — so a derived spec is distinguishable from an authored one, then re-run this lint.
+     **Only if `tasks.md` is also missing, or has no derivable step content, abort** —
+     `ABORTED (D16)`.
+
+   Either way, tell the user to run `/generate-tasks <blockId>` to author `tasks.json`, commit, then
+   re-run. Deriving from an authored block record or `tasks.md` is not guessing the task structure;
+   fabricating one from nothing is what D16 still refuses to do.
 
    **Per-task `validation_commands` scoping**: When authoring tasks.json, follow the convention
    documented at `.claude/commands/generate-tasks.md` (search it for "validation_commands"); do not
@@ -306,7 +334,9 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
      `<breakdownFile>` exists, use its `### Step <taskNum>:` sub-steps as a finer execution guide
      (`tasks.json` stays authoritative for scope). Run the D8 completeness self-check (no
      `todo!()`/`unimplemented!()`/`NotImplementedError`/`not implemented`/`FIXME` on any in-scope
-     path). Run the spec's `## Validation Commands` for this task to confirm correctness locally.
+     path). Run the spec's validation commands for this task to confirm correctness locally — the
+     `## Validation Commands` section in prose (`tasks-md` source), or the `validation_commands`
+     field in the JSON block record (`block-record` source).
    - **Commit** (never `git add -A`/`git add .` — stage files explicitly by name):
      ```
      git commit -m "$(cat <<'EOF'

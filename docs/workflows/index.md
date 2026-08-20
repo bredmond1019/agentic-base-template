@@ -113,19 +113,20 @@ Each engine writes a committed JSON state file under `planning/<spec>/sdlc/`:
 use per-stage report files (see below) as the primary resume signal; their state files are the
 at-a-glance index and token accounting artifact.
 
-### Report-file contract (Phase 2-5 commands invoked by hand)
-Reports are named `[taskN-]<stage>.md` under `sdlc/reports/`. `/sdlc-flow` does not use this
-contract — it uses `sdlc-flow-state.json` + `worklog.md` instead (see
-[D31](../../planning/decisions/D31-committed-authoritative-state.md)).
+### State + worklog contract (Phase 2-5 commands invoked by hand)
+There is no per-stage prose report file. `/implement`, `/test`, `/fix`, `/review-task`, and
+`/document`, invoked by hand, each read and update one shared `planning/<spec>/sdlc/state.json`
+(per-task keyed: status, attempts, files changed, commit, validation result) and append a section to
+`planning/<spec>/sdlc/worklog.md` — the same D31 shape `/sdlc-flow` uses, adapted for a standalone
+run (`mode: "standalone"`). Both files are write-only: never `git add`/`git commit`ed, read back off
+disk rather than git history.
 
-| Report | Written by | Read by |
+| Artifact | Written by | Read by |
 |---|---|---|
-| `[taskN-]implement.md` | implement (overwritten by each fix pass) | review, document |
-| `[taskN-]test.md` | test | review |
-| `[taskN-]review.md` | review | fix, document |
-| `[taskN-]document.md` | document | — |
+| `sdlc/state.json` (`tasks["<N>"]` entries) | implement, test, fix, review-task, document — each command only touches the fields/tasks it owns | every later stage on the same spec; `/fix` gates on `review.verdict` |
+| `sdlc/worklog.md` (`## Task <N> — <STAGE>` sections; `/fix` appends a `FIX PASS <k>` section per pass rather than overwriting) | implement, test, fix, review-task, document | human-readable run trail for the next stage or a resuming operator |
 | `sdlc-flow-state.json` | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | `--resume`, end-review localization, PR body — **committed** |
-| `worklog.md` | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | human-readable run trail — **committed** |
+| `worklog.md` (flow-scoped) | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | human-readable run trail — **committed** |
 
 ### The two hard gates
 1. **Review gates Document** — `/document` refuses to run unless the review verdict is `PASS`.

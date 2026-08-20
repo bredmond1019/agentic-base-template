@@ -63,7 +63,7 @@ flowchart TD
 
 | Stage | Model | What it does |
 |---|---|---|
-| **Scout / worktree-setup** | haiku | Reads the spec and existing report state (for `--resume`). With `--worktree`, creates `trees/<branch>/` via cone-mode sparse checkout (all tracked top-level dirs — no stack assumptions, per [D5](../../planning/decisions/D5-okf-phase-2-adopted.md)). |
+| **Scout / worktree-setup** | haiku | Reads the spec and existing report state (for `--resume`). With `--worktree`, creates `trees/<branch>/` via cone-mode sparse checkout (all tracked top-level dirs — no stack assumptions, per [D5](../../planning/decisions/D5-okf-phase-2-adopted.md)). Resolves the spec source (D65 stage 2): checks `planning/blocks/<BlockID>.json` first and prefers it when present; falls back to the legacy `planning/<spec>/tasks.md` only when no block record exists. `specSource` (`'block-record'` / `'tasks-md'` / `'missing'`) drives which file the run treats as the spec and, downstream, which D16 derive branch fires (see below). The D19 thin-spec check runs only when `specSource == 'tasks-md'`. |
 | **Implement** | sonnet | Executes every task (or the selected range) against `tasks.md` (and `breakdown.md` if present). Runs the [D8](../../planning/decisions/D8-implement-completeness-self-check.md) completeness self-check before committing `feat:`/`fix:`. |
 | **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` plus the universal emoji gate on changed markdown. Falls back to the spec's `## Validation Commands` if no config. |
 | **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. Stuck → commit the current state as `FAIL` and exit. |
@@ -89,20 +89,27 @@ fix, commit) walks that array. The preflight is **derive-then-abort**, not a bar
 
 1. **Enumerate.** Parse `planning/<spec>/tasks.json`. If it's a non-empty bare array, proceed
    normally.
-2. **Derive.** If `tasks.json` is missing, invalid, or empty but `tasks.md` carries a usable step
-   decomposition, an `opus` recovery generator authors a fresh [D45](../../planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md)-shaped
-   `tasks.json` from it (bare array, integer `task_id`, single-string `description`, no `status`/
-   `attempt_count` — never a verbatim copy of the prose), writes it, and commits it
-   (`chore: derive tasks.json from tasks.md (D16 fallback)`). Enumerate then re-runs against the
-   derived file.
-3. **Abort.** Only when nothing was derivable either — no `tasks.md`, or a `tasks.md` with no
-   extractable step structure — does the engine log `ABORTED (D16) — <path> is missing, invalid,
-   or is an empty array.` and return without touching the tree. D16 exists to refuse *guessing* a
-   task structure out of nothing; deriving from an authored `tasks.md` is not guessing, so the
-   abort survives only the genuinely underivable case.
+2. **Derive.** If `tasks.json` is missing, invalid, or empty, the derive branch taken depends on
+   the `specSource` resolved during Scout / worktree-setup (D65 stage 2):
+   - `specSource == 'block-record'` — an `opus` recovery generator derives a fresh
+     [D45](../../planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md)-shaped
+     `tasks.json` (bare array, integer `task_id`, single-string `description`, no `status`/
+     `attempt_count`) directly from `planning/blocks/<BlockID>.json`, writes it, and commits it
+     (`chore: derive tasks.json from block record (D16 fallback)`).
+   - `specSource == 'tasks-md'` (the legacy path) — if `tasks.md` carries a usable step
+     decomposition, the same recovery generator derives the D45-shaped `tasks.json` from the
+     prose instead, writes it, and commits it
+     (`chore: derive tasks.json from tasks.md (D16 fallback)`).
 
-`/sdlc-flow` runs the identical derive-then-abort preflight — see
-[its Enumerate stage](./sdlc-flow.md#pipeline).
+   Either branch re-runs Enumerate against the derived file once written.
+3. **Abort.** Only when nothing was derivable either — no block record and no `tasks.md`, or a
+   `tasks.md` with no extractable step structure — does the engine log `ABORTED (D16) — <path> is
+   missing, invalid, or is an empty array.` and return without touching the tree. D16 exists to
+   refuse *guessing* a task structure out of nothing; deriving from an authored block record or
+   `tasks.md` is not guessing, so the abort survives only the genuinely underivable case.
+
+`/sdlc-flow` runs the same derive-then-abort shape, but its D16 derive branch is `tasks.md`-only —
+it does not derive from a block record — see [its Enumerate stage](./sdlc-flow.md#pipeline).
 
 ---
 
