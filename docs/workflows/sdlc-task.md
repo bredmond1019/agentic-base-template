@@ -193,8 +193,19 @@ line above) is always the spec's **cumulative** total — every task marked done
 this spec so far, not just this run's `passedTasks` slice. On a spec resumed after a partial run
 (e.g. `/sdlc-task <slug> 1` followed later by `/sdlc-task <slug> 2`), the count reported after the
 second run reads the true "N of M" total, not "1 of M" for whichever slice ran last. A partial
-task-range run still leaves the block open regardless of what the count reads — the `fullRun` guard
-that gates `blockDone` is unaffected by this.
+task-range run still leaves the block open regardless of what the count reads — but **since
+2026-08-20 that is no longer the `fullRun` proxy's doing.** `blockDone` is now derived from
+`outstandingTasks` (every task in `allTasks` not yet passed), so a `--resume` that lands the final
+outstanding task **does** close the block, while a genuine subset run that leaves work outstanding
+does not. The old condition asked "was a selection passed?", which left every completed resume
+`open` — measured four for four. `fullRun` survives, but only to gate the terminal reconcile stage
+(above); it no longer gates the close. Two things make this safe: `state.tasks` now survives a
+`--resume` (it used to be overwritten, not merged), so the condition does not lean on the
+git-derived scout that [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md)
+says must never be load-bearing alone; and the comparison is scoped to `allTasks`, not to the
+selected `taskList` — against `taskList` it would be trivially true on every subset run. Both
+properties are pinned by `scripts/test_block_close_decision.py` and
+`scripts/test_resume_task_state_merge.py`, each of which also proves the pre-fix rule loses.
 
 `planning/state.json`'s top-level `focus` object (`focus.next` in particular) is derived, not
 bookkeep's to hand-edit — it's recomputed by `mev emit-state --write`. **In-place** runs execute
