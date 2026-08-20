@@ -9,6 +9,21 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-19]
 
+Resumed and completed `/sdlc-flow` on `BT.ticket.engines-read-block-record` (D65 stage 2) — all 7 tasks passed, review verdict PASS. Task 3 taught `sdlc-task.js`'s D16 preflight to derive `tasks.json` from the block record (`planning/blocks/<BlockID>.json`) when `specSource` is block-record, keeping the legacy `tasks.md` derive path for legacy specs. Task 4 rewrote `/breakdown` to resolve its spec from the block record + `tasks.json` first, falling back to `tasks.md` only when no block record exists. Task 5 re-verified every `.agents/skills` guide describing spec resolution against current engine source and fixed drift in `breakdown/SKILL.md` and `update-task/SKILL.md`, re-stamping `check_skill_sync.py`'s manifest for the anchors tasks 2/3 shifted. Task 6 deleted `scripts/render_spec.py` and removed the render-tasks.md step from `/ticket`, `/chore`, and `/generate-tasks` now that the engines read the block record directly, preserving the legacy tasks.md-authoring fallback for specs with no block record. Task 7 ran all 20 gated `harness.json` checks — all pass, including `engines-parse`, `skill-guide-sync`, `prompt-template-parse`, `block-record-schema`, and the D16 fallback tests. Notable decision: the block record's acceptance criteria still name "all four engines," but `sdlc-run.js`/`sdlc-block.js` no longer exist in this repo (retired earlier); tasks 2-3's real scope was the two surviving engines, `sdlc-task.js` and `sdlc-flow.js`. Next: none — spec closed.
+
+```
+ff6527d docs: update docs for BT.ticket.engines-read-block-record
+1e0b467 feat: implement BT.ticket.engines-read-block-record-task6
+683888e feat: implement BT.ticket.engines-read-block-record-task5
+82e2837 feat: implement BT.ticket.engines-read-block-record-task4
+9da5b04 feat: implement BT.ticket.engines-read-block-record-task3
+f53ccdb feat: implement BT.ticket.engines-read-block-record-task2
+6d9a6ca chore: wrap up BT.ticket.engines-read-block-record
+b7577ca feat: implement BT.ticket.engines-read-block-record-task2
+```
+
+## [run: 2026-08-19]
+
 Ran `/sdlc-flow` on `BT.ticket.engines-read-block-record` (D65 stage 2) through tasks 1 and 2; the run BAILED before task 3. Task 1 relocated the Amendment Log out of `tasks.md` into a sibling `amendments.md`, repointing `/update-task` at it so a mid-run amendment can no longer be clobbered by a spec regeneration. Task 2 changed `specFile` resolution in both live SDLC engines (`sdlc-task.js`, `sdlc-flow.js`) to check `planning/blocks/<BlockID>.json` first (D65) and fall back to legacy `planning/<BlockID>/tasks.md` only when no block record exists, with `specFileExists`/`specSource` now reported by the setup agent and the D19 thin-spec check scoped to the legacy path only. The block record's acceptance criteria name four engines, but `sdlc-run.js` and `sdlc-block.js` no longer exist in this repo (deleted by the earlier `BT.ticket.retire-unused-engines`), so task 2's real scope was the two surviving engines — recorded as an amendment. The run BAILED at task 2 because CHECK4 (skill-guide-sync) fails by design at this point in the sequence: `check_skill_sync.py`'s position-based anchors shifted since task 2 inserted lines upstream of them, and re-verifying the `.agents/skills` guides plus re-stamping the manifest is explicitly task 5's scope per the plan, not task 2's. CHECK10 (consolidator-discovery) additionally times out on a corpus scan; not yet attributed to this change vs. environment. Tasks 3-7 (D16 preflight, `/breakdown`, skill-guide re-verification, `tasks.md` retirement, final validation) remain pending. Next: resume `/sdlc-flow BT.ticket.engines-read-block-record 3` once CHECK10's timeout cause is isolated, or re-run with task 5 immediately following task 2 to close the skill-guide-sync gap sooner.
 
 ```
