@@ -145,6 +145,18 @@ def _gitignored_prefixes(root: Path) -> list[Path]:
     return prefixes
 
 
+# Directories the fallback walk never needs to descend into. None can contain an
+# orchestration-run/ record, so pruning them changes no result -- it removes only the build and
+# VCS trees that dominate an unpruned walk of the fleet. Same fix, same reason, as
+# roadmap_status_discovery.py: with `rg` unavailable as a real binary in the agent sandbox this
+# walk is the ONLY code path, and unpruned it ran 1m45s and timed out the SDLC test stage.
+_WALK_PRUNE_DIRS = frozenset({
+    ".git", "node_modules", "target", ".venv", "venv", "__pycache__",
+    ".next", "dist", "build", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+    ".cargo", ".rustup", "site-packages",
+})
+
+
 def _sweep_with_walk(root: Path, follow_symlinks: bool, hidden: bool) -> list[str]:
     """Pure-Python fallback sweep, used when no `rg` binary is on PATH.
 
@@ -156,10 +168,12 @@ def _sweep_with_walk(root: Path, follow_symlinks: bool, hidden: bool) -> list[st
     ignored = [] if hidden else _gitignored_prefixes(root)
     found: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root, followlinks=follow_symlinks):
-        dp = Path(dirpath).resolve()
-        if not hidden and any(dp == p or p in dp.parents for p in ignored):
-            dirnames[:] = []
-            continue
+        dirnames[:] = [d for d in dirnames if d not in _WALK_PRUNE_DIRS]
+        if not hidden:
+            dp = Path(dirpath).resolve()
+            if any(dp == p or p in dp.parents for p in ignored):
+                dirnames[:] = []
+                continue
         if Path(dirpath).name == "orchestration-run" or "orchestration-run" in Path(dirpath).parts:
             for name in filenames:
                 if name.endswith(".md"):
