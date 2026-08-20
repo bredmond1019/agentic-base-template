@@ -59,6 +59,15 @@ ABORT_SUBSTR = "No tasks.json (D16)"
 DERIVED_LOG_SUBSTR = "Derived tasks.json from tasks.md"
 D45_KEYWORDS = ["D45", "bare array", "task_id"]
 
+# BT.ticket.engines-read-block-record, task 3: the block-record counterpart of the
+# derive-from-tasks.md fallback, used when a run's spec source is the authored block record
+# (planning/blocks/<BlockID>.json) rather than legacy tasks.md prose. Scoped to sdlc-task.js only —
+# that is the engine this task's "files" list names; sdlc-flow.js keeps its tasks.md-only fallback
+# until a later task extends it.
+RECORD_ENGINES = ["sdlc-task.js"]
+RECORD_MARKER_COMMENT = "D16 derive-from-block-record fallback"
+RECORD_DERIVED_LOG_SUBSTR = "Derived tasks.json from block record"
+
 TICKET_MD = REPO_ROOT / ".claude" / "commands" / "ticket.md"
 TICKET_SKILL = REPO_ROOT / ".agents" / "skills" / "ticket" / "SKILL.md"
 GENERATE_TASKS_MD = REPO_ROOT / ".claude" / "commands" / "generate-tasks.md"
@@ -156,6 +165,76 @@ class EngineDerivationBranch(unittest.TestCase):
         if failures:
             self.fail(
                 f"engine(s) missing the distinguishing log line ({DERIVED_LOG_SUBSTR!r}): {failures}"
+            )
+
+
+class BlockRecordDerivationBranch(unittest.TestCase):
+    """BT.ticket.engines-read-block-record, task 3: sdlc-task.js must also derive tasks.json from
+    the authored block record (planning/blocks/<BlockID>.json) when THAT is the run's spec source,
+    keeping the tasks.md path above intact for legacy specs with no block record."""
+
+    def test_record_engines_carry_derivation_marker_before_abort(self):
+        failures = []
+        for name in RECORD_ENGINES:
+            src = _read(WORKFLOWS / name)
+            marker_idx = src.find(RECORD_MARKER_COMMENT)
+            abort_idx = src.find(ABORT_SUBSTR)
+            if marker_idx == -1:
+                failures.append(f"{name}: missing derivation marker comment ({RECORD_MARKER_COMMENT!r})")
+                continue
+            if abort_idx == -1:
+                failures.append(f"{name}: missing the D16 abort ({ABORT_SUBSTR!r})")
+                continue
+            if not marker_idx < abort_idx:
+                failures.append(f"{name}: block-record derivation marker must appear BEFORE the abort, not after")
+        if failures:
+            self.fail(
+                "engine(s) lacking the D16 derive-from-block-record fallback branch:\n  "
+                + "\n  ".join(failures)
+            )
+
+    def test_derivation_reads_block_record_and_names_d45_shape(self):
+        failures = []
+        for name in RECORD_ENGINES:
+            src = _read(WORKFLOWS / name)
+            marker_idx = src.find(RECORD_MARKER_COMMENT)
+            abort_idx = src.find(ABORT_SUBSTR)
+            if marker_idx == -1 or abort_idx == -1 or not marker_idx < abort_idx:
+                failures.append(f"{name}: derivation branch not found (see prior test)")
+                continue
+            span = src[marker_idx:abort_idx + len(ABORT_SUBSTR) + 400]
+            span_lower = span.lower()
+            if "block record" not in span and "block.schema.json" not in span:
+                failures.append(f"{name}: derivation branch does not mention the block record")
+            # Case-insensitive: the prompt text says "a BARE ARRAY (D45 shape" (imperative,
+            # uppercase for emphasis inside the agent instructions), not the lowercase phrasing
+            # used in DERIVE_SCHEMA's own field description.
+            missing_keywords = [kw for kw in D45_KEYWORDS if kw.lower() not in span_lower]
+            if missing_keywords:
+                failures.append(f"{name}: derivation branch missing D45 shape keyword(s): {missing_keywords}")
+        if failures:
+            self.fail("\n  ".join(failures))
+
+    def test_derivation_is_logged_distinctly(self):
+        failures = [
+            name for name in RECORD_ENGINES
+            if RECORD_DERIVED_LOG_SUBSTR not in _read(WORKFLOWS / name)
+        ]
+        if failures:
+            self.fail(
+                f"engine(s) missing the distinguishing log line ({RECORD_DERIVED_LOG_SUBSTR!r}): {failures}"
+            )
+
+    def test_legacy_tasks_md_branch_still_present_alongside(self):
+        """Both fallbacks must coexist — the block-record branch is additive, not a replacement."""
+        failures = [
+            name for name in RECORD_ENGINES
+            if MARKER_COMMENT not in _read(WORKFLOWS / name)
+        ]
+        if failures:
+            self.fail(
+                f"engine(s) lost the legacy tasks.md derivation branch after gaining the "
+                f"block-record one: {failures}"
             )
 
 

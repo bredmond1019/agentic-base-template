@@ -1088,6 +1088,62 @@ Return via StructuredOutput: hasTasks, allTasks (integers in order), taskChecks,
 let enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
 
 if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
+  if (specSource === 'block-record') {
+    // D16 derive-from-block-record fallback — the D65 stage 2 counterpart of the
+    // derive-from-tasks.md branch below, used when this run's spec source is the authored block
+    // record rather than legacy tasks.md prose. Mirrors /generate-tasks' --from mode: read the
+    // block record's what/why/files/acceptance_criteria/testing_strategy fields and author a
+    // FRESH D45-shaped tasks.json from them (never a verbatim copy, never the superseded D44
+    // {"tasks": [...]} wrapper). Deriving from an authored block record is not guessing the task
+    // structure — D16 exists to refuse fabricating one out of nothing, which the abort below still does.
+    const deriveFromRecordResult = await tracedAgent(`${W}
+You are the D16 recovery generator for one lean-engine spec. ${tasksJsonFile} is missing, invalid, or
+empty; ${blockRecordFile} (the authored block record, per block.schema.json) may still carry enough
+to decompose into tasks. Do NOT implement anything.
+
+STEP 1 — check for a derivable source:
+  cd ${runDir} && cat ${blockRecordFile} 2>/dev/null || echo "NO_BLOCK_RECORD"
+
+STEP 2 — Parse it as JSON per block.schema.json. If the block record is missing, invalid JSON, or
+  lacks a non-empty "what" and a non-empty "acceptance_criteria" array to decompose, set
+  derivable=false, written=false, and STOP — do not write anything.
+
+STEP 3 — Otherwise, author a FRESH decomposed ${tasksJsonFile} from the block record's "what" (scope),
+  "why" (intent), "files" (new/modified — use these to keep tasks disjoint), "acceptance_criteria",
+  "testing_strategy", and "validation_commands" fields (mirrors /generate-tasks' --from mode: a real
+  decomposition, not a verbatim copy of the record's prose). Write it as valid JSON: a BARE ARRAY (D45
+  shape — NOT the superseded D44 {"tasks": [...]} wrapper), each entry shaped { task_id, title,
+  description, acceptance_criteria, validation_commands, max_attempts, files, dependsOn } — task_id is
+  a 1-indexed integer in dependency order with no gaps, description is a single string, max_attempts is
+  3, and you must NEVER author a "status" or "attempt_count" key (those are engine-owned). Each task
+  names the concrete file(s) it owns in "files" (drawn from the record's files.new / files.modified
+  paths) so tasks stay disjoint.
+
+  Per-task "validation_commands" scoping — follow the convention documented at
+  \`.claude/commands/generate-tasks.md\` (search it for "validation_commands"); do not restate the
+  rubric in your own words, just apply it: "validation_commands" is [] for any task that touches
+  source the project's checks compile or lint — those tasks fall back to the project-wide harness
+  checks, which are authoritative for them. Set it ONLY for a task that CANNOT break the build
+  (docs-only, config-only, fixture-only), with cheap commands that actually verify that task (file
+  exists, frontmatter present, index updated). If you DO author an override that runs tests, it MUST
+  target that task's own tests specifically — never a bare/positional filter that could silently
+  match zero or the wrong tests — and a command matching nothing must fail rather than pass. Never
+  hardcode a stack-specific command (e.g. a particular test runner invocation) into this prompt;
+  that judgment belongs to the deriving agent at run time, per task.
+
+STEP 4 — Commit it on the current branch with an explicit pathspec:
+  git add ${tasksJsonFile}
+  git commit -m "chore: derive tasks.json from block record (D16 fallback)"
+  git log --oneline -1   (capture the short hash)
+
+Return via StructuredOutput: derivable, written, commitHash, taskCount, notes.
+`, withModel({ label: 'derive-tasks-json-from-record', schema: DERIVE_SCHEMA, phase: 'Plan' }, MODEL.derive))
+
+    if (deriveFromRecordResult?.derivable && deriveFromRecordResult?.written) {
+      log(`Derived tasks.json from block record (D16 derive-from-block-record fallback) — ${deriveFromRecordResult.taskCount || '?'} task(s), commit ${deriveFromRecordResult.commitHash || 'unknown'}.`)
+      enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate-post-derive', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
+    }
+  } else {
   // D16 derive-from-tasks.md fallback — before refusing, check whether the spec's authored
   // tasks.md carries a derivable step decomposition. Mirrors /generate-tasks' --from mode: author a FRESH decomposition from tasks.md (never
   // a verbatim copy of its prose). Deriving from an authored tasks.md is not guessing the task
@@ -1135,6 +1191,7 @@ Return via StructuredOutput: derivable, written, commitHash, taskCount, notes.
   if (deriveResult?.derivable && deriveResult?.written) {
     log(`Derived tasks.json from tasks.md (D16 derive-from-tasks.md fallback) — ${deriveResult.taskCount || '?'} task(s), commit ${deriveResult.commitHash || 'unknown'}.`)
     enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate-post-derive', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
+  }
   }
 }
 

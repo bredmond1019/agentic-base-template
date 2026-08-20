@@ -234,21 +234,39 @@ not persist between calls.
 
 1. **D16 preflight lint.** Read `<tasksJsonFile>`. It MUST parse as a **non-empty bare JSON array** of
    task objects (each with at least `task_id`; matches the SDLCTask shape, not wrapped in an object).
-   If it's missing, invalid, or an empty array: **before aborting, check the D16 derive-from-tasks.md
-   fallback.** If `<specFile>` (`tasks.md`) exists and carries a `## Step-by-Step Tasks` /
-   `## Step by Step Tasks` section with at least one numbered step, author a FRESH D45-shaped
-   `tasks.json` from that decomposition plus the spec's Acceptance Criteria / Validation Commands
-   (a real decomposition, never a verbatim copy of the prose, never the superseded D44
-   `{"tasks": [...]}` wrapper — bare array, 1-indexed integer `task_id`, `description` a single
-   string, `max_attempts: 3`, never author `status`/`attempt_count`), write it, and commit it on the
-   current branch with an explicit pathspec (`git add <tasksJsonFile>`,
-   `git commit -m "chore: derive tasks.json from tasks.md (D16 fallback)"`). Log a distinct line —
-   `Derived tasks.json from tasks.md (D16 derive-from-tasks.md fallback) — <N> task(s), commit
-   <hash>.` — so a derived spec is distinguishable from an authored one, then re-run this lint.
-   **Only if `tasks.md` is also missing, or has no derivable step content, abort** —
-   `ABORTED (D16)`, tell the user to run `/generate-tasks <blockId>` to author `tasks.json`, commit,
-   then re-run. Deriving from an authored `tasks.md` is not guessing the task structure; fabricating
-   one from nothing is what D16 still refuses to do.
+   If it's missing, invalid, or an empty array: **before aborting, check the matching D16 derive
+   fallback for this run's `specSource`** (from Step 1 above) — the two fallbacks are mutually
+   exclusive per run, not tried in sequence:
+
+   - **`specSource == "block-record"` → derive-from-block-record fallback.** Read
+     `<blockRecordFile>` (`planning/blocks/<blockId>.json`, per `block.schema.json`). If it parses as
+     JSON and carries a non-empty `what` plus a non-empty `acceptance_criteria` array, author a FRESH
+     D45-shaped `tasks.json` from the record's `what` (scope), `why` (intent), `files.new`/
+     `files.modified` (task ownership — keep tasks disjoint), `acceptance_criteria`,
+     `testing_strategy`, and `validation_commands` fields (a real decomposition, never a verbatim
+     copy of the record's prose, never the superseded D44 `{"tasks": [...]}` wrapper — bare array,
+     1-indexed integer `task_id`, `description` a single string, `max_attempts: 3`, never author
+     `status`/`attempt_count`), write it, and commit it on the current branch with an explicit
+     pathspec (`git add <tasksJsonFile>`,
+     `git commit -m "chore: derive tasks.json from block record (D16 fallback)"`). Log a distinct
+     line — `Derived tasks.json from block record (D16 derive-from-block-record fallback) — <N>
+     task(s), commit <hash>.` — then re-run this lint. **Only if the block record is also missing,
+     invalid, or has no derivable `what`/`acceptance_criteria`, abort** — `ABORTED (D16)`.
+
+   - **`specSource == "tasks-md"` → derive-from-tasks.md fallback (legacy path).** If `<specFile>`
+     (`tasks.md`) exists and carries a `## Step-by-Step Tasks` / `## Step by Step Tasks` section with
+     at least one numbered step, author a FRESH D45-shaped `tasks.json` from that decomposition plus
+     the spec's Acceptance Criteria / Validation Commands (same D45 shape rules as above), write it,
+     and commit it on the current branch with an explicit pathspec (`git add <tasksJsonFile>`,
+     `git commit -m "chore: derive tasks.json from tasks.md (D16 fallback)"`). Log a distinct line —
+     `Derived tasks.json from tasks.md (D16 derive-from-tasks.md fallback) — <N> task(s), commit
+     <hash>.` — so a derived spec is distinguishable from an authored one, then re-run this lint.
+     **Only if `tasks.md` is also missing, or has no derivable step content, abort** —
+     `ABORTED (D16)`.
+
+   Either way, tell the user to run `/generate-tasks <blockId>` to author `tasks.json`, commit, then
+   re-run. Deriving from an authored block record or `tasks.md` is not guessing the task structure;
+   fabricating one from nothing is what D16 still refuses to do.
 
    **Per-task `validation_commands` scoping**: When authoring tasks.json, follow the convention
    documented at `.claude/commands/generate-tasks.md` (search it for "validation_commands"); do not

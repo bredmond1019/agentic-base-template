@@ -51,9 +51,9 @@ MANIFEST_PATH = ROOT / "scripts" / "skill_sync_manifest.json"
 ANCHORS = [
     (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 781, 887,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1047, 1268,
+    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1047, 1325,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1506, 1625,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1563, 1682,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 899, 1066,
      ".agents/skills/sdlc-flow/SKILL.md"),
