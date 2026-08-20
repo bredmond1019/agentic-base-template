@@ -49,17 +49,17 @@ MANIFEST_PATH = ROOT / "scripts" / "skill_sync_manifest.json"
 # named by `anchor` — see the file for the surrounding phase/comment markers if a range needs
 # re-picking after a refactor moves code around.
 ANCHORS = [
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 774, 880,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 779, 885,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1020, 1241,
+    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1025, 1246,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1479, 1598,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1484, 1603,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 892, 1059,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 897, 1064,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "triage-bail-taxonomy", 1219, 1457,
+    (".claude/workflows/sdlc-flow.js", "triage-bail-taxonomy", 1224, 1462,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 1968, 2122,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 1980, 2134,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 
@@ -129,11 +129,75 @@ def run(root: Path, anchors: list, update: bool) -> int:
     return 0
 
 
+def relocate_anchors(root: Path) -> int:
+    """Rewrite ANCHORS' line numbers for anchors whose content moved but did not change.
+
+    `--update` alone re-hashes whatever now sits at the OLD line numbers, so an edit ABOVE an
+    anchor silently re-points it at a shifted window and reports OK -- the tripwire then measures
+    the wrong region forever. That happened twice on 2026-08-19. This finds each anchor's recorded
+    hash at its new offset and moves the line numbers to match, and REFUSES any anchor whose
+    content genuinely changed, because that is the case a human must review rather than re-stamp.
+    """
+    manifest_path = root / MANIFEST_REL if "MANIFEST_REL" in globals() else root / "scripts" / "skill_sync_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    script_path = Path(__file__)
+    script_src = script_path.read_text(encoding="utf-8")
+
+    moved, unchanged, differs = [], [], []
+    for rel, anchor, start, end, _skill in ANCHORS:
+        key = f"{rel}::{anchor}"
+        entry = manifest.get(key)
+        if not entry:
+            differs.append((rel, anchor, "no manifest entry"))
+            continue
+        lines = (root / rel).read_text(encoding="utf-8").splitlines()
+        span = end - start + 1
+        if hash_lines(root / rel, start, end) == entry["hash"]:
+            unchanged.append((rel, anchor))
+            continue
+        new_start = None
+        for i in range(0, max(0, len(lines) - span + 1)):
+            chunk = "\n".join(lines[i:i + span])
+            if hashlib.sha256(chunk.encode("utf-8")).hexdigest() == entry["hash"]:
+                new_start = i + 1
+                break
+        if new_start is None:
+            differs.append((rel, anchor, "content changed -- review the guide, do not relocate"))
+            continue
+        old_tuple = f'("{rel}", "{anchor}", {start}, {end},'
+        new_tuple = f'("{rel}", "{anchor}", {new_start}, {new_start + span - 1},'
+        if old_tuple not in script_src:
+            differs.append((rel, anchor, "could not locate its ANCHORS tuple to rewrite"))
+            continue
+        script_src = script_src.replace(old_tuple, new_tuple)
+        moved.append((rel, anchor, f"{start}-{end}", f"{new_start}-{new_start + span - 1}"))
+
+    if differs:
+        print("REFUSING to relocate -- these anchors need a human:")
+        for rel, anchor, why in differs:
+            print(f"  - {rel}::{anchor}: {why}")
+        return 1
+
+    if moved:
+        script_path.write_text(script_src, encoding="utf-8")
+        print(f"Relocated {len(moved)} anchor(s), content byte-identical in every case:")
+        for rel, anchor, was, now in moved:
+            print(f"  - {rel}::{anchor}: {was} -> {now}")
+    if unchanged:
+        print(f"{len(unchanged)} anchor(s) already correct.")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--update", action="store_true",
                          help="Re-stamp the manifest with current hashes (only after re-verifying SKILL.md)")
+    parser.add_argument("--relocate", action="store_true",
+                         help="Rewrite this script's ANCHORS line numbers for any anchor whose "
+                              "content moved unchanged, then re-stamp. Refuses when content differs.")
     args = parser.parse_args()
+    if args.relocate:
+        sys.exit(relocate_anchors(ROOT))
     sys.exit(run(ROOT, ANCHORS, args.update))
 
 

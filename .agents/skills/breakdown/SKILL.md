@@ -10,11 +10,22 @@ Takes a task spec from `planning/` and produces a granular breakdown where every
 sub-step names exact file paths, class/function names, and what to write or change —
 precise enough for an agent (or a human) to execute without interpretation.
 
+> **What consumes this.** `breakdown.md` is a **reading aid for the implementing context**, not an
+> executable artifact. Every SDLC engine executes `planning/<spec-slug>/tasks.json` and nothing
+> else — no engine parses `breakdown.md`. So a breakdown changes what an implementer *knows*, never
+> what the engine *runs*.
+>
+> That has one consequence worth stating plainly: **if the decomposition should change what gets
+> executed — different task boundaries, a task split in two, a new dependency edge — it must be
+> written back into `tasks.json`**, not left in prose here (step 7a). A breakdown that quietly
+> disagrees with `tasks.json` is worse than no breakdown, because the engine follows the JSON and
+> the reviewer follows the prose.
+
 ## Variables
 
 $ARGUMENTS — path to the task spec to break down (e.g. `planning/<spec-slug>/tasks.md`).
              If omitted, default to the current block's spec identified via `planning/status.md`.
-             If no spec exists for the current block, say so and suggest running `/next-task`.
+             If no spec exists for the current block, say so and suggest running `/next` to find the current block, then `/generate-tasks <BlockID>` to write its spec.
 
 ## Instructions
 
@@ -43,6 +54,21 @@ $ARGUMENTS — path to the task spec to break down (e.g. `planning/<spec-slug>/t
      project's conventions require, so the breakdown captures every artifact the change must touch.
    - Read only what is relevant to each step. Do not load the entire codebase.
 
+4a. **Decide whether each step actually needs decomposing.** This command is not free and an
+   already-atomic step gains nothing from being restated at greater length. Break a step down when
+   any of these hold — otherwise carry it through as a single sub-step and say so:
+   - it bundles separable concerns ("implement X **and** refactor Y **and** add Z")
+   - it spans multiple layers (data model + API + UI)
+   - it carries a large acceptance-criteria set over several independently-testable units
+   - it touches more than `breakdown.complexityThreshold` distinct files
+     (`planning/harness.json`; default 3) **and** those files are heterogeneous — different shapes
+     or roles, or spanning more than one concern
+
+   Do not flag on file count alone when the files are the same shape serving one concern. This is
+   the same heuristic `/generate-tasks` applies at authoring time; applying it here keeps the two
+   from disagreeing. If **no** step qualifies, stop and say the spec is already atomic rather than
+   writing a breakdown nobody needs.
+
 5. Decompose each spec step into numbered sub-steps using the format `N.M`
    (e.g. step 2 → sub-steps 2.1, 2.2, 2.3). Each sub-step must be atomic:
    - One file to create or one specific change to one existing file.
@@ -69,13 +95,41 @@ $ARGUMENTS — path to the task spec to break down (e.g. `planning/<spec-slug>/t
 
 7. Write the breakdown to `planning/<block-dir>/breakdown.md` — same directory as the spec, named `breakdown.md`.
 
+7a. **Reconcile with `tasks.json` — the engines execute that, not this file.** If reading the
+   source changed your view of the *executable* shape of the work, edit `tasks.json` too:
+   - a step that must become two tasks, or two that must merge (a breaking public-surface change
+     may never be split — the repository must compile at every task boundary)
+   - a `dependsOn` edge the decomposition revealed
+   - a `files[]` list that turned out wrong
+   - an acceptance criterion the source shows is not observable as written
+
+   Make the edit, and record it in **Notes** with one line per change and why. If nothing changed,
+   say "no `tasks.json` changes" — an absent statement reads as an omission. Never leave a
+   correction only in prose: the engine will run the JSON.
+
+7b. **Verify every symbol you named actually exists.** The failure mode of this command is a
+   confident sub-step referencing a function, type, or file that is not there. Before committing,
+   grep each named symbol and path:
+   ```bash
+   rg -L --fixed-strings '<symbol>' <path>
+   ```
+   Anything that does not resolve is either a symbol the sub-step **creates** — mark it explicitly
+   as new — or a mistake. Fix it. Report the count checked and any that were corrected.
+
 8. Commit the breakdown. Leave the working tree clean:
    ```bash
-   git add planning/<block-dir>/breakdown.md
+   git add planning/<block-dir>/breakdown.md planning/<block-dir>/tasks.json
    git commit -m "planning: add breakdown for <spec-slug>"
    ```
 
-9. Return only the path to the file created.
+9. Report:
+   ```
+   planning/<block-dir>/breakdown.md
+
+   Steps decomposed: <n> of <total>   (<skipped as already atomic>)
+   Symbols verified: <k> checked, <j> corrected, <m> marked as new
+   tasks.json: <no changes | the edits made, one line each>
+   ```
 
 ## What makes a sub-step unambiguous
 
@@ -89,6 +143,23 @@ Good sub-step:
 
 Bad sub-step (too vague to execute without interpretation):
 > - Add tests for the content loader
+
+## Session boundary
+
+Runs in `/generate-tasks`'s session, or its own if the spec already existed. **The engine runs
+fresh** either way.
+
+Close by telling the operator which engine command to run in a new session, and — if you edited
+`tasks.json` — say so explicitly and in one line each. That edit changes what the engine executes,
+and it is the one part of this command's output that will actually run.
+
+```
+Breakdown written: planning/<block-dir>/breakdown.md
+tasks.json: <no changes | the edits, one line each>
+
+Start a FRESH session and run:
+  /sdlc-task <spec-slug>   |   /sdlc-flow <spec-slug>   — <reason>
+```
 
 ## Context / Files to Read
 
@@ -153,6 +224,10 @@ checks as you go — do not batch them at the end. Each check must pass before c
 ## Notes
 <any discoveries made while reading the codebase that affect execution — e.g. a function
  signature differs from what the spec implied, or a standing rule from CLAUDE.md applies>
+
+## tasks.json changes
+<one line per edit made to tasks.json and why — or "none". The engines execute tasks.json, so a
+ correction recorded only in prose above will not reach the run.>
 ```
 
 ### State Refresh
@@ -161,5 +236,7 @@ Run `mev emit-state --write` to update the brain's focus derivation and state ba
 
 ## Report
 
-Return only the path to the file created (e.g. `planning/<spec-slug>/breakdown.md`).
+The block in step 9 — the path, what was decomposed and what was skipped, the symbol-verification
+result, and any `tasks.json` edits. The `tasks.json` line is the one that matters most: it is the
+only part of this command's output an engine will act on.
 

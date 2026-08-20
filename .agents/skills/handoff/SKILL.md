@@ -62,10 +62,31 @@ table; this restates only what an agent needs inline while appending:
 
 | kind | for |
 |---|---|
-| `constraint` | a rule the next agent must honor |
-| `known_issue` | a don't-re-investigate fact |
-| `env` | a transient environmental caveat ("installed binary is stale, rebuild first") |
+| `defect` | a real unticketed bug with a fix — not yet filed as its own block |
 | `deferred` | a real follow-on you haven't ticketed yet |
+| `drift` | a doc, comment, block title or generated surface that has fallen out of step with the code or the graph |
+| `env` | a transient environmental caveat ("installed binary is stale, rebuild first") |
+
+`constraint` and `known_issue` are **retired** (HQ D72) — okf-core preserves them only through its
+`Unknown(String)` fallback so legacy entries still round-trip. Do not mint new entries with either.
+
+**Route at write time — three destinations, not two.** Ask both questions before appending:
+
+1. **Can only a human do this?** A decision only the operator can make, a credential only they
+   hold, a judgement call, a thing they must look at — that is **not** a `carryover[]` entry. File
+   it as a `{"type":"operator", slug, exit, start, what?}` edge on the block it gates, per the
+   operator-work rule below. **Why it matters here and not only there:** a carryover entry gates
+   nothing, so operator work parked in it is never forced; an operator edge blocks the work standing
+   behind it, which is what gets it done. Measured 2026-08-19 — **30 of the fleet's 202 `carryover[]`
+   entries are operator work misfiled this way**, filed as `defect` or `deferred` because the table
+   above offers no row meaning "not an agent's to do."
+2. **Is it permanently true?** A gotcha still true next month, a deliberate non-fix nobody intends to
+   reverse, a load-bearing measured number someone will need again — that belongs in `reference[]`.
+   A fact with no `clears_when` because nothing will ever make it stop being true is the signal.
+   See `docs/state/reference-container-schema.md` for its field table and kind vocabulary.
+
+Only what survives both questions is a `carryover[]` entry: work-class findings that eventually
+clear — an unticketed defect, a deferred follow-on, a drifted surface, a transient env caveat.
 
 - `priority` (int, `0..=3`) — value if resolved, on the same rubric as `tracks[].blocks[]`.
   Omit when the entry carries no value judgement.
@@ -87,8 +108,8 @@ table; this restates only what an agent needs inline while appending:
 `finding_id` are what make an entry rankable and cross-repo-correlatable; an entry with none
 of these three still counts, but sits inert until someone triages it by hand.
 
-Append; don't duplicate an existing slug. **Delete** any entry whose `clears_when` resolved
-this session. Skip entirely if this repo has no `planning/state.json`.
+Append; don't duplicate an existing slug. Skip entirely if this repo has no
+`planning/state.json`.
 
 Sequenced work with real dependencies belongs in `tracks[].blocks[]`, and free-floating ideas
 belong in the HQ `backlog[]` — but **do not invoke `/update-state` or `/backlog-ticket` from
@@ -97,7 +118,39 @@ here**. Note them in the handoff prose and let the next session file them proper
 Never hand-edit a block's `tasks` field — it's a derived pointer, not somewhere to inject
 entries.
 
-**2c — File operator work as a graph edge, never as prose.** Anything this session is leaving
+**2c — Delete resolved entries.** This is not a cleanup pass to run "if there's time" — a
+`carryover[]` array that only ever grows is exactly as broken as one that silently loses
+entries, and it's the more common failure because deleting feels riskier than appending. Before
+writing anything in Step 2b, first sweep the entries you just read in Step 1 and delete every
+one whose `clears_when` has actually resolved this session or was already resolved before it
+(carried forward unnoticed by a prior handoff):
+
+- **Typed `clears_when`** — check it for real, don't eyeball it: `block_closed` means the named
+  `{repo, id}` is `status: "closed"` in *that* target's `state.json` (which may not be this
+  repo's — check the right file); `file_exists` means the path is present now; `file_contains`
+  means the pattern is present in the file now; `command_exits_zero` means running the command
+  now exits `0`. An entry only clears when its predicate is verified true at the moment of this
+  handoff — not because it looks old, not because you vaguely recall it was fixed, and not
+  because deleting it would shrink a messy-looking array.
+- **Prose `clears_when`** — resolve it only if this session's own work (or a fact you can point
+  to concretely) makes the condition true. If you're not sure, leave the entry and say so in
+  Step 5's report rather than guessing either way.
+- **`reference[]` entries are never deleted by this step.** They have no `clears_when` because
+  they're permanently true by construction (Step 2b's routing rule); if one looks stale or wrong,
+  that's a correction, not a resolution, and belongs in the handoff prose as an open question,
+  not a silent delete.
+- Deleting an entry that hasn't actually resolved is worse than leaving a stale one: the next
+  agent loses the only record that the constraint, defect, or caveat exists at all.
+
+**Run `mev validate-state planning/state.json` immediately after Step 2b/2c's writes — this is
+a mandatory step, not a suggestion to consider.** Do it before moving on to Step 2d or Step 3.
+Treat a nonzero exit as blocking: read the reported error, fix the entry (wrong field shape,
+`scope` written as a string instead of a struct, `related` as bare slugs instead of the
+schema's objects — the exact mistakes that cascaded to 50 errors across seven `state.json`
+files in a past incident before anyone ran this check), and re-run until it passes. Skip only
+if this repo has no `planning/state.json` (Step 2b already established that).
+
+**2d — File operator work as a graph edge, never as prose.** Anything this session is leaving
 for the operator to decide, review, approve, or judge — a call only they can make, a credential
 only they hold, a thing they must look at — is filed as a `{"type":"operator", slug, exit,
 start, what?}` entry in `depends_on` on the block(s) it gates, **not** written into the handoff
@@ -143,7 +196,7 @@ not "fixed engine".>
 only — the next agent can look them up.>
 
 ## Open questions / choices
-<Name the `operator-`/`approval` slugs already filed in `depends_on` (Step 2c) and what each
+<Name the `operator-`/`approval` slugs already filed in `depends_on` (Step 2d) and what each
 gates — this section points at the graph, it does not substitute for it. If truly nothing
 needs the operator: "None — clear to proceed.">
 

@@ -31,6 +31,21 @@ $ARGUMENTS — one of two input modes:
 
 ## Instructions
 
+> **The three checks that can fail this command.** They live in full in steps 6 and 8 below; they
+> are hoisted here because they are the reason a spec is rejected, and they are easy to skim past
+> in a long procedure.
+>
+> 1. **Compilable task boundaries** — under `/sdlc-flow` and `/sdlc-task` every task must leave the
+>    gating suite passing, so a breaking public-surface change may never be split across tasks.
+>    This outranks disjoint file ownership: **the tasks merge, not the constraint.**
+> 2. **Un-gateable acceptance criteria must be declared (D64)** — any criterion whose evidence
+>    lives in another process, another repo, a generated artifact, or an **installed** artefact
+>    needs a named failing command or a dedicated fixture-evidence task. A green suite is never
+>    itself the evidence.
+> 3. **Never fabricate a load-bearing fact** — which files a task owns, an observable criterion, a
+>    real dependency edge. Ask in an interactive session; abort with a specific message in a
+>    preflight context.
+
 1. Run `/prime` to orient to the repo (standing rules, architecture).
 
 2. **Resolve the input mode and the spec slug.**
@@ -68,15 +83,27 @@ $ARGUMENTS — one of two input modes:
      files, and acceptance criteria — as the block definition. **Author a fresh decomposed
      `tasks.json` from it; do not merely copy a pre-existing step list verbatim** (apply the same scoping
      and disjoint-ownership rigor below). Do NOT read `master-plan.md` in this mode.
-   - **Master-plan slug mode:** read ONLY the relevant section for the requested block in
-     `planning/master-plan.md` (the phase/block definition).
-   - In both modes: do NOT read status.md — the target is given explicitly.
-   - **Use what the block already gives you.** A well-authored block (see `/generate-master-plan`)
-     names its **Files** (New vs Modified, by path), an **Out of scope** boundary, and an optional
-     **Interfaces / shared surface**. When present, **carry these through** rather than re-deriving:
-     the named files seed each task's disjoint ownership (step 6), and **Out
-     of scope is a hard boundary** — do not generate tasks beyond it. Only fall back to deriving file
-     ownership yourself when the block doesn't name files.
+   - **Block-record mode (the default since D65):** read
+     `planning/blocks/<BlockID>.json` — the authored definition of this block. It is the source of
+     truth for `what`, `why`, `files`, `interfaces`, `out_of_scope`, `acceptance_criteria`,
+     `validation_commands`, and `depends_on`. Do **not** read `master-plan.md`: it is a generated
+     view of the block graph, and reading it instead of the record gets you a stale summary.
+     If no record exists (a legacy directory predating D65), fall back to the block's section in
+     `planning/master-plan.md` and note the fallback in the report.
+   - In every mode: do NOT read status.md — the target is given explicitly.
+   - **Use what the block record already gives you.** It names its **files** (new vs modified, by
+     path), an **out_of_scope** boundary, and optional **interfaces**. **Carry these through**
+     rather than re-deriving: the named files seed each task's disjoint ownership (step 6), and
+     **`out_of_scope` is a hard boundary** — do not generate tasks beyond it. Only derive file
+     ownership yourself when the record does not name files (a `forward_looking: true` block may
+     name them provisionally, in which case refine them and update the record's `updated` date).
+   - **Carry the un-gateable criteria through (D64).** An acceptance criterion written in the
+     object form with `gateable: false` needs a dedicated fixture-evidence task in `tasks.json` —
+     the record names the fixture in its `evidence` field. Do not silently drop it into an
+     ordinary task.
+   - **Carry the operator edges through.** If the record's `depends_on` holds an `operator` or
+     `approval` edge, the spec cannot be run to completion until it clears. Say so in the report
+     rather than generating tasks that will stall.
 
 5. **Clarify gate (only when enabled).** Read `planning/harness.json` → `planning.clarify`. When it is
    `true` **or** `$ARGUMENTS` contains `--clarify`, and the block definition is genuinely ambiguous (its
@@ -96,6 +123,22 @@ $ARGUMENTS — one of two input modes:
      fix the block. This is the proactive complement to the D19 thin-spec abort: D19 catches a thin
      spec after the fact; this prevents writing a confidently-wrong one in the first place.
 
+5a. **Read the actual source the block names — before writing any task.** This is not optional and
+   it is the difference between a spec an engine can execute and one that names things that do not
+   exist. For each file in the record's `files[]`:
+   - **Modified files:** open them. Get the real function names, signatures, struct fields and
+     surrounding conventions. A task that says "update `parse_config`" when the function is called
+     `load_config` costs a full implement→test→fix cycle to discover.
+   - **New files:** read an existing sibling of the same kind, so the task describes the project's
+     established pattern rather than a generic one.
+   - **If a file named as modified does not exist**, the record is wrong. Stop and say which file,
+     rather than emitting a task against a path that is not there. If a file named as new already
+     exists, say so — the block may be re-treading work that landed.
+   - Read only what the named files and their immediate siblings require. Do not load the codebase.
+
+   Line numbers move between authoring and execution: name **symbols**, not line numbers, in every
+   task you write.
+
 6. THINK HARD about correct scope:
    - Do not invent work beyond what the block defines.
    - Size tasks to roughly 21 hours spread across Mon/Wed/Fri sessions.
@@ -113,7 +156,7 @@ $ARGUMENTS — one of two input modes:
      one touches — do **not** split it across tasks to satisfy disjoint ownership below. Put the whole
      change in **one** task instead. **This constraint outranks the disjoint-file-ownership rule
      whenever the two conflict: the tasks merge, not the constraint.** Since this command decomposes
-     before the consuming engine is chosen (the recommendation is step 11, after decomposition), apply
+     before the consuming engine is chosen (the recommendation is step 10, after decomposition), apply
      this constraint by default unless the block is already known to run under `/sdlc-block` (e.g. it
      is one block of a multi-block roadmap being decomposed by `/sdlc-block` itself) — in that case the
      disjoint-ownership rule below governs instead.
@@ -145,10 +188,20 @@ $ARGUMENTS — one of two input modes:
      author-a-fresh-decomposition discipline this step describes — they are a recovery backstop for
      an already-written spec, not a substitute for running this command up front.
 
-7. Create the directory `planning/<spec-slug>/` if it does not exist, then write **both**
-   `planning/<spec-slug>/tasks.md` (prose) and `planning/<spec-slug>/tasks.json` (task list) using
-   the Output Format below. (In `--from` mode the directory already exists — it holds the source
-   block file — so the two new files land beside it.)
+7. Create the directory `planning/<spec-slug>/` if it does not exist, then write
+   `planning/<spec-slug>/tasks.json` (the task list) using the Output Format below.
+
+   **Then render the prose view — do not author it (D65).**
+   `python3 scripts/render_spec.py <BlockID>` writes `planning/<BlockID>/tasks.md` from the block
+   record at `planning/blocks/<BlockID>.json`. The engines read that file as the spec document
+   (`sdlc-task.js` sets `specFile = <blockDir>/tasks.md`), so it must exist — but it is
+   **generated**. Never hand-write or hand-edit it: change the block record and re-render, or the
+   two copies drift within a week. The renderer preserves an existing Amendment Log section, so
+   re-rendering mid-run is safe.
+
+   If no block record exists for this spec (a legacy directory predating D65), fall back to
+   authoring `tasks.md` from the Output Format below, and say so in the report — a spec with no
+   block record has no durable statement of *why* it exists, which is the gap D65 closes.
 
 8. **Property self-check (before committing).** A structurally valid spec can still be substantively
    thin and waste pipeline tokens. Re-read what you just wrote and confirm every required property
@@ -207,16 +260,7 @@ $ARGUMENTS — one of two input modes:
      code/prose (e.g. `Vec<T>`, "the `<concept>` folder") or a bare `TODO`/`TBD` inside authored
      content as a sentinel.
 
-9. **Commit the spec.** Leave the working tree clean so a downstream `/sdlc-block` run never trips
-   its clean-tree merge guard (an uncommitted `tasks.md`/`tasks.json` blocks every merge):
-   ```bash
-   git add planning/<spec-slug>/
-   git commit -m "chore: add spec for <spec-slug>"
-   ```
-   (Use the slug resolved in step 2 — the master-plan directory slug, or in `--from` mode the source
-   file's parent directory. The `git add` stages the source block file too, which is fine.)
-
-10. **Decomposition assessment.** Before reporting, evaluate each task you just wrote against the
+9. **Decomposition assessment.** Before reporting, evaluate each task you just wrote against the
    coarseness heuristic and recommend which (if any) warrant a `/breakdown` first. The real predictor
    is SEPARABLE STRUCTURE, not raw file count. A task is a breakdown candidate when ANY hold: it bundles
    multiple separable concerns ("implement X AND refactor Y AND add Z"), OR it spans multiple layers
@@ -229,7 +273,7 @@ $ARGUMENTS — one of two input modes:
    (the SDLC engines apply the same heuristic at run time per `breakdown.mode`, so this is the
    authoring-time preview of that decision).
 
-11. **Pipeline recommendation.** After writing the tasks, recommend the run command that fits this
+10. **Pipeline recommendation.** After writing the tasks, recommend the run command that fits this
    spec, with a one-line reason. The harness is a ladder of escalating ceremony — match the spec to
    the lowest rung that fits. This command decomposes **one** block, so the recommendation is normally
    one of the single-spec engines; `/sdlc-block` is named only to redirect when the block belongs to a
@@ -263,11 +307,68 @@ $ARGUMENTS — one of two input modes:
      task N). Say which task number and why isolation matters.
 
    Recommend exactly one primary command (optionally plus `/sdlc-task <N>` when a single task warrants
-   isolation). If `breakdown.mode` is `auto` and any tasks were flagged in step 10, note that breakdown
+   isolation). If `breakdown.mode` is `auto` and any tasks were flagged in step 9, note that breakdown
    must run first and the recommendation applies to each resulting sub-spec, not this spec directly.
 
-12. Report the path written and suggest the next step:
-    "Spec written and committed to planning/<spec-slug>/tasks.md. Run `/breakdown planning/<spec-slug>/tasks.md` to decompose into atomic sub-steps."
+11. **Commit the spec — after the self-check, the assessment and the recommendation, not before.**
+    Steps 8–10 can each require revising the spec in place, so committing earlier means committing
+    a draft and amending it. Leave the working tree clean so a downstream `/sdlc-block` run never
+    trips its clean-tree merge guard (an uncommitted `tasks.md`/`tasks.json` blocks every merge):
+    ```bash
+    git add planning/<spec-slug>/
+    git commit -m "chore: add spec for <spec-slug>"
+    ```
+    (Use the slug resolved in step 2 — the master-plan directory slug, or in `--from` mode the
+    source file's parent directory. The `git add` stages the source block file too, which is fine.)
+
+12. **Report — and name the command step 10 actually chose.** Do not hardcode a next step; the
+    pipeline recommendation is the answer, and `/breakdown` is only the next step when step 9
+    flagged a task for it.
+
+    ```
+    planning/<spec-slug>/tasks.json    <N> tasks
+    planning/<spec-slug>/tasks.md      <rendered from block record | authored (legacy)>
+
+    Source files read: <count> (<any that were named but missing>)
+    Un-gateable criteria declared: <n, or none>
+    Operator/approval edges on this block: <list, or none — these stall the run>
+    Breakdown candidates: <task numbers + one-line reason, or none>
+
+    Run:  <the single recommended engine command>   — <one-line reason>
+    <optionally: plus /sdlc-task <N> in isolation — <why>>
+    <if any breakdown candidates and breakdown.mode is auto:
+     First: /breakdown planning/<spec-slug>/tasks.md — the recommendation applies to each
+     resulting sub-spec, not this spec directly.>
+    ```
+
+## Session boundary
+
+**`/breakdown` runs in this session** if you flagged a task for it — it reads the same spec and the
+same source, and it now writes executable corrections back to `tasks.json`, which wants one writer.
+
+**The engine runs fresh.** `/sdlc-task` and `/sdlc-flow` spawn their own agent stack and are a
+different kind of work; carrying an authoring context into them buys nothing and costs room.
+
+**One block per session.** Do not decompose the next block here, even when it looks obvious. The
+next block's tasks depend on this block's code, which does not exist yet.
+
+Close by telling the operator:
+
+```
+Spec written: planning/<spec-slug>/tasks.json (+ rendered tasks.md)
+
+<If a task was flagged for breakdown:>
+  Running /breakdown in this session first.
+
+Start a FRESH session and run:
+  <the recommended engine command>       — <one-line reason>
+
+Then come back for the next block in a new session:
+  /generate-tasks <next block ID>
+
+<If the block carries an operator or approval edge:>
+  This block cannot run to completion until <edge> clears. It will stall.
+```
 
 ## Context / Files to Read
 

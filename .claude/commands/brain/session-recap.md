@@ -57,7 +57,7 @@ are none. Flag any `kind: env` caveat that gates the next action (e.g. "rebuild 
 
 ## Next Action
 <Single line: the exact command or action to take next.>
-Example: `/draft-post "Builder's Arc PT-BR"` or `/log-work <desc>` or `/sdlc-run planning/…`
+Example: `/draft-post "Builder's Arc PT-BR"` or `/log-work <desc>` or `/sdlc-flow planning/…`
 If nothing is queued: `Run /prime for full cross-project orientation.`
 
 ---

@@ -3,9 +3,130 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-18T02:20:33Z
+**Last updated:** 2026-08-19
 
 ---
+
+## [run: 2026-08-19]
+
+Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` to completion — all 6 tasks passed, verdict PASS. Deleted `.claude/workflows/sdlc-block.js` and `sdlc-run.js` plus their `.agents/skills/sdlc-block/` and `sdlc-run/` guides; rescoped `engines-parse`, `prompt-template-parse`, `emoji-gate-diff-scoped-tests`, `state-write-validation-tests`, and two gated checks not named in the original spec but found to read the retired engines directly from disk (`engine-parse-gate-extension-filter-tests`, `d16-tasks-json-fallback-tests`) to the two surviving engines only. `skill_sync_manifest.json` needed no re-stamp — its ANCHORS never referenced `sdlc-block`/`sdlc-run`. Wrote `planning/decisions/D70-orchestrate-supersedes-sdlc-block.md`, marking `D39-sdlc-block-block-level-orchestrator.md` superseded and citing HQ D74; updated the live documentation surface (`.claude/commands/README.md`, `docs/using-the-template.md`, `docs/index.md`, `docs/workflows/*`) to drop references to both retired engines, deleting `docs/workflows/sdlc-block.md` and `sdlc-run.md`. Task 6 fault-injected real defects into a surviving engine for each of the three affected test scripts (a stray backtick, a no-op emoji regex, a skipped rollback write) and confirmed each still goes red against the reduced site tables, per D68. All spec validation commands and the task-1 baseline checks pass at commit 937d6e9. Historical references (381 across archives and logs) were explicitly left untouched, per the spec's Acceptance Criteria. Left `.claude/commands/merge-train.md` and `review-PR.md` untouched even though both are built around `/sdlc-block`'s `block-orchestration-state.json` output — a real gap, noted as a follow-up rather than scope creep into command semantics. Next: none — spec closed.
+
+```
+937d6e9 fix: review pass 1 for BT.ticket.retire-unused-engines
+abd5ee1 docs: retire /sdlc-block and /sdlc-run from the live documentation surface
+eb3cfae feat: implement BT.ticket.retire-unused-engines-task5
+954afe1 chore: wrap up BT.ticket.retire-unused-engines
+48dc4c2 chore: wrap up BT.ticket.retire-unused-engines
+a4ff406 chore: wrap up BT.ticket.retire-unused-engines
+7ff26ec chore: wrap up BT.ticket.retire-unused-engines
+86fd6fd feat: implement BT.ticket.retire-unused-engines-task3
+```
+
+## [run: 2026-08-19]
+
+Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` a fourth time (tasks 1-6). Tasks 1 and 2 re-verified clean again. Task 3 re-verified the prior deletion of `sdlc-block.js`/`sdlc-run.js` (commit a547258) is correct and complete, but the run again hit the CHECK engine-parse-safety failure quoting `Cannot find module .../sdlc-block.js` and `.../sdlc-run.js`, with no progress since the prior attempt's byte-identical failure. Re-ran the guarded shell snippet exactly as rendered by `sdlc-flow.js`'s `renderEngineParseChecks` against worktree HEAD (48dc4c2): both files print "does not exist (deleted by this task) -- nothing to parse" and exit 0, confirming the guarded gate itself already passes. A bare unguarded `node --check` on the same deleted paths reproduces the exact `MODULE_NOT_FOUND` text quoted in the failure, so the failure is coming from something bypassing the guarded template rather than from the gate mechanism. Tasks 4, 5, 6 were not run. Verdict: **BAILED** — needs an operator to confirm which command the test stage is actually executing for this check, since the guarded rendering path is confirmed clean. Next: operator investigates the test-stage command path, then resume from Task 3 (or later) accordingly.
+
+```
+48dc4c2 chore: wrap up BT.ticket.retire-unused-engines
+a4ff406 chore: wrap up BT.ticket.retire-unused-engines
+7ff26ec chore: wrap up BT.ticket.retire-unused-engines
+86fd6fd feat: implement BT.ticket.retire-unused-engines-task3
+74accaf chore: init worktree BT.ticket.retire-unused-engines-flow
+1f125d2 fix(harness): --update re-stamped drifted anchors instead of relocating them
+3d4d0de fix(engines): tell the test agent not to substitute its own node --check
+cd15c51 fix(engines): a task that deletes an engine can now pass its own parse gate
+```
+
+## [run: 2026-08-19]
+
+Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` a third time (tasks 1-6). Tasks 1 and 2 re-verified clean again. Task 3 re-verified the prior attempt's deletion of `sdlc-block.js`/`sdlc-run.js` (commit a547258, already on this worktree's HEAD) is correct and complete, but hit the same CHECK 21/22 engine-parse-safety failure as attempt 1 — byte-identical text, no progress made. Re-ran the guarded shell snippet exactly as rendered by `sdlc-flow.js`/`sdlc-task.js`'s `renderEngineParseChecks` for `sdlc-block.js` and `sdlc-run.js`: it exits 0 (file absent → "nothing to parse", not an error). A plain unguarded `node --check` on the same deleted paths reproduces the exact `MODULE_NOT_FOUND` text seen in CHECK 21/22, so the failure is coming from how the test/triage stage evaluates a deleted file, not from the actual gate mechanism, which already passes. This is the same structural gap the ticket already bailed on once before — `sdlc-flow.js`'s own hardcoded per-task-file engine-parse-safety gate runs `node --check` on every `.js` path listed in task 3's `tasks.json` `files[]`, and no bounded fix exists within this ticket's scope. Tasks 4, 5, 6 were not run. Verdict: **BAILED** — needs an operator decision on how to reconcile a file-deleting task's `files[]` with this gate; a third identical retry will not resolve it. Next: operator decides the reconciliation approach, then resume from Task 3 (or later) accordingly.
+
+```
+619d5f5 chore: wrap up BT.ticket.retire-unused-engines
+5fd9cda chore: wrap up BT.ticket.retire-unused-engines
+a547258 feat: implement BT.ticket.retire-unused-engines-task3
+427c7fa chore: init worktree BT.ticket.retire-unused-engines-flow
+cd15c51 fix(engines): a task that deletes an engine can now pass its own parse gate
+501d21e perf(harness): stop roadmap-status-discovery-tests SIGKILLing its caller
+31d48da feat(harness): three more authoring skills — commit, derive, gates
+a4c12f8 feat(harness): mirror the authoring skills onto the vendor-neutral surface
+```
+
+## [run: 2026-08-19]
+
+Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` again (tasks 1-6, resuming after the prior run's timeout bail). Tasks 1 and 2 re-verified clean (usage census/baseline recorded, D68 site-table fault-injection proof). Task 3 re-confirmed the prior attempt's deletion of `sdlc-block.js`/`sdlc-run.js` plus their skill guides and gate unwiring was already committed (91f71d4) and gates green, then hit a different, structural blocker on re-verification: `sdlc-flow.js`'s own hardcoded per-task-file engine-parse-safety gate (`renderEngineParseChecks`, lines 701-717 — independent of `planning/harness.json` by design) runs `node --check` on every `.js` path listed in task 3's `tasks.json` `files[]`, which legitimately names `sdlc-block.js` and `sdlc-run.js` since those are exactly the files the task deletes; `node --check` on a now-deleted path throws `MODULE_NOT_FOUND`, reproduced directly and matching CHECK 21/22 verbatim. No bounded fix exists within this ticket's scope — resolving it means either editing `tasks.json`'s `files[]` to omit files the task's own acceptance criteria requires confirming are gone, or modifying the shared `sdlc-flow.js` gate mechanism itself, which is out of scope for a ticket about retiring two other engines. Tasks 4, 5, 6 were not run. Verdict: **BAILED** — this is a structural spec gap the ticket did not anticipate; needs an operator decision on how to reconcile a file-deleting task with sdlc-flow.js's own file-existence gate. Next: operator decides the reconciliation approach (amend tasks.json's files[] scoping vs. amend the shared engine gate), then resume from Task 3 (or later) accordingly.
+
+```
+944a515 chore: wrap up BT.ticket.retire-unused-engines
+91f71d4 feat: implement BT.ticket.retire-unused-engines-task3
+51bb15e chore: init worktree BT.ticket.retire-unused-engines-flow
+501d21e perf(harness): stop roadmap-status-discovery-tests SIGKILLing its caller
+31d48da feat(harness): three more authoring skills — commit, derive, gates
+a4c12f8 feat(harness): mirror the authoring skills onto the vendor-neutral surface
+fff3bcb feat(harness): distribute .claude/skills/ downstream
+af52cd0 feat: implement BT.ticket.fleet-lock-pid-liveness-task3
+```
+
+
+## [run: 2026-08-19]
+
+Ran `/sdlc-flow` on `BT.ticket.retire-unused-engines` (retiring `/sdlc-block` and `/sdlc-run`). Task 1 re-derived the fleet-wide usage census and recorded the six baseline gated-check exit codes on `tasks.json`'s task 1 entry (all six exit 0). Task 2 proved all three D68 site-table gates (`check_prompt_templates.py`, `test_emoji_gate_diff_scoped.py`, `test_state_write_validation.py`) correctly go red on deliberate faults injected into the surviving `sdlc-task.js` engine, then restored the tree clean — proof-only, no commit. Task 3 deleted `sdlc-block.js`/`sdlc-run.js` and their `.agents/skills/` guides and unwired every gate reading those files by disk path (`planning/harness.json`'s `engines-parse` plus five scripts, including two — `test_engine_parse_gate_extension_filter.py` and `test_d16_tasks_json_fallback.py` — not named in the ticket's own file list but discovered to read the retired engines directly), keeping every gate green at the commit boundary; it stopped there because `roadmap-status-discovery-tests` (`roadmap_status_discovery.py --self-test`) hung past 5 minutes without finishing in this environment, a pre-existing corpus-wide process-timeout issue the block record itself already flags ("the full 20-check suite exceeds a 2-minute shell timeout and was not measured"), not a defect from this change. Tasks 4, 5, 6 (skill-manifest re-stamp, D39 supersession, README/doc updates) were not run. Verdict: **BAILED** at Task 3 on the hang; not independently re-verified against base state this run. Next: resume from Task 4 in a fresh environment (or with the hanging self-test isolated/skipped), then continue through Task 6.
+
+```
+7d1a4f1 feat: implement BT.ticket.retire-unused-engines-task3
+7bbc9c2 chore: init worktree BT.ticket.retire-unused-engines-flow
+fff3bcb feat(harness): distribute .claude/skills/ downstream
+af52cd0 feat: implement BT.ticket.fleet-lock-pid-liveness-task3
+00285e6 feat: implement BT.ticket.fleet-lock-pid-liveness-task2
+e5843d0 chore: init worktree bt.ticket.fleet-lock-pid-liveness-task
+b547551 fix(engines): populate t.commit from commitHash so the emoji gate can scope
+af68ca3 feat: implement BT.ticket.emoji-gate-diff-window-concurrent-sessions-task3
+```
+
+## [2026-08-19]
+
+### D69 — the initiative-wide consistency pass
+
+**What:** Added Step 7 to `.claude/workflows/block-registration.md` — a pass run **once per
+initiative**, after every block is authored and before registration closes, with five checks read
+across every block at once: C1 a second repo means a second block record (`{"type": "external"}`
+naming a repo in `brain.toml` is an unfiled block, not an external dependency); C2 concurrency
+judged on files touched rather than repos in flight; C3 a split row re-derives each half's
+`depends_on` instead of inheriting the original's; C4 a sizing flag resolved into split-now-or-defer;
+C5 an operator `exit` written `UNRESOLVED` rather than as an invented artifact path. C1/C2/C5 carry
+listing snippets; C3/C4 are judgement. Wired into `/plan` (new step 7b + two self-check properties +
+a report line), `/generate-roadmap` (Step 6's Wave 0 gate, a new Step 4 section assigning lanes on
+files touched, two Step 8 checklist items, a lane-file comment rule for cross-tree writers) and
+`/sequence` (new step 6b sweep over rows, a split decision in step 5, an Exit column on the operator
+errands table, a sweep table in the output format, self-check and report lines). Authored
+[D69](planning/decisions/D69-initiative-wide-consistency-pass.md); brain-side, added the
+"one pass every fan-out needs" section to `docs/how-to-plan-with-agents.md` §9.
+
+**Why:** The `orchestration-extension` roadmap — the first full run of the pre-plan chain — needed
+several post-registration audits. All five defects were of one kind: a constraint that exists only
+*between* rows (a second repo, a concurrent lane, an inherited edge, a prior sizing flag, an
+ungrounded artifact), invisible to the per-row agent that authored its own row correctly. Three of
+five agents had the right instinct on the cross-repo half and wrote `external` rather than inventing
+an ID; nothing turned that correct refusal into filed work.
+
+**Also:** made operator sessions explicit as chain members in the same three commands —
+`block-registration.md` Step 2A, `/sequence` step 5's errand bullet, `/generate-roadmap` Step 5 —
+with the autonomy bias stated alongside: an operator edge is the only mechanism that actually holds
+the work behind it (and `/begin-session` drives it), but every gate is a point where the run waits
+on one desk, so file one only where *only* a human can act, then shrink it (one decision, one named
+exit artifact) and bind it late (the last block that needs it, not the first).
+
+**Also:** added C6 (nothing actionable left in prose) and the rule it serves — **if it is not in
+`state.json`, it does not exist** — as the opening section of `block-registration.md`, with the
+container routing table (block · operator/approval/block/external edge · `carryover[]` ·
+`reference[]` · `backlog[]` · `epics[]`) and the two legitimate destinations for any item: a row, or
+the cut list with a reason. Mirrored as standing rule 9 in this repo's `CLAUDE.md`, as a section in
+HQ's, as self-check properties in `/plan`, `/sequence` and `/generate-roadmap`, and as a bullet in
+`docs/how-to-plan-with-agents.md` §9.
+
+**Not done:** no mechanical gate. A proxy fixture suite in the shape of
+`scripts/test_extraction_port_gate_rule.py` is the follow-up; D69 states this explicitly rather than
+implying the rule is enforced.
 
 ## [2026-08-18]
 

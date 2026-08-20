@@ -148,11 +148,23 @@ category from the `is-heavy` output:
 `python3 <path-to-base-template>/scripts/fleet_concurrency_check.py register --repo <this-repo-name> --category <category>`.
 Exit code `3` (`"allowed": false`) means that category's pool is already at capacity (2
 browser-automation lanes, or 4 native-build lanes) — stop and report rather than starting another;
-wait or swap in a cheap-gate block instead. Release the slot once this repo's chain finishes:
-`... release --repo <this-repo-name>`. A lane killed mid-run does not block the fleet forever — its
-entry expires automatically (dead process, or past a fixed TTL) on the next registration. If the
-lock store itself is unavailable, the script degrades to `"allowed": true, "degraded": true` — the
-same advisory behavior this replaces, never a hard failure. Full design:
+wait or swap in a cheap-gate block instead.
+
+**Do not pass `--pid`.** The process running `register` is this short-lived command invocation —
+it exits as soon as this step returns, so its own pid is never a valid liveness signal for a later
+process to check. Leave `pid_source` at its default (`"self"`); the entry is then held by **TTL
+(90 minutes) plus explicit release only**, never by pid liveness. If this chain runs longer than
+that, **re-register periodically as a heartbeat** (repeat the same `register --repo <this-repo-name>
+--category <category>` call) — it is idempotent-refresh, so it bumps `started_at` instead of
+consuming a second slot.
+
+**Release the slot when this repo's chain finishes — this is required, not optional:**
+`... release --repo <this-repo-name>`, on success, failure, or abandonment. A lane killed mid-run
+without releasing does not block the fleet forever — its entry expires automatically once it is
+past the TTL, or (for an entry with an *explicitly*-supplied `--pid`) once that pid has died — but
+that is the fallback, not a substitute for releasing on exit. If the lock store itself is
+unavailable, the script degrades to `"allowed": true, "degraded": true` — the same advisory
+behavior this replaces, never a hard failure. Full design:
 `planning/decisions/D61-fleet-concurrency-enforcement.md` and
 `planning/decisions/D66-tiered-heavy-lane-concurrency.md` (in `base-template`).
 
@@ -354,10 +366,25 @@ At the end of every lane, alongside the report and `review.md`:
 - **For any lingering item this repo owns, write its next step into `handoff.md`**, ordered by a
   mix of priority (per D43) and quick-wins, so a fresh session can pick it up without replaying
   this lane's context.
-- **A lingering item that is still `OPEN` when the lane closes promotes to `state.json`
-  `carryover[]` (D57 section 4) — it never moves into a successor run record.** Each
+- **A lingering item that is still `OPEN` when the lane closes promotes to a durable home — and
+  `carryover[]` is only one of three.** It never moves into a successor run record: each
   `(repo, roadmap)` pair has exactly one record, addressed rather than rotated (Step 1E, rule 5),
-  so there is no successor file to move it into.
+  so there is no successor file to move it into. Route each item at promotion time:
+  1. **Only a human can do it** — a decision, a credential, a judgement call, a thing the operator
+     must look at → an `{"type":"operator", slug, exit, start, what?}` edge on the block it gates,
+     **not** a carryover entry. This is the highest-volume misfiling point in the fleet: a lane
+     closing promotes four to six items at once, and a carryover entry gates nothing, so operator
+     work parked there is never forced while an operator edge blocks the work behind it. Measured
+     2026-08-19 — **30 of the fleet's 202 `carryover[]` entries are operator work misfiled this
+     way.** Entry form: `docs/state/state-schema.md`.
+  2. **Permanently true** — a gotcha still true next month, a deliberate non-fix, a load-bearing
+     measured number → `reference[]`. The signal is having no `clears_when` because nothing will
+     ever make it stop being true.
+  3. **Everything else** → `carryover[]` (D57 section 4), `kind` one of `defect` / `deferred` /
+     `drift` / `env` (HQ D72; `constraint` and `known_issue` are retired). Prefer a typed
+     `clears_when` — but never author one that is **already satisfied**, which retires the entry on
+     its first sweep while the finding is still live. When no honest predicate exists, write prose
+     and say why.
 - **Close the lane with a terminal `/close-out`.**
 
 ## Files

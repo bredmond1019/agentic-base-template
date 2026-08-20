@@ -231,6 +231,9 @@ def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
 
     Separately, `EXCLUDED_COMMAND_FILENAMES` drops specific commands from every target regardless
     of `engines_only` - for commands that are HQ-only by nature rather than by target.
+
+    `skills/<slug>/SKILL.md` (CLAUDE_SKILL_SLUGS) is NOT gated on `engines_only` - see that
+    constant for why.
     """
     files: list[Path] = []
     commands_dir = root / ".claude" / "commands"
@@ -254,6 +257,16 @@ def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
     templates_dir = workflows_dir / "templates"
     if templates_dir.is_dir():
         files.extend(p for p in templates_dir.glob("*.md") if p.is_file())
+    # .claude/skills/<slug>/SKILL.md - model-triggered authoring guides. Like workflows/*.md these
+    # are mechanism rather than project fact, so they are NOT gated on engines_only: the brain root
+    # needs them as much as any leaf repo, and it is where both were authored.
+    skills_dir = root / ".claude" / "skills"
+    if skills_dir.is_dir():
+        files.extend(
+            skills_dir / slug / "SKILL.md"
+            for slug in CLAUDE_SKILL_SLUGS
+            if (skills_dir / slug / "SKILL.md").is_file()
+        )
     files.extend(collect_script_files(root))
     return files
 
@@ -298,9 +311,42 @@ def hook_files(brain_root: Path) -> list[Path]:
 # enumerated (not a glob over .agents/skills/) so a skill added to base-template for reasons
 # unrelated to the SDLC engines (or one that hasn't been reviewed against its matching .js the way
 # sdlc-task/sdlc-flow were in the 2026-08 audit) is never accidentally propagated - widen this
-# deliberately, per-slug, once a guide has actually been checked. sdlc-run/sdlc-block are NOT yet
-# in this list - their SKILL.md guides predate that audit and have not been verified.
-AGENT_SKILL_SLUGS: list[str] = ["sdlc-task", "sdlc-flow"]
+# deliberately, per-slug, once a guide has actually been checked.
+AGENT_SKILL_SLUGS: list[str] = [
+    "sdlc-task",
+    "sdlc-flow",
+    # Mirrors of .claude/skills/<slug>/SKILL.md for the vendor-neutral surface. Their BODIES are
+    # byte-identical to the .claude copies by design and only the frontmatter differs (folded
+    # `description:`, no `allowed-tools:`) - the mirror was made by hand precisely because the
+    # usual blind word substitution corrupts them: every "claude" string in these bodies is a
+    # literal path or filename (`CLAUDE.md` in the corpus-membership rule, `.claude` in
+    # skip_dirs), and rewriting them would make the rules they state false.
+    "write-okf-markdown",
+    "edit-state-json",
+    "commit-in-this-fleet",
+    "derive-state-safely",
+    "run-the-gates",
+]
+
+
+# The .claude/skills/<slug>/SKILL.md guides this script distributes downstream. Enumerated per-slug
+# for the same reason as AGENT_SKILL_SLUGS: base-template's .claude/skills/ may hold skills specific
+# to the factory, and a glob would fan those out to 17 repos on the next sync.
+#
+# NOT gated on engines_only - these sync to EVERY target including the brain root, same rule as
+# workflows/*.md. They describe fleet-wide authoring mechanism (the OKF corpus-membership rule, the
+# state.json schema), which is identical in every repo; the D54 exclusion exists for commands that
+# DIVERGE per repo, and these do not. HQ authored both, so its copies are the source of these.
+#
+# Both are deliberately path-portable: they carry a "paths are relative to the brain root" banner
+# instead of repo-relative links, because a ../../../ link is correct in exactly one of 17 repos.
+CLAUDE_SKILL_SLUGS: list[str] = [
+    "write-okf-markdown",
+    "edit-state-json",
+    "commit-in-this-fleet",
+    "derive-state-safely",
+    "run-the-gates",
+]
 
 
 def agent_skill_files(root: Path) -> list[Path]:

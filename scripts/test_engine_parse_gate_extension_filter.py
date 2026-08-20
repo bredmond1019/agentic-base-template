@@ -4,17 +4,18 @@ BT.ticket.engine-parse-gate-non-js-false-positive).
 
 WHY THIS EXISTS
 ----------------
-`renderEngineParseChecks()` in sdlc-task.js, sdlc-flow.js, and sdlc-run.js renders one `node
---check` CHECK per `.claude/workflows/` file a task's `files[]` names. `node --check` throws
+`renderEngineParseChecks()` in sdlc-task.js and sdlc-flow.js renders one `node --check` CHECK per
+`.claude/workflows/` file a task's `files[]` names (a third copy lived in a now-retired engine,
+removed by BT.ticket.retire-unused-engines as effectively unused). `node --check` throws
 ERR_UNKNOWN_FILE_EXTENSION on any non-.js path regardless of content, so before this ticket a task
 that merely touched block-registration.md, block.schema.json, or harness.schema.json (the three
 non-JS files that currently live under `.claude/workflows/`) bailed the whole verdict on a false
 positive unrelated to its actual change. Tasks 1-3 added an identical one-line filter
-(`files = (files || []).filter(f => f.endsWith('.js'))`) to the top of all three copies of the
-function. This suite extracts each engine's live `renderEngineParseChecks()` source by content
+(`files = (files || []).filter(f => f.endsWith('.js'))`) to the top of each copy of the function.
+This suite extracts each surviving engine's live `renderEngineParseChecks()` source by content
 marker (mirroring test_state_write_validation.py's extraction pattern) and actually executes it
-under Node against fixture inputs, so a regression in any of the three copies goes red here rather
-than silently reappearing at spec-authoring time.
+under Node against fixture inputs, so a regression in either copy goes red here rather than
+silently reappearing at spec-authoring time.
 
 Run: python3 scripts/test_engine_parse_gate_extension_filter.py
 """
@@ -22,6 +23,8 @@ Run: python3 scripts/test_engine_parse_gate_extension_filter.py
 from __future__ import annotations
 
 import json
+import re
+import os
 import shutil
 import subprocess
 import sys
@@ -35,10 +38,9 @@ WORKFLOWS = REPO_ROOT / ".claude" / "workflows"
 FUNCTION_START_MARKER = "function renderEngineParseChecks("
 FUNCTION_NAME = "renderEngineParseChecks"
 
-# sdlc-task.js/sdlc-flow.js: (files, cd, startIndex). sdlc-run.js: (files, startIndex) -- no `cd`.
+# sdlc-task.js/sdlc-flow.js: (files, cd, startIndex).
 ENGINES_WITH_CD = {"sdlc-task.js", "sdlc-flow.js"}
-ENGINES_WITHOUT_CD = {"sdlc-run.js"}
-ALL_ENGINES = sorted(ENGINES_WITH_CD | ENGINES_WITHOUT_CD)
+ALL_ENGINES = sorted(ENGINES_WITH_CD)
 
 NON_JS_PATHS = [
     ".claude/workflows/block-registration.md",
@@ -145,8 +147,11 @@ class MixedInputRendersOnlyTheJsPath(unittest.TestCase):
         for engine in ALL_ENGINES:
             with self.subTest(engine=engine):
                 rendered = run_render(engine, [JS_PATH] + NON_JS_PATHS)
+                # Count CHECK-block headers, not "node --check" occurrences: the block's prose
+                # legitimately names the command more than once when warning the test agent not
+                # to substitute its own unguarded form.
                 self.assertEqual(
-                    rendered.count("node --check"), 1,
+                    len(re.findall(r"^CHECK \d+ \u2014 engine-parse-safety", rendered, re.M)), 1,
                     f"{engine}: expected exactly one CHECK block, got: {rendered!r}",
                 )
                 self.assertIn(
@@ -183,6 +188,69 @@ class EmptyInputStillRendersEmpty(unittest.TestCase):
             with self.subTest(engine=engine):
                 rendered = run_render(engine, [])
                 self.assertEqual(rendered, "")
+
+
+class DeletedEngineFileIsNotAParseFailure(unittest.TestCase):
+    """A task that DELETES an SDLC engine legitimately names it in its own tasks.json files[],
+    so this gate would run `node --check` on a path that no longer exists and get
+    MODULE_NOT_FOUND -- a check that can never pass, whatever the task does.
+
+    That is not hypothetical: it bailed BT.ticket.retire-unused-engines twice on 2026-08-19,
+    a ticket whose entire purpose is deleting two now-retired engines. The only escapes were to
+    lie in files[] (omitting the very files the acceptance criteria say must be gone) or to
+    hand-edit the shared engine mid-run. The gate now guards on existence first: a file that is
+    gone has no syntax to be wrong.
+
+    The two survivors (ENGINES_WITH_CD) are the only engines that can carry the fix.
+    """
+
+    GUARDED_ENGINES = sorted(ENGINES_WITH_CD)
+
+    def test_render_guards_on_existence_before_parsing(self):
+        for engine in self.GUARDED_ENGINES:
+            with self.subTest(engine=engine):
+                rendered = run_render(engine, [".claude/workflows/some-deleted-engine.js"])
+                self.assertIn(
+                    "if [ -f", rendered,
+                    f"{engine}: engine-parse check must test for the file's existence before "
+                    "running node --check, or a deleting task can never pass its own gate",
+                )
+                self.assertIn("does not exist", rendered)
+                self.assertIn(
+                    "node --check", rendered,
+                    f"{engine}: the guard must still parse the file when it IS present -- "
+                    "guarding must not disable the check",
+                )
+
+    def test_guard_shell_passes_when_absent_and_still_fails_on_bad_syntax(self):
+        """Execute the rendered guard's shell semantics for real: absent -> 0, valid -> 0,
+        syntactically broken -> non-zero. Without the last assertion this suite would happily
+        accept a guard that had been neutered into always passing."""
+        with tempfile.TemporaryDirectory() as tmp:
+            good = os.path.join(tmp, "good.js")
+            bad = os.path.join(tmp, "bad.js")
+            missing = os.path.join(tmp, "missing.js")
+            with open(good, "w", encoding="utf-8") as fh:
+                fh.write("const a = 1\n")
+            with open(bad, "w", encoding="utf-8") as fh:
+                fh.write("const = =\n")
+
+            def guard_exit(path: str) -> int:
+                script = (
+                    f'if [ -f {path} ]; then node --check {path}; '
+                    f'else echo "does not exist"; fi'
+                )
+                return subprocess.run(
+                    ["bash", "-c", script], capture_output=True, text=True
+                ).returncode
+
+            self.assertEqual(guard_exit(missing), 0, "a deleted file must not fail the gate")
+            self.assertEqual(guard_exit(good), 0, "a valid engine must still pass")
+            self.assertNotEqual(
+                guard_exit(bad), 0,
+                "a syntactically broken engine must STILL fail -- the existence guard must not "
+                "have turned this gate into one that cannot fail",
+            )
 
 
 if __name__ == "__main__":

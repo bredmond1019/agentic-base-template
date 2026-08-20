@@ -28,22 +28,44 @@ Plan one maintenance or housekeeping task — no behavior change, tests incident
 3. Research the codebase: read `CLAUDE.md`, `planning/context.md`, then the files directly
    relevant to the chore.
 
+3a. **Establish ground truth, chore-sized.** Run the gated checks
+   (`planning/harness.json` → `validation.checks[]`) *before* changing anything, and record which
+   pass. A chore's whole promise is "no behaviour change," and you cannot claim that against a
+   baseline you never took — a check that was already red gets attributed to this chore, and one
+   that was already green gets read as proof the chore was safe.
+
+3b. **The floor, chore-sized.** Two questions, a sentence each:
+   - **Is this a deletion?** Ask it explicitly, even when the chore was framed as a change.
+     Removing dead or superseded surface is usually cheaper than tidying it, and it is the version
+     of the work nobody proposes. Check whether the thing has any remaining caller before
+     assuming it must be kept: one `rg -L` settles it.
+   - **What else touches these files?** One grep. A housekeeping change with a wide blast radius
+     is not housekeeping, and this is where that gets noticed rather than at merge.
+
 4. THINK HARD about scope before writing:
    - Choose the **SDLC workflow** (`none` | `patch` | `task` | `run` | `flow`) and the **model**
      (`sonnet` | `gemini-pro` | `gemini-flash` | `either`). Rule of thumb: Opus for
      reasoning/breakdown only; sonnet for high-risk or complex; gemini-pro intermediate;
      gemini-flash simple. Record the reasoning in `workflow_rationale`.
    - **Compilable task boundaries (outranks the file-based split when the two conflict).**
-     `/chore` only ever feeds `/sdlc-task` or `/sdlc-flow` — never `/sdlc-block`'s parallel-merge
-     model — and both run every task **sequentially on one branch/worktree with no inter-task
-     merge step**, gating the project's checks after **every single task**. A single breaking
-     public-surface change (a renamed public type, a struct's changed fields, an altered
-     trait/interface signature, and every call site each touches) must never be split across tasks
-     such that an intermediate task leaves the repository non-compiling — put the whole change in
-     **one** task, even if it then touches more files than usual. **Unconditional here**, with no
-     `/sdlc-block` carve-out.
+     `/chore` only ever feeds `/sdlc-task` or `/sdlc-flow`, and both run every task
+     **sequentially on one branch/worktree with no inter-task merge step**, gating the project's
+     checks after **every single task**. A single breaking public-surface change (a renamed public
+     type, a struct's changed fields, an altered trait/interface signature, and every call site
+     each touches) must never be split across tasks such that an intermediate task leaves the
+     repository non-compiling — put the whole change in **one** task, even if it then touches more
+     files than usual. Unconditional: both engines are sequential.
    - Acceptance criteria are lighter than a ticket's but still **observable** — "the check passes
      on a corpus sweep", not "the code is cleaner". End with the project's gating checks passing.
+   - **"The gates still pass" is a weak criterion on its own.** They passed before too — that is
+     what 3a's baseline establishes. At least one criterion must be something that is *different*
+     after this chore and observable: a command whose output changed, a file that no longer
+     exists, a count that dropped. Otherwise the chore has no evidence it did anything.
+   - **Escalation trigger.** If the chore turns out to change behaviour — even behaviour nobody
+     relies on — stop: it is a `/ticket`, and it needs tests and real Acceptance Criteria.
+     Likewise, if 3b's blast radius comes back wide, or the "no remaining caller" check is
+     ambiguous, say so rather than proceeding. A chore that quietly changes behaviour is the
+     worst-instrumented change in the harness, because nothing about it is expected to.
 
 5. Choose a short descriptive slug (e.g. `remove-k8s-secret`, `update-stale-handles`). The Block ID
    is `<Prefix>.chore.<slug>`, and the spec directory equals it exactly.
@@ -85,8 +107,30 @@ Plan one maintenance or housekeeping task — no behavior change, tests incident
      repository non-compiling under the per-task gate. If so this check **fails**: merge those
      tasks and re-run the self-check.
    - **`tasks.md` was rendered** and matches: `python3 scripts/render_spec.py <BlockID> --check`.
+   - **The pre-change baseline is recorded** in the block record's `why` or `description` — which
+     gates passed before this chore, so a later red one is attributable.
+   - **At least one acceptance criterion observes a difference**, not merely that the gates are
+     still green.
 
 10. Report the paths created and the next step.
+
+## Session boundary
+
+`/chore` authors and decomposes in one session. **The engine runs fresh.**
+
+Close by telling the operator:
+
+```
+Chore authored: planning/blocks/<BlockID>.json + planning/<BlockID>/tasks.json
+Baseline before the change: <which gates passed>
+
+Start a FRESH session and run:
+  /sdlc-task <BlockID>
+
+<If escalation triggered:>
+  This changes behaviour / has a wide blast radius — it is a /ticket, not a chore.
+  <What specifically.>
+```
 
 ## Codebase Structure
 

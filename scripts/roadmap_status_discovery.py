@@ -134,19 +134,40 @@ def _sweep_with_rg(root: Path, glob: str, follow_symlinks: bool, hidden: bool) -
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
+# Directories the fallback walk never needs to descend into. None of them can contain a
+# planning/<slug>/sdlc/ run-state file or a planning/state.json, so pruning them changes no
+# result -- it only removes the build/VCS trees that dominate an unpruned walk of the fleet.
+_WALK_PRUNE_DIRS = frozenset({
+    ".git", "node_modules", "target", ".venv", "venv", "__pycache__",
+    ".next", "dist", "build", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+    ".cargo", ".rustup", "site-packages",
+})
+
+
 def _sweep_with_walk(root: Path, glob_suffix_parts: tuple[str, ...], follow_symlinks: bool, hidden: bool) -> list[str]:
     """Pure-Python fallback sweep. `glob_suffix_parts` is a tuple of path-component substrings that
     must all appear, in order, somewhere in the relative path (a minimal glob stand-in sufficient
     for this module's fixed patterns)."""
     ignored = [] if hidden else _gitignored_prefixes(root)
     found: list[str] = []
+    root_str = str(root)
     for dirpath, dirnames, filenames in os.walk(root, followlinks=follow_symlinks):
-        dp = Path(dirpath).resolve()
-        if not hidden and any(dp == p or p in dp.parents for p in ignored):
-            dirnames[:] = []
-            continue
+        # Prune directories that structurally cannot hold this module's targets (run-state files
+        # under a planning/<slug>/sdlc/ path, or planning/state.json). This is the difference
+        # between a usable check and one that SIGKILLs its caller: with rg unavailable as a real
+        # binary -- which is the norm inside the agent sandbox, where `rg` is only a zsh function
+        # `subprocess.run` cannot invoke -- this walk is the ONLY code path, and unpruned it spent
+        # 195s per call, reliably bailing unrelated /sdlc-task and /sdlc-flow runs on 2026-08-19.
+        # `trees/` is deliberately NOT pruned: case_live_measured_snapshot asserts precisely that
+        # trees/-routed hits collapse onto non-trees/ realpaths, so pruning it would gut the test.
+        dirnames[:] = [d for d in dirnames if d not in _WALK_PRUNE_DIRS]
+        if not hidden:
+            dp = Path(dirpath).resolve()
+            if any(dp == p or p in dp.parents for p in ignored):
+                dirnames[:] = []
+                continue
         for name in filenames:
-            rel = str((Path(dirpath) / name).relative_to(root))
+            rel = os.path.relpath(os.path.join(dirpath, name), root_str)
             if all(part in rel for part in glob_suffix_parts):
                 found.append(rel)
     return found
@@ -168,8 +189,29 @@ def sweep(root: Path, glob: str, glob_suffix_parts: tuple[str, ...], follow_syml
 def realpath_dedup(root: Path, hits: list[str]) -> list[Path]:
     """Dedup raw hits by `os.path.realpath`, returning the sorted distinct realpaths. Because every
     `planning/` symlink -- including a worktree's -- canonicalizes onto the same vault file, this
-    naturally retains the vault original: a `trees/` alias's realpath IS the vault path."""
-    return sorted({Path(os.path.realpath(root / h)) for h in hits})
+    naturally retains the vault original: a `trees/` alias's realpath IS the vault path.
+
+    Parent directories are resolved once and cached, because the thing that is symlinked here is
+    always a DIRECTORY (`planning/`), never the state file itself. Resolving per-file instead made
+    this the single slowest thing in the harness: 1749 hits x a full symlink-chain walk each
+    measured 194s of the self-test's 195s, which reliably SIGKILLed the /sdlc-task and /sdlc-flow
+    test stages and bailed two unrelated blocks on 2026-08-19 before the cause was found. A file
+    that is ITSELF a symlink still gets a full realpath, so the result is unchanged in every case."""
+    parent_cache: dict[str, str] = {}
+    out = set()
+    for h in hits:
+        p = root / h
+        parent = str(p.parent)
+        resolved_parent = parent_cache.get(parent)
+        if resolved_parent is None:
+            resolved_parent = os.path.realpath(parent)
+            parent_cache[parent] = resolved_parent
+        candidate = os.path.join(resolved_parent, p.name)
+        # The parent is canonical now, so only a symlinked LEAF can still need resolving.
+        if os.path.islink(candidate):
+            candidate = os.path.realpath(candidate)
+        out.add(Path(candidate))
+    return sorted(out)
 
 
 # ---------------------------------------------------------------------------

@@ -47,6 +47,19 @@ class EnginesOnlyGuard(unittest.TestCase):
         _write(self.bt / ".claude" / "workflows" / "sdlc-task.js", "// engine\n")
         _write(self.bt / ".claude" / "workflows" / "harness.schema.json", "{}\n")
         _write(self.bt / ".claude" / "workflows" / "templates" / "t.md", "template\n")
+        _write(
+            self.bt / ".claude" / "skills" / "write-okf-markdown" / "SKILL.md",
+            "okf authoring guide\n",
+        )
+        _write(
+            self.bt / ".claude" / "skills" / "edit-state-json" / "SKILL.md",
+            "state.json authoring guide\n",
+        )
+        # Not in CLAUDE_SKILL_SLUGS — a factory-only skill must never fan out.
+        _write(
+            self.bt / ".claude" / "skills" / "factory-only" / "SKILL.md",
+            "base-template internal\n",
+        )
 
         # HQ (brain root) — has workflows, and its OWN commands that differ.
         _write(self.brain / ".claude" / "commands" / "prime.md", "HQ's 164-line brain prime\n")
@@ -95,6 +108,43 @@ class EnginesOnlyGuard(unittest.TestCase):
     def test_harness_files_includes_commands_by_default(self):
         names = {p.name for p in sync.harness_files(self.bt)}
         self.assertIn("prime.md", names)
+
+    def test_allowlisted_skills_sync_to_every_target_including_engines_only(self):
+        """.claude/skills/<slug>/SKILL.md describe fleet-wide authoring mechanism, identical in
+        every repo. D54's engines_only exclusion is for commands that DIVERGE per repo; skills do
+        not, and the brain root needs them as much as any leaf."""
+        rels = {
+            str(p.relative_to(self.bt / ".claude"))
+            for p in sync.harness_files(self.bt, engines_only=True)
+        }
+        self.assertIn("skills/write-okf-markdown/SKILL.md", rels)
+        self.assertIn("skills/edit-state-json/SKILL.md", rels)
+
+    def test_allowlisted_skills_sync_to_a_normal_repo_too(self):
+        rels = {str(p.relative_to(self.bt / ".claude")) for p in sync.harness_files(self.bt)}
+        self.assertIn("skills/write-okf-markdown/SKILL.md", rels)
+        self.assertIn("skills/edit-state-json/SKILL.md", rels)
+
+    def test_non_allowlisted_skill_never_syncs(self):
+        """The allowlist is the whole point: a skill added to base-template for factory-internal
+        reasons must not fan out to 17 repos on the next sync."""
+        for engines_only in (True, False):
+            rels = {
+                str(p.relative_to(self.bt / ".claude"))
+                for p in sync.harness_files(self.bt, engines_only=engines_only)
+            }
+            self.assertNotIn("skills/factory-only/SKILL.md", rels)
+
+    def test_skills_land_under_dot_claude_with_their_slug_directory(self):
+        """Regression: the destination must keep the skills/<slug>/ nesting. A flattened copy
+        lands at .claude/SKILL.md and Claude Code never discovers it."""
+        report = sync.diff_repo(self.bt.resolve(), self.brain.resolve(), self._targets()["leaf"])
+        entry = next(
+            d for d in report.diffs if d.rel_path.endswith("write-okf-markdown/SKILL.md")
+        )
+        self.assertEqual(entry.dest_prefix, ".claude")
+        self.assertEqual(entry.rel_path, "skills/write-okf-markdown/SKILL.md")
+        self.assertEqual(entry.status, "new")
 
     def test_workflows_md_syncs_to_every_target_including_engines_only(self):
         """workflows/*.md are shared procedures the commands include by reference.
@@ -163,6 +213,53 @@ class EnginesOnlyGuard(unittest.TestCase):
             any("commands" in c and "prime.md" in c for c in changed),
             f"expected leaf to receive prime.md, got {changed}",
         )
+
+
+class MirroredSkillBodiesMatch(unittest.TestCase):
+    """Repo invariant, not a fixture test: the .agents/skills mirrors of the .claude/skills
+    authoring guides must stay body-identical to their source.
+
+    The mirror exists for the vendor-neutral surface and differs ONLY in frontmatter (folded
+    `description:`, no `allowed-tools:`). It was made by hand because the usual mirror transform is
+    a blind word substitution, and every "claude" string in these bodies is a literal path or
+    filename - `CLAUDE.md` in the corpus-membership rule, `.claude` in skip_dirs. Substituting them
+    makes the documented rules false. This test is what catches that."""
+
+    MIRRORED = [
+        "write-okf-markdown",
+        "edit-state-json",
+        "commit-in-this-fleet",
+        "derive-state-safely",
+        "run-the-gates",
+    ]
+
+    def _body(self, path: Path) -> str:
+        return path.read_text(encoding="utf-8").split("---", 2)[2]
+
+    def test_agents_mirror_body_matches_claude_source(self):
+        root = Path(sync.__file__).resolve().parent.parent
+        checked = 0
+        for slug in self.MIRRORED:
+            src = root / ".claude" / "skills" / slug / "SKILL.md"
+            mirror = root / ".agents" / "skills" / slug / "SKILL.md"
+            if not src.is_file() or not mirror.is_file():
+                continue
+            checked += 1
+            self.assertEqual(
+                self._body(src),
+                self._body(mirror),
+                f"{slug}: .agents mirror body has drifted from its .claude source",
+            )
+        self.assertEqual(checked, len(self.MIRRORED), "a mirrored skill is missing from one surface")
+
+    def test_agents_mirror_drops_claude_only_frontmatter(self):
+        root = Path(sync.__file__).resolve().parent.parent
+        for slug in self.MIRRORED:
+            mirror = root / ".agents" / "skills" / slug / "SKILL.md"
+            if not mirror.is_file():
+                continue
+            fm = mirror.read_text(encoding="utf-8").split("---", 2)[1]
+            self.assertNotIn("allowed-tools", fm, f"{slug}: allowed-tools is Claude-only")
 
 
 if __name__ == "__main__":

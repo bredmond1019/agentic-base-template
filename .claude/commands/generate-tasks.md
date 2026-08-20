@@ -25,6 +25,21 @@ $ARGUMENTS — one of two input modes:
 
 ## Instructions
 
+> **The three checks that can fail this command.** They live in full in steps 6 and 8 below; they
+> are hoisted here because they are the reason a spec is rejected, and they are easy to skim past
+> in a long procedure.
+>
+> 1. **Compilable task boundaries** — under `/sdlc-flow` and `/sdlc-task` every task must leave the
+>    gating suite passing, so a breaking public-surface change may never be split across tasks.
+>    This outranks disjoint file ownership: **the tasks merge, not the constraint.**
+> 2. **Un-gateable acceptance criteria must be declared (D64)** — any criterion whose evidence
+>    lives in another process, another repo, a generated artifact, or an **installed** artefact
+>    needs a named failing command or a dedicated fixture-evidence task. A green suite is never
+>    itself the evidence.
+> 3. **Never fabricate a load-bearing fact** — which files a task owns, an observable criterion, a
+>    real dependency edge. Ask in an interactive session; abort with a specific message in a
+>    preflight context.
+
 1. Run `/prime` to orient to the repo (standing rules, architecture).
 
 2. **Resolve the input mode and the spec slug.**
@@ -32,7 +47,7 @@ $ARGUMENTS — one of two input modes:
      `<path>`. Derive the spec slug from the **parent directory name** of `<path>` (e.g.
      `planning/plan-add-rate-limiter/plan.md` → slug `plan-add-rate-limiter`); the decomposed
      `tasks.md` is written **into that same directory** (`planning/plan-add-rate-limiter/tasks.md`),
-     so `/sdlc-flow <slug>` / `/sdlc-run <slug>` can run it. If `<path>` does not exist, stop and say
+     so `/sdlc-flow <slug>` can run it. If `<path>` does not exist, stop and say
      so. Then resolve which block to read:
      - If a `phaseN-blockX` selector follows `--from <path>` (accept any of `phase0-blockA`,
        `phase0blockA`, `0-A`, `Phase 0 Block A`), that names the block to decompose.
@@ -41,7 +56,7 @@ $ARGUMENTS — one of two input modes:
        exactly one block defaults to that block; a master-plan-format file with **more than one
        block** has no safe default — STOP, list the blocks, and ask which one (plan-quality floor:
        never guess a load-bearing target). To run the whole multi-block plan instead, point the user
-       at `/sdlc-block <path>`.
+       at `/orchestrate <path>`.
    - **Otherwise (master-plan slug mode):** parse `$ARGUMENTS` to extract the phase number and
      block/project identifier (e.g. `phase0-blockC` → phase 0, block C). Accept any of these forms:
      `phase0-blockC`, `phase0blockC`, `0-C`, `Phase 0 Block C`. The spec slug is the normalized
@@ -97,44 +112,44 @@ $ARGUMENTS — one of two input modes:
      block definition, `CLAUDE.md`, `planning/context.md`, or the repo (e.g. which files a task owns,
      an observable acceptance criterion, a real dependency edge) — do not emit a fabricated `tasks.md`.
      Instead: in an **interactive session**, STOP and ask the user a targeted question; in a
-     **non-interactive / preflight context** (invoked by `/sdlc-block` / `/sdlc-flow` to auto-generate
+     **non-interactive / preflight context** (invoked by `/orchestrate` / `/sdlc-flow` to auto-generate
      a missing spec), **ABORT with a specific message naming exactly what's missing** so the human can
      fix the block. This is the proactive complement to the D19 thin-spec abort: D19 catches a thin
      spec after the fact; this prevents writing a confidently-wrong one in the first place.
+
+5a. **Read the actual source the block names — before writing any task.** This is not optional and
+   it is the difference between a spec an engine can execute and one that names things that do not
+   exist. For each file in the record's `files[]`:
+   - **Modified files:** open them. Get the real function names, signatures, struct fields and
+     surrounding conventions. A task that says "update `parse_config`" when the function is called
+     `load_config` costs a full implement→test→fix cycle to discover.
+   - **New files:** read an existing sibling of the same kind, so the task describes the project's
+     established pattern rather than a generic one.
+   - **If a file named as modified does not exist**, the record is wrong. Stop and say which file,
+     rather than emitting a task against a path that is not there. If a file named as new already
+     exists, say so — the block may be re-treading work that landed.
+   - Read only what the named files and their immediate siblings require. Do not load the codebase.
+
+   Line numbers move between authoring and execution: name **symbols**, not line numbers, in every
+   task you write.
 
 6. THINK HARD about correct scope:
    - Do not invent work beyond what the block defines.
    - Size tasks to roughly 21 hours spread across Mon/Wed/Fri sessions.
    - Enforce **the project's standing rules** as written in `CLAUDE.md` — do not assume any stack, locale-parity, or content-layout rule unless written there. Every task must leave the project's gated checks (`planning/harness.json` → `validation.checks[]` with `gates: true`) passing.
-   - **Compilable task boundaries (outranks decomposition preferences under the sequential engines).**
-     `/sdlc-flow` and `/sdlc-task` run every task **sequentially on one branch/worktree with no
-     inter-task merge step** — `sdlc-flow.js`'s own header says so explicitly ("sequential tasks (no
-     inter-task merge conflicts)") — and both gate the project's checks after **every single task**
-     (the `runTests()` call inside each engine's per-task loop: `sdlc-flow.js`'s and `sdlc-task.js`'s
-     `test-${taskNum}-${attempt}` gate). Under those two engines **every task must leave the gating
+   - **Compilable task boundaries.** `/sdlc-flow` and `/sdlc-task` — the only two engines this
+     command feeds — run every task **sequentially on one branch/worktree with no inter-task merge
+     step** — `sdlc-flow.js`'s own header says so explicitly ("sequential tasks (no inter-task merge
+     conflicts)") — and both gate the project's checks after **every single task** (the
+     `runTests()` call inside each engine's per-task loop: `sdlc-flow.js`'s and `sdlc-task.js`'s
+     `test-${taskNum}-${attempt}` gate). Under both engines **every task must leave the gating
      suite passing** — for a compiled or type-checked stack that means the repository must compile
      (and typecheck) at every task boundary, not just at the end of the spec. When a single logical
      change cannot be split without leaving an intermediate task non-compiling — a renamed public
      type, a struct's changed fields, an altered trait/interface signature, and every call site each
-     one touches — do **not** split it across tasks to satisfy disjoint ownership below. Put the whole
-     change in **one** task instead. **This constraint outranks the disjoint-file-ownership rule
-     whenever the two conflict: the tasks merge, not the constraint.** Since this command decomposes
-     before the consuming engine is chosen (the recommendation is step 11, after decomposition), apply
-     this constraint by default unless the block is already known to run under `/sdlc-block` (e.g. it
-     is one block of a multi-block roadmap being decomposed by `/sdlc-block` itself) — in that case the
-     disjoint-ownership rule below governs instead.
-   - **Disjoint file ownership (parallel-merge safety) — `/sdlc-block` only.** This rule is scoped to
-     `/sdlc-block`'s parallel-merge model, where each task runs as its own pipeline and the pipelines
-     merge independently; it does **not** apply under `/sdlc-flow` or `/sdlc-task` (see the compilable
-     task boundaries rule above, which governs task boundaries there instead — including when it
-     requires two tasks that would otherwise be disjoint to merge into one). Under `/sdlc-block`: a
-     block's tasks run as parallel pipelines that merge independently, so two tasks editing the same
-     existing file collide at merge. Decompose so each task **owns a distinct set of files**. When two
-     tasks would touch the same file, either (a) make one `dependsOn` the other so `/sdlc-block`
-     serializes them into different waves, or (b) restrict the shared file to **append-only** edits
-     (the block engine union-merges files declared `additiveFiles`). Name each task's primary files in
-     its step so the dependency analysis can see the boundaries — an undeclared overlap escalates the
-     whole block on a merge conflict.
+     one touches — do **not** split it across tasks. Put the whole change in **one** task instead.
+     This applies unconditionally: both engines are sequential, so there is no parallel-merge model
+     to weigh it against.
    - Foundational steps come first; the final step is always Validate.
    - **Write the task list as `tasks.json`, not markdown headings.** Every SDLC engine reads
      `planning/<spec-slug>/tasks.json` directly — a **bare array** of `{task_id, title, description,
@@ -145,9 +160,9 @@ $ARGUMENTS — one of two input modes:
      Validation Commands, Notes, Amendment Log) but the Step-by-Step Tasks section in it is just a
      one-line pointer at the JSON file, not the task list itself.
    - **This command's `--from` mode is one of two derivation surfaces that both author `tasks.json`
-     from a `tasks.md`/block source — the other is each engine's own D16 preflight.** `sdlc-task.js`,
-     `sdlc-flow.js`, and `sdlc-run.js` now derive `tasks.json` from an existing `tasks.md` themselves
-     (rather than aborting with "No tasks.json (D16)") when a spec ships prose-only, using the same
+     from a `tasks.md`/block source — the other is each engine's own D16 preflight.** `sdlc-task.js`
+     and `sdlc-flow.js` now derive `tasks.json` from an existing `tasks.md` themselves (rather than
+     aborting with "No tasks.json (D16)") when a spec ships prose-only, using the same
      author-a-fresh-decomposition discipline this step describes — they are a recovery backstop for
      an already-written spec, not a substitute for running this command up front.
 
@@ -172,20 +187,17 @@ $ARGUMENTS — one of two input modes:
    - **`tasks.json` parses as valid JSON** and is a non-empty array (not wrapped in an object —
      orchestrator's `LoadTaskStateNode` expects a bare array).
    - **Every task except the final Validate task names ≥1 file** in its `files[]` (so the dependency
-     analysis, the `/sdlc-block` disjoint-ownership guard, and the compilable-boundary review below
-     can see boundaries). Under the sequential engines this does **not** imply the named files must be
-     disjoint *across* tasks — two tasks are free to touch the same file there, since there is no
-     inter-task merge to collide. This property and the compilable-boundary check below do not
-     contradict each other: naming files is about visibility for both guards, not about which guard's
-     ownership rule applies.
+     analysis and the compilable-boundary review below can see boundaries). This does **not** imply
+     the named files must be disjoint *across* tasks — two tasks are free to touch the same file
+     under the sequential engines, since there is no inter-task merge to collide. This property and
+     the compilable-boundary check below do not contradict each other: naming files is about
+     visibility, not ownership.
    - **Compilable task boundaries — can fail.** Check whether any single breaking public-surface
      change (a renamed public type, a struct's changed fields, an altered trait/interface signature)
      is split across two or more tasks such that an intermediate task would leave the repository
      non-compiling. If it is, this check **fails**: merge those tasks into one before proceeding, per
-     the compilable task boundaries rule in step 6, then re-run this self-check. (This still applies
-     even when the block is known to run under `/sdlc-block`: that engine's disjoint-ownership rule
-     governs *which* files a task owns, but a task that cannot compile on its own is never a valid
-     task under any engine.)
+     the compilable task boundaries rule in step 6, then re-run this self-check — a task that cannot
+     compile on its own is never valid, under either engine.
    - **`dependsOn` ids are all valid** — every id referenced exists as some task's `task_id` in the
      same array, and the final Validate task depends on every other task's id.
    - **Acceptance Criteria are non-empty and observable** — each criterion can be judged true/false.
@@ -223,16 +235,7 @@ $ARGUMENTS — one of two input modes:
      code/prose (e.g. `Vec<T>`, "the `<concept>` folder") or a bare `TODO`/`TBD` inside authored
      content as a sentinel.
 
-9. **Commit the spec.** Leave the working tree clean so a downstream `/sdlc-block` run never trips
-   its clean-tree merge guard (an uncommitted `tasks.md`/`tasks.json` blocks every merge):
-   ```bash
-   git add planning/<spec-slug>/
-   git commit -m "chore: add spec for <spec-slug>"
-   ```
-   (Use the slug resolved in step 2 — the master-plan directory slug, or in `--from` mode the source
-   file's parent directory. The `git add` stages the source block file too, which is fine.)
-
-10. **Decomposition assessment.** Before reporting, evaluate each task you just wrote against the
+9. **Decomposition assessment.** Before reporting, evaluate each task you just wrote against the
    coarseness heuristic and recommend which (if any) warrant a `/breakdown` first. The real predictor
    is SEPARABLE STRUCTURE, not raw file count. A task is a breakdown candidate when ANY hold: it bundles
    multiple separable concerns ("implement X AND refactor Y AND add Z"), OR it spans multiple layers
@@ -245,10 +248,10 @@ $ARGUMENTS — one of two input modes:
    (the SDLC engines apply the same heuristic at run time per `breakdown.mode`, so this is the
    authoring-time preview of that decision).
 
-11. **Pipeline recommendation.** After writing the tasks, recommend the run command that fits this
+10. **Pipeline recommendation.** After writing the tasks, recommend the run command that fits this
    spec, with a one-line reason. The harness is a ladder of escalating ceremony — match the spec to
    the lowest rung that fits. This command decomposes **one** block, so the recommendation is normally
-   one of the single-spec engines; `/sdlc-block` is named only to redirect when the block belongs to a
+   one of the single-spec engines; `/orchestrate` is named only to redirect when the block belongs to a
    multi-block roadmap.
 
    - **`/patch`** — trivial, single-file hotfix with no new tests. Not produced by this command (a
@@ -258,32 +261,83 @@ $ARGUMENTS — one of two input modes:
      tightly-coupled tasks that want a fast test→fix loop but no review / docs / PR ceremony. The
      cheapest real engine and the natural runner for `/ticket` and `/chore` outputs. In-place by
      default; `--worktree` to isolate.
-   - **`/sdlc-run <spec-slug>`** — one whole spec, full lifecycle (implement→test→review→document→
-     wrap-up) in a single shared implement context, in place on the current branch, no PR. Best for
-     small / homogeneous / sequential specs where one context holds all the tasks without blurring or
-     overflowing.
    - **`/sdlc-flow <spec-slug>`** (default for non-trivial feature work) — one whole spec in a
      dedicated worktree terminating in a PR: sequential tasks (no inter-task merge conflicts), per-task
      test→fix loop (≤3 attempts, Opus escalation), one consolidated end review over the integrated
      tree. Use when the work has many moving parts or a reviewable PR is wanted. `--auto-merge` to
      merge + clean the worktree on a clean PASS; `--no-pr` to stop after wrap-up; `--resume` to
      re-attach after an interruption.
-   - **`/sdlc-block <plan-file>`** — the rung *above* a single spec: a multi-block roadmap. If this
-     block is one of several in `planning/master-plan.md` or a `/plan` output, drive the whole roadmap
-     with `/sdlc-block <plan-file>` — it ensures each block's `tasks.md` and fans out one `/sdlc-flow`
-     per independent block as a branch train of reviewable PRs (reviewed with `/review-PR`, merged with
-     `/merge-train`) — instead of running this one block alone. In slug mode `<plan-file>` is
-     `planning/master-plan.md`; in `--from` mode it is the path you passed to `--from`.
+   - **`/orchestrate`** — the rung *above* a single spec: a multi-block roadmap. If this block is
+     one of several in `planning/master-plan.md` or a `/plan` output, drive the whole roadmap with
+     `/orchestrate` instead of running this one block alone — it runs `/generate-tasks` and the right
+     single-spec engine per block, in dependency order, in one session.
    - **`/sdlc-task <spec-slug> <N>`** — not a strategy for the whole spec; name it only when the right
      move is one specific task in isolation (a high-risk surgical change, or resuming after a failure on
      task N). Say which task number and why isolation matters.
 
    Recommend exactly one primary command (optionally plus `/sdlc-task <N>` when a single task warrants
-   isolation). If `breakdown.mode` is `auto` and any tasks were flagged in step 10, note that breakdown
+   isolation). If `breakdown.mode` is `auto` and any tasks were flagged in step 9, note that breakdown
    must run first and the recommendation applies to each resulting sub-spec, not this spec directly.
 
-12. Report the path written and suggest the next step:
-    "Spec written and committed to planning/<spec-slug>/tasks.md. Run `/breakdown planning/<spec-slug>/tasks.md` to decompose into atomic sub-steps."
+11. **Commit the spec — after the self-check, the assessment and the recommendation, not before.**
+    Steps 8–10 can each require revising the spec in place, so committing earlier means committing
+    a draft and amending it. Leave the working tree clean so a downstream `/orchestrate` run never
+    trips its clean-tree merge guard (an uncommitted `tasks.md`/`tasks.json` blocks every merge):
+    ```bash
+    git add planning/<spec-slug>/
+    git commit -m "chore: add spec for <spec-slug>"
+    ```
+    (Use the slug resolved in step 2 — the master-plan directory slug, or in `--from` mode the
+    source file's parent directory. The `git add` stages the source block file too, which is fine.)
+
+12. **Report — and name the command step 10 actually chose.** Do not hardcode a next step; the
+    pipeline recommendation is the answer, and `/breakdown` is only the next step when step 9
+    flagged a task for it.
+
+    ```
+    planning/<spec-slug>/tasks.json    <N> tasks
+    planning/<spec-slug>/tasks.md      <rendered from block record | authored (legacy)>
+
+    Source files read: <count> (<any that were named but missing>)
+    Un-gateable criteria declared: <n, or none>
+    Operator/approval edges on this block: <list, or none — these stall the run>
+    Breakdown candidates: <task numbers + one-line reason, or none>
+
+    Run:  <the single recommended engine command>   — <one-line reason>
+    <optionally: plus /sdlc-task <N> in isolation — <why>>
+    <if any breakdown candidates and breakdown.mode is auto:
+     First: /breakdown planning/<spec-slug>/tasks.md — the recommendation applies to each
+     resulting sub-spec, not this spec directly.>
+    ```
+
+## Session boundary
+
+**`/breakdown` runs in this session** if you flagged a task for it — it reads the same spec and the
+same source, and it now writes executable corrections back to `tasks.json`, which wants one writer.
+
+**The engine runs fresh.** `/sdlc-task` and `/sdlc-flow` spawn their own agent stack and are a
+different kind of work; carrying an authoring context into them buys nothing and costs room.
+
+**One block per session.** Do not decompose the next block here, even when it looks obvious. The
+next block's tasks depend on this block's code, which does not exist yet.
+
+Close by telling the operator:
+
+```
+Spec written: planning/<spec-slug>/tasks.json (+ rendered tasks.md)
+
+<If a task was flagged for breakdown:>
+  Running /breakdown in this session first.
+
+Start a FRESH session and run:
+  <the recommended engine command>       — <one-line reason>
+
+Then come back for the next block in a new session:
+  /generate-tasks <next block ID>
+
+<If the block carries an operator or approval edge:>
+  This block cannot run to completion until <edge> clears. It will stall.
+```
 
 ## Context / Files to Read
 
@@ -394,11 +448,10 @@ Decomposition assessment:
 Pipeline recommendation:
   <one of:>
   /sdlc-task <spec-slug>         — <N> tasks, one small tested unit; fast test→fix loop, no review/docs/PR
-  /sdlc-run <spec-slug>          — <N> tasks, small/homogeneous/sequential; one shared implement context, in place, no PR
   /sdlc-flow <spec-slug>         — <N> tasks, non-trivial feature work; dedicated worktree, per-task test→fix, one end review, PR (<reason: many moving parts / reviewable PR wanted>)
   /sdlc-flow <spec-slug> --auto-merge
                                  — as above; merge PR + clean worktree on clean PASS
-  /sdlc-block <plan-file>        — this block is one of several; drive the whole roadmap as a branch train of PRs
+  /orchestrate                   — this block is one of several; drive the whole roadmap in one session
   /sdlc-task <spec-slug> <N>     — run task <N> in isolation; <reason isolation matters here>
 
 Next (optional — decompose first):

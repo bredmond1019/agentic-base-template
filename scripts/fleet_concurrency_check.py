@@ -11,7 +11,7 @@ starting a heavy repo, and releases when it finishes.
 Design (recorded in full in planning/decisions/D61-fleet-concurrency-enforcement.md):
 
 - **State**: one small JSON file per active heavy lane, in a shared lock directory. Each file
-  records `{repo, pid, started_at}`. The directory is resolved by walking up from the current
+  records `{repo, pid, pid_source, started_at}`. The directory is resolved by walking up from the current
   working directory looking for `brain.toml` (the brain root's own marker file, already relied on
   elsewhere per base-template/CLAUDE.md) and using `<brain_root>/.fleet-locks/`; it can also be
   forced with `--lock-dir` / `FLEET_LOCK_DIR` (used by the test suite and by a caller that already
@@ -19,14 +19,21 @@ Design (recorded in full in planning/decisions/D61-fleet-concurrency-enforcement
 - **Registration**: `register` first sweeps stale entries (see below), then counts what is left.
   If capacity (`MAX_HEAVY_LANES`, default 2) is not yet used, it writes its own lock file and
   reports allowed; otherwise it reports refused and names the lanes holding the slots.
-- **Stale-entry expiry**: an entry is stale (and removed during the sweep, unconditionally, before
-  it can block anyone) if EITHER its recorded `pid` is no longer a running process (checked via
-  `os.kill(pid, 0)`) OR its `started_at` is older than `--ttl` seconds (default 4 hours). This is
-  what keeps a lane killed mid-run from blocking the fleet permanently — the failure mode that
-  would make a naive lockfile worse than the prose it replaces.
+- **Stale-entry expiry**: pid-liveness (checked via `os.kill(pid, 0)`) is trusted as a staleness
+  signal ONLY for an entry whose `pid_source` is `"explicit"` — i.e. the caller passed a `--pid`
+  that is not the writer process's own. The registering process is itself short-lived and exits as
+  soon as the command returns, so its own pid is never a valid liveness signal for a *different*,
+  later process to check — treating it as one is exactly the "dead on arrival" bug this design
+  fixes (planning/decisions/D61 vs. the fix recorded in this ticket). An entry with `pid_source`
+  `"self"` (the default — no `--pid` was passed) relies solely on `--ttl` expiry (default 5400s /
+  90 minutes, matched to a real lane segment) plus an explicit `release`. Either way, an entry is
+  removed during the sweep, unconditionally before it can block anyone, once it is stale by
+  whichever rule applies to it.
 - **Clean release**: `release` removes exactly the lock file this repo+pid registered. A lane that
-  exits cleanly should always call this; a lane that dies without calling it is caught by the
-  stale-entry sweep on the next registration attempt instead.
+  exits cleanly should always call this; a lane that dies without calling it is caught by TTL
+  expiry (or, for an explicit pid, liveness) on the next registration attempt instead. A long lane
+  should re-register periodically as a heartbeat — `register` is idempotent-refresh, so a
+  re-register of the same repo+pid+category bumps `started_at` instead of consuming a second slot.
 - **Degrade to advisory, never hard-fail**: if the lock directory cannot be resolved, created, or
   written to for any reason (no brain.toml found, permission error, read-only filesystem, ...),
   every operation reports success with `degraded: true` and a reason — the caller proceeds exactly
@@ -61,7 +68,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-DEFAULT_TTL_SECONDS = 4 * 60 * 60  # 4 hours
+DEFAULT_TTL_SECONDS = 5400  # 90 minutes - matched to a real lane segment's length, not an afternoon
 LOCK_SUBDIR = ".fleet-locks"
 
 # Two distinct cost shapes get lumped under "heavy" in the old prose rule, but they are not
@@ -194,7 +201,17 @@ def _sweep_stale(lock_dir: Path, ttl_seconds: int) -> list:
         pid = data.get("pid")
         started_at = data.get("started_at", 0)
         age = time.time() - started_at
-        stale = (not isinstance(pid, int)) or (not _pid_running(pid)) or (age > ttl_seconds)
+        pid_source = data.get("pid_source", "self")
+        # pid-liveness is a signal ONLY for an entry whose pid was EXPLICITLY supplied by the
+        # caller (pid_source == "explicit") - that is a real, potentially long-lived process the
+        # caller vouches for. A "self" entry's pid is the short-lived writer process's own
+        # os.getpid(), which is gone by the time any other process checks it - using it as a
+        # liveness signal is exactly the dead-on-arrival bug this model fixes. "self" entries rely
+        # on TTL expiry plus an explicit release instead.
+        pid_dead = pid_source == "explicit" and (
+            (not isinstance(pid, int)) or (not _pid_running(pid))
+        )
+        stale = pid_dead or (age > ttl_seconds)
         if stale:
             entry_path.unlink(missing_ok=True)
             continue
@@ -218,7 +235,14 @@ def register(
     slot with a browser-automation lane. `max_heavy_lanes`, if given, overrides
     MAX_LANES_BY_CATEGORY[category]; otherwise the category's own default applies.
     """
-    pid = pid if pid is not None else os.getpid()
+    own_pid = os.getpid()
+    # pid_source records WHY this entry's pid should (or should not) be trusted as a liveness
+    # signal: "explicit" only when the caller passed a --pid that is not the writer process's own
+    # (a real, potentially long-lived process the caller vouches for); "self" when no pid was
+    # supplied, or the supplied pid IS the writer's own - the short-lived process writing this
+    # lock file, which will be gone long before anyone else checks it.
+    pid_source = "explicit" if (pid is not None and pid != own_pid) else "self"
+    pid = pid if pid is not None else own_pid
     lock_dir = resolve_lock_dir(lock_dir_override)
     cap = max_heavy_lanes if max_heavy_lanes is not None else MAX_LANES_BY_CATEGORY.get(
         category, MAX_HEAVY_LANES
@@ -252,11 +276,33 @@ def register(
     if not already_registered:
         own_path.write_text(
             json.dumps(
-                {"repo": repo, "pid": pid, "category": category, "started_at": time.time()},
+                {
+                    "repo": repo,
+                    "pid": pid,
+                    "pid_source": pid_source,
+                    "category": category,
+                    "started_at": time.time(),
+                },
                 indent=2,
             )
         )
         active_repos.append(repo)
+    else:
+        # Idempotent-refresh: a re-register of the same repo+pid+category is a heartbeat, not a
+        # no-op - it bumps started_at so a long lane's slot doesn't age past the TTL out from
+        # under it.
+        own_path.write_text(
+            json.dumps(
+                {
+                    "repo": repo,
+                    "pid": pid,
+                    "pid_source": pid_source,
+                    "category": category,
+                    "started_at": time.time(),
+                },
+                indent=2,
+            )
+        )
 
     return LockResult(allowed=True, active=active_repos)
 

@@ -30,6 +30,9 @@ All commands live directly in `.claude/commands/` — no subdirectories (except 
   log-work.md       prime.md         session-recap.md
   wrap-up.md        update-state.md  next.md
 
+  assess.md         seams.md         sequence.md
+  define-design-system.md            define-polish-standard.md
+
   breakdown.md      chore.md         generate-master-plan.md  generate-tasks.md
   generate-roadmap.md  plan.md       ticket.md
 
@@ -52,7 +55,9 @@ All commands live directly in `.claude/commands/` — no subdirectories (except 
 |---|---|
 | Session | `/prime`, `/session-recap`, `/next`, `/handoff`, `/wrap-up`, `/log-work`, `/archive`, `/capture` |
 | State | `/update-state` — how to safely edit `planning/state.json` per `state-schema.md` |
-| Planning | `/generate-roadmap`, `/generate-master-plan`, `/generate-tasks`, `/plan`, `/ticket`, `/chore`, `/breakdown` |
+| Pre-plan | `/assess`, `/seams`, `/sequence` |
+| UI foundations | `/define-design-system` (greenfield), `/define-polish-standard` (existing UI) |
+| Planning | `/generate-roadmap`, `/generate-tasks`, `/plan`, `/ticket`, `/chore`, `/breakdown` (`/generate-master-plan` is superseded by `/plan --founding`, D65) |
 | SDLC | `/implement`, `/test`, `/fix`, `/patch`, `/document`, `/update-docs`, `/conditional_docs`, `/process-tasks`, `/update-task`, `/review-task`, `/review-PR`, `/close-out` |
 | Git | `/commit`, `/init-worktree`, `/clean-worktree`, `/start-block`, `/merge-train` |
 | Orchestration | `/orchestrate`, `/begin-orchestration`, `/begin-session`, `/consolidate-run`, `/roadmap-status` |
@@ -95,9 +100,14 @@ predictably-named output file.
 | Session End | `/handoff [note]` | Write handoff + log work + commit; hands off to a fresh session | `planning/handoff.md`, status.md, log.md, git |
 | Session End | `/close-out [--base <ref>] [--gap-check-only] [--skip-coverage] [--clean-worktree \| --merge-branch] [note]` | Resolve diff base (loud-fail if none) → verify coverage → patch docs → clean worktree/merge branch (opt.) → hand off; the quality-close pipeline | status.md, log.md, docs/, git |
 | Block Setup | `/start-block [name]` | Flip a spec to `In progress` in status.md | status.md |
-| **1 — Roadmap** | `/generate-master-plan [desc]` | Author the full roadmap as canonical block definitions | `planning/master-plan.md` |
+| **0 — Pre-plan** | `/assess <topic>` | Fan out fresh recon agents, then a second fresh set to re-check the load-bearing claims | `planning/<slug>/assessment.md` · `verification.md` · `evidence/` |
+| **0 — Pre-plan** | `/seams <slug>` | Built/half-built/absent, attachment points with one writer per side, blast radius, one spike, the operator's forks | `planning/<slug>/seams.md` |
+| **0 — Pre-plan** | `/sequence <slug>` | Cut into ordered blocks that each ship something usable; owning repo per block | `planning/<slug>/sequence.md` |
+| **0 — UI (greenfield)** | `/define-design-system <desc> --surface <kind>` | Tokens, components and rules a new UI is built from; proved by building one real screen | `planning/<slug>/design-system.md` + emitted token/theme/component files |
+| **0 — UI (existing)** | `/define-polish-standard <desc> --surface <kind>` | The falsifiable standard a UI is judged against, calibrated until two reviewers agree | `planning/<slug>/polish-standard.md` |
+| **1 — Roadmap** | `/plan --founding` | A new project's founding roadmap — block records, not a hand-written master plan | `planning/founding/plan.md` + `planning/blocks/*.json` |
 | **1 — Plan** | `/generate-tasks <name>` · `/generate-tasks --from <path>` | Write the full task spec from a master-plan block, **or** from a standalone block file (`--from`) | `planning/<name>/tasks.md` |
-| **1 — Plan (ad-hoc)** | `/chore` · `/ticket` · `/plan <desc>` | Plan ad-hoc work from a free-text description (not a master-plan block) | `planning/<prefix>-<slug>/{tasks,plan}.md` |
+| **1 — Plan (ad-hoc)** | `/chore` · `/ticket` · `/plan <desc>` | Plan ad-hoc work from a free-text description (not a roadmap block). `/ticket` reproduces the failure first and orders the test before the fix; `/chore` takes a pre-change gate baseline | `planning/blocks/<BlockID>.json` + `planning/<BlockID>/tasks.json` — or `planning/<slug>/plan.md` for `/plan` |
 | **1 — Plan (opt.)** | `/breakdown <spec>` | Decompose spec into atomic, agent-executable sub-steps | `planning/<name>/breakdown.md` |
 | **2 — Implement** | `/implement <spec> [N]` | Execute every task (or task N) in the spec | `planning/<name>/sdlc/reports/[taskN-]implement.md` |
 | **2 — Hotfix** | `/patch` | Implement → validate → commit for low-risk single-file fixes; skips test/review/document | git history |
@@ -119,10 +129,36 @@ SESSION START
 BLOCK SETUP
   /start-block <spec>      → status.md
 
-PHASE 1 — PLAN
-  /generate-tasks <spec>                 → planning/<spec>/tasks.md
-        ↓  (optional)
+UI FOUNDATIONS             ← only when the work has a visual surface. Beside the pipeline.
+  new UI, nothing to read  → /define-design-system  → design-system.md + tokens/theme/components
+                                                      (proved by building one real screen)
+                                     ↓ emits
+  existing UI              → /define-polish-standard → polish-standard.md
+                                                      (calibrated: 2 agents, 1 screenshot, agree)
+  A new page in an existing app needs neither — it inherits both.
+        ↓ polish-standard.md is read by /assess's polish scout, or a UI /ticket's AC
+
+PHASE 0 — PRE-PLAN         ← existing system, cut not obvious. Skip for a known block.
+                           ← "|" = fresh session required.  "·" = same session continues.
+  /assess <topic>          → planning/<slug>/assessment.md + verification.md + evidence/
+      | fresh — /seams must be free to refute those classifications
+  /seams <slug>            → planning/<slug>/seams.md      (+ the operator answers its forks)
+      · same session
+  /sequence <slug>         → planning/<slug>/sequence.md
+      | fresh — a fresh reader of sequence.md IS the handoff test
+        ↓
+  one repo   → /plan             → planning/<slug>/plan.md + planning/blocks/*.json
+  many repos → /generate-roadmap --from planning/<slug>/sequence.md
+                                 → planning/roadmaps/<slug>/{roadmap.md,lane-*.txt,lane-log.jsonl}
+      | fresh, ONE PER LANE, held open for that lane's whole chain
+                                 → /begin-orchestration --roadmap ... --lane ... → /orchestrate
+
+PHASE 1 — PLAN             ← fresh session, ONE PER BLOCK
+  /generate-tasks <spec>                 → planning/<spec>/tasks.json (+ rendered tasks.md)
+        ↓  (optional — only if a task is genuinely coarse; same session)
   /breakdown planning/<spec>/tasks.md   → planning/<spec>/breakdown.md
+                                           (+ any executable correction written back to tasks.json)
+      | fresh — the engine runs in its own session
 
 PHASE 2 — IMPLEMENT
   /implement planning/<spec>/tasks.md [N]
@@ -151,51 +187,99 @@ PHASE 6 — WRAP-UP
   /log-work [notes]        → status.md, log.md
 ```
 
+### Session boundaries and models
+
+Every command in the planning chain ends with a **Session boundary** section telling the agent what
+to report to the operator on close. The map:
+
+| Command | Session | Model |
+|---|---|---|
+| `/assess` | own; ends | Opus main · Sonnet scouts + verifiers |
+| `/seams` | continues into `/sequence` | Opus · Opus red team |
+| `/sequence` | own; **ends hard** | Opus · Opus red team |
+| `/define-design-system` | own; the first feature runs fresh | Opus |
+| `/define-polish-standard` | own; calibration subagents spawned from it | Opus |
+| `/plan` | fresh; ends | Opus |
+| `/generate-roadmap` | fresh; ends | Opus |
+| `/generate-tasks` | fresh, **one per block** | Sonnet (Opus for breaking-surface blocks) |
+| `/breakdown` | with `/generate-tasks` | Sonnet |
+| `/chore` · `/ticket` | one session — authors **and** decomposes; the engine runs fresh | Sonnet; Opus for a subtle `/ticket` |
+| `/capture` | inline in whatever session found the thing — **never a subagent** | whatever is already running |
+| `/begin-orchestration` | fresh, **one per lane**, held open for the chain | Opus |
+| `/sdlc-task` · `/sdlc-flow` | fresh | per-engine — the engines tier their own internal agents (Sonnet on mechanical stages, Opus escalation on hard retries) |
+
+**Fresh** where the next step must be able to disagree with this one, or must prove an artifact
+stands alone. **Continuous** where the work is one sustained act of judgement. The `/sequence` →
+`/plan` \| `/generate-roadmap` break is the load-bearing one: a fresh session reading only
+`sequence.md` *is* the handoff test, performed rather than imagined.
+
+Model tier tracks **breadth held at once**, not importance — which is why `/generate-tasks`, the
+most rule-dense command in the harness, is correctly Sonnet: it reads one block record and the files
+that record names. Escalate it only when the block carries breaking public-surface changes or
+several un-gateable criteria.
+
+Full rationale: `docs/how-to-plan-with-agents.md` §11 in the brain repo.
+
 ### Argument Convention
 
-Every step from Phase 2 onward takes the same form: `planning/<name>/tasks.md [N]`
+Every step from Phase 2 onward takes the same form: `planning/<BlockID>/tasks.md [N]`
+
+That path is what the engines hand their agents as the spec document (`sdlc-task.js` and
+`sdlc-flow.js` both set `specFile = <blockDir>/tasks.md`). It is **not** what determines the work —
+the task loop is enumerated from `tasks.json`, and a missing or unparseable one hard-aborts the run
+(D16).
 
 Split on the last space. Trailing number = task N (scope to that task only). No number = full
-spec. Use the **same `N`** throughout the pipeline — it determines all report filenames at
-every step.
+spec. Use the **same `N`** throughout the pipeline — under the hand-invoked Phase 2–5 commands
+it determines every report filename (see Run Artifacts below).
 
 ### Directory Layout
 
-Each spec gets its own directory under `planning/`. All reports live in a `reports/`
-subdirectory alongside the spec:
+Each block gets its own directory under `planning/`, named exactly for its block ID. The block
+**record** lives separately in `planning/blocks/`, because it is the planning unit and outlives any
+one run (D65).
 
 ```
 planning/
-  <spec>/
-    tasks.md          ← spec (written by /generate-tasks)
-    breakdown.md      ← optional (written by /breakdown)
+  blocks/
+    <BlockID>.json    <- the block record: what/why/files/out_of_scope/AC. The authored unit.
+  <BlockID>/
+    tasks.json        <- THE EXECUTED TASK LIST. A bare array. Every engine reads this.
+    tasks.md          <- GENERATED from the record by scripts/render_spec.py. Never hand-edit.
+    breakdown.md      <- optional (written by /breakdown)
     sdlc/
-      reports/
-        implement.md         ← or task3-implement.md for task-scoped
-        test.md              ← or task3-test.md
-        review.md            ← or task3-review.md
-        document.md          ← or task3-document.md
-        workflow.md          ← or task3-workflow.md (written by /sdlc-run)
+      sdlc-<engine>-state.json   <- authoritative run state, committed
+      worklog.md                 <- human-readable trail, one section per task (D31)
+      reports/                   <- Phase 2-5 commands invoked by hand; plus gate baselines for the other engines
 ```
 
-### Report File Naming
+**The two files people confuse.** `tasks.json` is what runs — a bare array, never a
+`{"tasks": [...]}` wrapper. `tasks.md` is a rendered view of the block record that the engines hand
+their agents as the spec document; editing it by hand is silently discarded on the next render.
+Change the record and re-render. `BT.ticket.engines-read-block-record` retires `tasks.md` entirely
+once the engines read the record directly.
 
-Pattern: `[taskN-]{step}.md` inside `planning/<name>/sdlc/reports/`
+### Run Artifacts
+
+**`/sdlc-flow` and `/sdlc-task` do not write per-step reports.** D31 replaced the 5xN report files
+with one committed `sdlc-<engine>-state.json` plus one `worklog.md` — `sdlc-flow.js`'s own header
+says so. Their `sdlc/reports/` path survives only for gate baselines (`<slug>-baseline.json`,
+`<slug>-skip-baseline.txt`), not step output. Measured across the fleet: **0 `sdlc/reports/`
+directories exist; 18 `worklog.md` files do.**
+
+**The Phase 2-5 commands invoked by hand still write the report-per-step layout** below.
 
 | Step | Full-spec | Task-scoped |
 |---|---|---|
 | implement | `implement.md` | `task3-implement.md` |
-| fix | *(overwrites implement slot)* | *(overwrites implement slot)* |
+| fix | *(overwrites the implement slot)* | *(overwrites the implement slot)* |
 | test | `test.md` | `task3-test.md` |
 | review | `review.md` | `task3-review.md` |
 | document | `document.md` | `task3-document.md` |
-| workflow (sdlc-run) | `workflow.md` | `task3-workflow.md` |
-| workflow-review | `workflow-review.md` | `task3-workflow-review.md` |
 
-> **Note:** `/fix` writes to the same `implement.md` slot as `/implement` — it represents the
-> current state of Phase 2 work. Git history preserves prior versions.
+Pattern: `[taskN-]{step}.md` inside `planning/<BlockID>/sdlc/reports/`. `/fix` writes to the same
+slot as `/implement` — it is the current state of Phase 2 work, and git history holds the rest.
 
----
 
 ## Automated & Orchestrated Pipelines
 
@@ -205,39 +289,11 @@ unattended.
 
 | Workflow | Scope | Isolation |
 |---|---|---|
-| `/sdlc-run <name> [N]` | one task or a **full spec**, sequential | none — runs on the current branch, updates STATUS/Log directly |
 | `/sdlc-task <name> N` | **one** task, parallel-safe | own git worktree; defers STATUS/Log to merge time |
 | `/sdlc-flow <name> [range]` | a **full spec** on one shared branch, per-task test→fix loop, one end review, a PR | plain branch in the main tree (or `--worktree` for isolation); terminates in a PR |
-| `/sdlc-block [plan-file]` | a **whole roadmap** (master-plan) as a branch train — one `/sdlc-flow` per independent block, in dependency-ordered waves | each block its own worktree + PR; orchestrator owns the train branch and merges in dependency order |
 
 > **Full reference with mermaid diagrams, per-stage detail, and token usage:**
 > [`docs/workflows/`](../../docs/workflows/index.md) — one page per engine plus the manual lifecycle.
-
-### `/sdlc-block` — roadmap orchestration (branch train)
-
-**Drive a whole master-plan roadmap to completion in one invocation.** Fans out **one `/sdlc-flow` per
-independent block** over dependency-ordered waves, producing a **branch train of reviewable PRs**.
-Blocks in a wave are independent *by construction* (the master-plan's per-block **Files** + **Out of
-scope** contract). A **pre-flight** guarantees a clean tree with the plan committed and sets up the train
-branch off the base; **enumerate** parses the `## Phase N` / `### Block X` sections into blocks + a
-dependency graph. Per wave it ensures each block's `tasks.md`, fans out the child flows (each `--no-pr`),
-runs a **per-block close-out gap-check** (scoped to the whole block, `<train>...HEAD`), then opens the PR
-(default) or merges into the base (`--auto-merge`), advancing the train in dependency order. A final
-`/close-out --gap-check-only` runs over the full train. See
-[D34](../../planning/decisions/D34-adhoc-planning-seam.md).
-
-| Arg | Meaning | Default |
-|---|---|---|
-| `[plan-file]` | Optional 1st positional — a master-plan-format path, or a slug → `planning/<slug>/plan.md`. | `planning/master-plan.md` |
-| `--base <branch>` | Base branch the train forks from / merges into. | `main` |
-| `--auto-merge` | Merge each block into `<base>` in dependency order (no PRs). | off |
-| `--no-pr` | Branch train only — no PRs anywhere. | off |
-| `--max-parallel-blocks N` | Max `/sdlc-flow` runs in flight per wave (default from `harness.json` `block.maxParallelBlocks`). | `3` |
-| `--blocks <sel>` | Phase selection: `0`, `0-1`, `0,2` — only those phases' blocks run. | all phases |
-| `--resume` | Re-read `block-orchestration-state.json`, skip done blocks, continue. | — |
-
-After the train is built, review each PR with **`/review-PR <PR#>`** and land them bottom-up with
-**`/merge-train`** (below).
 
 ### `/review-PR <PR#> [plan-slug]`
 Spec-aware review for a branch-train PR. Locates the block's `block-orchestration-state.json`, checks
@@ -274,6 +330,10 @@ given), then applies the isolation policy — `base-template` is always `--workt
 edits the engines running it), the brain root is always `--no-worktree` (corpus gates cannot pass in
 a worktree) — before handing off. `--roadmap` is **required and never inferred**. Also enforces the
 heavy-gate concurrency cap, operator gates, and the same notes-file and decision-recording rules.
+At lane close it routes every still-`OPEN` lingering item to one of **three** homes rather than
+sweeping them all into `carryover[]`: operator-only work becomes an `operator` edge on the block it
+gates, permanently-true facts go to `reference[]`, and the rest becomes a `carryover[]` entry. This
+is the fleet's highest-volume misfiling point — a closing lane promotes four to six items at once.
 
 ### `/begin-session <session-slug> [--roadmap <path>] [--dry-run]`
 Drives one **operator session** — the unit for work an agent cannot do alone: a decision, a
@@ -315,12 +375,13 @@ finding correlation) — this answers what a roadmap's lanes are doing right now
 ## Session Orientation
 
 ### `/wrap-up [note]`
-Clean session close without a handoff. Drains any durable caveat into `carryover[]` first (full
-twelve-field shape — `slug`, `scope`, `kind`, `text`, `related?`, `clears_when?`, `priority?`,
-`blocks?`, `finding_id?`, `created`, `reviewed?`, `snoozed_until?`; only entries with a typed
-`clears_when` predicate are machine-evaluable by `mev carryover`), files any operator work as a
-graph edge rather than prose, then runs `/log-work` (syncs status.md + appends log entry) and
-`/commit`. Use this when you're done with a piece of work and don't need to hand off to a fresh
+Clean session close without a handoff. Routes anything durable to one of **three** homes before
+writing anything — operator-only work to an `operator` edge, permanently-true facts to
+`reference[]`, and only what is left to `carryover[]` (full twelve-field shape — `slug`, `scope`,
+`kind`, `text`, `related?`, `clears_when?`, `priority?`, `blocks?`, `finding_id?`, `created`,
+`reviewed?`, `snoozed_until?`; `kind` is one of `defect` / `deferred` / `drift` / `env` per HQ D72,
+and only entries with a typed `clears_when` predicate are machine-evaluable by `mev carryover`).
+Then runs `/log-work` (syncs status.md + appends log entry) and `/commit`. Use this when you're done with a piece of work and don't need to hand off to a fresh
 agent.
 
 ### `/handoff [note]`
@@ -332,13 +393,15 @@ remaining, first command for the next agent), then invokes `/log-work` and `/com
 `blocks[]`, `finding_id`, and the four typed `clears_when` predicates
 (`block_closed` / `file_exists` / `file_contains` / `command_exits_zero`) are what make an entry
 rankable, cross-repo-correlatable, and machine-evaluable by `mev carryover`; a prose `clears_when`
-lands it in the not-evaluable lane instead. **Anything left for the operator to decide, review,
-approve, or judge is filed as an `operator` (or `approval`) edge in `depends_on`, never written
+lands it in the not-evaluable lane instead. `kind` is one of `defect` / `deferred` / `drift` / `env`
+(HQ D72 — `constraint` and `known_issue` are retired). **Step 2b routes to three destinations, not
+two: anything left for the operator to decide, review, approve, or judge is filed as an `operator`
+(or `approval`) edge in `depends_on` — never as a `carryover[]` entry, and never written
 into the handoff's `## Open questions / choices` section as prose** — that section now names the
 slugs already filed, it does not hold decisions itself.
 
 ### `/close-out [--base <ref>] [--gap-check-only] [--skip-coverage] [--clean-worktree | --merge-branch] [note]`
-Quality-close pipeline for the end of an `sdlc-run` or `sdlc-flow` session. Runs **(0.5)**
+Quality-close pipeline for the end of an `sdlc-flow` or `sdlc-task` session. Runs **(0.5)**
 diff-base resolution before anything else: the emoji gate and the coverage sweep must scope to
 the **same** base, resolved from real evidence — an explicit `--base <ref>`, else
 `planning/harness.json`'s `flow.prBase`, else `origin/HEAD`, else a local `main`/`master` — never
@@ -397,9 +460,164 @@ it are `Done`), and returns a status table. Read-only.
 
 ---
 
+## Phase 0 — Pre-plan
+
+For work on an **existing** system where the cut is not obvious. Three commands, each writing one
+artifact that the next reads; `/sequence`'s output is the only input `/plan` or `/generate-roadmap`
+needs. Skip all three when you already know the block — go straight to `/ticket`, `/chore`, or
+`/generate-tasks`.
+
+The method behind them is `docs/how-to-plan-with-agents.md` in the brain repo — §1 for the arc,
+§8 for judging work a test suite cannot check, §11 for sessions and models. Its §1 states the
+whole arc as **six phases named by the question each answers** — assess, seams, sequence, author,
+decompose, evaluate — independent of these commands, which are one implementation of it. The rule
+that makes the phases work is that **each is forbidden from doing the next one's job**: an
+assessment may not propose a sequence, a seam map may not cut blocks, a sequence may not assign
+concurrency, an author may not re-cut. The operator decides at exactly two points, both blocking:
+the forks (after seams) and the cut (after sequence).
+
+**Phase 0 is optional; its floor is not.** `/plan` and `/generate-roadmap` both run fine with no
+pre-plan folder — short planning sessions should skip straight to them. But each carries a small
+inline **floor** for when Phase 0 was skipped: classify every capability the work *calls* rather
+than builds as built / half-built / absent, name the blast radius of each new attachment point, say
+what is deleted first, and (for a roadmap) name the single writer of every artifact two lanes touch.
+Answer them in proportion to the work — a sentence each for two blocks, a paragraph each for six.
+
+Each floor carries an **escalation trigger**: if the half-built question cannot be answered for
+something on the critical path, the command stops and recommends `/assess` rather than planning over
+the gap. That failure is invisible afterwards — it surfaces as a block sized as wiring that turns
+out to be a rewrite.
+
+| Command | Writes | Answers |
+|---|---|---|
+| `/assess <topic> [--slug <name>] [--areas "..."] [--depth quick\|standard\|deep]` | `planning/<slug>/assessment.md` · `verification.md` · `evidence/` | What is actually there, with proof, and which claims survived re-checking |
+| `/seams <slug> [--spike <n>]` | `planning/<slug>/seams.md` | Built / half-built / absent; what to reuse; what to delete; blast radius; the forks the operator must decide |
+| `/sequence <slug> [--single-repo]` | `planning/<slug>/sequence.md` | The cut into blocks, each shipping something usable, with owning repo and cross-repo contract author |
+| `/define-design-system <desc> --surface <kind>` | `planning/<slug>/design-system.md` + token/theme/component files | What a **new** UI is built from — tokens, a justified component inventory, the rules |
+| `/define-polish-standard <desc> --surface <kind>` | `planning/<slug>/polish-standard.md` | What "polished" means for an **existing** product, in items that can be failed by looking |
+
+### `/assess`
+Establishes ground truth first — builds, runs the gated checks, and **runs the subsystem once** if
+it can be run — then sweeps the fleet's own `carryover[]` / `decisions/` / `knowledge.md` /
+`memory.md` / `backlog.md` before spawning any scout, so nothing already filed is re-discovered as
+novel. Scouts get fresh context and narrow briefs, report **findings with `file:line` + symbol and
+never recommendations**, and always include a reuse scout and a deletion scout. A second, fresh set
+of agents then re-checks the load-bearing claims — **given claims, not conclusions** — and anything
+refuted is corrected **in `assessment.md` itself**, not only noted in `verification.md`.
+
+It produces evidence only. It may not propose a sequence, a wave, a block, or an estimate.
+
+**Session:** own session, ends with `/handoff`. **Model:** Opus main, Sonnet scouts and verifiers.
+`/seams` must run fresh so it is free to refute this document's classifications.
+
+### `/seams`
+The stage most often skipped and the one whose absence most reliably produces a plan that is
+coherent on paper and unbuildable in practice. Classifies every capability the work depends on as
+**built** (has a production call site), **half-built** (exists in source but has no caller, is
+behind a disabled flag, or was never run), or **absent** — half-built is where plans die, and the
+classification decides whether each is a wiring block or a rewrite. Then: the seam list with a
+**single named writer per side**, a blast radius per seam, one spike on the riskiest assumption
+(a smoke run of an existing path counts, and is always cheapest), the cross-cutting walk
+(migrations · flags · observability · error paths · auth · perf · concurrency · **install/deploy
+boundary** · rollback), and 2–4 forks stated as options plus a recommendation.
+
+**Session:** normally continues into `/sequence` — one sustained act of judgement, and the red team
+is fresh subagents anyway. Split only if the forks will take days to answer or the session is
+already long. **Model:** Opus, Opus red team.
+
+### `/sequence`
+Cuts by **deliverable, not by layer**. Every block is tested against *"what can the operator do the
+day this merges that they could not do the day before?"* — a block whose answer is "nothing yet" is
+merged into the block that consumes it. Blocks that make later work observable outrank blocks that
+add capability; deletions come before the extensions that would inherit them. Operator errands
+(a credential, a machine visit, a decision) are first-class blocks, not prose asides. Fork answers
+are recorded with dates before the cut, because an unresolved fork gets decided silently by
+whichever agent hits it first.
+
+**Session:** ends hard — `/plan` and `/generate-roadmap` always run fresh. This is the load-bearing
+break in the chain: a fresh session reading only `sequence.md` *is* the handoff test, performed
+rather than imagined. **Model:** Opus, Opus red team.
+
+### `/define-design-system` — greenfield UI
+For a UI that **does not exist yet**: a new client project, a new side project, a new app. Emits the
+artifacts the first screen is built from — design tokens as real files, a Tailwind or `ThemeData`
+config, a justified component inventory, the icon set — plus the rules that keep screen twenty
+consistent with screen one.
+
+Two things keep it honest. It **starts from the practice's settled stack** — Next 16 + React 19 +
+Tailwind 4 with CSS variables + **shadcn/ui** (`style: base-nova`, `baseColor: neutral`) + `lucide`,
+as built in `business/bastiel` and `client/jardins-fitness`, with the reference `components.json`
+inlined so a new project starts identical. Hand-rolling is the departure and needs a reason.
+
+Note *how* that precedent is chosen, because it generalises: **a pattern found in a codebase tells
+you what happened, not what was intended.** `learn-ai` and `bastion-web` are the largest frontends
+and are explicitly *not* the reference — one predates the practice's design-system discipline, the
+other deferred the decision and retrofitted a system later. The command says to ask the operator
+which projects are exemplary rather than infer a house standard from a majority, because inferring
+propagates an old mistake with a survey as its evidence.
+
+And **tokens come before components**, because a component that hardcodes a colour cannot be
+retuned.
+
+**The gate is building one real screen with it** — not a swatch page or a component gallery. Reaching
+for a value that is not in the scale means the scale is wrong; needing a component that is not in the
+inventory means the inventory is wrong or the screen is. What that forces gets folded back and
+recorded. A system never used to build anything is a wish.
+
+Component inventory is deliberately short: an entry earns its place only by appearing on ≥2 real
+screens or being a state container. It ends by emitting a polish standard, so the review path
+converges with the command below. **Escalation trigger:** if the product already has a discernible
+system, it stops — codify it with `/define-polish-standard` instead; a second system is a rewrite.
+
+> **A new page in an existing app needs neither command.** It inherits the system and is reviewed
+> against the existing standard. Both of these are for the uncommon case.
+
+### `/define-polish-standard` — existing UI
+Runs **beside** the pipeline rather than in it, whenever the work involves a UI — web, mobile, TUI
+or desktop. "Clean and polished" cannot be assessed against nothing: without a written standard you
+get opinions, opinions differ between reviewers, and opinions do not become blocks of work.
+
+It looks at the running product first (a standard written from general UI knowledge describes some
+other product), **derives the existing system rather than inventing one** — codifying the spacing
+and type scales the code already uses, cited to source — and writes items that can be **failed by
+looking**, each with a verdict procedure. "Spacing is consistent" is not an item; "vertical gaps are
+multiples of 8px, flag any that is not" is. It covers the five states where products are actually
+unpolished — loading, empty, error, offline, permission-denied — and carries a real Out of Scope
+section so a polish review cannot sprawl into a redesign.
+
+**Then it calibrates, and that step is the gate:** two fresh agents, one screenshot, compared item
+by item. Any item they read differently gets tightened and both re-run. An item that will not
+converge after two rounds is taste, not a standard — it moves to Out of Scope or escalates to the
+operator. **Escalation trigger:** if the product has no discernible existing system at all, it stops
+and says so, because a standard written over that gap fails every screen, which is discouraging
+rather than actionable — that is a design decision or a `/ticket`, not a polish pass.
+
+Feed the result to `/assess`'s polish scout, or use it as the acceptance-criteria source for a UI
+`/ticket`. **Session:** one session, calibration subagents spawned from it; whatever reviews the UI
+runs fresh. **Model:** Opus — judging consistency across a whole product's screens is exactly the
+breadth-held-at-once case.
+
+---
+
 ## Phase 1 — Plan
 
 ### `/generate-roadmap <slug> [--from <path> ...] [--supersedes <path>]`
+**Pre-plan input (Step 1b).** A `sequence.md` passed via `--from` is handled differently from every
+other source: it is an **authored cut**, not a body of findings, so it is carried through rather
+than re-derived — wave headings become the outcomes, wave exit lines become the Definition of done
+verbatim, `candidate` blocks become Wave 0, cross-repo contracts become cross-lane edges, operator
+errands become the operator lane, and `seams.md`'s blast radius lands in the lane files' `#`
+comments where it is read at execution time. `SQ-nn` refs make the coverage crosswalk a one-liner.
+Any departure from the authored cut must be stated with a reason, and the operator's fork answers
+may not be silently re-decided. What this command still owns: lane assignment, the heavy budget,
+isolation, Wave 0 mechanics and both crosswalks — `/sequence` decides *what* and *in what order*,
+this decides *who runs it concurrently without colliding*.
+
+**Session:** fresh (reading only `sequence.md`), and it ends without running anything. Each lane is
+then **one fresh Opus session per repo, held open for that lane's whole chain** — the lane agent is
+the single writer for its repo and carries block 1's lessons into block 7. Never two lanes in one
+session. **Model:** Opus throughout.
+
 Authors the two things `/begin-orchestration` consumes: a **roadmap document** and one
 `lane-<name>.txt` chain file per lane, written to `planning/roadmaps/<slug>/` and registered as an
 epic's `plan:` pointer. A roadmap is a *concurrency plan* — an assignment of work to
@@ -412,7 +630,7 @@ in a worktree with propagation **deferred** to an operator gate; `[*]` blocks mu
 region is the only status surface and no wave table may be authored beside it; and the **Definition
 of Done must be written as observations with commands, not as blocks closed** — the failure that
 left a previous roadmap 30/53 closed with an undeployed demo and an unverified funnel. Authors only;
-never runs `/orchestrate`. Sits above `/generate-master-plan`, which scopes to one repo.
+never runs `/orchestrate`. Sits above `/plan`, which scopes to one repo.
 
 **Runs only from HQ (the brain root) — single-copy, does not sync downstream.** Step 1A resolves
 `BRAIN_ROOT` and requires it: "a roadmap spanning repos cannot be authored from inside one of them."
@@ -421,29 +639,65 @@ from every sync target, HQ included, so it stays the one copy at `base-template/
 rather than fanning out to all 17 leaf repos where it has no meaning. Decision + rationale recorded
 in `planning/ticket-generate-roadmap-command/review.md`.
 
-### `/generate-master-plan`
-Authors (or revises) `planning/master-plan.md` — the roadmap source of truth — as a sequence of
-canonical **block definitions** (`## Phase N` → `### Block X`, each with What / Why / Build notes /
-Acceptance criteria) whose phase/block headers `/generate-tasks` can parse directly. Turns a
-free-form planning session into the structure the rest of Phase 1 expects. `/new-project` should call
-this as its post-scaffold roadmap step. See `planning/decisions/D34-adhoc-planning-seam.md`.
+### `/generate-master-plan` — superseded (D65)
+**Authors nothing.** `master-plan.md` is now **generated** from the block graph in `state.json`, not
+hand-written, and a project's founding roadmap is authored by `/plan --founding`. The command file
+remains only to redirect. Do not hand-write or hand-edit a `master-plan.md`; if one looks stale, run
+`mev emit-state --write` and let it regenerate.
 
 ### `/generate-tasks`
-Reads the relevant section of `planning/master-plan.md`, writes a full task spec to
-`planning/<name>/tasks.md`, and **commits it** (clean tree for downstream `/sdlc-block`).
-Each spec carries a **Validation Commands** block and ends with a Validate task.
+Reads **`planning/blocks/<BlockID>.json`** — the authored block record (D65), *not* `master-plan.md`,
+which is a generated view and gets you a stale summary. Writes the executable task list to
+`planning/<name>/tasks.json`, renders the prose `tasks.md` from the record via
+`scripts/render_spec.py` (generated — never hand-edit), and **commits** for a clean downstream tree.
 
-**`--from <path>` mode** decomposes a single **standalone block file** (e.g. a `/plan` output)
-instead of a master-plan block — for ad-hoc / experimental features kept out of the roadmap. It
-derives the slug from the file's parent directory and writes `tasks.md` beside the source, then runs
-the identical decomposition / pipeline-recommendation logic. The default master-plan slug mode is
-unchanged.
+**Before writing any task it reads the actual source the record names** — real function names,
+signatures and sibling patterns. A file named as modified that does not exist means the record is
+wrong, and the command stops rather than emitting a task against a path that is not there.
+
+Three checks can **fail** the command and force a revision in place: **compilable task boundaries**
+(under `/sdlc-flow` and `/sdlc-task` every task must leave the gating suite passing, so a breaking
+public-surface change may never be split — the tasks merge, not the constraint); **un-gateable
+acceptance criteria must be declared** (D64 — evidence living in another process, another repo, a
+generated artifact, or an **installed** artefact needs a named failing command or a fixture-evidence
+task); and **never fabricate a load-bearing fact** (ask interactively, abort with specifics in a
+preflight context).
+
+The commit lands **after** the self-check, the decomposition assessment and the pipeline
+recommendation — all three can require a revision, so committing earlier means committing a draft.
+The report names the engine command the recommendation actually chose; `/breakdown` appears only
+when a task was flagged for it.
+
+**`--from <path>` mode** decomposes a single standalone block file (e.g. a `/plan` output) instead
+of a block record — for ad-hoc / experimental features kept out of the roadmap. Slug comes from the
+file's parent directory.
+
+**Session:** fresh, **one per block** — never decompose the next block in the same session, because
+its tasks depend on this block's code, which does not exist yet (D65). **Model:** Sonnet; Opus when
+the block carries breaking public-surface changes or several un-gateable criteria. The engine then
+runs fresh again.
 
 ### `/breakdown`
 Reads a task spec and the source files each step touches, then writes a granular
 `breakdown.md` — every sub-step atomic (one file, one change, one command). Both `/implement`
 and `/fix` auto-detect this file and use the matching `### Step N:` section as the primary
 execution guide (HOW); `tasks.md` stays authoritative for scope (WHAT).
+
+**Only `tasks.json` is executed.** No engine parses `breakdown.md`, so a breakdown changes what an
+implementer *knows*, never what the engine *runs*. If the decomposition should change what gets
+executed — a task split in two, a merge forced by a breaking public-surface change, a new
+`dependsOn` edge, a wrong `files[]` — that correction must be **written back into `tasks.json`**
+and recorded in the breakdown's `## tasks.json changes` section. A breakdown that quietly disagrees
+with the JSON is worse than no breakdown: the engine follows the JSON and the reviewer follows the
+prose.
+
+It also **verifies every symbol it names actually exists** before committing (anything unresolved is
+either explicitly marked as created by the sub-step, or a mistake), and applies a **coarseness
+floor** — the same heuristic `/generate-tasks` uses at authoring time — so an already-atomic spec is
+reported as such instead of being restated at greater length.
+
+**Session:** runs inside `/generate-tasks`' session (same spec, same source, and it writes back to
+`tasks.json` — one writer). **Model:** Sonnet. The engine runs fresh.
 
 ### Pre-planning capture — `/capture`
 
@@ -455,9 +709,30 @@ pointer ticket to the brain's `planning/backlog.md`.
 |---|---|---|
 | `/capture <title>` | Rich pre-plan notes — detailed enough to need a file, not yet a plan | `planning/<slug>/notes.md` + brain backlog |
 
+Captures are read weeks later with none of the originating context, and read as fact unless they
+say otherwise — so every substantive claim is tagged **VERIFIED** (read in source or observed
+running, with the symbol named) · **ASSUMED** (believed, not checked, with what would check it) ·
+**SAID** (stated by someone, unconfirmed). A `## Provenance` block pins the date and each repo's
+SHA, so a later reader can tell in one command whether the note still describes the system that
+exists. Open Questions are each labelled READ · SPIKE · ASK · ASSESS, which is what decides where
+the note goes next — an ASSESS entry means the next step is `/assess`, not a plan.
+
+**A capture is not an assessment and must not be promoted as one.** It is cheap precisely because
+it is mostly unverified; the tags are what keep that legible.
+
 The notes file sections (What & Why · Context & Background · Key Information · Open Questions ·
-Rough Scope) are designed as direct input to the planning commands below — paste conversation
-content in, then promote with `/plan`, `/chore`, or `/generate-master-plan` when ready.
+Rough Scope · Provenance) are direct input to the commands below. **Where a note goes next is
+decided by its Open Questions, not by its size:**
+
+| Open Questions are mostly | Promote with |
+|---|---|
+| READ or ASK, and the unit of work is clear | `/ticket` or `/chore` |
+| READ or ASK, several blocks in one repo | `/plan` |
+| SPIKE — one assumption is load-bearing and unsettled | Settle the spike first, then promote |
+| ASSESS, or "what does this call that it does not build" came back *unknown* | `/assess <topic>` — the shape of the work is not yet known |
+
+**Session:** inline only, no subagent — a subagent cold-starts with none of the conversation the
+capture exists to preserve. **Model:** whatever the session is already running.
 
 ### Ad-hoc planners — `/chore`, `/ticket`, `/plan`
 
@@ -465,17 +740,57 @@ Entry points into Phase 1 for work that **isn't** a master-plan block. Each take
 description, researches the codebase, and writes a spec into its own `planning/<dir>/` directory.
 Output feeds the rest of the pipeline unchanged.
 
-| Command | Use for | Writes to |
-|---|---|---|
-| `/chore <description>` | Maintenance / housekeeping (no behavior change) | `planning/chore-<slug>/tasks.md` |
-| `/ticket <description>` | Bug fix or targeted enhancement that requires tests + observable AC | `planning/ticket-<slug>/tasks.md` |
-| `/plan <description>` | Any ad-hoc or experimental feature — mini-roadmap format | `planning/plan-<slug>/plan.md` |
+| Command | Use for | Writes to | Escalates to |
+|---|---|---|---|
+| `/chore <description>` | Maintenance / housekeeping — no behavior change | `planning/blocks/<Prefix>.chore.<slug>.json` + `planning/<BlockID>/tasks.json` (+ rendered `tasks.md`) | `/ticket`, if it turns out to change behavior |
+| `/ticket <description>` | Bug fix or targeted enhancement requiring tests + observable AC | `planning/blocks/<Prefix>.ticket.<slug>.json` + `planning/<BlockID>/tasks.json` (+ rendered `tasks.md`) | `/plan` on size · `/assess` when the behavior can't be reproduced or the half-built question can't be answered |
+| `/plan <description>` | Any ad-hoc or experimental feature — several blocks in one repo | `planning/<slug>/plan.md` + `planning/blocks/*.json` | `/generate-roadmap` if it spans repos · `/assess` per its own floor |
+
+`/chore` and `/ticket` are the **one-session** commands: they author the block record *and* its
+task list in the same pass, because a one-off has no downstream block waiting on its code and so
+nothing to defer (D65). `tasks.md` is rendered from the record by `scripts/render_spec.py` — never
+hand-written.
+
+**`/chore` and `/ticket` carry the pre-plan floor at their own scale.** **`/ticket`** reproduces the failure before
+writing a single Acceptance Criterion — a ticket written from a *described* bug fixes the
+description — records the real error text in the block record, and orders the test **before** the
+fix so the gate is shown capable of failing (D68, red-green). **`/chore`** takes a pre-change gate
+baseline, since "no behaviour change" cannot be claimed against a baseline never taken, and must
+carry at least one criterion that observes a *difference* — "the gates still pass" is true of doing
+nothing. Both ask the half-built question (does this call something that merely exists in source?)
+and both have an escalation trigger: `/ticket` stops when the behaviour cannot be reproduced or the
+half-built question cannot be answered; `/chore` stops when the work turns out to change behaviour,
+which makes it a ticket.
+
+**Session:** both author *and* decompose in one session — that is the point of the lean lane, and
+the work is small enough that the record-stands-alone property is cheap to satisfy directly. The
+engine then runs fresh. **Model:** Opus for `/ticket` when the failure is subtle; Sonnet otherwise
+and for most chores.
 
 `/chore` and `/ticket` write a runnable `tasks.md` **directly** and route to lean `/sdlc-task`
 (the fast path). `/plan` writes a `plan.md` in the **master-plan format** (phases/blocks/Quick
-Reference table), so `/sdlc-block` can orchestrate it as a branch train or `/generate-tasks --from
+Reference table), so `/orchestrate` can drive it as a branch train or `/generate-tasks --from
 planning/plan-<slug>/plan.md` can decompose a single block into a `tasks.md` → `/sdlc-flow`, all
 **without** touching `master-plan.md`. See `planning/decisions/D34-adhoc-planning-seam.md`.
+
+`/plan` reads **`planning/<slug>/sequence.md`** when Phase 0 has run, and carries its cut, wave
+boundaries, `ships` lines, `depends_on` edges, named files and recorded fork answers through rather
+than re-deriving them — a silent departure means the seam analysis was done and then ignored, so any
+departure has to be stated in the Sequencing Rationale with a reason. Where `assessment.md` and
+`verification.md` disagree, **verification wins**, and no claim it marked REFUTED may reach a block
+record.
+
+Its self-check carries three properties beyond the structural ones, each of which can **fail** the
+plan: **ships alone** (a block record whose `why` reads "enables <later block>" gets merged into the
+block that consumes it), **every block names the gate that proves it** plus — per D68 — how that gate
+is shown capable of *failing*, and a **handoff test** on the first runnable block (could a fresh
+agent start from that record alone, without asking a question?). A fresh-agent adversarial pass then
+attacks the sequencing, because step 9 is self-review by the context that wrote the plan. `--no-redteam`
+skips it for small, low-risk initiatives.
+
+**Session:** fresh, and it ends. `/generate-tasks` reads **only** the target block's record — running
+it in the planning session would let it lean on narrative context the record does not carry, and the
+record's incompleteness would never surface. **Model:** Opus.
 
 ---
 
@@ -557,11 +872,10 @@ Finds the target spec (defaulting to the first non-done spec), checks that all p
 are `Done`, then flips it to `In progress` and updates Current focus + Last updated.
 
 ### `/init-worktree` · `/clean-worktree`
-Manual entry points for the isolated-worktree lifecycle that `/sdlc-task` and `/sdlc-block`
+Manual entry points for the isolated-worktree lifecycle that `/sdlc-task` and `/orchestrate`
 automate. `/init-worktree` derives a branch/worktree from the spec slug and creates an isolated
 sparse checkout; `/clean-worktree` **merges before delete** — fast-forward-merges the branch
-into `main`, applies deferred STATUS/Log updates, then removes the worktree. Do **not** run
-`/clean-worktree` for `/sdlc-block` tasks — that orchestrator merges each wave for you.
+into `main`, applies deferred STATUS/Log updates, then removes the worktree.
 
 ### `/update-docs [--patch] [--since <ref>]`
 Documentation health sweep — audits all `docs/` files and `.claude/commands/README.md` against

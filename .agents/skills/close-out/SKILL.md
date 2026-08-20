@@ -162,7 +162,11 @@ verbatim — it already states what to do (pass `--base <ref>`, or run from the 
 
 Read `planning/harness.json`. Run every check listed in `validation.checks[]` in order
 (lint, type, test, build). Then always run the universal emoji gate last, scoped to the range
-resolved in Step 0.5:
+resolved in Step 0.5. This site stays on the **base-ref range** by design, not the run-state-scoped
+commit-SHA form used by `sdlc-task.js`/`sdlc-flow.js`: `/close-out` runs after the SDLC run has
+already finished, against a feature branch cut from the base (or the in-place `base_sha` fallback),
+with no live run-state and no shared-branch concurrent-session window to be exposed to
+(BT.ticket.emoji-gate-diff-window-concurrent-sessions):
 
 ```bash
 python3 - "$(cat .git/CLOSE_OUT_RANGE)" <<'PYEOF'

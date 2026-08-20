@@ -46,9 +46,9 @@ Each of these exists because it has already caused a real failure in this fleet.
    conflict resolution — runs **inline in this session**.
 
    If you find yourself about to write code for a block ID, stop: that is an engine's job.
-2. **Only `sdlc-task` and `sdlc-flow`.** If `/generate-tasks` recommends `/sdlc-run` or
-   `/sdlc-block`, stop and report — those have different isolation and merge semantics than this
-   command handles.
+2. **Only `sdlc-task` and `sdlc-flow`.** These are the only two engines `/generate-tasks` may
+   recommend; if it recommends anything else, stop and report — this command only handles their
+   isolation and merge semantics.
 3. **One repo per session, one engine run at a time.** Both engines take the repo's branch or
    working tree. Never launch a second engine workflow in the same repo before the first has
    completed and integrated.
@@ -207,7 +207,7 @@ unrelated lane's uncommitted files.
   output, a handful of files). Cheapest rung. In place, no review, no PR.
 - **`sdlc-flow <spec-slug>`** — a whole spec wanting a consolidated review, a docs pass, and a PR.
   The default for anything not clearly small.
-- Recommends `sdlc-run`/`sdlc-block` → stop and report (rule 2).
+- Recommends anything else → stop and report (rule 2).
 
 **Isolation.** Both engines default to plain-branch/in-place; `--worktree` opts into an isolated
 sparse-checkout worktree. Worktrees are **safe in brain-vaulted repos** — the engines detect a
@@ -250,12 +250,24 @@ that category:
 `python3 <path-to-base-template>/scripts/fleet_concurrency_check.py register --repo <name> --category <category>`.
 Exit code `3` (or `"allowed": false` in the JSON output) means that category's pool is already at
 capacity (`MAX_LANES_BY_CATEGORY`: 2 browser-automation, 4 native-build) — put this repo on a
-cheap-gate block instead, or wait. Release the slot when the heavy repo's chain finishes:
-`... release --repo <name>`. A stale entry (a killed lane, or one past the TTL) expires
-automatically on the next registration, so a dead lane never blocks the fleet permanently. If the
-lock store itself is unavailable (no brain root found, unwritable), the script reports
-`"degraded": true, "allowed": true` — same as today's unenforced-prose behavior, not a new way to
-fail. See `planning/decisions/D61-fleet-concurrency-enforcement.md` and
+cheap-gate block instead, or wait.
+
+**Do not pass `--pid`.** The process running `register` is the short-lived Claude Code command
+invocation itself — it exits as soon as this step returns, so its own pid is never a valid
+liveness signal for a later process to check. Leave `pid_source` at its default (`"self"`); the
+entry is then held by **TTL (90 minutes) plus explicit release only**, never by pid liveness. If a
+heavy chain runs longer than that, **re-register periodically as a heartbeat**
+(`... register --repo <name> --category <category>` again) — registration is idempotent-refresh,
+so the same repo+category bumps `started_at` instead of consuming a second slot.
+
+**The lane MUST release its slot on exit** — success, failure, or abandonment — with
+`... release --repo <name>` when the heavy repo's chain finishes. A stale entry (one past the TTL,
+or one with an *explicitly*-supplied `--pid` that has died) is swept automatically on the next
+registration, so a lane that dies without releasing does not block the fleet permanently — but
+release on exit is still required, since TTL is the fallback, not the norm. If the lock store
+itself is unavailable (no brain root found, unwritable), the script reports `"degraded": true,
+"allowed": true` — same as today's unenforced-prose behavior, not a new way to fail. See
+`planning/decisions/D61-fleet-concurrency-enforcement.md` and
 `planning/decisions/D66-tiered-heavy-lane-concurrency.md` for the full design.
 
 ### 6. Launch the engine — do not wait idly

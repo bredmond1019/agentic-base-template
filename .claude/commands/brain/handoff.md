@@ -39,12 +39,26 @@ leave it living only in the prose below:
 
 - **Committed, sequenced work** with real dependencies → a `tracks[].blocks[]` block in the target repo.
 - **Free-floating ideas/chores** not on a critical path → HQ `backlog[]` (via `/backlog-ticket`).
-- **Durable caveats, known-issues, environmental notes, and not-yet-ticketed deferred follow-ons** →
-  append a `carryover[]` entry to `planning/state.json`. This is the in-between lane the other two miss:
-  - `kind: constraint` — a rule the next agent must honor (e.g. "rename must be brain+leaf atomic").
-  - `kind: known_issue` — a don't-re-investigate fact (e.g. "~1750 dangling errors are pre-existing").
-  - `kind: env` — a transient environmental caveat (e.g. "installed binary is stale, rebuild first").
+- **Work only a human can do** — a decision only the operator can make, a credential only they hold,
+  a judgement call, a thing they must look at → an `{"type":"operator", ...}` edge on the block it
+  gates, per the operator-work rule below. **Ask this before reaching for `carryover[]`**, because
+  the two look alike at write time and behave nothing alike afterwards: a carryover entry gates
+  nothing, so operator work parked there is never forced. Measured 2026-08-19 — **30 of the fleet's
+  202 `carryover[]` entries are operator work misfiled this way.**
+- **Permanently-true facts** — a gotcha still true next month, a deliberate non-fix nobody intends to
+  reverse, a load-bearing measured number → `reference[]`, not `carryover[]`. The signal is a finding
+  with no `clears_when` because nothing will ever make it stop being true.
+  See `docs/state/reference-container-schema.md`.
+- **Durable caveats, environmental notes, drifted surfaces, and not-yet-ticketed deferred follow-ons** →
+  append a `carryover[]` entry to `planning/state.json`. This is the in-between lane the others miss —
+  work-class findings that eventually clear. The kind vocabulary is exactly four (HQ D72):
+  - `kind: defect` — a real unticketed bug with a fix, not yet filed as its own block.
   - `kind: deferred` — a real follow-on you haven't ticketed yet; promote it to a block/backlog when ready.
+  - `kind: drift` — a doc, comment, block title or generated surface out of step with the code or graph.
+  - `kind: env` — a transient environmental caveat (e.g. "installed binary is stale, rebuild first").
+
+  `constraint` and `known_issue` are **retired** — D72 removed them and okf-core now preserves them
+  only through its `Unknown(String)` fallback. Do not mint new entries with either.
 
   Follow the `carryover[]` field shape in `docs/state/state-schema.md` — the authoritative table — for
   the required core (`slug`, `scope`, `kind`, `text`, `created`) plus the optional fields worth naming

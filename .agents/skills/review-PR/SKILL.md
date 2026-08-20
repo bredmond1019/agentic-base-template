@@ -98,7 +98,11 @@ block can be found, do **not** silently APPROVE — run no gating checks, record
 found", and downgrade the verdict to COMMENT (never APPROVE) so a human runs the checks.
 
 Then always run the emoji gate last, diffing from the merge-base so only the PR's own
-changes are scanned:
+changes are scanned. This site stays on the **base-ref (merge-base) range** by design, not the
+run-state-scoped commit-SHA form used by `sdlc-task.js`/`sdlc-flow.js`: `/review-PR` reviews a
+finished PR branch cut from `main`/`origin/main`, with no live run-state to scope by and no
+shared-branch concurrent-session window to be exposed to
+(BT.ticket.emoji-gate-diff-window-concurrent-sessions):
 
 ```bash
 python3 - <<'PYEOF'
