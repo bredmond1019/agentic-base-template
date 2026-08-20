@@ -57,7 +57,7 @@ flowchart TD
     roadmap --> orch["/orchestrate<br/>roadmap → one /sdlc-flow per block"]
     orch --> flow
 
-    flow -. "open PR (default)" .-> pr["PR — /review-PR → /merge-train"]
+    flow -. "open PR (default)" .-> pr["PR — /review-PR → merge"]
     orch -. "PR per block" .-> pr
 
     classDef engine fill:#1f2937,stroke:#60a5fa,color:#e5e7eb;
@@ -216,7 +216,7 @@ each engine's committed state file — check the state JSON for real figures fro
 - **[commands.md](commands.md)** — the manual command lifecycle the engines automate (Phase 1 → 7).
 
 > A whole roadmap is driven by `/orchestrate` / `/begin-orchestration` (one `/sdlc-flow` per block,
-> branch train of PRs, `/review-PR` → `/merge-train`) — see
+> branch train of PRs, `/review-PR`) — see
 > [`.claude/commands/README.md`](../../.claude/commands/README.md); block-level roadmap orchestration
 > no longer has a dedicated engine of its own (D39 superseded).
 

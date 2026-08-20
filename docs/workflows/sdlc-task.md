@@ -203,9 +203,9 @@ that command as part of bookkeep, so `focus.next` is current by the time the run
 unsafe), so `focus.next` is left pointing at the pre-close state after the branch's own commits —
 this is a deliberate deferral, not a bug, and the engine's own log line states it explicitly
 (`"focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree or
-/merge-train runs mev emit-state --write."`) rather than silently leaving it stale. Since
+/clean-worktree runs mev emit-state --write."`) rather than silently leaving it stale. Since
 `--worktree` is the default mode for isolated `/sdlc-task` runs, treat a freshly-merged worktree
-branch's `focus.next` as stale until the merge step (`/clean-worktree` or `/merge-train`) has run
+branch's `focus.next` as stale until the merge step (`/clean-worktree`) has run
 `mev emit-state --write` on the base.
 
 ---

@@ -82,9 +82,7 @@ Examples:
 
 ## Record (worklog + state, not a prose report)
 
-No prose report file. Both `sdlc/worklog.md` and `sdlc/state.json` are **write-only artifacts**
-(never `git add`/`git commit` them — `planning/` is a D46 vault symlink in a vaulted repo, so
-committing under it can fail "beyond a symbolic link"; they're read back off disk only). Doc file
+No prose report file. Both `sdlc/worklog.md` and `sdlc/state.json` are **committed**, exactly as the engines commit theirs — in a vaulted repo through the REAL vault path (`git -C <vault>/planning ...`), never through the `planning/` symlink face, which aborts the whole `git add` with "beyond a symbolic link" (D46). Doc file
 edits themselves (under `docs/`) are ordinary source changes and still get committed normally per
 the spec's own instructions.
 

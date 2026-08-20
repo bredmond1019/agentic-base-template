@@ -344,6 +344,7 @@ AGENT_SKILL_SLUGS: list[str] = [
 # Both are deliberately path-portable: they carry a "paths are relative to the brain root" banner
 # instead of repo-relative links, because a ../../../ link is correct in exactly one of 17 repos.
 CLAUDE_SKILL_SLUGS: list[str] = [
+    "report-to-the-operator",
     "write-okf-markdown",
     "edit-state-json",
     "commit-in-this-fleet",

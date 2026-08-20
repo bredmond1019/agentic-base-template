@@ -234,6 +234,7 @@ class MirroredSkillBodiesMatch(unittest.TestCase):
     makes the documented rules false. This test is what catches that."""
 
     MIRRORED = [
+        "report-to-the-operator",
         "write-okf-markdown",
         "edit-state-json",
         "commit-in-this-fleet",
