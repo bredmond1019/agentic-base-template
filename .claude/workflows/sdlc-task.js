@@ -1846,7 +1846,27 @@ Return via StructuredOutput:
 // FINAL STATE COMMIT + SUMMARY
 // ================================================================
 const passedTasks = taskList.filter(n => state.tasks[String(n)]?.status === 'passed' || passedFromState.has(n))
-const fullRun = !selectedTasks   // no explicit selection = every task in the spec ran
+const fullRun = !selectedTasks   // no explicit selection = every task in the spec ran; still used to gate
+                                  // the once-per-full-run reconcile step below (D56) — unaffected by this ticket.
+
+// BT.ticket.resume-cannot-close-its-block: the close decision is derived from every task in the
+// SPEC (allTasks), never from taskList (which is the SELECTED subset when a range/task was passed —
+// see :1212). Comparing against taskList made `passedTasks.length === taskList.length` trivially
+// true on a subset run, so `fullRun` (a proxy for "was a selection passed?") was the only thing
+// preventing a wrong close; comparing against allTasks makes the condition honest on its own and a
+// "was a selection passed?" proxy is no longer needed for it. This is safe now — and was NOT safe
+// before — because BT.ticket.sdlc-task-resume-truncates-run-state (closed 2026-08-20) made
+// state.tasks survive a --resume, so passedAll no longer leans on passedFromState (the git-derived
+// scout) as anything but the augment D37 says it must always be, not a load-bearing replacement.
+const passedAll = allTasks.filter(n => state.tasks[String(n)]?.status === 'passed' || passedFromState.has(n))
+const outstandingTasks = allTasks.filter(n => !passedAll.includes(n))
+
+// sdlc-flow.js audited 2026-08-20: it has NO fullRun/blockDone-shaped proxy to fix. It never
+// computes a single close boolean in code — the bookkeep/PR agent prompt (sdlc-flow.js:~2335) is
+// handed `selectedTasks` and `taskList` directly and told in prose to judge "if tasks remain, keep
+// status In progress ...; if this was the last, flip to Done", i.e. the "was every task passed"
+// judgment already happens per-run rather than being gated by a proxy for "was a selection passed".
+// So the defect this ticket fixes does not reproduce there, and sdlc-flow.js is left unchanged.
 
 // ----------------------------------------------------------------
 // PHASE 2.5: TERMINAL AUTHORITATIVE RECONCILE (D56) — after every task passes, before bookkeep.
@@ -1936,7 +1956,7 @@ if (reconcileFailed) state.bail_reason = `Terminal reconcile failed (D56): ${rec
 // Skipped entirely on a bail or a reconcile_failed (the block is not done) and on a partial task
 // selection (can't close the block).
 // ----------------------------------------------------------------
-const blockDone = !bailed && !reconcileFailed && fullRun && passedTasks.length === taskList.length
+const blockDone = !bailed && !reconcileFailed && passedAll.length === allTasks.length
 let bookkeepResult = null
 if (!bailed && !reconcileFailed) {
   // D46: when planning/ is a vaulted symlink, ${specFile}, planning/status.md, and planning/state.json
@@ -1955,7 +1975,8 @@ Target:
   Spec:        ${blockId}
   Tasks run:   ${taskList.join(', ')}  (passed: ${passedTasks.join(', ') || 'none'})
   Full spec run: ${fullRun ? 'yes (every task in the spec)' : 'no (a task subset — do NOT close the block)'}
-  Block done:  ${blockDone ? 'yes — the whole spec is complete this run' : 'no — keep the block open/in-progress'}
+  Spec-wide:   ${passedAll.length}/${allTasks.length} tasks passed across all runs${outstandingTasks.length ? ` | outstanding: ${outstandingTasks.join(', ')}` : ''}
+  Block done:  ${blockDone ? 'yes — every task in the spec has passed' : `no — keep the block open/in-progress (outstanding: ${outstandingTasks.join(', ') || 'none, but bailed/reconcile_failed this run'})`}
 
 1. Read the surfaces:
    cd ${runDir} && cat ${specFile}

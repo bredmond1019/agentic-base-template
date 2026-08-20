@@ -534,7 +534,13 @@ check from the per-task list entirely.
 
 Skip this entire step if the run bailed OR Step 3.5 set `reconcileFailed = true`. Otherwise:
 
-- `blockDone` = true iff `fullRun` AND `!reconcileFailed` AND every task in `taskList` passed.
+- `blockDone` = true iff `!reconcileFailed` AND every task in `allTasks` (the FULL spec, not
+  `taskList`, which is only this run's selected subset) has passed — comparing against `taskList`
+  would be trivially true on a subset run, so this is derived from `allTasks` and no longer gated by
+  `fullRun` (BT.ticket.resume-cannot-close-its-block). This is only safe because `state.tasks`
+  survives a `--resume` (BT.ticket.sdlc-task-resume-truncates-run-state) — before that fix, a
+  resumed run's `state.tasks` held only the resumed tasks and this comparison could not be trusted.
+  When declining to close, name the outstanding task numbers in the report.
 - **Re-detect the vault** (same check as Step 1c, from `runDir`):
   `[ -L planning ]` → symlink (vaulted) vs plain directory; resolve the real path via
   `python3 -c "import os; print(os.path.realpath('planning'))"`.
