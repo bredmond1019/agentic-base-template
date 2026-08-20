@@ -3,9 +3,22 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-19
+**Last updated:** 2026-08-20
 
 ---
+
+## [run: 2026-08-20]
+
+Ran `/sdlc-flow` on `BT.ticket.phase-commands-adopt-worklog` through all 6 tasks — all passed, review verdict PASS. Task 1 recorded the D31 worklog/state-write target shape (sourced from `sdlc-flow.js`) plus three open questions as a research field on the spec. Task 2 rewrote `/implement`, `/test`, `/fix`, `/review-task`, and `/document` to append structured sections to `sdlc/worklog.md` and update `sdlc/state.json` instead of writing prose reports into `sdlc/reports/`, with `/fix` appending a `FIX PASS` section rather than overwriting the implement slot; neither file is ever git-committed by these commands (write-only, matching `writeFlowState()`'s own convention). Task 3 rewrote the five `.agents/skills/*/SKILL.md` manual-replication guides to be byte-identical to their now-current commands (verified with `diff`). Task 4 repointed `update-docs.md`'s one stale reference to `/document`'s output; `close-out.md`, `patch.md`, and `conditional_docs.md` needed no change since they never literally read the old report path. Task 5 rewrote `.claude/commands/README.md`'s Run Artifacts section and every remaining per-step-report reference, and re-stamped `check_skill_sync.py`'s manifest (hashes unchanged, no anchor drift). Task 6 validated the migration end-to-end: all 3 spec validation commands and all 20 gated `harness.json` checks pass; `sdlc/reports` references in `.claude/commands/` dropped from a baseline of 49 to 7 (remaining are legit legacy/gate-baseline mentions in `clean-worktree.md` and `README.md`, out of scope). Next: none — spec closed.
+
+```
+2e7b027 docs: update docs for BT.ticket.phase-commands-adopt-worklog
+f1c1783 feat: implement BT.ticket.phase-commands-adopt-worklog-task5
+5879de4 feat: implement BT.ticket.phase-commands-adopt-worklog-task4
+b186fff feat: implement BT.ticket.phase-commands-adopt-worklog-task3
+139f2ff feat: implement BT.ticket.phase-commands-adopt-worklog-task2
+23a68cd chore: init worktree BT.ticket.phase-commands-adopt-worklog-flow
+```
 
 ## [run: 2026-08-19]
 
