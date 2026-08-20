@@ -451,11 +451,78 @@ was pointed at the right run:
 #   /begin-orchestration --roadmap <rel path> --lane <name>
 #
 # ISOLATION: <flag> — <why>
-# BUDGET: <heavy/light, and what it may not run beside>
 ```
 
-Then the traps, holds and spec sources as comments, then **bare block IDs, one per line, in
-execution order**. Blank lines and `#` comments are stripped by the reader.
+Then the structured directives (below) when the lane has a corresponding constraint, then the
+traps, holds and spec sources as comments, then **bare block IDs, one per line, in execution
+order**. Blank lines and `#` comments are stripped by the reader.
+
+### Structured directives — mev's parser reads these, the prose above is for the operator
+
+The header and the trap comments below it are prose: read by whoever drives the lane, at the
+moment they drive it. Nothing reads them mechanically. Alongside that prose — **never instead of
+it** — emit the machine-readable directive mev's parser (`parse_lane_directives` in
+`core/mev/src/brain/lane_segments.rs`) actually checks, whenever the corresponding constraint is
+real. Both ship in the same lane file because they serve two different readers: the directive is
+for the parser, the prose is for the operator holding the file open at 2am.
+
+Each directive is a **comment-only line** — nothing before the `#` but whitespace — whose body
+starts, immediately after `#` and any leading whitespace, with one of these three prefixes,
+spelled and cased exactly as shown. A directive-looking phrase buried inside an ordinary sentence
+does not parse; the prefix must be the first thing after `#`.
+
+- **`# HELD-UNTIL: <token>`** — emit only when this lane genuinely waits on a block ID or an
+  operator-gate slug before it can run. `<token>` is the first whitespace-delimited word after the
+  prefix — it is carried opaque, never resolved by the parser, so use the exact block ID or slug.
+- **`# BUDGET: HEAVY`** or **`# BUDGET: LIGHT`**, with an optional `NOT-WITH <repo>[,<repo>...]`
+  clause — e.g. `# BUDGET: HEAVY NOT-WITH mev,orchestrator`. Unlike the other two, **every lane
+  emits this one** — Step 4's "heavy budget is the real constraint" rule means every lane already
+  has a real heavy-or-light classification, so there is no "constraint absent" case for `BUDGET`.
+  The level is matched case-insensitively but write it upper-case to match the fleet's convention.
+  Add `NOT-WITH` only when this lane's heavy budget collides with another repo's; a bare
+  `# BUDGET: HEAVY` with no `NOT-WITH` is a complete, valid directive on its own. Keep the
+  directive line itself free of trailing prose when `NOT-WITH` is present — text after the repo
+  list gets folded into the last repo name by `parse_repo_list` rather than rejected, so it
+  produces a wrong exclusion instead of a diagnostic. Put the "why" on its own comment line
+  instead, as the worked example below does.
+- **`# EXCLUSIVE-REPOS: <repo>[,<repo>...]`** — emit only when this lane claims exclusive write
+  access to one or more repos beyond its own (the cross-tree-writer case below).
+
+**A `HELD-UNTIL` or `EXCLUSIVE-REPOS` constraint that does not exist emits no line for it at all —
+never an empty directive, a placeholder, or a value of `none`.** (`BUDGET` is the one exception —
+see above — because it is never absent.) A malformed value (a `HELD-UNTIL:` with no token after
+it, a `BUDGET:` with no `HEAVY`/`LIGHT` in it, an `EXCLUSIVE-REPOS:` with no repo after it)
+produces a mev diagnostic against a real lane file; an absent directive produces nothing, because
+the constraint is simply not there. When in doubt, omit the line — do not guess at a value to fill
+it.
+
+**Worked example** — a lane that is held on a sibling block, runs a heavy build that must not
+overlap `mev`'s lane, and owns one file outside its own repo's tree, with both the directives and
+the prose that explains them to the operator:
+
+```
+# Lane B · base-template — land the generator change, defer propagation
+# ROADMAP: /Users/brandon/Dev/agentic-portfolio/planning/roadmaps/lane-directives/roadmap.md
+# LOG:     /Users/brandon/Dev/agentic-portfolio/planning/roadmaps/lane-directives/lane-log.jsonl
+#
+# RUN FROM /Users/brandon/Dev/agentic-portfolio/base-template :
+#   /begin-orchestration --roadmap ../planning/roadmaps/lane-directives/roadmap.md --lane B
+#
+# ISOLATION: --worktree — base-template owns the engines this run executes under
+# HELD-UNTIL: MV.ticket.lane-file-structured-directives
+# BUDGET: HEAVY NOT-WITH mev
+# EXCLUSIVE-REPOS: mev
+#
+# HELD: waits on mev landing the directive grammar this generator emits against —
+#   emitting against an unlanded contract risks a format mev never actually reads.
+# BUDGET WHY: heavy — full harness + prompt-template checks; must not run beside mev's lane,
+#   which is what NOT-WITH above encodes.
+# TRAP: /sync-downstream-harness is roadmap gate G4 — do not run it while this lane
+#   or any other lane is live; a mid-flight sync swaps a running lane's engine underneath it.
+# WRITES OUTSIDE ITS OWN TREE: planning/harness.json only — no other repo's files.
+#
+BT.ticket.generate-roadmap-lane-directives
+```
 
 **Those lines are canonical `<PFX>.<phase>.<block>` IDs — `EN.12.A`, `MV.4.B` — and nothing else.**
 Not a `SQ-nn` row ref, not a slug, not a title. `/orchestrate` resolves each line against
@@ -480,7 +547,9 @@ and chore block**, which is most of what a roadmap of small work contains.
 Three things belong in these comments and nowhere else, because they are read at the moment of
 execution rather than at planning time:
 
-- **Every HELD block**, with the exact sibling block it waits on and why.
+- **Every HELD block**, with the exact sibling block it waits on and why. Pair the prose with a
+  `# HELD-UNTIL: <token>` structured directive (see "Structured directives" above) — the prose
+  carries the *why*, the directive is what a machine can check.
 - **Every spec source that is not master-plan slug mode** — `/generate-tasks --from <path>`. A lane
   that cannot resolve a spec improvises one.
 - **The traps that have cost a real run in that repo.** Not general advice; specific, cited, and
@@ -492,7 +561,10 @@ execution rather than at planning time:
   two lanes writing one artifact is the contention failure the whole lane model exists to prevent.
 - **Any block that writes outside its own repo's tree**, with the exact paths and the lane it may
   not run beside. The lane agent is the single writer for its repo, and this is the one write it
-  cannot know about from the repo it is standing in.
+  cannot know about from the repo it is standing in. If the exclusivity is against another whole
+  repo (not just a sibling lane's budget), pair the prose with a `# EXCLUSIVE-REPOS: <repo>[,...]`
+  structured directive; if it is specifically about not overlapping another repo's *heavy* run,
+  that is the `NOT-WITH` clause on `# BUDGET:` instead.
 - **`# ORIGIN: <roadmap path>` above any adopted block** — a block ID that belongs to a *different*
   roadmap's outcomes and Wave 0, placed in this lane only because the lane already exists here. See
   "Cross-roadmap block adoption" above. Every block ID a lane file names either appears in this
