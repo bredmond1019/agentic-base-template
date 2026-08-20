@@ -23,9 +23,9 @@ markdown that an agent can follow to write or execute E2E tests for a feature.
 
 ## Integrating with the SDLC pipeline
 
-If you want E2E tests to run as part of the `sdlc-block` back-half, set
-`block.verify: "consolidated+review"` in `planning/harness.json` and add your E2E command to
-`validation.checks[]`. The consolidated review stage will run it over the integrated tree.
+If you want E2E tests to run as part of a roadmap orchestration run's back-half, add your E2E
+command to `validation.checks[]` in `planning/harness.json`. The consolidated review stage will
+run it over the integrated tree.
 
 ## Placeholders
 

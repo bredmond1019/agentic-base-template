@@ -68,14 +68,13 @@ downstream block waiting on its code, so there is nothing to defer (D65).
    - Every task in `tasks.json` must name ≥1 concrete file in `files[]` (the Validate task is
      exempt).
    - **Compilable task boundaries (outranks the file-based split when the two conflict).**
-     `/ticket` only ever feeds `/sdlc-task` or `/sdlc-flow` — never `/sdlc-block`'s parallel-merge
-     model — and both run every task **sequentially on one branch/worktree with no inter-task
-     merge step**, gating the project's checks after **every single task**. A single breaking
-     public-surface change (a renamed public type, a struct's changed fields, an altered
-     trait/interface signature, and every call site each touches) must never be split across tasks
-     such that an intermediate task leaves the repository non-compiling — put the whole change in
-     **one** task, even if it then touches more files than usual. **Unconditional here**, with no
-     `/sdlc-block` carve-out: `/ticket` never produces a spec `/sdlc-block` decomposes in parallel.
+     `/ticket` only ever feeds `/sdlc-task` or `/sdlc-flow`, and both run every task
+     **sequentially on one branch/worktree with no inter-task merge step**, gating the project's
+     checks after **every single task**. A single breaking public-surface change (a renamed public
+     type, a struct's changed fields, an altered trait/interface signature, and every call site
+     each touches) must never be split across tasks such that an intermediate task leaves the
+     repository non-compiling — put the whole change in **one** task, even if it then touches more
+     files than usual. Unconditional: both engines are sequential.
 
 5. **Un-gateable acceptance criteria must be declared, not just written down (D64).** This repo's
    checks are in-repo and in-language, and structurally cannot observe evidence outside that

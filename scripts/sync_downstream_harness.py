@@ -311,8 +311,7 @@ def hook_files(brain_root: Path) -> list[Path]:
 # enumerated (not a glob over .agents/skills/) so a skill added to base-template for reasons
 # unrelated to the SDLC engines (or one that hasn't been reviewed against its matching .js the way
 # sdlc-task/sdlc-flow were in the 2026-08 audit) is never accidentally propagated - widen this
-# deliberately, per-slug, once a guide has actually been checked. sdlc-run/sdlc-block are NOT yet
-# in this list - their SKILL.md guides predate that audit and have not been verified.
+# deliberately, per-slug, once a guide has actually been checked.
 AGENT_SKILL_SLUGS: list[str] = [
     "sdlc-task",
     "sdlc-flow",

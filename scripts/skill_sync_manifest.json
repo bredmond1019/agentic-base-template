@@ -1,32 +1,32 @@
 {
   ".claude/workflows/sdlc-task.js::isolation-and-branch-naming": {
-    "hash": "08ad887424e04df1eda8252f42d281a089b9d209b08d1547a2541977a1c6661d",
-    "lines": "774-880",
+    "hash": "a7f1f2b66caa96e8f89ddb4244f3ddb807315794d147162770ea99df69389893",
+    "lines": "779-885",
     "skill_md": ".agents/skills/sdlc-task/SKILL.md"
   },
   ".claude/workflows/sdlc-task.js::triage-bail-taxonomy": {
-    "hash": "7b7b1112cd0d463b43c5b69d421ced1c17c0a007885bb1c5c72dd2327502c09f",
-    "lines": "1020-1241",
+    "hash": "2770536a787226d5db19ed34f545d1e52f1260edcd974e7f5a0288f5011339dd",
+    "lines": "1025-1246",
     "skill_md": ".agents/skills/sdlc-task/SKILL.md"
   },
   ".claude/workflows/sdlc-task.js::bookkeep-vault-commit": {
-    "hash": "af5a5a81dffd283ad61339d11919d69198cfe52df922a4c51f31ebb37db36ab5",
-    "lines": "1479-1598",
+    "hash": "0b7492a9e2134089bd9d46e47c1db3d8ff91951507de1a8731fc8c4ef4f0bc86",
+    "lines": "1484-1603",
     "skill_md": ".agents/skills/sdlc-task/SKILL.md"
   },
   ".claude/workflows/sdlc-flow.js::isolation-and-branch-naming": {
-    "hash": "d53ad8615922ff9cff712662b2687f19e6fbb1d87381acfeeee83079f1eb5e94",
-    "lines": "892-1059",
+    "hash": "95ba7be5b448f7c164f566a6d90012342054a3f9a2f551114f65c3c388bffeaa",
+    "lines": "897-1064",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   },
   ".claude/workflows/sdlc-flow.js::triage-bail-taxonomy": {
-    "hash": "3c6da2547484e99ec64905f1e9529f7646450269fa7b7de108e28c72b79ce656",
-    "lines": "1219-1457",
+    "hash": "8525dde5a06043e39f00c9d42cabe14c6623f411bd113dc63eef37d41f690d61",
+    "lines": "1224-1462",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   },
   ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
-    "hash": "f770763a777629d611c5e7f01776c3ed81f3fde5d72c278f7d6059a932a8e09a",
-    "lines": "1975-2129",
+    "hash": "a35c9e62c5115d82fa04b20064618654e0e850b9ea381c18abe9bb587e495fe4",
+    "lines": "1980-2134",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   }
 }

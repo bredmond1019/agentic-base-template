@@ -179,7 +179,7 @@ would otherwise re-derive. Cite file paths and decision numbers.>
 
 ## Completed this session
 <Concrete things done — commits, files changed, decisions reached. "bumped harness-config
-loader to sonnet in all 3 engines (sdlc-block.js:473, sdlc-task.js:455, sdlc-run.js:326)",
+loader to sonnet in both engines (sdlc-flow.js:473, sdlc-task.js:455)",
 not "fixed engine".>
 
 ## Remaining work

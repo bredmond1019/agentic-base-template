@@ -35,7 +35,7 @@ $ARGUMENTS — optional flags, space-separated:
 
    Run:
    ```bash
-   test -f .claude/workflows/sdlc-run.js && echo "Guard: OK — running from base-template root" || echo "ABORT: .claude/workflows/sdlc-run.js not found. Run this command from the base-template root."
+   test -f .claude/workflows/sdlc-flow.js && echo "Guard: OK — running from base-template root" || echo "ABORT: .claude/workflows/sdlc-flow.js not found. Run this command from the base-template root."
    ```
 
 2. **Dry run first, always** — even if `$ARGUMENTS` includes `--apply`, run once without it first

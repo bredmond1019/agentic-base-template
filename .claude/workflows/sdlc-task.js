@@ -12,7 +12,7 @@
 // state.json block status) and — in place, on main — runs `mev emit-state --write`; it
 // does NOT write a log.md narrative, a D18 amendment log, or run review/docs/PR. Run
 // /log-work for the narrative. When you need a consolidated review + docs + a PR, use
-// /sdlc-flow; for a whole spec in place, /sdlc-run; for a roadmap, /sdlc-block.
+// /sdlc-flow; for a roadmap, /orchestrate.
 //
 // TERMINAL AUTHORITATIVE RECONCILE (D56) — this engine's per-task tripwire runs
 // `fastCommand` in place of `command` (testDepth=fast, the default) and never runs a
@@ -32,7 +32,7 @@
 // renderCheckList) or on a partial task-subset run (the existing fullRun guard).
 //
 // ISOLATION
-//   Default: IN PLACE on the current branch (no worktree) — cheapest, like /sdlc-run.
+//   Default: IN PLACE on the current branch (no worktree) — cheapest.
 //   --worktree: run in an isolated git worktree on its own branch (you integrate the
 //   branch yourself when ready). Opt-in only.
 //
@@ -334,8 +334,7 @@ const ENUMERATE_SCHEMA = {
   }
 }
 
-// D16 derive-from-tasks.md fallback — see the abort below. Mirrors sdlc-block.js's ensureTasks()
-// generator and /generate-tasks' --from mode: read the spec's authored step decomposition and
+// D16 derive-from-tasks.md fallback — see the abort below. Mirrors /generate-tasks' --from mode: read the spec's authored step decomposition and
 // write a fresh D45-shaped tasks.json from it (never a verbatim copy of the prose, never the
 // superseded D44 {"tasks": [...]} wrapper).
 const DERIVE_SCHEMA = {
@@ -434,13 +433,13 @@ const BOOKKEEP_SCHEMA = {
 // ----------------------------------------------------------------
 // MODEL TIERING — the primary token lever for this pipeline.
 //
-// Match the model to the work (mirrors sdlc-run/flow). To re-tier, change one value here.
+// Match the model to the work (mirrors sdlc-flow). To re-tier, change one value here.
 // Valid values: 'haiku' | 'sonnet' | 'opus' | undefined (inherit session model).
 // ----------------------------------------------------------------
 const MODEL = {
   setup:       'haiku',    // scripted git: locate the repo root, or follow the worktree free-name recipe
   enumerate:   'haiku',    // read + parse tasks.json's task list — a fixed procedure
-  derive:      'opus',     // D16 fallback: author a fresh tasks.json from tasks.md's step list — real judgment, mirrors sdlc-block.js's ensureTasks() generator
+  derive:      'opus',     // D16 fallback: author a fresh tasks.json from tasks.md's step list — real judgment, mirrors sdlc-flow.js's ensureTasks() generator
   stateLoad:   'haiku',    // read + parse one JSON file (resume only)
   implement:   'sonnet',   // writes code/content + tests against a scoped task
   fix:         'sonnet',   // targeted fixes; failures escalate, never silently ship
@@ -503,8 +502,7 @@ function recordFilesRead(result) {
 // CONTRACT SCOPE (Phase 0 /code-review carry-in): `metrics` — and therefore `tokens.total` — cover the
 // SUBSTANTIVE stages only. Cheap helper / state-writer agents (the Haiku state-writer, config + baseline
 // loaders) deliberately use bare agent() and are EXCLUDED; this bounded, Haiku-cheap exclusion is the
-// same boundary in all four engines, named here so it is explicit rather than silent — it keeps the
-// two-level /sdlc-block roll-up summing comparable substantive-stage totals at both levels.
+// same boundary in both engines, named here so it is explicit rather than silent.
 function buildTokensBlock() {
   const stages = metrics.map(m => {
     const filesReadKb = m.filesReadKb != null ? m.filesReadKb : null
@@ -1069,8 +1067,7 @@ let enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumera
 
 if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
   // D16 derive-from-tasks.md fallback — before refusing, check whether the spec's authored
-  // tasks.md carries a derivable step decomposition. Mirrors sdlc-block.js's ensureTasks()
-  // generator and /generate-tasks' --from mode: author a FRESH decomposition from tasks.md (never
+  // tasks.md carries a derivable step decomposition. Mirrors /generate-tasks' --from mode: author a FRESH decomposition from tasks.md (never
   // a verbatim copy of its prose). Deriving from an authored tasks.md is not guessing the task
   // structure — D16 exists to refuse fabricating one out of nothing, which the abort below still does.
   const deriveResult = await tracedAgent(`${W}
@@ -1103,9 +1100,7 @@ STEP 3 — Otherwise, author a FRESH decomposed ${tasksJsonFile} from tasks.md's
   target that task's own tests specifically — never a bare/positional filter that could silently
   match zero or the wrong tests — and a command matching nothing must fail rather than pass. Never
   hardcode a stack-specific command (e.g. a particular test runner invocation) into this prompt;
-  that judgment belongs to the deriving agent at run time, per task. \`sdlc-block.js\`'s generator
-  (its "acceptance_criteria/validation_commands can stay [] per task" step) is the sibling that
-  already gets this right — match its intent.
+  that judgment belongs to the deriving agent at run time, per task.
 
 STEP 4 — Commit it on the current branch with an explicit pathspec:
   git add ${tasksJsonFile}

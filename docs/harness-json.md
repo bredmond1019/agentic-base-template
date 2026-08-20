@@ -124,7 +124,6 @@ This is acceptable for a quick start but is less reliable than a `harness.json`.
 | `uiTest` | object | **Yes** | UI smoke-test stage config |
 | `breakdown` | object | No | Task-decomposition policy (absent → `mode: recommend`, `complexityThreshold: 3`) |
 | `planning` | object | No | Planning-phase policy for the authoring commands (absent → `clarify: false`) |
-| `block` | object | No | Lean `/sdlc-block` runner policy (absent → `verify: consolidated`) |
 | `flow` | object | No | `/sdlc-flow` engine policy (absent → CLI flag defaults apply) |
 
 ### `validation.checks[]`
@@ -159,9 +158,7 @@ file (the engine only carries the interpretation). ¹`command` is required for e
 
 > **`count-delta` caveat:** this check degrades to a plain exit-code gate in both `/sdlc-task`
 > and `/sdlc-flow`. The cross-task regression comparison (`failOn: decrease`/`zero-or-decrease`)
-> no longer fires under either engine — only the command's exit code is evaluated. If your project
-> relies on the regression comparison, use `/sdlc-run` (where the full `count-delta` logic runs
-> with a per-task prior-task report to compare against).
+> no longer fires under either engine — only the command's exit code is evaluated.
 
 See `planning/harness.examples.md` (the Python "rich checks" profile) for a worked example of all
 five, and [D6](../planning/decisions/D6-harness-richer-checks.md) for the rationale.
@@ -198,8 +195,8 @@ but cohesive.
 
 | `mode` | What happens when a task is flagged |
 |---|---|
-| `recommend` (default) | Log a recommendation and proceed — no file is written. `/sdlc-block` lists the coarse tasks before the waves; a standalone `/sdlc-task` logs it before implementing. |
-| `auto` | Generate `breakdown.md` sub-steps for the flagged tasks first. `/sdlc-block` writes + commits them on **main before the waves** (so every parallel worktree inherits the same file — no merge conflict); a standalone `/sdlc-task` writes them in its own worktree. Implement then follows the sub-steps. |
+| `recommend` (default) | Log a recommendation and proceed — no file is written. `/sdlc-task` logs it before implementing; `/sdlc-flow` logs it before its first task. |
+| `auto` | Generate `breakdown.md` sub-steps for the flagged tasks first, then implement follows the sub-steps. |
 | `off` | Skip the assessment entirely. |
 
 The per-task engine (`/sdlc-flow` or `/sdlc-task`) assesses coarseness when it starts and
@@ -221,28 +218,12 @@ median results" anti-pattern. Default `false` preserves the zero-touch flow (wri
 user can always force the behavior for a single invocation by appending **`--clarify`**, regardless
 of this setting. See [D20](../planning/decisions/D20-clarify-before-generate.md).
 
-### `block` object
-
-Optional. Policy for `/sdlc-block` — the **block-level roadmap orchestrator** that fans out one
-`/sdlc-flow` per independent block in its own worktree, runs blocks in dependency-ordered waves
-derived from a master-plan-format file, and opens a PR per block by default. Only `/sdlc-block`
-reads it; `/sdlc-run`, `/sdlc-task`, and `/sdlc-flow` ignore it. Absent → `maxParallelBlocks 3`,
-`autoMerge false`.
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `maxParallelBlocks` | integer | No | Maximum number of blocks `/sdlc-block` fans out concurrently within a wave (default `3`). Blocks in a wave share no dependency; this cap limits concurrent worktree creation and `/sdlc-flow` runs. Lower for machines with tight disk/memory; raise for CI with ample resources. CLI `--max-parallel-blocks` overrides per run. |
-| `autoMerge` | boolean | No | `false` (default): open one PR per block; human reviews via `/review-PR`, then `/merge-train` lands them in dependency order. `true`: merge each block's branch into the train branch automatically as it completes (no PRs). CLI `--auto-merge` overrides per run. |
-
-See [D39](../planning/decisions/D39-sdlc-block-block-level-orchestrator.md) and
-[D40](../planning/decisions/D40-branch-train-pr-model.md).
-
 ### `flow` object
 
 Optional. Policy for the **`/sdlc-flow`** engine — the default for non-trivial feature work. It
 runs one spec sequentially in a single shared worktree, with a per-task test-fix loop, one
 consolidated end-review, a docs patch, and a PR as the terminal step. Only `/sdlc-flow` reads this
-block; `/sdlc-run`, `/sdlc-task`, and `/sdlc-block` ignore it. Absent → CLI flag defaults apply.
+block; `/sdlc-task` ignores it. Absent → CLI flag defaults apply.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -388,7 +369,7 @@ project policy, so they are not config fields in the current schema:
 
 | Behavior | Why hardcoded |
 |---|---|
-| **No emoji in docs** | Universal harness rule — every project applies it. **Diff-scoped**: the gate parses `git diff -U0` and judges only lines *added* in the run's range (`+++`/`---` diff headers are never treated as content, a pure rename has no added lines and passes, a brand-new file's added lines are its whole content). A file with pre-existing emoji outside the diff never fails a change that didn't touch those lines — this is what lets the gate ratchet instead of blocking on legacy footprint. See `.claude/workflows/sdlc-block.js`, `.claude/commands/test.md`, `.claude/workflows/sdlc-task.js`, and `.claude/workflows/sdlc-flow.js` for the four sites (the latter two also exempt the literal `Generated with Claude Code` PR-footer). |
+| **No emoji in docs** | Universal harness rule — every project applies it. **Diff-scoped**: the gate parses `git diff -U0` and judges only lines *added* in the run's range (`+++`/`---` diff headers are never treated as content, a pure rename has no added lines and passes, a brand-new file's added lines are its whole content). A file with pre-existing emoji outside the diff never fails a change that didn't touch those lines — this is what lets the gate ratchet instead of blocking on legacy footprint. See `.claude/commands/test.md`, `.claude/workflows/sdlc-task.js`, `.claude/workflows/sdlc-flow.js`, and `.claude/commands/close-out.md` for the four sites (all four also exempt the literal `Generated with Claude Code` PR-footer). |
 | **Parallel port = `port + taskNumber`** | One valid behavior; a knob with one value is noise |
 
 ## Deferred fields (not yet built)

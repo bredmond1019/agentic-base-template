@@ -2,11 +2,11 @@
 type: Reference
 title: "SDLC run-state data contract — terminal status vocabulary"
 description: The complete, enumerable vocabulary of terminal `status` values the SDLC engines write into their committed run-state files, and what a Rust/Python consumer must and must not fold each value into.
-doc_id: sdlc-run-state-data-contract
+doc_id: run-state-data-contract
 layer: [factory]
 project: base-template
 status: active
-keywords: [data contract, run-state, status vocabulary, reconcile_failed, sdlc-task-state, sdlc-flow-state, block-orchestration-state, consumers]
+keywords: [data contract, run-state, status vocabulary, reconcile_failed, sdlc-task-state, sdlc-flow-state, consumers]
 related: [sdlc-task, D56-sdlc-task-authoritative-reconcile]
 ---
 
@@ -32,35 +32,29 @@ none is claimed here.
 
 ## Run-state files and their `status` field
 
-Three engines write a committed top-level `status` field to a run-state file. (`sdlc-run.js` does
-not write its own top-level run-state `status` field — it sequences stages of the other engines
-and defers to their state files.)
+Two engines write a committed top-level `status` field to a run-state file.
 
 | Engine | State file | Written under |
 |---|---|---|
 | `.claude/workflows/sdlc-task.js` | `sdlc-task-state.json` | `planning/<spec>/sdlc/` |
 | `.claude/workflows/sdlc-flow.js` | `sdlc-flow-state.json` | `planning/<spec>/sdlc/` |
-| `.claude/workflows/sdlc-block.js` | `block-orchestration-state.json` | `planning/<spec>/sdlc/` |
 
 ## Terminal vocabulary
 
 A value is **terminal** if it is the `status` an engine's state file is left holding once the run
-stops advancing (not a mid-run phase marker such as `"running"`, `"review"`, `"docs"`,
-`"wrapup"`, or `sdlc-block.js`'s transient `"paused-budget"`, which is always overwritten by
-`"done"`/`"blocked"` before the run actually stops — see `sdlc-block.js` around the Report phase,
-where `allClean` folds `state.status !== 'paused-budget'` into its check before the final
-assignment).
+stops advancing (not a mid-run phase marker such as `"running"`, `"review"`, `"docs"`, or
+`"wrapup"`).
 
 | Value | Written by | Means success? | A consumer must NOT fold this into |
 |---|---|---|---|
-| `"done"` | `sdlc-task.js`, `sdlc-flow.js`, `sdlc-block.js` | **Yes.** The run completed and its terminal gate (where one exists) passed. | — |
-| `"blocked"` | `sdlc-task.js`, `sdlc-flow.js`, `sdlc-block.js` | **No.** A task/block bailed (exhausted its fix-attempt budget) or an orchestrated block escalated. | `"done"` — a bail is not a completion. |
+| `"done"` | `sdlc-task.js`, `sdlc-flow.js` | **Yes.** The run completed and its terminal gate (where one exists) passed. | — |
+| `"blocked"` | `sdlc-task.js`, `sdlc-flow.js` | **No.** A task bailed (exhausted its fix-attempt budget). | `"done"` — a bail is not a completion. |
 | `"reconcile_failed"` | `sdlc-task.js` only | **No — and not a bail either.** The per-task fix loop finished and every task individually passed, but the terminal authoritative reconcile (D56) — the one point where checks a per-task `fastCommand` substituted for, or a `perTask: false` check skipped entirely, run in their real form — failed. Bookkeep is skipped entirely: `tasks.md` is not marked done, the `status.md` Progress row is not flipped, and `planning/state.json`'s block status is not flipped to `"closed"`. Per-task commits already made are **not** reverted. | `"done"` (the gate did not pass) **and** ordinary `"blocked"` (there is no single task to attribute the failure to, and no per-task attempt budget was spent retrying it — see D56). This is the category most status enums do not have: *the work finished and the gate did not pass.* Collapsing it into either neighbor is the exact failure this contract exists to prevent. |
 
-That is the complete set as of this writing — grep `state.status = ` (and the block engine's
-final assignment) across `.claude/workflows/sdlc-task.js`, `sdlc-flow.js`, and `sdlc-block.js` to
-reproduce it; any future engine change that adds a fourth terminal value must add a row here in
-the same change (this doc is the "not just a sentence" surface D56's follow-up was missing).
+That is the complete set as of this writing — grep `state.status = ` across
+`.claude/workflows/sdlc-task.js` and `sdlc-flow.js` to reproduce it; any future engine change that
+adds a new terminal value must add a row here in the same change (this doc is the "not just a
+sentence" surface D56's follow-up was missing).
 
 ## Practical guidance for a consumer
 

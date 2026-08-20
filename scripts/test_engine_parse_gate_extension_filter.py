@@ -5,8 +5,8 @@ BT.ticket.engine-parse-gate-non-js-false-positive).
 WHY THIS EXISTS
 ----------------
 `renderEngineParseChecks()` in sdlc-task.js and sdlc-flow.js renders one `node --check` CHECK per
-`.claude/workflows/` file a task's `files[]` names (a third copy lived in sdlc-run.js, retired by
-BT.ticket.retire-unused-engines as effectively unused). `node --check` throws
+`.claude/workflows/` file a task's `files[]` names (a third copy lived in a now-retired engine,
+removed by BT.ticket.retire-unused-engines as effectively unused). `node --check` throws
 ERR_UNKNOWN_FILE_EXTENSION on any non-.js path regardless of content, so before this ticket a task
 that merely touched block-registration.md, block.schema.json, or harness.schema.json (the three
 non-JS files that currently live under `.claude/workflows/`) bailed the whole verdict on a false
@@ -196,13 +196,12 @@ class DeletedEngineFileIsNotAParseFailure(unittest.TestCase):
     MODULE_NOT_FOUND -- a check that can never pass, whatever the task does.
 
     That is not hypothetical: it bailed BT.ticket.retire-unused-engines twice on 2026-08-19,
-    a ticket whose entire purpose is deleting sdlc-block.js and sdlc-run.js. The only escapes
-    were to lie in files[] (omitting the very files the acceptance criteria say must be gone)
-    or to hand-edit the shared engine mid-run. The gate now guards on existence first: a file
-    that is gone has no syntax to be wrong.
+    a ticket whose entire purpose is deleting two now-retired engines. The only escapes were to
+    lie in files[] (omitting the very files the acceptance criteria say must be gone) or to
+    hand-edit the shared engine mid-run. The gate now guards on existence first: a file that is
+    gone has no syntax to be wrong.
 
-    The two survivors are the only engines that can carry the fix -- sdlc-run.js is itself
-    being retired, so it is excluded here rather than patched.
+    The two survivors (ENGINES_WITH_CD) are the only engines that can carry the fix.
     """
 
     GUARDED_ENGINES = sorted(ENGINES_WITH_CD)
@@ -210,7 +209,7 @@ class DeletedEngineFileIsNotAParseFailure(unittest.TestCase):
     def test_render_guards_on_existence_before_parsing(self):
         for engine in self.GUARDED_ENGINES:
             with self.subTest(engine=engine):
-                rendered = run_render(engine, [".claude/workflows/sdlc-block.js"])
+                rendered = run_render(engine, [".claude/workflows/some-deleted-engine.js"])
                 self.assertIn(
                     "if [ -f", rendered,
                     f"{engine}: engine-parse check must test for the file's existence before "

@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [sdlc-task, lean engine, implement test commit, worktree, patch ladder, D38, planning vault, D46]
-related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch-ladder, D56-sdlc-task-authoritative-reconcile, D46-tasks-json-propagation-and-state-pointer, sdlc-run-state-data-contract]
+related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch-ladder, D56-sdlc-task-authoritative-reconcile, D46-tasks-json-propagation-and-state-pointer, run-state-data-contract]
 ---
 
 # `/sdlc-task` — lean single-unit SDLC engine

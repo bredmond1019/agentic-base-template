@@ -4,9 +4,9 @@
 RED-FIRST (ticket-generate-tasks-json-on-ticket, task 1): at this commit none of the SDLC engines
 carried the fallback yet, so this script MUST FAIL. It was deliberately NOT registered in
 planning/harness.json yet (that happened in task 5) — a red test at task 1 must not gate the rest
-of the chain. Two of the four engines this suite originally covered (sdlc-run.js, sdlc-block.js)
-were later retired as effectively unused (BT.ticket.retire-unused-engines); this suite now covers
-only the two surviving engines.
+of the chain. Two of the four engines this suite originally covered were later retired as
+effectively unused (BT.ticket.retire-unused-engines); this suite now covers only the two
+surviving engines.
 
 This is a source-assertion suite, not a live-agent suite: the derivation itself is performed by an
 LLM agent at runtime (mirroring /generate-tasks --from mode), so there is no pure function to

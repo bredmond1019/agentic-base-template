@@ -48,14 +48,13 @@ Plan one maintenance or housekeeping task — no behavior change, tests incident
      reasoning/breakdown only; sonnet for high-risk or complex; gemini-pro intermediate;
      gemini-flash simple. Record the reasoning in `workflow_rationale`.
    - **Compilable task boundaries (outranks the file-based split when the two conflict).**
-     `/chore` only ever feeds `/sdlc-task` or `/sdlc-flow` — never `/sdlc-block`'s parallel-merge
-     model — and both run every task **sequentially on one branch/worktree with no inter-task
-     merge step**, gating the project's checks after **every single task**. A single breaking
-     public-surface change (a renamed public type, a struct's changed fields, an altered
-     trait/interface signature, and every call site each touches) must never be split across tasks
-     such that an intermediate task leaves the repository non-compiling — put the whole change in
-     **one** task, even if it then touches more files than usual. **Unconditional here**, with no
-     `/sdlc-block` carve-out.
+     `/chore` only ever feeds `/sdlc-task` or `/sdlc-flow`, and both run every task
+     **sequentially on one branch/worktree with no inter-task merge step**, gating the project's
+     checks after **every single task**. A single breaking public-surface change (a renamed public
+     type, a struct's changed fields, an altered trait/interface signature, and every call site
+     each touches) must never be split across tasks such that an intermediate task leaves the
+     repository non-compiling — put the whole change in **one** task, even if it then touches more
+     files than usual. Unconditional: both engines are sequential.
    - Acceptance criteria are lighter than a ticket's but still **observable** — "the check passes
      on a corpus sweep", not "the code is cleaner". End with the project's gating checks passing.
    - **"The gates still pass" is a weak criterion on its own.** They passed before too — that is

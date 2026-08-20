@@ -4,7 +4,7 @@
 //
 // The default engine for non-trivial feature work. Runs one spec's tasks
 // SEQUENTIALLY on a SINGLE shared branch (so there are no inter-task merges to
-// conflict — sdlc-block's #1 failure mode), with a per-task test→fix loop, ONE
+// conflict), with a per-task test→fix loop, ONE
 // consolidated review at the end, a docs patch, and a PR as the terminal step.
 //
 // ISOLATION MODE
@@ -12,7 +12,7 @@
 //   sparse-checkout worktree, so a relative planning/ symlink (brain-vaulted repos)
 //   stays intact. main is left on the branch until the PR merges.
 //   --worktree: the isolated sparse-checkout worktree under trees/<spec>-flow/ —
-//   opt in when you need true isolation (e.g. /sdlc-block fans out parallel children).
+//   opt in when you need true isolation.
 //
 // A compact, COMMITTED, AUTHORITATIVE state.json + one worklog.md replace the 5×N
 // per-stage report files: resume + review + wrap-up read a structured index instead
@@ -217,7 +217,7 @@ const noPr          = hasFlag('--no-pr')
 const resumeMode    = hasFlag('--resume')
 // Isolation mode: default runs on a plain branch checked out in the MAIN working tree (keeps a relative
 // planning/ symlink intact — worktrees break it). --worktree opts back into the isolated sparse-checkout
-// worktree (needed for true parallelism — e.g. /sdlc-block fans out concurrent children).
+// worktree (needed for true isolation).
 const useWorktree   = hasFlag('--worktree')
 
 const VALID_TEST_DEPTHS = ['fast', 'full']
@@ -320,8 +320,8 @@ const ENUMERATE_SCHEMA = {
   }
 }
 
-// D16 derive-from-tasks.md fallback — see the abort below. Mirrors sdlc-block.js's ensureTasks()
-// generator and /generate-tasks' --from mode: read the spec's authored step decomposition and
+// D16 derive-from-tasks.md fallback — see the abort below. Mirrors /generate-tasks' --from mode:
+// read the spec's authored step decomposition and
 // write a fresh D45-shaped tasks.json from it (never a verbatim copy of the prose, never the
 // superseded D44 {"tasks": [...]} wrapper).
 const DERIVE_SCHEMA = {
@@ -391,7 +391,7 @@ const REVIEW_SCHEMA = {
 }
 
 // Triage a per-task or per-review failure: RETRYABLE (a bounded fix can help) vs MAJOR (bail to a
-// human now). Mirrors sdlc-block's TRIAGE_SCHEMA + the immediate-bail reason set.
+// human now).
 const TRIAGE_SCHEMA = {
   type: 'object',
   required: ['class', 'reason'],
@@ -505,14 +505,14 @@ const STATE_WRITE_SCHEMA = {
 // MODEL TIERING — the primary token lever for this pipeline.
 //
 // Without this map every stage inherits the SESSION model — so launching /sdlc-flow from an Opus
-// session silently runs the mechanical stages on Opus too. Principle (mirrors sdlc-run/task): match
+// session silently runs the mechanical stages on Opus too. Principle (mirrors sdlc-task): match
 // the model to the work. To re-tier, change one value here — nothing else moves.
 // Valid values: 'haiku' | 'sonnet' | 'opus' | undefined (inherit session model).
 // ----------------------------------------------------------------
 const MODEL = {
   worktreeSetup: 'haiku',    // scripted git following an exact free-name + sparse-checkout recipe
   enumerate:     'haiku',    // read + parse tasks.json's task list — a fixed procedure
-  derive:        'opus',     // D16 fallback: author a fresh tasks.json from tasks.md's step list — real judgment, mirrors sdlc-block.js's ensureTasks() generator
+  derive:        'opus',     // D16 fallback: author a fresh tasks.json from tasks.md's step list — real judgment
   stateLoad:     'haiku',    // read + parse one JSON file (resume only)
   generateTasks: 'opus',     // PLANNING — authors the spec (fallback path only)
   implement:     'sonnet',   // writes code/content + tests against a scoped task
@@ -569,8 +569,7 @@ async function tracedAgent(prompt, opts = {}) {
 // CONTRACT SCOPE (Phase 0 /code-review carry-in): `metrics` — and therefore `tokens.total` — cover the
 // SUBSTANTIVE stages only. Cheap helper / state-writer agents (the Haiku state-writer, config + baseline
 // loaders) deliberately use bare agent() and are EXCLUDED; this bounded, Haiku-cheap exclusion is the
-// same boundary in all four engines, named here so it is explicit rather than silent — it keeps the
-// two-level /sdlc-block roll-up summing comparable substantive-stage totals at both levels.
+// same boundary in both engines, named here so it is explicit rather than silent.
 function buildTokensBlock() {
   const stages = metrics.map(m => {
     const filesReadKb = m.filesReadKb != null ? m.filesReadKb : null
@@ -1231,8 +1230,8 @@ let enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumera
 
 if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
   // D16 derive-from-tasks.md fallback — before refusing, check whether the spec's authored
-  // tasks.md carries a derivable step decomposition. Mirrors sdlc-block.js's ensureTasks()
-  // generator and /generate-tasks' --from mode: author a FRESH decomposition from tasks.md (never
+  // tasks.md carries a derivable step decomposition. Mirrors /generate-tasks' --from mode:
+  // author a FRESH decomposition from tasks.md (never
   // a verbatim copy of its prose). Deriving from an authored tasks.md is not guessing the task
   // structure — D16 exists to refuse fabricating one out of nothing, which the abort below still does.
   const deriveResult = await tracedAgent(`${W}
@@ -1265,9 +1264,7 @@ STEP 3 — Otherwise, author a FRESH decomposed ${tasksJsonFile} from tasks.md's
   target that task's own tests specifically — never a bare/positional filter that could silently
   match zero or the wrong tests — and a command matching nothing must fail rather than pass. Never
   hardcode a stack-specific command (e.g. a particular test runner invocation) into this prompt;
-  that judgment belongs to the deriving agent at run time, per task. \`sdlc-block.js\`'s generator
-  (its "acceptance_criteria/validation_commands can stay [] per task" step) is the sibling that
-  already gets this right — match its intent.
+  that judgment belongs to the deriving agent at run time, per task.
 
 STEP 4 — Commit it on the current branch with an explicit pathspec:
   git add ${tasksJsonFile}

@@ -46,9 +46,9 @@ Each of these exists because it has already caused a real failure in this fleet.
    conflict resolution — runs **inline in this session**.
 
    If you find yourself about to write code for a block ID, stop: that is an engine's job.
-2. **Only `sdlc-task` and `sdlc-flow`.** If `/generate-tasks` recommends `/sdlc-run` or
-   `/sdlc-block`, stop and report — those have different isolation and merge semantics than this
-   command handles.
+2. **Only `sdlc-task` and `sdlc-flow`.** These are the only two engines `/generate-tasks` may
+   recommend; if it recommends anything else, stop and report — this command only handles their
+   isolation and merge semantics.
 3. **One repo per session, one engine run at a time.** Both engines take the repo's branch or
    working tree. Never launch a second engine workflow in the same repo before the first has
    completed and integrated.
@@ -207,7 +207,7 @@ unrelated lane's uncommitted files.
   output, a handful of files). Cheapest rung. In place, no review, no PR.
 - **`sdlc-flow <spec-slug>`** — a whole spec wanting a consolidated review, a docs pass, and a PR.
   The default for anything not clearly small.
-- Recommends `sdlc-run`/`sdlc-block` → stop and report (rule 2).
+- Recommends anything else → stop and report (rule 2).
 
 **Isolation.** Both engines default to plain-branch/in-place; `--worktree` opts into an isolated
 sparse-checkout worktree. Worktrees are **safe in brain-vaulted repos** — the engines detect a
