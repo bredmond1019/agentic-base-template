@@ -132,13 +132,7 @@ downstream block waiting on its code, so there is nothing to defer (D65).
    `acceptance_criteria` and 53% with empty `validation_commands` because the template's empty
    array was read as a default.
 
-9. **Render the spec view:** `python3 scripts/render_spec.py <BlockID>`. This writes
-   `planning/<BlockID>/tasks.md` from the block record — the SDLC engines read it as the spec
-   document (`sdlc-task.js` sets `specFile = <blockDir>/tasks.md`). It is **generated**: never
-   hand-edit it, edit the block record and re-render. Until D65 stage 2 lands, this step is not
-   optional — an engine run against a missing `tasks.md` has no spec to read.
-
-10. **Property self-check.** Re-read what you wrote and **revise in place** until every property
+9. **Property self-check.** Re-read what you wrote and **revise in place** until every property
     holds, then re-check:
     - **`tasks.json` must be read BACK off disk and parsed** — a verification you *perform*, not
       an assertion you write. Run it:
@@ -168,9 +162,8 @@ downstream block waiting on its code, so there is nothing to defer (D65).
     - **The gate is shown capable of failing** — a task orders the test before the fix, or names
       the fixture standing in for that.
     - **Nothing this ticket depends on is unclassified** as built / half-built / absent.
-    - **`tasks.md` was rendered** and matches: `python3 scripts/render_spec.py <BlockID> --check`.
 
-11. Report the paths and next step.
+10. Report the paths and next step.
 
 ## Session boundary
 
@@ -217,7 +210,6 @@ ticket ships with tests.
 ```
 planning/blocks/<BlockID>.json     (block record)
 planning/<BlockID>/tasks.json      (<N> tasks)
-planning/<BlockID>/tasks.md        (generated view)
 state.json: <created | already existed>, block registered
 
 Next (implement + test loop):

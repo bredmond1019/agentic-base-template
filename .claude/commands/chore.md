@@ -91,13 +91,7 @@ Plan one maintenance or housekeeping task — no behavior change, tests incident
    and 53% with empty `validation_commands` because the template's empty array was read as a
    default.
 
-8. **Render the spec view:** `python3 scripts/render_spec.py <BlockID>`. This writes
-   `planning/<BlockID>/tasks.md` from the block record — the SDLC engines read it as the spec
-   document. It is **generated**: never hand-edit it, edit the block record and re-render. Until
-   D65 stage 2 lands this step is not optional; an engine run against a missing `tasks.md` has no
-   spec to read.
-
-9. **Property self-check (can fail).** Before reporting, confirm:
+8. **Property self-check (can fail).** Before reporting, confirm:
    - **`tasks.json` reads back off disk and parses** — run it, do not assert it:
      `python3 -c "import json;d=json.load(open('planning/<BlockID>/tasks.json'));assert isinstance(d,list) and d;print(len(d),'tasks')"`.
    - **The block record validates** against `.claude/workflows/block.schema.json`, with `why`,
@@ -106,13 +100,12 @@ Plan one maintenance or housekeeping task — no behavior change, tests incident
      change is split across two or more tasks such that an intermediate task would leave the
      repository non-compiling under the per-task gate. If so this check **fails**: merge those
      tasks and re-run the self-check.
-   - **`tasks.md` was rendered** and matches: `python3 scripts/render_spec.py <BlockID> --check`.
    - **The pre-change baseline is recorded** in the block record's `why` or `description` — which
      gates passed before this chore, so a later red one is attributable.
    - **At least one acceptance criterion observes a difference**, not merely that the gates are
      still green.
 
-10. Report the paths created and the next step.
+9. Report the paths created and the next step.
 
 ## Session boundary
 
@@ -156,7 +149,6 @@ metrics or quotes, no emoji.
 ```
 planning/blocks/<BlockID>.json     (block record)
 planning/<BlockID>/tasks.json      (<N> tasks)
-planning/<BlockID>/tasks.md        (generated view)
 state.json: <created | already existed>, block registered
 
 Next (implement + test loop):

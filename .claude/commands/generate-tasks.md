@@ -167,19 +167,15 @@ $ARGUMENTS — one of two input modes:
      an already-written spec, not a substitute for running this command up front.
 
 7. Create the directory `planning/<spec-slug>/` if it does not exist, then write
-   `planning/<spec-slug>/tasks.json` (the task list) using the Output Format below.
-
-   **Then render the prose view — do not author it (D65).**
-   `python3 scripts/render_spec.py <BlockID>` writes `planning/<BlockID>/tasks.md` from the block
-   record at `planning/blocks/<BlockID>.json`. The engines read that file as the spec document
-   (`sdlc-task.js` sets `specFile = <blockDir>/tasks.md`), so it must exist — but it is
-   **generated**. Never hand-write or hand-edit it: change the block record and re-render, or the
-   two copies drift within a week. The renderer preserves an existing Amendment Log section, so
-   re-rendering mid-run is safe.
+   `planning/<spec-slug>/tasks.json` (the task list) using the Output Format below. When a block
+   record exists at `planning/blocks/<BlockID>.json`, that is the whole deliverable — the engines
+   read the block record plus `tasks.json` directly (D65 stage 2); do not author or render a
+   `tasks.md` for it.
 
    If no block record exists for this spec (a legacy directory predating D65), fall back to
    authoring `tasks.md` from the Output Format below, and say so in the report — a spec with no
-   block record has no durable statement of *why* it exists, which is the gap D65 closes.
+   block record has no durable statement of *why* it exists, which is the gap D65 closes. This is
+   the only case in which `/generate-tasks` still produces a `tasks.md`.
 
 8. **Property self-check (before committing).** A structurally valid spec can still be substantively
    thin and waste pipeline tokens. Re-read what you just wrote and confirm every required property
@@ -296,7 +292,7 @@ $ARGUMENTS — one of two input modes:
 
     ```
     planning/<spec-slug>/tasks.json    <N> tasks
-    planning/<spec-slug>/tasks.md      <rendered from block record | authored (legacy)>
+    planning/<spec-slug>/tasks.md      <omitted (block record) | authored (legacy)>
 
     Source files read: <count> (<any that were named but missing>)
     Un-gateable criteria declared: <n, or none>
@@ -324,7 +320,7 @@ next block's tasks depend on this block's code, which does not exist yet.
 Close by telling the operator:
 
 ```
-Spec written: planning/<spec-slug>/tasks.json (+ rendered tasks.md)
+Spec written: planning/<spec-slug>/tasks.json (+ tasks.md, legacy specs only)
 
 <If a task was flagged for breakdown:>
   Running /breakdown in this session first.
