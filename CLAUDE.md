@@ -157,6 +157,46 @@ customizations are never touched) — keep changes here additive and well-docume
    of this. Rules 7 and 8 are two instances of it. Where a document and the graph disagree, the
    graph wins.
 
+10. **The running engine is a snapshot — editing `.claude/` mid-session does not change the session.**
+    The Workflow harness copies the engine `.js` at launch into
+    `~/.claude/projects/<proj>/<session>/workflows/scripts/sdlc-<engine>-wf_<runid>.js` and executes
+    that copy. Committing an engine fix to `main` — even rebasing the running worktree onto it —
+    does **not** reliably change what the next run executes. The same holds for
+    `.claude/commands/*.md`. **Only restarting the session reliably picks the change up, and a long
+    `/orchestrate` chain cannot restart itself.**
+
+    **Why this rule exists rather than a note: the failure is self-concealing.** A stale engine
+    emits the pre-fix command, the stage runs it faithfully, and the pre-fix failure comes back —
+    which reads as an unreliable agent, not a stale binary. On 2026-08-19
+    `BT.ticket.retire-unused-engines` was re-run **four times** against an engine that never
+    changed, and the run record wrote the whole episode up as an agent-fidelity problem before
+    anyone hashed the snapshots. Measured that day: one run executed an engine **two fixes stale**,
+    another **one fix stale**, in both cases with the fix present on `main` and in the worktree.
+
+    **So, in order of preference:**
+    1. **Fix it somewhere that takes effect immediately** — the spec, `tasks.json`, `harness.json`,
+       or a script the engine shells out to. Rescoping a task's `files[]` is what finally unblocked
+       the block above; the two engine-side fixes for the same bug did not.
+    2. **If it must be the engine, verify the snapshot before re-running**, and read an unchanged
+       snapshot as "this re-run proves nothing" rather than as evidence about the fix:
+       ```
+       grep -c '<a string unique to the fix>' \
+         ~/.claude/projects/<proj>/<session>/workflows/scripts/sdlc-*-wf_<runid>.js
+       ```
+    3. **Otherwise record the fix as pending** in the run record and let a fresh session take it.
+
+    Never conclude an engine fix "did not work" from a run whose snapshot predates it. Full evidence:
+    `planning/knowledge.md` (Gotchas) and
+    `planning/orchestration-run/command-hardening/review.md`. This is a standing argument for moving
+    orchestration into `engine-rs`, where the executing engine's version is explicit.
+
+11. **A command that creates a new `.md` must seed it with OKF frontmatter.** A file created under
+    `planning/` without frontmatter reports the same missing-fence error on `--graph`, `--state`,
+    `--links` **and** `--structure`, so a single omitted `---` looks like a corpus-wide regression
+    rather than one bad file. `/update-task` created the fleet's first `amendments.md` this way on
+    2026-08-19 and took the corpus from 0 to 7 errors. Seeding content without frontmatter is not a
+    smaller version of rule 5 — it is a breach of it.
+
 <!-- BEGIN:response-style -->
 ## Response Style
 

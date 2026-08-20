@@ -42,13 +42,32 @@ a subagent round trip adds latency without adding value.
 
 5. If note text was provided, append it as one dated line to the spec's Amendment Log at
    `planning/<name>/amendments.md` — a sibling file to `tasks.md`, never a section inside it.
-   - If `amendments.md` does not exist yet, create it first with this seed:
+   - If `amendments.md` does not exist yet, create it first with this seed. **The OKF frontmatter
+     is not optional** — standing rule 5 requires it of every new `.md` under `planning/`, and a
+     file created without it red-gates `validate-brain` on **all four** flags at once
+     (`--graph`, `--state`, `--links`, `--structure` each report the same missing-fence error), so
+     one omitted fence reads as a corpus-wide regression. That happened on 2026-08-19, when this
+     command created the fleet's first `amendments.md` without frontmatter.
      ```
+     ---
+     type: Log
+     title: "Amendment Log — <name>"
+     description: Deviations recorded while <name> actually ran - fixes, scope adjustments, substitutions.
+     doc_id: <repo-slug>-amendments-<short-slug>
+     layer: [<repo's layer>]
+     project: <repo-slug>
+     status: active
+     keywords: [amendment log, d18, <2-3 terms from the spec>]
+     related: [<repo-slug>-status]
+     ---
+
      # <name> — Amendment Log
 
      Append-only. Records deviations from the spec as it actually ran — a fix, a scope
      adjustment, a substitution. Do not rewrite history — only append.
      ```
+     Keep `doc_id` unique and stable — it is the graph's handle on this file. Then add a row for
+     the new file to the directory's `index.md` if that directory has one (standing rule 7).
    - Then append one line (step `0` omits the `[task N]` tag):
      ```
      **YYYY-MM-DD** [task N]: <note text>
