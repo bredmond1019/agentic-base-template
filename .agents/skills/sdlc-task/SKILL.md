@@ -92,6 +92,16 @@ description: >
  If this prints COMMIT_GUARD_ABORT, STOP — do not run the commit; the index is empty against a
  non-empty HEAD, which is exactly the shape that deletes every tracked file.
 
+ GIT ENVIRONMENT STRIP (BT.ticket.worktree-run-can-commit-an-empty-tree, half (a)) — git exports
+ nine repository-scoping variables to the hooks it runs, and a hook-spawned process inherits them;
+ they OVERRIDE `-C` and cwd, so a later `git commit` can silently build its tree from a stale/foreign
+ index instead of the one you just staged. Run EVERY git command in this guide — including inside
+ `$(...)` substitutions — through this prefix instead of a bare `git`:
+   env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_NAMESPACE -u GIT_PREFIX -u GIT_CEILING_DIRECTORIES git
+ e.g. `git status` becomes `env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_NAMESPACE -u GIT_PREFIX -u GIT_CEILING_DIRECTORIES git status`.
+ Below, commands are written as plain `git ...` for readability — always run them through this
+ prefix; only the prose mentions of git (descriptions, prohibitions) stay bare.
+
  MODEL TIERING (the token lever — see the MODEL map below)
    haiku : setup, enumerate, state-load, test, state-writer, bookkeep
    sonnet: implement, fix, triage
