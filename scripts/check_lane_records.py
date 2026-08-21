@@ -262,13 +262,36 @@ def check(path, repo_paths: dict | None = None):
 # --- discovery ----------------------------------------------------------------------------
 
 def discover_lane_files(root) -> list:
-    """Recursively find every lane-*.json file under `root` -- covers both the current
-    planning/roadmaps/<slug>/ layout and the legacy planning/<slug>/ layout, since a lane file
-    is identified by name, not by which parent directory holds it."""
+    """Recursively find every lane-*.json file in a ROADMAP DIRECTORY under `root` -- covers both
+    the current planning/roadmaps/<slug>/ layout and the legacy planning/<slug>/ layout.
+
+    A lane record is identified by name AND by living in a subdirectory of the planning root, never
+    directly in it. That second half is load-bearing, not tidiness: `mev emit-state --write` emits
+    three DERIVED artifacts straight into the brain root's `planning/` whose names match this
+    module's `lane-*.json` glob exactly --
+
+        planning/lane-segments.json      (mev, lane_segments.rs)
+        planning/lane-availability.json  (mev, main.rs -- "never writes ... that is `mev emit-state`")
+        planning/lane-frontier.json      (mev, frontier.rs LANE_FRONTIER_ARTIFACT)
+
+    -- and they are not lane records: they carry `derived_at`/`segments`/`entries`/`gate_ranks` and
+    no `lane`/`roadmap`/`blocks`. Name-only discovery therefore made this checker exit 1 over a
+    corpus with ZERO authored lane records, which would red-gate the brain root the moment HQ.8.A
+    registered it as a gated check -- and via the push gate, every concurrent lane with it.
+    Measured at HQ 832b6747: 3 FAILs, all three of them mev's derived artifacts.
+
+    The rule is structural rather than a list of three basenames on purpose: mev is free to emit a
+    fourth derived `lane-*.json` and it will land in the same place, where this still excludes it.
+    Every real lane record -- both layouts, all 70 of the .txt files HQ.8.A converts -- lives one or
+    more levels down, so none is lost.
+    """
     root = Path(root)
     found = []
     for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        if Path(dirpath) == root:
+            # The planning root itself holds mev's derived artifacts, never a lane record.
+            continue
         for name in filenames:
             if LANE_FILE_RE.match(name):
                 found.append(Path(dirpath) / name)
