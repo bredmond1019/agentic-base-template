@@ -9,6 +9,48 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-21]
 
+### BT.ticket.worktree-run-can-commit-an-empty-tree — commit-safety guard + git env strip
+
+- **What:** Ran `/sdlc-flow` on `BT.ticket.worktree-run-can-commit-an-empty-tree` through all 7
+  tasks; all passed, review verdict PASS. Closed a P0 data-loss path: an `/sdlc-flow --worktree`
+  run could commit a tree that deletes every tracked file behind a green PASS. Task 1 added a
+  byte-identical `renderCommitSafetyGuard()` to both `sdlc-flow.js`/`sdlc-task.js`, wired
+  `&&`-joined into every commit-emitting recipe (per-task, vault, bookkeep/wrap-up, review-fix
+  commits — excluding the exempt `--allow-empty` worktree-init commit), refusing any commit built
+  from an empty index against a non-empty HEAD; updated both `.agents/skills/*/SKILL.md`
+  replication guides and re-stamped `check_skill_sync.py`'s manifest. Task 2 authored
+  `scripts/test_commit_safety_guard.py` (4 scratch-repo cases: poisoned worktree, clean control,
+  no-HEAD, vault `-C` shape) via real `node -e` extraction of the guard, gated as
+  `commit-safety-guard-tests`, with a D68 negative-path proof (inverted guard observed failing).
+  Tasks 3-4 added a `GIT` env-strip prefix (env -u of mev's nine `GIT_REPO_ENV_VARS`) to both
+  engines and routed every executable git invocation through it, so a hook-inherited
+  `GIT_INDEX_FILE`/`GIT_DIR` can no longer redirect commands at the wrong index/repo. Task 5
+  authored `scripts/test_git_env_strip.py` (cross-engine byte-identity, pinned nine-variable list,
+  source-scan with a staleness-checked allowlist, positive control), gated as
+  `git-env-strip-tests`, with its own D68 proof. Task 6 fixed a real drift found while
+  re-verifying both SKILL.md guides against their engines: `sdlc-flow/SKILL.md` was missing the
+  GIT ENVIRONMENT STRIP section entirely despite the engine carrying 78 prefixed call sites; added
+  it, mirroring `sdlc-task/SKILL.md`'s existing section. Task 7 ran all 28 `harness.json`
+  gates:true checks individually — all passed.
+- **Why:** The bug let a worktree-init commit silently redirect through an inherited
+  `GIT_INDEX_FILE`/`GIT_DIR` and land an empty-tree commit against a real HEAD, deleting every
+  tracked file behind a passing pipeline — a cause-independent backstop (the guard) plus closing
+  the specific cause (the env leak) together stop both the known vector and any future variant of
+  the same class.
+- **Next:** `BT.ticket.bookkeep-leaves-derived-output-uncommitted` is up next per `status.md`'s
+  frontmatter `next` pointer.
+
+```
+80d0297 docs: update docs for BT.ticket.worktree-run-can-commit-an-empty-tree
+2a77c35 feat: implement BT.ticket.worktree-run-can-commit-an-empty-tree-task6
+a07916e feat: implement BT.ticket.worktree-run-can-commit-an-empty-tree-task5
+482c704 feat: implement BT.ticket.worktree-run-can-commit-an-empty-tree-task4
+582d64a feat: implement BT.ticket.worktree-run-can-commit-an-empty-tree-task3
+36e6e86 feat: implement BT.ticket.worktree-run-can-commit-an-empty-tree-task2
+d819fca feat: implement BT.ticket.worktree-run-can-commit-an-empty-tree-task1
+3625ff0 fix(lane-records): stop discovering mev's derived lane-*.json artifacts as lane records
+```
+
 ### BT.5.B — lane.json across the orchestration commands
 
 - **What:** Ran `/sdlc-flow` on `BT.5.B` through all 7 tasks; all passed, review verdict PASS.
