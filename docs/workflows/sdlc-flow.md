@@ -321,6 +321,31 @@ so there is no `chore: flow state` commit in this list.
 
 ---
 
+## Commit safety guard and GIT environment strip
+
+Every commit-emitting recipe listed above (except the `--allow-empty` worktree-init commit, which
+is intentionally empty), plus the vault commits and the consolidated-review fix commit, is
+`&&`-joined to a shared `renderCommitSafetyGuard(gitCmd='git')` snippet before the `git commit`
+itself runs. The guard refuses to commit when the staged index is empty against a non-empty
+`HEAD` — the failure mode that otherwise lands a zero-file "passing" commit when a prior `git add`
+silently touched nothing (e.g. a `GIT_INDEX_FILE` pointed at the wrong index). `sdlc-task.js`
+defines a byte-identical copy of the same helper; `scripts/test_commit_safety_guard.py` pins the
+two engines' text in agreement and exercises the guard against a poisoned worktree, a clean
+control, a no-`HEAD` repo, and the vaulted `git -C <vault>` call shape, registered as the gating
+`commit-safety-guard-tests` check in `planning/harness.json`.
+
+Separately, every executable `git` invocation in this engine's recipes — setup/worktree/branch,
+the D16 derive commit, per-task + vault commits, review diff reads, the docs commit, the wrap-up
+commit + vault commit, and auto-merge cleanup — is routed through a shared `GIT` prefix constant:
+`env -u` of the nine `GIT_REPO_ENV_VARS` mev recognizes, so a hook-inherited
+`GIT_INDEX_FILE`/`GIT_DIR`/etc. can no longer silently redirect a recipe's git commands at the
+wrong index or repo. `scripts/test_git_env_strip.py` pins the constant's byte-identity across both
+engines, the exact nine-variable list, and (via an allowlisted source scan) that no executable git
+call site in either engine is left unprefixed; registered as the gating `git-env-strip-tests`
+check.
+
+---
+
 ## Vaulted planning directories (D46)
 
 Under D46, a brain-vaulted sub-repo's `planning/` is a relative symlink into a brain-owned vault

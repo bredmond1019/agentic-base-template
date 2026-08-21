@@ -195,6 +195,63 @@ def check_legacy_and_roadmaps_discovery() -> None:
               len(names) == 3, f"found: {names}")
 
 
+def check_derived_artifacts_at_the_planning_root_are_not_lane_records() -> None:
+    """mev's three DERIVED lane-*.json artifacts live directly in the planning root and match the
+    lane-file glob exactly. Discovery must not pick them up, and a corpus holding them must still
+    exit 0.
+
+    This is the regression that made the real checker exit 1 over a corpus with ZERO authored lane
+    records (measured at HQ 832b6747: 3 FAILs, all three of them mev artifacts), which would have
+    red-gated the brain root the moment HQ.8.A registered it as a gated check.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = build_corpus(Path(td))
+        planning_root = tmp / "consumer-repo" / "planning"
+
+        # Exactly the shapes mev emits, straight into the planning root.
+        _write_json(planning_root / "lane-segments.json",
+                    {"derived_at": "2026-08-21T00:00:00Z", "degraded": False, "segments": []})
+        _write_json(planning_root / "lane-availability.json",
+                    {"derived_at": "2026-08-21T00:00:00Z", "degraded": False, "segments": []})
+        _write_json(planning_root / "lane-frontier.json",
+                    {"derived_at": "2026-08-21T00:00:00Z", "entries": [], "gate_ranks": {}})
+
+        found = check_lane_records.discover_lane_files(planning_root)
+        names = sorted(p.name for p in found)
+        check("mev's derived artifacts are not discovered as lane records",
+              not any(n.startswith("lane-segments") or n.startswith("lane-availability")
+                      or n.startswith("lane-frontier") for n in names),
+              f"found: {names}")
+        check("the three real fixture records are still discovered",
+              len(names) == 3, f"found: {names}")
+
+        proc = subprocess.run(
+            [sys.executable, str(MODULE_PATH), "--planning", str(planning_root), "--quiet"],
+            capture_output=True, text=True,
+        )
+        check("a corpus carrying mev's derived artifacts still exits 0",
+              proc.returncode == 0, proc.stdout + proc.stderr)
+
+
+def check_a_lane_record_at_the_planning_root_is_the_deliberate_blind_spot() -> None:
+    """The control for the fixture above. The exclusion is by LOCATION, so a well-formed lane
+    record placed directly in the planning root is deliberately invisible. Pinned so the trade-off
+    is a recorded decision rather than a silent hole: every real lane record, in both layouts,
+    lives in a roadmap subdirectory.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = build_corpus(Path(td))
+        planning_root = tmp / "consumer-repo" / "planning"
+        _write_json(planning_root / "lane-rootlevel.json", {
+            "lane": "rootlevel",
+            "roadmap": "my-roadmap",
+            "blocks": [{"id": "BT.9.Z", "origin_roadmap": "my-roadmap", "repo": "consumer-repo"}],
+        })
+        names = sorted(p.name for p in check_lane_records.discover_lane_files(planning_root))
+        check("a lane record directly in the planning root is not discovered (by design)",
+              "lane-rootlevel.json" not in names, f"found: {names}")
+
+
 def check_positive_no_top_level_repo() -> None:
     """A lane record with NO top-level `repo` validates.
 
@@ -395,6 +452,8 @@ def main() -> int:
     check_positive_notes_field()
     check_negative_per_block_note()
     check_legacy_and_roadmaps_discovery()
+    check_derived_artifacts_at_the_planning_root_are_not_lane_records()
+    check_a_lane_record_at_the_planning_root_is_the_deliberate_blind_spot()
     check_negative_missing_origin_roadmap()
     check_negative_duplicate_block_id()
     check_negative_unknown_top_level_key()
