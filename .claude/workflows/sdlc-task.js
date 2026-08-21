@@ -260,6 +260,19 @@ different repo), notes (paste the raw script output).
   return result
 }
 
+// COMMIT-SAFETY GUARD (BT.ticket.worktree-run-can-commit-an-empty-tree) — the cause-independent
+// backstop. Joined to a `git commit` with `&&` in the SAME Bash call as the commit itself: a
+// separate preceding call runs in a different process whose inherited git environment may differ,
+// which is the whole failure mode this guards against. Signal is an EMPTY INDEX against a non-empty
+// HEAD tree — deliberately NOT core.bare, which stays false in every reproduction of the data loss.
+// `gitCmd` lets a vault-repo commit run the same guard via `git -C <vault path>` against the vault's
+// own HEAD/index rather than the worktree's; the default 'git' reproduces the exact snippet verbatim.
+// Kept byte-identical with sdlc-flow.js's copy — the two engines share no module, so this is
+// duplicated on purpose (see scripts/test_commit_safety_guard.py's cross-engine agreement check).
+function renderCommitSafetyGuard(gitCmd = 'git') {
+  return `if ${gitCmd} rev-parse --verify -q HEAD >/dev/null; then TRACKED=$(${gitCmd} ls-tree -r HEAD --name-only | wc -l | tr -d ' '); STAGED=$(${gitCmd} ls-files -s | wc -l | tr -d ' '); if [ "$TRACKED" -gt 0 ] && [ "$STAGED" -eq 0 ]; then echo "COMMIT_GUARD_ABORT: index holds 0 entries but HEAD tracks $TRACKED files - refusing to commit a tree that deletes everything (BT.ticket.worktree-run-can-commit-an-empty-tree)"; exit 1; fi; fi`
+}
+
 // Given a task stage's self-reported filesModified (repo-root-relative) and a resolved vault, return
 // the vault-relative subset (the part of the path after "planning/") that needs an independent
 // vault-commit check. Derived from what the task ACTUALLY wrote — never a hard-coded filename list.
@@ -963,7 +976,10 @@ ${resumeMode ? `  RESUME — reuse the existing worktree for this spec if presen
        worktree. Run:
          git ls-files --others --ignored --exclude-standard -- . | grep -E '(^|/)\.env(\.[^/]*)?$' | grep -Ev '(^|/)(node_modules|\.venv|venv|trees|vendor)/' | while IFS= read -r f; do dest="trees/[branchName]/$f"; if [ ! -f "$dest" ]; then mkdir -p "$(dirname "$dest")"; cp "$f" "$dest"; echo "ENV_COPIED: $f"; fi; done
        Record the list of "ENV_COPIED:" lines — report them in STEP 4.
-    g. git -C trees/[branchName] commit --allow-empty -m "chore: init worktree [branchName]"
+    g. # COMMIT-SAFETY GUARD EXEMPT: this is the worktree-init commit — its index is legitimately
+       # populated after checkout (it is the very first commit on the branch), so the guard's
+       # "empty index against a non-empty HEAD" signal cannot fire here; --allow-empty is orthogonal.
+       git -C trees/[branchName] commit --allow-empty -m "chore: init worktree [branchName]"
     Set wasCreated=true.
 
   STEP 2c — Fix the planning/ symlink for the worktree (run from the MAIN repo root, for ALL worktree
@@ -1181,7 +1197,7 @@ STEP 3 — Otherwise, author a FRESH decomposed ${tasksJsonFile} from the block 
 
 STEP 4 — Commit it on the current branch with an explicit pathspec:
   git add ${tasksJsonFile}
-  git commit -m "chore: derive tasks.json from block record (D16 fallback)"
+  ${renderCommitSafetyGuard()} && git commit -m "chore: derive tasks.json from block record (D16 fallback)"
   git log --oneline -1   (capture the short hash)
 
 Return via StructuredOutput: derivable, written, commitHash, taskCount, notes.
@@ -1230,7 +1246,7 @@ STEP 3 — Otherwise, author a FRESH decomposed ${tasksJsonFile} from tasks.md's
 
 STEP 4 — Commit it on the current branch with an explicit pathspec:
   git add ${tasksJsonFile}
-  git commit -m "chore: derive tasks.json from tasks.md (D16 fallback)"
+  ${renderCommitSafetyGuard()} && git commit -m "chore: derive tasks.json from tasks.md (D16 fallback)"
   git log --oneline -1   (capture the short hash)
 
 Return via StructuredOutput: derivable, written, commitHash, taskCount, notes.
@@ -1703,7 +1719,7 @@ Target:
 7. Commit on the branch. Never use git add -A or git add . — stage files explicitly by name.
    Run: cd ${runDir} && git status
    Stage your changed source/test files explicitly, then commit using HEREDOC:
-     cd ${runDir} && git commit -m "$(cat <<'EOF'
+     cd ${runDir} && ${renderCommitSafetyGuard()} && git commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem}` : `feat: implement ${stem}`}
 EOF
 )"
@@ -1721,10 +1737,10 @@ ${vault.vaulted ? `
     Then, once every such path is staged, commit ONLY those paths — pass them explicitly to \`git commit\`
     itself (not merely to \`git add\`), so a sibling lane's unrelated pre-staged files are never swept
     into this commit even if they happen to already be staged:
-      cd ${runDir} && git -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+      cd ${runDir} && git -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
 EOF
-)" -- <relpath1> <relpath2> ...
+)" -- <relpath1> <relpath2> ...)
       cd ${runDir} && git -C ${vault.planningPath} log --oneline -1
     If NOTHING you wrote this attempt lives under planning/, skip this step entirely — do not run any
     vault command. If a vault add/commit fails, report it PLAINLY in notes; never paper over it, and
@@ -2172,15 +2188,15 @@ ${vault.vaulted ? `
    Then commit ONLY these three paths — pass them explicitly to \`git commit\` itself (not merely to
    \`git add\`), so anything a sibling lane already had staged in this same vault repo is left staged
    and untouched by this commit:
-   cd ${runDir} && git -C ${vault.planningPath} diff --cached --quiet -- ${vault.planningPath}/${blockId}/tasks.md ${vault.planningPath}/status.md ${vault.planningPath}/state.json || git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+   cd ${runDir} && git -C ${vault.planningPath} diff --cached --quiet -- ${vault.planningPath}/${blockId}/tasks.md ${vault.planningPath}/status.md ${vault.planningPath}/state.json || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && git -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 chore: sdlc-task bookkeep — ${blockId}
 EOF
-)" -- ${vault.planningPath}/${blockId}/tasks.md ${vault.planningPath}/status.md ${vault.planningPath}/state.json
+)" -- ${vault.planningPath}/${blockId}/tasks.md ${vault.planningPath}/status.md ${vault.planningPath}/state.json)
    cd ${runDir} && git -C ${vault.planningPath} log --oneline -1` : `
    planning/ is a plain directory here (not vaulted) — everything commits together as before:
    cd ${runDir} && git add ${specFile} planning/status.md
    cd ${runDir} && git add planning/state.json 2>/dev/null || true
-   cd ${runDir} && git commit -m "$(cat <<'EOF'
+   cd ${runDir} && ${renderCommitSafetyGuard()} && git commit -m "$(cat <<'EOF'
 chore: sdlc-task bookkeep — ${blockId}
 EOF
 )" || echo "NOTHING_TO_COMMIT"

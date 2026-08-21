@@ -49,17 +49,17 @@ MANIFEST_PATH = ROOT / "scripts" / "skill_sync_manifest.json"
 # named by `anchor` — see the file for the surrounding phase/comment markers if a range needs
 # re-picking after a refactor moves code around.
 ANCHORS = [
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 786, 892,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 799, 905,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1087, 1367,
+    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1103, 1383,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1605, 1724,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1621, 1740,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 904, 1071,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 917, 1086,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "triage-bail-taxonomy", 1290, 1528,
+    (".claude/workflows/sdlc-flow.js", "triage-bail-taxonomy", 1306, 1545,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 2046, 2201,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 2063, 2216,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 
