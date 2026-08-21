@@ -9,8 +9,8 @@ Both engines are Workflow scripts driven by an agent-executed setup STEP, not
 functions this repo can import and call in-process (they don't even share
 code with each other by design -- see each file's own comments). So the only
 way to pin the resolution RULE as a testable, versioned contract is to mirror
-it here in Python, exactly as `scripts/test_lane_directive_emission.py`
-mirrors mev's directive grammar for the same reason.
+it here in Python, the same way this repo mirrors other engine-embedded
+rules as testable Python fixtures.
 
 THE RULE (transcribed from sdlc-task.js ~line 1055-1092 and the identical
 region in sdlc-flow.js):

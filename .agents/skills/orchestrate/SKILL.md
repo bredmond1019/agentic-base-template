@@ -17,9 +17,11 @@ One `/orchestrate` session drives one repo. Run several repos at once — that i
 $ARGUMENTS — one of:
 - **Inline list:** ordered block IDs or spec slugs, space- or comma-separated.
   `/orchestrate OK.3.A OK.3.B`
-- **File path:** a file with one block ID or spec slug per line. `#` comments and blank lines are
-  ignored; file order is execution order.
-  `/orchestrate planning/bullet-proof-software/lane-okf-core.txt`
+- **Lane-file path:** a single `lane-<name>.json` path, authored against
+  `.claude/workflows/lane.schema.json` (D71). Read its `blocks[]` array — **array order IS chain
+  order** — and take each entry's `id`. The argument stays a single path; there is no second
+  argument for a lane file.
+  `/orchestrate planning/bullet-proof-software/lane-okf-core.json`
 - **Flags:**
   - `--worktree` — **require** worktree isolation for every block in the chain. See step 5.
   - `--no-worktree` — force plain-branch/in-place for every block, overriding any per-repo default.
@@ -30,7 +32,7 @@ $ARGUMENTS — one of:
 If `$ARGUMENTS` is empty, stop and print:
 ```
 Usage: /orchestrate <block-id> [block-id ...]
-       /orchestrate <path-to-list-file>
+       /orchestrate <path-to-lane-name.json>
        Flags: --worktree --no-worktree --engine <task|flow> --dry-run --continue-on-fail
 ```
 
@@ -52,9 +54,9 @@ Each of these exists because it has already caused a real failure in this fleet.
    conflict resolution — runs **inline in this session**.
 
    If you find yourself about to write code for a block ID, stop: that is an engine's job.
-2. **Only `sdlc-task` and `sdlc-flow`.** If `/generate-tasks` recommends `/sdlc-run` or
-   `/sdlc-block`, stop and report — those have different isolation and merge semantics than this
-   command handles.
+2. **Only `sdlc-task` and `sdlc-flow`.** These are the only two engines `/generate-tasks` may
+   recommend; if it recommends anything else, stop and report — this command only handles their
+   isolation and merge semantics.
 3. **One repo per session, one engine run at a time.** Both engines take the repo's branch or
    working tree. Never launch a second engine workflow in the same repo before the first has
    completed and integrated.
@@ -84,7 +86,11 @@ Each of these exists because it has already caused a real failure in this fleet.
    The log lives beside the roadmap driving the run, at `<roadmap_dir>/lane-log.jsonl` — resolve
    `<roadmap_dir>` from the driving roadmap's slug via `/begin-orchestration`'s Step 1C rule (new
    location `planning/roadmaps/<slug>/` first, then legacy `planning/<slug>/`; both existing is an
-   error), never a hardcoded `planning/<slug>/`. If the chain has no roadmap, skip it.
+   error), never a hardcoded `planning/<slug>/`. **If the chain has no driving roadmap, a run slug
+   fills the same `<slug>` position** — `<roadmap_dir>` becomes `planning/orchestration-run/<run-
+   slug>/`, the same convention already on disk for `harness-hardening` and
+   `carryover-improvements`, both run with no roadmap. A run with no roadmap is still a run and
+   still leaves evidence — do not skip the lane log.
 
    **Do not hand-edit a roadmap's generated regions.** Run `mev emit-state --write` and let the
    sequence table regenerate from `state.json`, which is the authority. Four concurrent sessions
@@ -96,8 +102,11 @@ Each of these exists because it has already caused a real failure in this fleet.
 9. **Keep a running notes file — `planning/orchestration-run/<roadmap-slug>/notes.md` in this
    repo**, where `<roadmap-slug>` is the driving roadmap's directory name (the one from `$ARGUMENTS`
    or the list file this chain runs from) — the same directory name `/begin-orchestration` resolves
-   as its `run_record_dir`, so both commands address the same record. If the chain has no roadmap,
-   skip this rule (same as the lane log above). The lane log carries one line per block for
+   as its `run_record_dir`, so both commands address the same record. **If the chain has no
+   driving roadmap, use the same run slug that fills rule 8's `<roadmap_dir>` position** —
+   `planning/orchestration-run/<run-slug>/notes.md` — so the record path and the lane-log path
+   resolve from the same slug. Do not skip this rule; a run with no roadmap still leaves evidence.
+   The lane log carries one line per block for
    *sibling lanes*; this file carries everything else, for the *next session in this repo*. Defects
    found in passing, deferred fixes, decisions you took, traps re-confirmed, whatever the roadmap
    got wrong. None of it survives the session transcript otherwise, and the next agent starts blind
@@ -113,6 +122,18 @@ Each of these exists because it has already caused a real failure in this fleet.
    per `planning/decisions/D57-orchestration-run-artifact-contract.md`. Follow that contract; do not
    restate it here. In short: unresolved items never carry into a successor file — at lane close,
    promote any item still `OPEN` into `state.json` `carryover[]`.
+
+   **Adopting a block not on this chain?** Append its ledger row **at adoption time, not at lane
+   close**, with `origin_roadmap` set explicitly to that block's own driving roadmap (Rule 5's
+   ledger schema — do not restate it here). A block adopted and never given a row leaves its
+   home-roadmap attribution unrecoverable: it has already happened once, silently, and broke a
+   downstream consolidation pass that depends on the column.
+
+   **At lane close, reconcile the ledger against the repo's live `state.json` before stamping any
+   lifecycle field.** `state.json` is the authority on which blocks are actually closed; a ledger
+   row still marked `held` or `open` for a block `state.json` shows closed is stale and must be
+   corrected first. Do not stamp `lane-complete` or `consolidated` over a ledger that disagrees
+   with `state.json`.
 
    **Verify what you just wrote, before continuing** — and before the commit in rule 7/8 below.
    After every write or append to `notes.md` (and after writing the terminal `review.md`), run
@@ -166,8 +187,13 @@ rather than launching anything.
 ## Steps
 
 ### 1. Parse the chain
-Resolve `$ARGUMENTS` to an ordered list. For a file, read it and strip comments/blanks. Print the
-chain with positions so the operator can confirm the order before anything runs.
+Resolve `$ARGUMENTS` to an ordered list. For a lane-file path, read the JSON, validate it against
+`.claude/workflows/lane.schema.json` at a glance (required top-level keys `lane`, `roadmap`,
+`blocks`), and take the `id` of each entry in `blocks[]` in array order — **array order IS chain
+order**; there is no comment syntax or line order to strip, because the file is structured data,
+not a directive list. A per-block briefing that used to live as lane-file prose now lives on the
+block's own record (`notes`/`why`); read it there, not from this file. Print the chain with
+positions so the operator can confirm the order before anything runs.
 
 ### 2. Check readiness against the live graph
 For each block, find it in the repo's `planning/state.json` `tracks[].blocks[]` and resolve every
@@ -197,14 +223,17 @@ If `planning/<spec-slug>/tasks.md` is missing for block 1, run **`/generate-task
 Run **`/breakdown planning/<spec-slug>/tasks.md`** *only* when it flagged that spec. Never break
 down on your own judgment — an unnecessary breakdown multiplies engine runs for no benefit.
 
-**Two authoring-time rules for any spec or OKF frontmatter this step produces or edits** —
-generalized from a lane that hit both in one day: a `related:` target must resolve to a real
-`doc_id` on a document that has actually been crawled, never a carryover slug or an invented id
-— an unresolved edge red-gates the whole corpus for every concurrent lane when `--graph` gates,
-not just the authoring one. And a `validation_command` must be scoped to the task's own changes,
-never the whole working tree (e.g. never a working-tree-wide `git diff | grep` guard) — a
-tree-wide guard can never pass in a shared index with concurrent lanes and bails the block on an
-unrelated lane's uncommitted files.
+**Two authoring-time rules for any spec or OKF frontmatter this step (or `/generate-tasks`,
+or hand-editing) produces or edits** — generalized from a lane that hit both in one day: a
+`related:` target must resolve to a real `doc_id` on a document that has actually been crawled,
+never a carryover slug or an invented id — an unresolved edge red-gates the whole corpus for
+every concurrent lane when `--graph` gates, not just the authoring one. A cross-repo target must
+be qualified `<repo>:<doc_id>` (e.g. `base-template:D48-downstream-harness-sync-script`); a bare
+`doc_id` resolves only within the authoring repo and is treated as unresolved everywhere else —
+see `docs/okf-frontmatter.md` for the full syntax. And a `validation_command` must be scoped to
+the task's own changes, never the whole working tree (e.g. never a working-tree-wide `git diff |
+grep` guard) — a tree-wide guard can never pass in a shared index with concurrent lanes and bails
+the block on an unrelated lane's uncommitted files.
 
 ### 5. Decide engine and isolation
 
@@ -213,7 +242,7 @@ unrelated lane's uncommitted files.
   output, a handful of files). Cheapest rung. In place, no review, no PR.
 - **`sdlc-flow <spec-slug>`** — a whole spec wanting a consolidated review, a docs pass, and a PR.
   The default for anything not clearly small.
-- Recommends `sdlc-run`/`sdlc-block` → stop and report (rule 2).
+- Recommends anything else → stop and report (rule 2).
 
 **Isolation.** Both engines default to plain-branch/in-place; `--worktree` opts into an isolated
 sparse-checkout worktree. Worktrees are **safe in brain-vaulted repos** — the engines detect a
@@ -415,33 +444,37 @@ Cheap, and it catches anything that changed outside the chain. Then return to st
   — pass `-uu` too. A sweep reporting "clean" without both is not trustworthy. See
   `begin-orchestration.md`'s Traps section for the same rule stated for that command.
 
+## Required deliverable — the terminal `review.md`
+
+Before you report, write `planning/orchestration-run/<roadmap-slug>/review.md`. **Required, not
+optional.** Plain-English summary of what this chain changed, plus the hand-verification recipes an
+operator would run to confirm it. **Every recipe must have been executed by this session before the
+file is written, and the file must say so** (e.g. "ran, output: ..."). An authored-but-unrun recipe
+reads as verification while being a guess — worse than no recipe. Naming, frontmatter and lifecycle
+follow `planning/decisions/D57-orchestration-run-artifact-contract.md`; do not restate it.
+
 ## Final report
 
-A table, one row per block: `position · block ID · spec slug · engine · isolation · outcome ·
-state verified (clean / repaired) · commit or PR`.
+**<= 20 lines.** Everything else is already on disk — link paths, never restate them. See the
+`report-to-the-operator` skill.
 
-Then explicitly:
-- **HELD** blocks and what each waits on.
-- **State repairs** you made, and where.
-- **Merge conflicts** you resolved, and how.
-- **BROKEN DOWNSTREAM** — any consumer repo step 9 found broken by this chain's changes (repo,
-  error class, one-line fix estimate). Empty is the expected case; say so rather than omitting
-  the line.
-- **Decisions you took** under rule 10, each with its one-line reasoning — and confirmation they
-  are in `planning/orchestration-run/<roadmap-slug>/notes.md`, not only in this report.
-- **Open items** the run surfaced but did not fix, as recorded in the notes file (defects found in
-  passing, deferred propagation, anything needing its own ticket).
-- **The remaining chain** if you stopped early — as a paste-ready `/orchestrate` invocation.
-- A **terminal `planning/orchestration-run/<roadmap-slug>/review.md`** — required, not optional. It is a
-  plain-English summary of what this chain changed plus the hand-verification recipes an operator
-  would run to confirm it. Every recipe in it must have been **executed at least once by this
-  session before the file is written**, and the file must say so explicitly (e.g. "ran, output:
-  ...") — an authored-but-unrun recipe reads as verification while being a guess, which is worse
-  than no recipe at all. Naming, frontmatter, and lifecycle follow
-  `planning/decisions/D57-orchestration-run-artifact-contract.md`; do not restate that contract
-  here.
-- A reminder to run **`/log-work`**: `sdlc-task`'s bookkeep is deliberately lean and writes no
-  `log.md` entry, so a chain of tasks leaves no narrative history without it.
+Line 1: `<n>/<m> blocks closed[, <k> HELD]` + whether anything needs the operator.
+
+Then a table, one row per block: `# · block ID · engine · outcome · state (clean/repaired) ·
+commit or PR`.
+
+Then **only the lines that are non-empty**, one line each:
+- **HELD** — block + what it waits on.
+- **State repairs** — block + what was wrong.
+- **Merge conflicts** — block + how resolved.
+- **BROKEN DOWNSTREAM** — repo + error class. Say "none" explicitly; silence is ambiguous here.
+- **Needs your call** — anything you could not decide.
+- **Remaining chain** — a paste-ready `/orchestrate` invocation, if you stopped early.
+
+Close with the `notes.md` and `review.md` paths, and a one-line `/log-work` reminder (`sdlc-task`'s
+bookkeep writes no `log.md` entry).
+
+Decisions and open items go **in `notes.md`**, not in this reply. Name the count and the path.
 
 ## Notes
 

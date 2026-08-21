@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fixture suite for check_lane_records.py (D71).
 
-Self-contained, no pytest dependency, in the style of test_lane_directive_emission.py: builds a
+Self-contained, no pytest dependency, in the same self-contained fixture style used across this
+repo's other harness gates: builds a
 synthetic corpus in a temp dir (a fake brain.toml + fake repo directories carrying real
 planning/harness.json files, plus lane-*.json records in both the current
 planning/roadmaps/<slug>/ layout and the legacy planning/<slug>/ layout) and drives the real

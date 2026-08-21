@@ -99,12 +99,14 @@ This stage does not author block records or register `state.json`. That is `/pla
      crosswalk can prove no row fell out during lane assignment.
 
      > **`SQ-nn` is not a block ID and must never be used as one.** It may appear in a table
-     > column, in prose, and in a lane-file `#` comment for traceability. It may **not** appear as
-     > a bare line in a lane file, as a block's `id` in `state.json`, or anywhere `/orchestrate`
-     > will try to resolve it. A lane file whose executable lines are `SQ-nn` is unrunnable: every
-     > ID misses the graph, and the lane either stops on the first block or improvises a spec for
-     > something that was never specced. This has already happened once — the first roadmap built
-     > from a `sequence.md` shipped five lane files of `SQ-nn` lines that passed both crosswalks,
+     > column, in prose, and in the roadmap's lane-table notes column or a block record's own
+     > `notes` for traceability — lane records are JSON now, so there is no `#` comment to carry
+     > it. It may **not** appear as a `blocks[].id` entry in a lane record, as a block's `id` in
+     > `state.json`, or anywhere `/orchestrate` will try to resolve it. A lane record whose
+     > `blocks[]` entries are `SQ-nn` is unrunnable: every ID misses the graph, and the lane either
+     > stops on the first block or improvises a spec for something that was never specced. This
+     > has already happened once — the first roadmap built from a `sequence.md` shipped five lane
+     > files of `SQ-nn` lines that passed both crosswalks,
      > because a crosswalk checks that refs *appear*, not that they are resolvable.
    - **registration state** — `registered` if the block already exists in its repo's `state.json`
      (give the real ID), or `candidate` if it does not. **`/orchestrate` resolves block IDs from
