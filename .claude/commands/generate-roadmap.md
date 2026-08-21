@@ -9,13 +9,15 @@ Produces the two things `/begin-orchestration` consumes: a **roadmap document** 
 **`lane-<name>.json` chain record per lane**, authored against
 `.claude/workflows/lane.schema.json` (D71). It does not run anything.
 
-**A lane record carries no free text — it is data, not prose.** Every per-block briefing, hold,
-trap, blast radius and operator gate that used to live as a comment in the retired plain-text lane
-format routes to the container that actually owns it: a per-block briefing goes in that block's own
-record (`notes`/`why` — the field the SDLC engines actually read; neither engine has ever opened a
-lane file), a hold or intra-lane dependency goes in `state.json`'s `depends_on` on the block it
-gates, and an operator gate goes in an `operator` edge in `depends_on`, named in the roadmap's
-operator table. See "`planning/roadmaps/<slug>/lane-<name>.json`" below for the full routing table.
+**A lane record is data, not a place for per-block prose.** Every per-block briefing, trap, and
+blast radius that used to live as a comment in the retired plain-text lane format routes to the
+container that actually owns it — a per-block briefing goes in that block's own record (`notes`/
+`why` — the field the SDLC engines actually read; neither engine has ever opened a lane file), a
+hold goes in the lane record's own `held_until`, an intra-lane dependency goes in `state.json`'s
+`depends_on` on the block it gates, and an operator gate goes in an `operator` edge in
+`depends_on`, named in the roadmap's operator table. The lane record's own top-level `notes` field
+is the one deliberate exception — lane-level constraints and context, never a per-block briefing.
+See "`planning/roadmaps/<slug>/lane-<name>.json`" below for the full routing table.
 
 **INSTALL-WINDOW WARNING:** a lane authored before mev's lane.json reader is installed fleet-wide
 (`HQ.8.A`) is fully drivable by `/orchestrate`, which reads the file directly — but it will **not**
@@ -489,25 +491,37 @@ because a lane is not single-repo in this corpus).
 |---|---|
 | `repo` | An optional lane-level default repo, for a single-repo lane's own convenience. Carries no meaning for `blocks[]` — each entry still names its own `repo`. |
 | `budget` | `{"heavy": bool, "not_with": [repo, ...]}`. **Every lane authors `heavy`** — Step 4's "heavy budget is the real constraint" rule means every lane already has a real classification, so there is no "constraint absent" case here. Add `not_with` only when this lane's heavy budget collides with another repo's. |
-| `held_until` | A **calendar date** (`YYYY-MM-DD`) this lane may not start before. This is the *only* kind of hold authored in the lane record — a block-to-block or block-to-operator-gate hold is **not** repeated here; it already exists as a `depends_on` edge on that block's own `state.json` record, and `/orchestrate` reads it there. |
+| `held_until` | What this lane is held until before it may start: a block ID (waits for that block to land) or an `operator-`-prefixed kebab-case slug (waits on that operator/approval edge). **RETYPED, not renamed** (D71 follow-on) — the retired `.txt` `# HELD-UNTIL:` directive never carried a calendar date in any of the 70 live files, so a date-typed field was latent drift rather than a live one; the name `held_until` already reads correctly for either referent. This is the *only* kind of hold authored in the lane record — a block-to-block or block-to-operator-gate hold is **not** duplicated anywhere else; it is this field, full stop, and `/orchestrate` reads it here. |
+| `notes` | **LANE-LEVEL** constraints and context only — the SPEC / RISK / EXCEPTION / MERGE-DO-NOT-INSTALL / TRAPS class of prose the retired `.txt` format carried as comments: cross-lane warnings, sequencing rationale, known traps, anything an operator or agent driving this whole lane needs before running it. Free text, no fixed structure. **Per-block briefings do NOT go here** — see the routing table below; a per-block `note` property is deliberately absent from `blocks[]` and always will be. |
 | `isolation` | The isolation flag for this lane (e.g. `--worktree`). The *why* belongs in the roadmap's Isolation and CPU-budget table (Step 4), not in the lane record. |
 | `exclusive_repos` | Repos this lane claims exclusive write access to, beyond its own — the cross-tree-writer case below. |
 | `spec_source` | Where this lane's block specs were sourced from, when the whole lane shares one (e.g. a `sequence.md` path) and it is not master-plan slug mode. |
 | `cut_blocks` | Block IDs originally planned for this lane but cut — mirror the roadmap's own cut list, do not silently drop them from both places. |
 
+**MEV INSTALL-WINDOW CAVEAT for `notes`:** `core/mev`'s authored-record reader
+(`brain/lane_segments.rs`'s `LaneRecord`) deserializes with `#[serde(deny_unknown_fields)]` and, as
+of this writing, does not yet declare a `notes` field. `/orchestrate` reads the lane record
+directly and is unaffected, but until `mev` adds `notes` to `LaneRecord`, any lane record that
+carries it will fail `mev`'s own parse (`E_LANE_RECORD_MALFORMED`) and so will not appear in `mev
+lanes`, any derived artifact, or bastion-web — the same shape of gap as the broader
+INSTALL-WINDOW WARNING above, but scoped to this one field rather than the whole format. Track the
+`mev`-side fix separately; this command does not make cross-repo changes.
+
 ### Routing — where the old `.txt` prose now lives
 
-**A lane record carries no free text; every field above is data.** This table replaces the old
+**Almost every field above is data, not prose — `notes` is the one deliberate exception**, and it
+is scoped to lane-level constraints only, never per-block briefings. This table replaces the old
 comment blocks one-for-one so nothing that used to be said gets dropped, only relocated to the
 container that actually owns it:
 
 | What a `.txt` lane file used to say in a comment | Where it goes now |
 |---|---|
-| The per-block briefing (what the operator would read before driving a block) | That block's own record, `notes`/`why` — the field the SDLC engines actually read; neither engine has ever opened a lane file |
-| `# HELD-UNTIL: <block or operator-gate token>` | A `depends_on` edge (`block` or `operator` type) on the held block's own `state.json` record. The lane record's `held_until` field is unrelated — it is a calendar date only |
+| The per-block briefing (what the operator would read before driving a block) | That block's own record, `notes`/`why` — the field the SDLC engines actually read; neither engine has ever opened a lane file. **Not** the lane record's own `notes` field, which is lane-level only |
+| Lane-level constraints/context: `# SPEC:`, `# RISK:`, `# EXCEPTION:`, `MERGE-DO-NOT-INSTALL`-class warnings, cross-lane sequencing rationale | The lane record's own top-level `notes` field |
+| `# HELD-UNTIL: <block or operator-gate token>` | The lane record's own `held_until` field, which now accepts exactly that token (a block ID or `operator-` slug) — not a `state.json` edge, and not a calendar date |
 | `# BUDGET: HEAVY/LIGHT [NOT-WITH ...]` | `budget.heavy` / `budget.not_with` |
 | `# EXCLUSIVE-REPOS: <repo>[,...]` | `exclusive_repos` |
-| `# TRAP: ...` and any other trap cited from a real prior run | The relevant block's own record, `notes`/`why` |
+| `# TRAP: ...` and any other trap cited from a real prior run | The relevant block's own record, `notes`/`why` — a *fleet-wide* trap (not specific to one block) goes in the lane record's `notes` instead |
 | `seams.md` blast radius / single-named-writer callouts | The relevant block's own record, `notes`/`why`, plus the roadmap's lane-table notes column |
 | A non-master-plan spec source for one block | That block's own record, `notes`/`why`. `spec_source` at the lane level is for a lane-wide source only |
 | `# ORIGIN: <roadmap path>` above an adopted block | The adopted `blocks[]` entry's own `origin_roadmap` field — no comment needed or possible in JSON; see below |
@@ -534,7 +548,10 @@ an expected gap, not a bug to chase.
 from what a lane "feels like"), and which owns one file outside its own repo's tree. The
 block-to-block hold this same lane used to carry as `# HELD-UNTIL: MV.ticket....` is **not**
 repeated here — it lives on `BT.ticket.generate-roadmap-lane-directives`'s own `depends_on` edge in
-`base-template`'s `state.json`, exactly per the routing table above.
+`base-template`'s `state.json`, exactly per the routing table above. The lane-level `notes` value
+below carries the class of thing that used to be an untyped `# EXCLUSIVE-REPOS:`-adjacent comment —
+*why* the exclusivity was needed — which is lane-level context, not a per-block briefing (that
+still lives on the block's own record, as the paragraph above shows).
 
 <!-- WORKED-EXAMPLE:lane.json BEGIN -->
 ```json
@@ -553,7 +570,8 @@ repeated here — it lives on `BT.ticket.generate-roadmap-lane-directives`'s own
     "heavy": false
   },
   "isolation": "--worktree",
-  "exclusive_repos": ["mev"]
+  "exclusive_repos": ["mev"],
+  "notes": "Exclusive against mev because this block writes planning/harness.json outside its own repo's tree; a concurrent mev lane could observe or clobber a half-written file. See the block's own record for the full trap list and the depends_on hold."
 }
 ```
 <!-- WORKED-EXAMPLE:lane.json END -->
