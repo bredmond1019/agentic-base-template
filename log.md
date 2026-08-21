@@ -3,9 +3,49 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-20
+**Last updated:** 2026-08-21
 
 ---
+
+## [run: 2026-08-21]
+
+### BT.5.B — lane.json across the orchestration commands
+
+- **What:** Ran `/sdlc-flow` on `BT.5.B` through all 7 tasks; all passed, review verdict PASS.
+  Task 1 rewrote `.claude/commands/generate-roadmap.md` to emit `lane-<name>.json` per
+  `lane.schema.json` (D71) instead of the old `.txt` directive-grammar format, routing per-block
+  briefings to block-record `notes`/`why`, holds to `state.json` `depends_on`, and operator gates
+  to operator edges. Task 2 authored `scripts/check_worked_example_lane.py`, extracting the
+  command's fenced worked example and validating it via `check_lane_records.py` with a D68
+  negative-path proof, gated as `worked-example-lane-gate`. Task 3 rewrote `orchestrate.md` to
+  read the ordered `blocks[]` of a single `lane-<name>.json` path instead of stripping `#`
+  comments. Task 4 rewrote `begin-orchestration.md`'s Step 1F/G to resolve and cross-check the
+  same lane record shape. Task 5 deleted `scripts/test_lane_directive_emission.py` and its
+  harness entry, sweeping stale references from two neighboring test docstrings (net harness
+  check count 26, per the spec's math). Task 6 regenerated the six `.agents/skills/*/SKILL.md`
+  mirrors and `commands/README.md` to zero `lane-*.txt` references, and fixed a stale claim in
+  `sequence.md`. Task 7 synced global commands (`~/.claude/commands/`) so the fleet's executing
+  copies carry zero stale references, verified with a positive control; no repo files changed for
+  this task, so nothing committed here for it. `/sync-downstream-harness` (18 scaffolded repos)
+  was deliberately deferred, per the spec's stated out-of-scope.
+- **Why:** Until the generator emits the new format, every roadmap authored from `base-template`
+  is born in a format the fleet intends to delete, immediately re-dirtying `HQ.8.A`'s migration.
+  Landing this means the next `/generate-roadmap` run — anywhere in the fleet, once global
+  commands are synced — produces a lane the new `mev` parser reads and `/orchestrate` can drive.
+- **Next:** `HQ.8.A` (migrate the 32 existing `.txt` lane files and retire the old format) must
+  start in a **fresh session** — standing rule 10: global command snapshots are taken at session
+  launch, so an already-running chain would still execute the pre-sync `/orchestrate`. Also
+  pending: `/sync-downstream-harness` for the 18 scaffolded repos.
+
+```
+762d4d2 feat: implement BT.5.B-task6
+7b5f409 feat: implement BT.5.B-task5
+518df13 feat: implement BT.5.B-task4
+ddeb083 feat: implement BT.5.B-task3
+a1c1ae1 feat: implement BT.5.B-task2
+317ce05 feat: implement BT.5.B-task1
+17f32c2 chore: init worktree BT.5.B-flow
+```
 
 ## [run: 2026-08-20]
 
