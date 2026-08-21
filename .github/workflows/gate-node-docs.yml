@@ -32,7 +32,17 @@ jobs:
 
       - name: engines-parse
         run: |
-          for f in .claude/workflows/sdlc-run.js .claude/workflows/sdlc-task.js .claude/workflows/sdlc-flow.js .claude/workflows/sdlc-block.js; do
+          # Glob rather than a hardcoded list: BT.ticket.retire-unused-engines deleted
+          # sdlc-run.js and sdlc-block.js, and this loop kept naming them, so every PR
+          # went red on MODULE_NOT_FOUND for four days. A glob cannot outlive its files.
+          shopt -s nullglob
+          engines=(.claude/workflows/sdlc-*.js)
+          if [ ${#engines[@]} -eq 0 ]; then
+            echo "no engines found at .claude/workflows/sdlc-*.js -- expected at least one" >&2
+            exit 1
+          fi
+          for f in "${engines[@]}"; do
+            echo "node --check $f"
             node --check "$f" || exit 1
           done
 
