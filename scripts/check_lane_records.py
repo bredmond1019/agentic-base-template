@@ -47,15 +47,23 @@ from pathlib import Path
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 BLOCK_ID_RE = re.compile(r"^[A-Z]{2,3}\.(?:\d+[A-Z]?|ticket|chore)\.[A-Za-z0-9][A-Za-z0-9-]*$")
-DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# held_until (D71, retyped by BT.ticket.lane-schema-has-no-home-for-the-briefing task 1): the
+# retired `.txt` `# HELD-UNTIL:` directive carried a block ID or an operator-gate slug, never a
+# date -- so this accepts either, matching lane.schema.json's pattern exactly rather than the
+# stale DATE_RE this checker used to hold.
+HELD_UNTIL_RE = re.compile(
+    r"^(operator-[a-z0-9][a-z0-9-]*|[A-Z]{2,3}\.(?:\d+[A-Z]?|ticket|chore)\.[A-Za-z0-9][A-Za-z0-9-]*)$"
+)
 LANE_FILE_RE = re.compile(r"^lane-.*\.json$")
 
 TOP_LEVEL_REQUIRED = ["lane", "roadmap", "blocks"]
 # `repo` is deliberately NOT required at the top level: a lane is not single-repo in this
 # corpus, so a lane-level repo is an optional default and never a source of inheritance.
 # Every blocks[] entry carries its own required `repo` (BLOCK_ENTRY_REQUIRED below).
+# `notes` is lane-level free text ONLY (SPEC/RISK/EXCEPTION/TRAPS-class prose); a per-block
+# `note` is deliberately absent from BLOCK_ENTRY_ALLOWED below -- do not add one here either.
 TOP_LEVEL_ALLOWED = {
-    "lane", "repo", "roadmap", "blocks", "budget",
+    "lane", "repo", "roadmap", "blocks", "budget", "notes",
     "held_until", "isolation", "exclusive_repos", "spec_source", "cut_blocks",
 }
 BLOCK_ENTRY_REQUIRED = ["id", "origin_roadmap", "repo"]
@@ -235,10 +243,10 @@ def check(path, repo_paths: dict | None = None):
                 problems.append("budget.not_with must be an array")
 
     v = record.get("held_until")
-    if v is not None and not DATE_RE.match(str(v)):
-        problems.append(f"held_until `{v}` is not YYYY-MM-DD")
+    if v is not None and not HELD_UNTIL_RE.match(str(v)):
+        problems.append(f"held_until `{v}` is not a block ID or an operator-gate slug")
 
-    for field in ("isolation", "spec_source"):
+    for field in ("isolation", "spec_source", "notes"):
         v = record.get(field)
         if v is not None and not (isinstance(v, str) and v):
             problems.append(f"`{field}` must be a non-empty string")

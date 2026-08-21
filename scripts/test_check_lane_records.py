@@ -217,6 +217,48 @@ def check_positive_no_top_level_repo() -> None:
               not problems, f"problems: {problems}")
 
 
+def check_positive_notes_field() -> None:
+    """A lane-level `notes` string (SPEC/RISK/EXCEPTION-class prose) validates cleanly."""
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "lane-noted.json"
+        _write_json(path, {
+            "lane": "noted",
+            "roadmap": "my-roadmap",
+            "blocks": [
+                {"id": "BT.1.A", "origin_roadmap": "my-roadmap", "repo": "consumer-repo"},
+            ],
+            "notes": "MERGE, DO NOT INSTALL -- needs BT.5.A first.",
+        })
+        problems, _ = check_lane_records.check(path, {})
+        check("a lane record carrying `notes` validates cleanly",
+              problems == [], f"problems: {problems}")
+
+
+def check_negative_per_block_note() -> None:
+    """A per-block `note` is REJECTED, naming the offending key. This is the point of the
+    fixture pair: rejecting a per-block note is a deliberate design decision (two lanes agreed
+    on evidence that per-block briefings route to the block record, never a lane file), and a
+    decision with no test is one the next author silently reverses for symmetry with `notes`."""
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "lane-bad-note.json"
+        _write_json(path, {
+            "lane": "bad-note",
+            "roadmap": "my-roadmap",
+            "blocks": [
+                {
+                    "id": "BT.1.A",
+                    "origin_roadmap": "my-roadmap",
+                    "repo": "consumer-repo",
+                    "note": "this per-block briefing must be rejected",
+                },
+            ],
+        })
+        problems, _ = check_lane_records.check(path, {})
+        named = [p for p in problems if "blocks[0]" in p and "note" in p]
+        check("a per-block `note` is rejected, naming the offending key",
+              len(named) == 1, f"problems: {problems}")
+
+
 def check_negative_missing_origin_roadmap() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -350,6 +392,8 @@ def main() -> int:
     check_positive_well_formed()
     check_positive_two_repos()
     check_positive_no_top_level_repo()
+    check_positive_notes_field()
+    check_negative_per_block_note()
     check_legacy_and_roadmaps_discovery()
     check_negative_missing_origin_roadmap()
     check_negative_duplicate_block_id()
