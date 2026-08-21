@@ -329,6 +329,7 @@ AGENT_SKILL_SLUGS: list[str] = [
     "commit-in-this-fleet",
     "derive-state-safely",
     "run-the-gates",
+    "stop-or-continue",
 ]
 
 
@@ -350,6 +351,7 @@ CLAUDE_SKILL_SLUGS: list[str] = [
     "commit-in-this-fleet",
     "derive-state-safely",
     "run-the-gates",
+    "stop-or-continue",
 ]
 
 

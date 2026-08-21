@@ -3081,3 +3081,24 @@ work — see `planning/decisions/D3-engine-stack-deferred.md`. The user also fla
 ```diff
 (initial harness + scaffold + template meta — no application code)
 ```
+
+## 2026-08-21 — Session-continuity guidance becomes a standing rule
+
+Added a `stop-or-continue` skill and a matching `<!-- BEGIN:session-continuity -->` managed block to
+every canonical `CLAUDE.md` in the fleet (25 files), so an agent suggests wrapping up, clearing, or
+writing an artifact first according to one rule rather than ad hoc.
+
+The rule is three ordered questions: a correctness trigger (a changed engine, command, installed
+binary, hook or `CLAUDE.md` makes the running snapshot untrustworthy — standing rule 10) overrides
+everything; then whether the next chunk of work has a written entry point, because the gate is the
+artifact and not the token count; and only then context size, where the real signal is what fraction
+is finished tool output rather than active understanding. Orchestration lanes get a structural
+version: clear at block boundaries, never mid-block.
+
+Also added `scripts/sync_claude_md_block.py`, which distributes ONE named marker-delimited block
+into every canonical `CLAUDE.md` and touches nothing else. `CLAUDE.md` is project fact and is
+deliberately not synced by `sync_downstream_harness.py`, so the response-style block had been
+hand-maintained across ~24 repos — which is how a rule lands in some of them and not others. The
+script is idempotent, dry-run by default, skips `/trees/` worktree copies and nested checkouts, and
+with `--require-anchor` skips any file carrying neither the block nor its anchor (`example-repo/qm`
+and `learn-ai/lib` surface that way — neither carries the response-style convention either).
