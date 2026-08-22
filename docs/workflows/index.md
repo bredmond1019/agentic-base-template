@@ -59,14 +59,19 @@ flowchart TD
 
 **In words:**
 
-1. **You write a roadmap** — the work, split up by which repo it lands in.
+1. **You write a roadmap** — the work, split up by which repo it lands in. Made with
+   [`/generate-roadmap`](../../.claude/commands/generate-roadmap.md).
 2. **Each repo gets a lane record** — a small JSON file listing that repo's blocks, in order.
-3. **You open one lane per repo**, each in its own Claude Code session. They run at the same time.
-4. **Inside a lane, blocks run one at a time.** Each block hands off to an engine, and the engine
-   writes the code.
-5. **Lanes never share a working directory.** They coordinate through the layer underneath —
-   claiming identity, locking repos, and leaving each other messages.
-6. **The commander sweeps that layer** and tells you what needs a human.
+   Shape: [`lane.schema.json`](../../.claude/workflows/lane.schema.json).
+3. **You open one lane per repo**, each in its own Claude Code session, with
+   [`/begin-orchestration`](../../.claude/commands/begin-orchestration.md). They run at the same time.
+4. **Inside a lane, blocks run one at a time.** Each block hands off to an engine —
+   [`/sdlc-task`](sdlc-task.md) or [`/sdlc-flow`](sdlc-flow.md) — and the engine writes the code.
+5. **Lanes never share a working directory.** They coordinate through
+   [the layer underneath](lane-coordination.md) — claiming identity, locking repos, and leaving each
+   other messages.
+6. **[The commander](../../.claude/commands/orchestration-commander.md) sweeps that layer** and tells you what needs a
+   human. Run it by typing `/orchestration-commander`.
 
 The only steps you personally do are 1, 3, and answering whatever the commander surfaces.
 
@@ -81,21 +86,21 @@ Terms used everywhere in these docs. Skim once; come back when a word stops maki
 | **Brain root** | The top-level `agentic-portfolio/` directory — the one containing `brain.toml`. Almost every path in these docs is relative to it. |
 | **Corpus** | Every markdown document across every repo, treated as one searchable body. What `validate-brain` checks. |
 | **Repo** | One project with its own git — `learn-ai`, `mev`, `bastion`. There are ~18. |
-| **Roadmap** | A plan spanning several repos, at `planning/roadmaps/<slug>/roadmap.md`. |
+| **Roadmap** | A plan spanning several repos, at `planning/roadmaps/<slug>/roadmap.md`. Created by [`/generate-roadmap`](../../.claude/commands/generate-roadmap.md). |
 | **Block** | One unit of work with an ID like `LA.ticket.fix-the-thing`. The thing an engine actually builds. |
-| **Lane** | One repo + one Claude session + one ordered list of blocks from one roadmap. |
-| **Lane record** | The JSON file naming a lane's blocks: `<roadmap-dir>/lane-<name>.json`. |
+| **Lane** | One repo + one Claude session + one ordered list of blocks from one roadmap. Full lifecycle: [orchestration.md](orchestration.md). |
+| **Lane record** | The JSON file naming a lane's blocks: `<roadmap-dir>/lane-<name>.json` ([schema](../../.claude/workflows/lane.schema.json)). |
 | **Chain** | The ordered blocks a lane will work through. |
-| **Engine** | The automation that writes code for one block — `/sdlc-task` (small) or `/sdlc-flow` (a whole spec). |
-| **Spec** | The instructions for one block: `planning/blocks/<ID>.json` + `planning/<ID>/tasks.json`. |
+| **Engine** | The automation that writes code for one block — [`/sdlc-task`](sdlc-task.md) (small) or [`/sdlc-flow`](sdlc-flow.md) (a whole spec). |
+| **Spec** | The instructions for one block: `planning/blocks/<ID>.json` + `planning/<ID>/tasks.json`. Written by [`/generate-tasks`](../../.claude/commands/generate-tasks.md); see [D65](../../planning/decisions/D65-block-record-is-the-planning-unit.md). |
 | **Gate** | A check that must pass — tests, lint, build, `validate-brain`. A "red gate" is a failing one. |
 | **Worktree** | A second checkout of the same repo in a separate folder, so two pieces of work don't collide. |
-| **Lease** | A claim that says "this lane is using this repo right now, keep out." |
-| **Queue / drain** | Lanes leave each other messages in a queue. A *drain* is one pass that reads and routes them. |
-| **Commander** | The thing that performs a drain and reports the leftovers. Run it as `/orchestration-commander`. |
+| **Lease** | A claim that says "this lane is using this repo right now, keep out." ([schema](../../.claude/workflows/lease.schema.json), [guide](lane-coordination.md)) |
+| **Queue / drain** | Lanes leave each other messages in a queue. A *drain* is one pass that reads and routes them. ([schema](../../.claude/workflows/message.schema.json), [guide](lane-coordination.md)) |
+| **Commander** | The thing that performs a drain and reports the leftovers. Run it as [`/orchestration-commander`](../../.claude/commands/orchestration-commander.md). |
 | **Operator gate** | A point where the work stops because only a human can decide or do the next thing. That human is you. |
-| **Carryover** | A recorded loose end — a bug found in passing, a deferred fix — kept in `state.json` so it is not lost. |
-| **`state.json`** | Per repo. The real record of what work exists and what state it is in. If it is not here, it does not exist. |
+| **Carryover** | A recorded loose end — a bug found in passing, a deferred fix — kept in `state.json` so it is not lost. See the `edit-state-json` skill. |
+| **`state.json`** | Per repo. The real record of what work exists and what state it is in. If it is not here, it does not exist. Editing it: the `edit-state-json` skill. |
 
 ---
 

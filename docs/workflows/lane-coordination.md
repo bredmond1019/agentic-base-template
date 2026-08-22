@@ -51,8 +51,10 @@ python3 scripts/check_lane_agents.py     # who is registered, and are any repo l
 python3 scripts/check_messages.py        # what messages are queued?
 ```
 
-To sweep the queue, type **`/orchestration-commander`** in a Claude Code session. (There is also
-`./scripts/commander_drain.sh` for unattended runs — see [§5](#5-running-the-commander), and note
+Sources: [`check_lane_agents.py`](../../scripts/check_lane_agents.py) · [`check_messages.py`](../../scripts/check_messages.py).
+
+To sweep the queue, type **[`/orchestration-commander`](../../.claude/commands/orchestration-commander.md)** in a Claude
+Code session. (There is also [`./scripts/commander_drain.sh`](../../scripts/commander_drain.sh) for unattended runs — see [§5](#5-running-the-commander), and note
 it always writes to the real shared directory.)
 
 **Read this before you trust a green result.** Both checkers exit `0` **silently when there is
@@ -94,8 +96,9 @@ first thing to check is that they resolved the same folder.
 
 **Precedence**, identical in every tool: `--lock-dir` flag → `FLEET_LOCK_DIR` env →
 `brain.toml` found by walking up, joined with `.fleet-locks`. The reference implementation is
-`resolve_lock_dir()` in `scripts/check_lane_agents.py`, mirrored in `check_messages.py` and
-`fleet_concurrency_check.py`.
+`resolve_lock_dir()` in [`scripts/check_lane_agents.py`](../../scripts/check_lane_agents.py), mirrored in
+[`check_messages.py`](../../scripts/check_messages.py) and
+[`fleet_concurrency_check.py`](../../scripts/fleet_concurrency_check.py).
 
 ```
 <lock_dir>/
@@ -171,8 +174,8 @@ interrupt discipline, the four-verdict response — is owned by
 
 | | How | When |
 |---|---|---|
-| **Interactive** | Type `/orchestration-commander` in a Claude Code session | You're at the keyboard. No arguments, no setup, and it cannot surprise you. |
-| **Unattended** | `./scripts/commander_drain.sh [--repo NAME] [--lane NAME]` | Cron or scripting. Wraps the same slash command and stamps a heartbeat file. |
+| **Interactive** | Type [`/orchestration-commander`](../../.claude/commands/orchestration-commander.md) in a Claude Code session | You're at the keyboard. No arguments, no setup, and it cannot surprise you. |
+| **Unattended** | [`./scripts/commander_drain.sh`](../../scripts/commander_drain.sh) `[--repo NAME] [--lane NAME]` | Cron or scripting. Wraps the same slash command and stamps a heartbeat file. |
 
 The script is not a separate implementation — it reads
 [`orchestration-commander.md`](../../.claude/commands/orchestration-commander.md) and hands it to a
@@ -198,8 +201,8 @@ Defaults: `--repo` is this repo's basename, `--lane` is `main`.
 | `FLEET_LOCK_DIR` | per §2 | Informational inbox count only — **not** `HEARTBEAT_DIR`. |
 
 **The commit rule: the commander re-derives, it never detects.** It does not scan `git status`
-guessing which dirty files look derived. It runs `scripts/emit_state_write.sh` and commits exactly
-the paths that script's own manifest names (`$LOG_DIR/.emit_wrote`, the `I_EMIT_WROTE` set).
+guessing which dirty files look derived. It runs **HQ's** `agentic-portfolio/scripts/emit_state_write.sh` (that script lives in the brain
+root, not in this repo) and commits exactly the paths that script's own manifest names (`$LOG_DIR/.emit_wrote`, the `I_EMIT_WROTE` set).
 Anything dirty outside that manifest is an **authored orphan** — reported, never committed. A drain
 reporting an authored orphan is the commander working correctly: a human wrote something, and it
 refuses to guess whether that belongs in its commit.
@@ -216,7 +219,7 @@ Start from the symptom you can see.
 
 | Symptom | Likely cause | Check |
 |---|---|---|
-| A lane will not start | Stale or duplicate exclusive lease on the repo, or the registry claim never ran | `check_lane_agents.py --lock-dir <dir>` for a `FAIL duplicate exclusive lease` line — it names both claimants. Confirm the lock dir resolved where you expect (§2). |
+| A lane will not start | Stale or duplicate exclusive lease on the repo, or the registry claim never ran | [`check_lane_agents.py`](../../scripts/check_lane_agents.py)` --lock-dir <dir>` for a `FAIL duplicate exclusive lease` line — it names both claimants. Confirm the lock dir resolved where you expect (§2). |
 | A lease looks stale | Never released at lane close | The lease's `acquired_at` age — it doubles as the heartbeat. The checker reports age and agent but has no `ListAgents` access, so it **cannot** tell abandoned from slow. Join it against `ListAgents` yourself. |
 | Sent a message, nothing happened | Undrained, or a drain died mid-route | `queue/<repo>/<lane>/{inbox,processing}/` and `receipts.jsonl`. Zero receipts = undrained. One `inbox->processing` and nothing since = interrupted drain, not a lost message. |
 | The drain never runs | Nothing schedules the heartbeat (`HQ.8.A`) | Whether the sender used a self-triggering kind (§4). Otherwise run the wrapper by hand. |
@@ -228,5 +231,7 @@ Start from the symptom you can see.
 
 - [`orchestration.md`](orchestration.md) — the lane lifecycle above this layer.
 - [`ping-agent/SKILL.md`](../../.claude/skills/ping-agent/SKILL.md) — agent-facing ping contract.
+- [`index.md`](index.md) — the system diagram and the vocabulary these terms come from.
+- [`fleet_concurrency_check.py`](../../scripts/fleet_concurrency_check.py) — the heavy-lane slot mechanism `orchestration.md` §3 uses.
 - [`orchestration-commander.md`](../../.claude/commands/orchestration-commander.md) — the six-step drain.
 - [`planning/lane-coordination/plan.md`](../../planning/lane-coordination/plan.md) — design, `BT.6.A`–`BT.6.E`.
