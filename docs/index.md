@@ -38,6 +38,7 @@ The [`workflows/`](workflows/index.md) subfolder is the canonical reference for 
 | [workflows/sdlc-flow.md](workflows/sdlc-flow.md) | Shared-worktree feature engine (D30–D33) — sequential tasks, per-task test→fix, one end review, PR wrap-up |
 | [workflows/commands.md](workflows/commands.md) | The manual Phase 1–7 command lifecycle the engines automate |
 | [workflows/orchestration.md](workflows/orchestration.md) | The lane lifecycle — what a lane is, the phases from `/begin-orchestration` through the terminal `review.md`, the mandatory artifacts, and the traps |
+| [workflows/lane-coordination.md](workflows/lane-coordination.md) | The operator's guide to the layer underneath a lane — registry, leases, message queue, ping contract, commander: setup, cold-start walkthrough, troubleshooting |
 
 ## Quick pointers
 
