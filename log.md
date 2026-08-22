@@ -3,7 +3,50 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-21
+**Last updated:** 2026-08-22
+
+---
+
+## [run: 2026-08-22]
+
+### `derive-state-safely` + `edit-state-json` — cover mev's other authored-state write verbs
+
+- **What:** Both skills documented `state.json` mutation as either a hand edit or a bare
+  `mev emit-state --write`, and named no other verb. Widened both to the actual writer set —
+  `set-block-status`, `defer-epic`/`resume-epic`/`complete-epic`/`sync-epics`,
+  `close-operator-gate`, `approve`/`reject`. Edited in `.claude/skills/` and mirrored to
+  `.agents/skills/` (bodies byte-identical; `.agents` keeps its folded-YAML frontmatter).
+- **Why:** **every one of those verbs re-runs `emit-state --write` internally on success**, so each
+  is a whole-corpus derived-surface rewrite wearing a one-block name. `derive-state-safely`'s
+  stale-binary warning — the one guarding the measured board regression in
+  `base-template:installed-mev-and-bastion-are-stale` — did not reach an agent who typed
+  `mev set-block-status mev:MV.10.A closed --write`, which has identical blast radius. That was the
+  gap; the rest below is what the same read turned up.
+- `derive-state-safely`: new writer table at the top with each verb's shape (dry-run by default vs
+  verified-or-refused vs digest-bound) and the read-only exemptions (`carryover`, `frontier`,
+  `lanes`, `conformance`, `validate-*`); new Step 5 on the `<root>/.mev-emit.lock` advisory lock
+  (`E_EMIT_LOCK_HELD` writes nothing, stale locks self-reclaim, dry-run never takes it, never
+  delete the file by hand) and the linked-worktree refusal on `close-operator-gate`/`approve` —
+  which matters because the SDLC engines run in worktrees, making that the common case. Old Step 5
+  renumbered to Step 6.
+- `edit-state-json`: Step 1's one-line "prefer the tools" note becomes a six-row verb table plus the
+  three shape rules; records that **an agent structurally cannot clear its own operator gate**
+  (`E_BLOCK_OPERATOR_GATED`, and `--force-operator-gate` is refused on non-TTY stdin) so the
+  escape hatch is `/begin-session`, not a `depends_on` hand edit. Step 6 gains the `mev carryover`
+  commands that *check* an already-satisfied `clears_when` instead of trusting it, including the
+  `--allow-exec` trap where a `command_exits_zero` predicate silently reports not-evaluable.
+  Concurrency section upgraded from social convention to the enforced lock, noting that a hand
+  edit takes no lock at all — which is why report-then-one-writer still governs that path.
+- Both descriptions rewritten so the skills are recalled when an agent reaches for a write verb,
+  not only when it hand-edits; new error codes added as triggers (`E_BLOCK_OPERATOR_GATED`,
+  `E_APPROVAL_DIGEST_MISMATCH`, `E_EMIT_LOCK_HELD`).
+- **Forward note:** `mev carryover --dispose` (`MV.ticket.carryover-dispose`, unblocked 2026-08-22
+  by `okf-core:OK.4.A` closing, not yet implemented) will be a writer — the table in
+  `derive-state-safely` says to add it there when it ships.
+- **Verified:** `check_skill_sync.py` exit 0 (6 anchors match — these skills are outside its
+  manifest); `bastion validate-brain --structure` 0 errors; YAML frontmatter parses in all four
+  files.
+- **Next:** `/sync-downstream-harness` (dry-run, then `--apply`) to reach the scaffolded repos.
 
 ---
 
