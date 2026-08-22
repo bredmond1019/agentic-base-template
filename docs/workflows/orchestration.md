@@ -33,9 +33,8 @@ model — everything else follows from it.
 - **Several repos run concurrently — as separate sessions.** That concurrency is the lane model:
   each lane is independent, and lanes interact only through cross-repo `depends_on` edges in
   `state.json`, never by sharing a working tree or a session.
-- A lane does **not** fan out one engine per block into parallel worktrees, and it does not always
-  use `/sdlc-flow` — `/orchestrate` chooses `/sdlc-task` or `/sdlc-flow` per block, and every block
-  in the chain runs strictly one after another.
+- A lane runs one engine at a time per block — `/orchestrate` chooses `/sdlc-task` or `/sdlc-flow`
+  per block, and every block in the chain runs strictly one after another.
 
 ---
 
