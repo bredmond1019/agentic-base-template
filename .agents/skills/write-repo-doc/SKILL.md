@@ -5,6 +5,9 @@ description: Write or rewrite an internal doc (docs/*.md, a guide, a README sect
 
 # Writing an internal doc
 
+> Governed by **D72** (`planning/decisions/D72-write-repo-doc-is-the-internal-docs-standard.md`).
+> How the corpus gets converted: **D73** (`…/D73-docs-upgrade-incrementally-through-close-out.md`).
+
 ## Who you are writing for
 
 **Brandon plans this system and approves every decision. He did not write the code — agents did.**

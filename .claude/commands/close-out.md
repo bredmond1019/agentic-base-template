@@ -248,6 +248,9 @@ Invoke the `/update-docs --patch` skill. Wait for it to complete.
 
 #### 3b — Bring every doc you touched up to the current standard
 
+**Governed by D73** (`base-template/planning/decisions/D73-docs-upgrade-incrementally-through-close-out.md`);
+the standard itself is D72.
+
 **Load the `write-repo-doc` skill and apply it to each doc this run created or edited.** Most docs
 in this fleet predate that standard: they open with prose instead of a quickstart, use vocabulary
 they never define, and name commands and scripts without linking them. `/close-out` runs on
