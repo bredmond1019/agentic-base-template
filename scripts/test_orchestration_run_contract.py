@@ -546,6 +546,31 @@ def _sweep_with_walk(root: Path) -> list[Path]:
     return found
 
 
+def _inside_linked_worktree(path: Path, root: Path) -> bool:
+    """True when `path` sits inside a linked git worktree below `root`.
+
+    A linked worktree's root has a `.git` FILE (gitdir pointer); a normal repo has a `.git`
+    DIRECTORY. Walking up from the record to `root`, the first `.git` we meet decides it. The
+    scan root itself is never treated as a linked worktree, so running the checker from inside
+    one still validates that tree's own records.
+    """
+    try:
+        rel_parent = path.resolve().parent
+        root_res = root.resolve()
+    except OSError:
+        return False
+    cur = rel_parent
+    while True:
+        if cur == root_res or cur == cur.parent:
+            return False
+        dot_git = cur / ".git"
+        if dot_git.is_file():
+            return True
+        if dot_git.is_dir():
+            return False
+        cur = cur.parent
+
+
 def discover_records(root: Path) -> tuple[list[Record], int, int]:
     """Sweep `root` for orchestration-run/ records with -L -uu, dedup by realpath.
 
@@ -566,6 +591,22 @@ def discover_records(root: Path) -> tuple[list[Record], int, int]:
     # reason unrelated to any live contract. `check_block_naming.py` already excludes archived
     # directories for the same reason; this mirrors it.
     distinct = [p for p in distinct if "archive" not in p.parts]
+
+    # Records inside a LINKED GIT WORKTREE are the same records, checked out a second time --
+    # not a second corpus. A linked worktree's root carries a `.git` FILE (a gitdir pointer)
+    # where a normal clone carries a `.git` DIRECTORY, which is what distinguishes them here.
+    # HQ tracks every repo's planning/ directory itself, so a worktree of the brain root gets a
+    # real second copy of every orchestration-run record on disk -- realpath dedup does NOT
+    # collapse them, because they genuinely are two files.
+    #
+    # Measured 2026-08-22: with mev's trees/MV.ticket.op-slug-rendering-and-sweep-flow/ checked
+    # out, this checker reported 97 NEW blocking duplicate-doc_id violations, every one of them
+    # pairing a real record with its copy under that worktree and NONE between two real files.
+    # It then attributed them to "this tree's changes", so an unrelated lane's open worktree
+    # red-gated whoever ran the suite next -- and it bailed a live block that had nothing to do
+    # with it. Do NOT fix this by dropping the -L symlink follow in the sweep: that follow is
+    # what finds the records at all.
+    distinct = [p for p in distinct if not _inside_linked_worktree(p, root)]
 
     run_dirs: set[Path] = set()
     for p in distinct:
