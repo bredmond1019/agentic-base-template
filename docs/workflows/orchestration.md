@@ -1,178 +1,193 @@
 ---
 type: Guide
 title: Orchestration lifecycle — driving a lane end to end
-description: How-to for opening, running and closing one lane of a multi-repo roadmap — the lane model, the phases from /begin-orchestration through the terminal review.md, the mandatory artifacts, and the traps that have cost real runs.
+description: How to open, run and close one lane of a multi-repo roadmap — quickstart first, then the phase table, the mandatory artifacts, and the traps that have cost real runs.
 doc_id: base-template-orchestration-guide
 layer: [factory]
 project: base-template
 status: active
-keywords: [orchestration, lane, begin-orchestration, orchestrate, lane-log, notes.md, review.md, D57, D43, commander]
+keywords: [orchestration, lane, begin-orchestration, lane-log, run record, commander]
 related: [base-template-workflows-index, sdlc-task, sdlc-flow, D57-orchestration-run-artifact-contract, plan-lane-coordination]
 ---
 
 # Orchestration lifecycle — driving a lane end to end
 
-A how-to for the piece of the pipeline the reference pages don't cover: what a **lane** is, which
-command opens one, what order its phases run in, which artifacts are mandatory, and what to watch
-for. For the flag-level reference on `/orchestrate` and `/begin-orchestration`, see
-[`.claude/commands/README.md`](../../.claude/commands/README.md) — this page is the narrative,
-that page is the lookup table. Where this page and a command file disagree, **the command wins**;
-this page describes `.claude/commands/begin-orchestration.md` and `.claude/commands/orchestrate.md`
-as they stand, not as remembered from an older reading.
+**One repo, one session, one chain of blocks from one roadmap.** That is a lane. This page is how
+to run one.
+
+- **Flag-level reference:** [`.claude/commands/README.md`](../../.claude/commands/README.md).
+- **The layer underneath** (registry, leases, messages, commander):
+  [`lane-coordination.md`](lane-coordination.md).
+- **Where this page and a command file disagree, the command wins.**
 
 ---
 
-## What a lane is
+## Quickstart
 
-A **lane** is one repo, one session, one chain of blocks drawn from one roadmap. That's the whole
-model — everything else follows from it.
+```bash
+# 1. Open the lane. --roadmap is required and never inferred.
+/begin-orchestration --roadmap planning/roadmaps/<slug>/roadmap.md --lane <name>
 
-- **One repo per session, one engine run at a time.** Both SDLC engines take the repo's branch or
-  working tree; a lane never launches a second engine in the same repo before the first has
-  completed and integrated (`orchestrate.md` standing rule 3).
-- **Several repos run concurrently — as separate sessions.** That concurrency is the lane model:
-  each lane is independent, and lanes interact only through cross-repo `depends_on` edges in
-  `state.json`, never by sharing a working tree or a session.
-- A lane runs one engine at a time per block — `/orchestrate` chooses `/sdlc-task` or `/sdlc-flow`
-  per block, and every block in the chain runs strictly one after another.
+# 2. Read the dry-run it prints. Confirm, or fix the chain and re-run.
+
+# 3. It hands off to /orchestrate, which drives every block.
+```
+
+That is the whole happy path. Everything below is what the dry run is telling you and what to do
+when it is not happy.
+
+**Before you run it, you need:** a roadmap at `planning/roadmaps/<slug>/roadmap.md`, and a lane
+record at `<roadmap-dir>/lane-<name>.json` naming this repo in its `blocks[]`.
+
+**No lane record?** Use `--blocks <id> <id> ...` instead and skip the file.
 
 ---
 
-## The phases, in order
+## The run at a glance
 
-### 1. Resolve
+| # | Phase | Who acts | Detail |
+|---|---|---|---|
+| 1 | Resolve | command | [↓](#1-resolve) |
+| 2 | Isolation | command | [↓](#2-isolation) |
+| 3 | Concurrency | command | [↓](#3-concurrency) |
+| 4 | Confirm | **you** | [↓](#4-confirm) |
+| 5 | Per block ×N | agent | [↓](#5-per-block) |
+| 6 | Lane close | agent | [↓](#6-lane-close) |
 
-`/begin-orchestration --roadmap <path|slug> (--lane <name> | --blocks <id...>)` resolves, in order:
-`BRAIN_ROOT` → the repo (from `state.json`, or `--repo`) → the roadmap (never inferred — a missing
-`--roadmap` stops and prints usage) → `run_record_dir` (`planning/orchestration-run/<roadmap-
-slug>/` in this repo) → the chain (the lane record's `blocks[]` in array order, filtered to this
-repo, or the `--blocks` list verbatim). A lane record's top-level `roadmap` field is cross-checked
-against the resolved roadmap; a mismatch stops the run rather than proceeding against the wrong
-lane.
+You are only in the loop at step 4 — and at any operator gate step 5 surfaces.
 
-### 2. Isolation policy
+---
 
-`base-template` always runs `--worktree` (a chain here edits the engines that are running it); the
-brain root (HQ) always runs `--no-worktree` (a worktree's own `brain.toml` resolves the gitignored
-sub-repos incorrectly); every other repo defaults to `--no-worktree` and opts into `--worktree`
-only when a block deserves quarantine. Re-verify the measurement behind this table before relying
-on it — it is a measured fact, not policy handed down once, and it can go stale.
+## 1. Resolve
 
-### 3. Concurrency registration
+Resolves in this order: `BRAIN_ROOT` → repo → roadmap → `run_record_dir` → chain.
 
-Heavy-gate repos (browser-automation, native-build) register a slot with
-`scripts/fleet_concurrency_check.py` before the chain starts and release it when the chain ends —
-success, failure, or abandonment. Cheap-gate repos skip this step.
+- **Repo** comes from `state.json`; `--repo` overrides.
+- **Roadmap** is never inferred. A missing `--roadmap` prints usage and stops.
+- **`run_record_dir`** is `planning/orchestration-run/<roadmap-slug>/` in this repo.
+- **Chain** is the lane record's `blocks[]` in array order, filtered to this repo — or `--blocks`
+  verbatim.
+- **Cross-check:** the lane record's own `roadmap` field must match the resolved roadmap. A
+  mismatch stops the run.
 
-### 4. Confirm
+## 2. Isolation
 
-Print the resolved repo, roadmap, lane record, chain order, isolation, per-block engine/spec
-status, readiness against the live graph, and any operator gates — then stop for confirmation
-unless `--execute`. Before the first block launches, this step also claims the lane's identity in
-the registry and takes the repo lease (both released at lane close).
+| Repo | Isolation | Why |
+|---|---|---|
+| `base-template` | **always `--worktree`** | A chain here edits the engines running it. |
+| brain root (HQ) | **always `--no-worktree`** | A worktree's `brain.toml` mis-resolves the gitignored sub-repos. |
+| everything else | `--no-worktree` | Opt into `--worktree` when a block deserves quarantine. |
 
-### 5. Per block: spec → engine → integrate → verify → report
+**Re-verify before relying on this table.** It is a measurement, not policy, and it can go stale.
 
-For each block in the resolved chain:
+## 3. Concurrency
 
-1. **Spec** — resolve the block ID to a spec slug and run `/generate-tasks` (or `--from <plan>`)
-   if `tasks.json` is missing. Since D65 the spec is the block record at
-   `planning/blocks/<BlockID>.json` plus `planning/<BlockID>/tasks.json`; `tasks.md` is a legacy
-   path the engines still fall back to when no block record exists.
-2. **Engine** — launch `/sdlc-task` or `/sdlc-flow` per `/generate-tasks`' recommendation, as a
-   background workflow. Spec preparation for the next blocks overlaps the running engine; the
-   engine runs themselves are strictly serial (one repo, one engine run at a time).
-3. **Integrate** — merge/clean the worktree, resolve any merge conflict toward the incoming
-   block's intent.
-4. **Verify the state write** — the engines' status bookkeeping is known-unreliable; check
-   `state.json`'s block status and `status.md` directly rather than
-   trusting the engine's own report.
-5. **One lane-log line** — append to `<roadmap_dir>/lane-log.jsonl` and commit it.
-6. **Append to `notes.md`** — this repo's local record (see Artifacts below).
+Heavy-gate repos (browser-automation, native-build) register a slot before the chain and release
+it after — on success, failure, *or* abandonment.
+
+```bash
+python3 scripts/fleet_concurrency_check.py is-heavy --repo-path <repo>   # exit 0 = heavy
+python3 scripts/fleet_concurrency_check.py register --repo <name> --category <cat>
+python3 scripts/fleet_concurrency_check.py release  --repo <name>
+```
+
+Exit `3` on register means that category's pool is full. Wait, or run a cheap-gate block instead.
+Cheap-gate repos skip this entirely.
+
+## 4. Confirm
+
+The dry run prints: repo · roadmap · lane record · chain order · isolation · per-block engine and
+spec status · readiness against the live graph · operator gates · log path.
+
+**Read the readiness and gate lines.** They are the two that stop a run later if ignored.
+`--execute` skips this stop.
+
+## 5. Per block
+
+Per block, in order: **spec → engine → integrate → verify → report.**
+
+1. **Spec** — resolve the block ID to a slug; run `/generate-tasks` (or `--from <plan>`) if
+   `tasks.json` is missing. Since D65 the spec is `planning/blocks/<BlockID>.json` +
+   `planning/<BlockID>/tasks.json`; `tasks.md` is a legacy fallback.
+2. **Engine** — `/sdlc-task` or `/sdlc-flow`, as a background workflow. Spec prep for later blocks
+   may overlap; **engine runs are strictly serial** — one repo, one engine at a time.
+3. **Integrate** — merge/clean the worktree; resolve conflicts toward the incoming block's intent.
+4. **Verify the state write** — engine status bookkeeping is known-unreliable. Check `state.json`
+   and `status.md` yourself; do not trust the engine's report.
+5. **Log** — one line to `<roadmap_dir>/lane-log.jsonl`, committed.
+6. **Notes** — append to `notes.md`.
 
 Repeat until the chain is done or stopped.
 
-### 6. Lane close
+## 6. Lane close
 
 - Write the terminal `review.md`.
-- Promote any `notes.md` item still `OPEN` into a durable home — never copy it into a successor
-  file (D57 keeps one record per `(repo, roadmap)` pair, addressed rather than rotated).
+- Promote every `OPEN` item in `notes.md` to a durable home. **Never copy it into a successor
+  file** — D57 keeps one record per `(repo, roadmap)`, addressed rather than rotated.
 - Release the repo lease and registry claim.
-- Close with a terminal `/close-out`.
+- Run `/close-out`.
 
 ---
 
 ## Artifacts
 
-| Artifact | Scope | Written | Cite |
-|---|---|---|---|
-| `<roadmap_dir>/lane-log.jsonl` | **Cross-lane.** One line per integrated block, append-only — the channel sibling lanes read. | Per block | — |
-| `planning/orchestration-run/<roadmap-slug>/notes.md` | **Local to this repo.** Everything the lane log's one line can't carry: defects found in passing, deferred fixes, decisions taken and why, traps re-confirmed. | Per block (append-only) | D57 |
-| `planning/orchestration-run/<roadmap-slug>/review.md` | **Terminal.** A plain-English summary plus hand-verification recipes; every recipe must have been **executed** by this lane before the file is written. | Once, at lane close | D57 |
+| Artifact | Scope | Written |
+|---|---|---|
+| `<roadmap_dir>/lane-log.jsonl` | **Cross-lane.** One line per block, append-only. Sibling lanes read this. | Per block |
+| `planning/orchestration-run/<slug>/notes.md` | **Local.** Everything the log line can't carry: defects found in passing, decisions and why, traps re-confirmed. | Per block, append-only |
+| `planning/orchestration-run/<slug>/review.md` | **Terminal.** Plain-English summary + hand-verification recipes. Every recipe must have been **run** before the file is written. | Once, at close |
 
 Frontmatter, the `doc_id` rule, `lifecycle`, and the ledger's `origin_roadmap` column are specified
-once, in `planning/decisions/D57-orchestration-run-artifact-contract.md` — cited here as the
-deciding authority, not restated.
+in `planning/decisions/D57-orchestration-run-artifact-contract.md`. Cited, not restated.
 
 ---
 
 ## Traps
 
-- **A piped command's exit code is the pipe's, not the command's** — `mev conformance | tail`
-  reports success while `mev conformance` itself exits 1. Redirect to a file, then check `$?`.
-- **`validate-brain`'s flags do not compose** — `main.rs` is an if/else-if chain, first flag wins.
-  One invocation per flag, never combined.
-- **Every `planning/` is a symlink into a `_planning/` vault** — `rg`/`find` are symlink-blind by
-  default, so an exhaustive sweep needs `-L`. **At the brain root, also pass `-uu`** — every
-  sub-repo is gitignored there, so `-L` alone still skips them all, and a sweep missing `-uu`
-  reports a false clean over the whole fleet.
-- **Command and engine files are launch-time snapshots** — editing `.claude/commands/*.md` or
+- **A piped command's exit code is the pipe's.** `mev conformance | tail` reports success while
+  `mev conformance` exits 1. Redirect to a file, then check `$?`.
+- **`validate-brain`'s flags do not compose.** First flag wins (if/else-if chain). One per invocation.
+- **Every `planning/` is a symlink.** `rg`/`find` need `-L`. **At the brain root also pass `-uu`** —
+  every sub-repo is gitignored there, so `-L` alone reports a false clean over the whole fleet.
+- **Command and engine files are launch-time snapshots.** Editing `.claude/commands/*.md` or
   `.claude/workflows/*.js` mid-session does not change what the running session executes. A re-run
-  against a stale snapshot proves nothing about a fix; verify the snapshot (or fix somewhere that
-  takes effect immediately) before concluding an engine change did or didn't work.
-- **A lane record reads as a chain but usually behaves as a queue of one** — its value is the
-  `depends_on` edges, not the array order. Never start a block showing `blocked`; pull the next
-  `open` block instead, and say plainly what it's waiting on.
+  against a stale snapshot proves nothing.
+- **A lane record reads as a chain but behaves as a queue of one.** Its value is the `depends_on`
+  edges, not array order. Never start a `blocked` block — pull the next `open` one and say what the
+  blocked one waits on.
 
 ---
 
 ## The commander
 
-`BT.6.D` landed on 2026-08-22. The commander is a **stateless drain**: one `bastion ask` turn that
-reads the queue and fleet state from disk, routes what it finds, re-derives the fleet's generated
-surfaces and commits exactly what it can prove is derived, then reports the remainder. Its context
-never grows, because nothing is carried between drains except what is on disk.
-
-Run one by hand:
+A **stateless drain**: one `bastion ask` turn that reads the queue and fleet state from disk, routes
+what it finds, re-derives generated surfaces, commits what it can prove is derived, and reports the
+rest. Context never grows — nothing carries between drains except what is on disk.
 
 ```bash
 ./scripts/commander_drain.sh [--repo NAME] [--lane NAME]
 ```
 
-`--repo`/`--lane` default to this repo's basename and `main`. Knobs, all with defaults:
-`COMMANDER_DRAIN_TIMEOUT_SECS` (900 — deliberately not `bastion ask`'s 180s default),
-`COMMANDER_LAUNCH_CMD` (Sonnet), `FLEET_LOCK_DIR`.
+- Defaults: this repo's basename, and `main`.
+- Knobs: `COMMANDER_DRAIN_TIMEOUT_SECS` (900, deliberately not `bastion ask`'s 180),
+  `COMMANDER_LAUNCH_CMD` (Sonnet), `FLEET_LOCK_DIR`.
+- **The one rule:** the commander **re-derives, it never detects.** It does not scan `git status`
+  for files that look derived — it runs the derivation and commits exactly the paths reported back.
+  Anything dirty outside that manifest is an authored orphan: reported, never committed.
 
-**Nothing schedules it yet.** Kind-triggered drains need no scheduler — a lane sends `RENDEZVOUS`
-or `LEASE_RELEASE` and drains at its own block boundary — but the 20–30 minute heartbeat has no
-invoker, and cron on the Mac Mini is blocked behind `HQ.8.A`. Until then a drain happens when
-someone runs the wrapper. The full procedure is
-[`.claude/commands/orchestration-commander.md`](../../.claude/commands/orchestration-commander.md);
-the design and what was deliberately cut are in
-[`planning/lane-coordination/plan.md`](../../planning/lane-coordination/plan.md).
+**Nothing schedules it yet.** Kind-triggered drains need no scheduler (a lane sends `RENDEZVOUS` or
+`LEASE_RELEASE` and drains at its block boundary), but the 20–30 minute heartbeat has no invoker —
+cron on the Mac Mini is blocked behind `HQ.8.A`. Until then, a drain happens when someone runs the
+wrapper.
 
-The one rule worth knowing before you run it: **the commander re-derives, it never detects.** It
-does not scan `git status` for files that look derived — it runs the derivation and commits exactly
-the paths that reports back. Anything dirty outside that manifest is an authored orphan: reported,
-never committed.
+Full procedure: [`.claude/commands/orchestration-commander.md`](../../.claude/commands/orchestration-commander.md).
 
 ---
 
 ## See also
 
-- [`.claude/commands/README.md`](../../.claude/commands/README.md) — flag-level reference for
-  `/orchestrate` and `/begin-orchestration`.
-- [`workflows/index.md`](index.md) — the two SDLC engines this lifecycle drives per block.
+- [`.claude/commands/README.md`](../../.claude/commands/README.md) — flag reference.
+- [`lane-coordination.md`](lane-coordination.md) — registry, leases, messages, commander setup.
+- [`index.md`](index.md) — the two SDLC engines this drives per block.
 - `planning/decisions/D57-orchestration-run-artifact-contract.md` — the run-record contract.
-- `planning/decisions/D43-cross-domain-priority-graph.md` — priority ordering for lingering items
-  at lane close.
+- `planning/decisions/D43-cross-domain-priority-graph.md` — priority ordering at lane close.
