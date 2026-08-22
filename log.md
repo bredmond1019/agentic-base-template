@@ -9,6 +9,26 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-22]
 
+### Hotfix — `test_orchestration_run_contract.py` skips linked git worktrees
+
+- **What:** `discover_records()` now excludes any record inside a **linked git worktree**, detected
+  by that directory's `.git` being a FILE (a gitdir pointer) rather than a DIRECTORY. Covered by
+  self-test case (l), which builds both shapes and asserts they behave differently — a real nested
+  repo's duplicate `doc_id` is still reported.
+- **Why:** with `mev`'s `trees/MV.ticket.op-slug-rendering-and-sweep-flow/` checked out at the brain
+  root, the checker reported **97 NEW blocking duplicate-`doc_id` violations**, every one pairing a
+  real record with its copy under that worktree and **none between two real files**. It attributed
+  them to "this tree's changes", so an unrelated lane's open worktree red-gated whoever ran the
+  suite next — and it **bailed a live block** (`BT.ticket.lane-coordination-operator-guide`) that
+  had nothing to do with it. The bail was correct behaviour; the gate was wrong.
+- **Not the fix:** realpath de-duplication was tried first and does **not** work. HQ tracks every
+  repo's `planning/` itself, so a worktree of the brain root holds a genuine second copy on disk —
+  the two paths do not converge. Nor may the `-L` symlink follow be dropped: that follow is what
+  finds the records at all.
+
+---
+
+
 ### `BT.ticket.engine-docs-drift-tripwire` — Guard the docs surface at write time
 
 - **What:** Ran `/sdlc-flow` across all six tasks to PASS, review verdict PASS. HALF A (P1 live
