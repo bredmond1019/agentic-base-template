@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [SDLC workflows, engines, orchestration, harness, pipeline reference]
-related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-commands]
+related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-commands, base-template-orchestration-guide]
 ---
 
 # SDLC Workflows
@@ -29,7 +29,7 @@ slash-command lifecycle they automate.
 /patch          trivial hotfix · no tests · in-place
 /sdlc-task      small tested change · implement→test→fix→commit · in-place or --worktree
 /sdlc-flow      full spec · sequential · branch (or --worktree) · terminates in PR   ← default for non-trivial work
-/orchestrate    roadmap · one /sdlc-flow per block · branch train of PRs
+/orchestrate    one repo's lane · ordered block chain · sequential, one engine at a time
 ```
 
 ## The two engines at a glance
@@ -39,9 +39,13 @@ slash-command lifecycle they automate.
 | [`/sdlc-task`](sdlc-task.md) | **one small unit** | in-place / `--worktree` | `/chore`, `/ticket` | small tested change — fast implement→test→commit |
 | [`/sdlc-flow`](sdlc-flow.md) | **a whole spec**, **sequential** | plain branch in the main tree (one shared for the whole spec), or `--worktree` | `/generate-tasks` | **the default for non-trivial feature work** — sequential, conflict-free, terminates in a PR |
 
-A whole roadmap (master-plan-format file) is driven by `/orchestrate` / `/begin-orchestration`,
-which fan out one `/sdlc-flow` per independent block across dependency-ordered waves — see
-[`.claude/commands/README.md`](../../.claude/commands/README.md) for that command's reference.
+A whole roadmap is driven **one repo (one lane) at a time** by `/orchestrate` / `/begin-orchestration`,
+which take an ordered chain of block IDs or a `lane-<name>.json` record — not a master-plan file —
+and run each block sequentially through **`/sdlc-task` or `/sdlc-flow`, chosen per block**, one
+engine run at a time, never a second engine in the same repo before the first has integrated.
+Several repos can each run their own lane concurrently as separate sessions; within one repo it is
+never parallel. See [orchestration.md](orchestration.md) for the lane lifecycle and
+[`.claude/commands/README.md`](../../.claude/commands/README.md) for the flag-level reference.
 
 For step-by-step **manual** control (run `/implement`, then inspect, then `/test`, …), see the
 [manual command lifecycle](commands.md). The engines automate exactly those commands.
@@ -49,16 +53,16 @@ For step-by-step **manual** control (run `/implement`, then inspect, then `/test
 ```mermaid
 flowchart TD
     plan["planning/&lt;spec&gt;/tasks.md<br/>(written by /generate-tasks)"]
-    roadmap["planning/master-plan.md<br/>(written by /generate-master-plan or /plan)"]
+    lane["block chain / lane-&lt;name&gt;.json<br/>(one repo's ordered blocks)"]
 
     plan --> flow["/sdlc-flow<br/>whole spec, branch (or --worktree), PR"]
     plan --> task["/sdlc-task<br/>small unit, in-place or --worktree"]
 
-    roadmap --> orch["/orchestrate<br/>roadmap → one /sdlc-flow per block"]
-    orch --> flow
+    lane --> orch["/orchestrate<br/>one repo, sequential, per block: /sdlc-task or /sdlc-flow"]
+    orch -. "chosen per block" .-> flow
+    orch -. "chosen per block" .-> task
 
     flow -. "open PR (default)" .-> pr["PR — /review-PR → merge"]
-    orch -. "PR per block" .-> pr
 
     classDef engine fill:#1f2937,stroke:#60a5fa,color:#e5e7eb;
     class flow,task,orch engine;
@@ -68,24 +72,32 @@ flowchart TD
   inter-task merge conflicts; a single end-review over the integrated tree replaces per-task reviews;
   the terminal step is a PR. Runs on a plain branch in the main tree by default (keeps a relative
   `planning/` symlink intact), or in an isolated worktree with `--worktree`.
-- `/orchestrate` is the **roadmap driver**: it fans out one `/sdlc-flow` per independent block
-  across dependency-ordered waves, producing a branch train of reviewable PRs.
+- `/orchestrate` is the **lane driver**: one repo, one session, an ordered chain of blocks run
+  strictly sequentially — one engine run at a time, choosing `/sdlc-task` or `/sdlc-flow` per
+  block, never a second engine in the same repo before the first has integrated. Several repos run
+  their own lanes concurrently as separate sessions; see [orchestration.md](orchestration.md).
 - `/sdlc-task` is the **fast path** for small work: a real implement→test→fix loop but no
   review/document/wrap-up agents. Pairs with `/chore` and `/ticket`.
 
 ### Decomposition differs by engine: disjoint files vs. compilable boundaries
 
-`/generate-tasks` decomposes a block **before** the consuming engine is chosen, so it applies one of
-two mutually-exclusive rules depending on which engine will run the spec:
+`/generate-tasks` decomposes a block **before** the consuming engine is chosen. Every engine
+`/orchestrate` drives — `/sdlc-task` and `/sdlc-flow` alike — runs its tasks **sequentially, on one
+branch/worktree, with no inter-task merge step**, and gates the project's checks after **every
+single task** — so **every task boundary must leave the gating suite passing** (for a
+compiled/type-checked stack, the repo must compile at every boundary). A change that cannot be
+split without an intermediate non-compiling task — e.g. a renamed public type and every call site —
+lands in **one** task instead, even if that means merging tasks that would otherwise be file-disjoint.
+That compilable-boundary rule is what actually governs decomposition today.
 
-- **`/orchestrate`** runs each block as its own pipeline in parallel worktrees that merge independently
-  — so blocks must own **disjoint files**; an undeclared overlap escalates the whole roadmap at merge.
-- **`/sdlc-flow` and `/sdlc-task`** run every task sequentially on one branch/worktree with no
-  inter-task merge step, but gate the project's checks after **every single task** — so **every task
-  boundary must leave the gating suite passing** (for a compiled/type-checked stack, the repo must
-  compile at every boundary). A change that cannot be split without an intermediate non-compiling
-  task — e.g. a renamed public type and every call site — lands in **one** task instead, even if that
-  means merging tasks that would otherwise be file-disjoint.
+**Under review:** an older version of this section additionally required blocks driven by
+`/orchestrate` to own **disjoint files**, justified by a claim that each block ran as its own
+pipeline in isolated worktrees merging independently of one another. That premise is false —
+`/orchestrate` runs one repo sequentially, one engine at a time, with no concurrent per-block
+isolation to merge back (see [orchestration.md](orchestration.md)) — so the disjoint-files
+requirement's stated justification did not survive contact with the command. This block does not
+delete or re-justify the requirement; whether it should still hold, and under what reason, is left
+for a follow-up to decide.
 
 The full rule, its precedence, and the escape hatches (`additiveFiles`, `dependsOn`) live in
 [`generate-tasks.md`](../../.claude/commands/generate-tasks.md) — see its step 6 — rather than being
@@ -200,7 +212,7 @@ each engine's committed state file — check the state JSON for real figures fro
 |---|---|---|
 | `/sdlc-task` (one task, PASS first try) | ~4–6 | scout + implement + test + commit |
 | `/sdlc-flow` (5-task spec, PASS first try) | ~30–40 | setup + per-task update/implement/test + end-review + docs + wrap-up + PR |
-| `/orchestrate` (5-block roadmap) | N × `/sdlc-flow` + orchestration | dominated by child flow costs |
+| `/orchestrate` (5-block lane) | N × (`/sdlc-task` or `/sdlc-flow`) + orchestration | dominated by child engine costs |
 
 > **Token roll-up note:** all engines record **substantive-stages-only** totals — cheap Haiku helper
 > agents (state writers, enumerate, update-task) are excluded. See
@@ -214,9 +226,12 @@ each engine's committed state file — check the state JSON for real figures fro
   per-task test-fix loop, triage-gated bail (D32), committed state model (D31), PR wrap-up (D33).
 - **[sdlc-task.md](sdlc-task.md)** — lean single-unit engine (D38). In-place or `--worktree`, implement→test→fix→commit, pairs with `/chore`/`/ticket`.
 - **[commands.md](commands.md)** — the manual command lifecycle the engines automate (Phase 1 → 7).
+- **[orchestration.md](orchestration.md)** — the lane lifecycle: what a lane is, the phases from
+  `/begin-orchestration` through the terminal `review.md`, the mandatory artifacts, and the traps.
 
-> A whole roadmap is driven by `/orchestrate` / `/begin-orchestration` (one `/sdlc-flow` per block,
-> branch train of PRs, `/review-PR`) — see
+> A whole roadmap is driven **one repo (lane) at a time** by `/orchestrate` / `/begin-orchestration`
+> — an ordered block chain, sequential, one engine (`/sdlc-task` or `/sdlc-flow`, chosen per block)
+> at a time, `/review-PR` on any PR a block produces — see [orchestration.md](orchestration.md) and
 > [`.claude/commands/README.md`](../../.claude/commands/README.md); block-level roadmap orchestration
 > no longer has a dedicated engine of its own (D39 superseded).
 

@@ -37,6 +37,7 @@ The [`workflows/`](workflows/index.md) subfolder is the canonical reference for 
 | [workflows/sdlc-task.md](workflows/sdlc-task.md) | Lean single-unit engine (D38) — implement→test→fix→commit, in-place or `--worktree`, pairs with `/chore`/`/ticket` |
 | [workflows/sdlc-flow.md](workflows/sdlc-flow.md) | Shared-worktree feature engine (D30–D33) — sequential tasks, per-task test→fix, one end review, PR wrap-up |
 | [workflows/commands.md](workflows/commands.md) | The manual Phase 1–7 command lifecycle the engines automate |
+| [workflows/orchestration.md](workflows/orchestration.md) | The lane lifecycle — what a lane is, the phases from `/begin-orchestration` through the terminal `review.md`, the mandatory artifacts, and the traps |
 
 ## Quick pointers
 
