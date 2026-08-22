@@ -883,6 +883,38 @@ def self_test() -> int:
     # into a no-op (same discipline as scripts/test_check_prompt_templates.py).
     # -----------------------------------------------------------------------------------
 
+    # (l) A linked git worktree's copy of a record is the SAME record seen twice, not a second
+    # file sharing a doc_id. Regression fixture for the 2026-08-22 incident where mev's open
+    # worktree produced 97 phantom duplicate-doc_id violations at the brain root and bailed an
+    # unrelated live block. The discriminator is `.git` being a FILE (worktree gitdir pointer)
+    # rather than a DIRECTORY, so this builds both shapes and asserts they behave differently --
+    # a fixture that only built the worktree shape could pass against a checker that skipped
+    # everything.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td) / "wt"
+        _init_git_repo(base)
+        _write_record(base, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
+        _commit_all(base, "clean baseline")
+
+        # A LINKED WORKTREE copy: same doc_id, under a dir whose .git is a FILE.
+        linked = base / "trees" / "some-lane"
+        (linked).mkdir(parents=True)
+        (linked / ".git").write_text("gitdir: /nonexistent/.git/worktrees/some-lane\n")
+        _write_record(linked, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
+        rc, out = _run_corpus_mode(base)
+        check("(l) a linked worktree's copy is not a duplicate doc_id", rc == 0)
+        check("(l) the worktree path is absent from the output", "some-lane" not in out)
+
+        # PROVEN NEGATIVE: the identical second copy under a dir whose .git is a DIRECTORY is a
+        # real second repo, and its doc_id collision MUST still be reported. Without this the
+        # case above passes against a checker that simply ignores every nested directory.
+        nested = base / "vendored"
+        nested.mkdir()
+        _init_git_repo(nested)
+        _write_record(nested, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
+        rc2, out2 = _run_corpus_mode(base)
+        check("(l) negative: a real nested repo's copy IS still a duplicate", rc2 == 1)
+
     # (h) Pre-existing violation reports but does not block: the bad record is already in the
     # baseline commit, and the working tree introduces no further change.
     with tempfile.TemporaryDirectory() as td:
