@@ -28,10 +28,11 @@ Engine: [`.claude/workflows/sdlc-task.js`](../../.claude/workflows/sdlc-task.js)
 ## Usage
 
 ```
-/sdlc-task <spec-slug>              run the whole spec in-place on the current branch
-/sdlc-task <spec-slug> 1-3          scope to tasks 1 through 3
-/sdlc-task <spec-slug> --worktree   isolated worktree (defer status/log to merge)
-/sdlc-task <spec-slug> --resume     re-attach existing worktree + continue
+/sdlc-task <spec-slug>                     run the whole spec in-place on the current branch
+/sdlc-task <spec-slug> 1-3                 scope to tasks 1 through 3
+/sdlc-task <spec-slug> --worktree          isolated worktree (defer status/log to merge)
+/sdlc-task <spec-slug> --resume            re-attach existing worktree + continue
+/sdlc-task <spec-slug> --test-depth full   full gating suite per task (default: fast)
 ```
 
 | Argument | Meaning | Default |
@@ -40,6 +41,7 @@ Engine: [`.claude/workflows/sdlc-task.js`](../../.claude/workflows/sdlc-task.js)
 | `[range]` | Optional task selection (positional or `--tasks`). Forms: `1-3`, `1,3,5`, `5`. | all tasks |
 | `--worktree` | Create an isolated worktree. Status/log are deferred to `/clean-worktree` at merge time. | off (in-place) |
 | `--resume` | Re-attach the existing worktree and continue from the last committed state. | off |
+| `--test-depth fast\|full` | Per-task validation depth. `fast` runs only `gates:true` checks (the tripwire) via each check's `fastCommand`; `full` runs the whole suite (authoritative `command`) per task, which also skips the terminal reconcile stage — see [Terminal authoritative reconcile (D56)](#terminal-authoritative-reconcile-d56) below. Unlike `/sdlc-flow`, there is no `harness.json` config key for this — CLI-flag-only, default `fast`. | `fast` |
 
 ---
 
