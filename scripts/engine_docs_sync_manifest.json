@@ -36,7 +36,7 @@
     "section": "## Usage"
   },
   ".claude/workflows/sdlc-flow.js::stage-list": {
-    "hash": "937fde2768582c641adb81cd44b29e8fa7bb10867e3b20fdaaa70f81c0a5fdd2",
+    "hash": "356cdb309a0faf40b414e6deb69f0995d7ed57f479dd988f66f8dabdef24d2a9",
     "lines": "62-74",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Pipeline"

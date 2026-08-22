@@ -89,7 +89,7 @@ flowchart TD
     UpdateTask -- "all tasks done" --> Review{"End-review<br/><i>sonnet — full gating suite</i>"}
     Review -- "FAIL/PARTIAL, localized<br/>(&lt;2 passes)" --> ReviewFix["Review fix<br/><i>sonnet &rarr; opus on final</i>"]
     ReviewFix --> Review
-    Review -- "PASS" --> Docs["Docs patch<br/><i>sonnet — gated on PASS</i>"]
+    Review -- "PASS" --> Docs["Docs patch + doc-standard pass<br/><i>sonnet — gated on PASS</i>"]
     Review -- "bail (broad)" --> Wrapup["Wrap-up<br/><i>sonnet — status/log + amendment log</i>"]
     Docs --> Wrapup
     Wrapup --> PR["gh pr create<br/><i>sonnet — draft PR on bail</i>"]
@@ -109,7 +109,7 @@ flowchart TD
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **End-review** | sonnet | ONE consolidated review over the integrated tree. Re-runs the **full** gating suite (authoritative). Reads `git diff <prBase>..HEAD` + `tasks.md` acceptance criteria + the on-disk (uncommitted) `state.json` as the localization index. Verdict: `PASS` / `PARTIAL` / `FAIL`. |
 | **Review fix** | sonnet | Bounded fix for localized end-review findings. Escalates to `opus` on the final pass. A broad or structural finding bails instead (triage decision). |
-| **Docs patch** | sonnet | Surgical `--patch` of affected doc files. **Hard-gated on a PASS verdict.** Skipped entirely on bail. |
+| **Docs patch** | sonnet | Surgical `--patch` of affected doc files, then a `write-repo-doc` standard pass over exactly those files (quickstart, inline links, defined vocabulary, plain-English openers). A doc needing a genuine rewrite is flagged `NEEDS_REVIEW` rather than rewritten here — [`/close-out`](../../.claude/commands/close-out.md) routes it to a ticket or a carryover. **Hard-gated on a PASS verdict.** Skipped entirely on bail. |
 | **Wrap-up** | sonnet | Updates `status.md` (an **append-only** edit — adds one new line under "Current focus" recording this run's outcome; a prior block's narrative survives verbatim, with the one exception that this spec's own leftover line from an earlier partial run may be replaced in place) + appends the `log.md` entry + writes D18 Amendment-Log entries — all **on the flow branch** (so they ride in the PR and merge atomically with the code). On a fully-done block, also flips `planning/state.json`'s block status to `"closed"` on the branch. It does **not** run `mev emit-state --write` in either mode (a worktree refuses it; a plain feature branch is not the base) — `focus.next` stays **deferred**, still pointing at the pre-close state, until the branch merges via `/clean-worktree` or `/close-out --merge-branch` and runs `mev emit-state --write` on the base; the engine's own log line says so explicitly rather than leaving it silently stale ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md), [D51](../../planning/decisions/D51-sdlc-flow-branch-default.md)). |
 | **PR** | sonnet | Pushes the branch and runs `gh pr create --base <prBase>`. Builds the PR body from the on-disk (uncommitted) `state.json` (per-task summary, verdict, open items). Opens a **draft** PR on bail. Degrades gracefully when `gh` is absent — prints the branch name and the exact commands. Reports one of three `prOutcome` values (`'created'`/`'impossible'`/`'failed'`), which the engine then independently re-verifies via its own `gh pr view` rather than trusting on faith — see [PR-stage outcome vocabulary](#pr-stage-outcome-vocabulary). |
 
