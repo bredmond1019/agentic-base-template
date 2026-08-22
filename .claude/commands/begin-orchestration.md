@@ -182,6 +182,12 @@ behavior this replaces, never a hard failure. Full design:
 `planning/decisions/D61-fleet-concurrency-enforcement.md` and
 `planning/decisions/D66-tiered-heavy-lane-concurrency.md` (in `base-template`).
 
+**At lane close, release both the repo lease and the registry claim taken in Step 4, alongside
+this fleet-concurrency slot release** — delete `<lock_dir>/leases/lease-<repo>.json` and
+`<lock_dir>/lane-agents/agent-<agent_name>.json`. All three releases happen together, on success,
+failure, or abandonment, so a reader looking for "what does this lane give back on exit" finds it
+in one place.
+
 ## Step 4 — Confirm
 
 Print, and stop for confirmation unless `--execute`:
@@ -194,6 +200,49 @@ Print, and stop for confirmation unless `--execute`:
   blocker and that blocker's repo
 - **operator gates** — any block the roadmap marks as waiting on a human, with which item
 - the log path
+
+**Before any block runs**, claim this lane's identity in the registry and take the repo lease:
+
+- Resolve `<lock_dir>` exactly as `scripts/check_lane_agents.py` does — `--lock-dir`, else
+  `FLEET_LOCK_DIR`, else a `brain.toml` walk-up joined with `.fleet-locks` — see that script for
+  the precedence rather than re-deriving it here.
+- Write a lane-agent registry record, per `.claude/workflows/lane-agent.schema.json`
+  (`agent_name`, `repo`, `lane`, `roadmap`, `started_at`, `heartbeat`), to
+  `<lock_dir>/lane-agents/agent-<agent_name>.json`.
+- Take the repo lease, per `.claude/workflows/lease.schema.json` (`repo`, `lane`, `agent`,
+  `acquired_at`, `kind`), at `<lock_dir>/leases/lease-<repo>.json`. `kind` is `exclusive` for a
+  lane that will commit — every real lane.
+- Both writes happen before the first block launches. If either write fails, stop; do not start
+  the chain holding only one of the two.
+
+**Agent identity comes from the transport, never from self-report.** `agent_name` is the
+ListAgents nickname this session is currently reachable at, taken from the transport-stamped
+identity — never typed, assumed, or copied from a listing row. The reason is not that an agent
+cannot know its own name; that claim is false and a reviewer will disprove it in one tool call.
+The reason is that a **self-reported identity is unverifiable at the reader**: a lease whose
+primary key is supplied by its own holder is ambiguous by construction, regardless of whether the
+self-reporter happened to get it right. Two facts measured 2026-08-21, stronger one first:
+
+1. **The self-identity capability is not uniform across sessions.** `engine-rs-6d`'s `ListAgents`
+   output opens with a header naming the calling session ("This session is engine-rs-6d [871821]
+   ... it is not listed below"). The identical call in a base-template session that same evening,
+   checked three separate times, carries no such header — the output begins directly with "Peer
+   sessions (N):" and the caller never appears in it. A registry primary key must not depend on a
+   capability that some sessions have and others lack.
+2. A base-template session wrote "base-template-b6 here" into two consecutive cross-session
+   messages while the routing envelope carried "base-template-46" — it had read a `ListAgents`
+   listing and taken a neighbour's row.
+
+**If no transport-stamped identity is reachable at claim time, the claim fails loudly and the
+lane does not start.** Never record a guessed name.
+
+**What `check_lane_agents.py` does not do:** it cannot call `ListAgents`, so it can only report a
+claim's or lease's timestamp age and agent name. It never decides "abandoned" versus "merely
+slow" — joining staleness against live `ListAgents` output to make that call is the caller's job,
+not the checker's.
+
+No field is added to `.claude/workflows/lane.schema.json` by this claim — the registry and lease
+records are separate files, not lane-record fields.
 
 Then run `/orchestrate <chain> <isolation-flag> [--engine ...] [--continue-on-fail]`.
 
