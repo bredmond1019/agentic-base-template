@@ -27,6 +27,78 @@ slash-command lifecycle they automate.
 
 ---
 
+## The system in one picture
+
+If you have never run any of this, read this section and nothing else. It is the whole model.
+
+```mermaid
+flowchart TD
+    OP["You<br/><i>plan, decide, approve</i>"] -->|writes| RM["<b>Roadmap</b><br/>a body of work, split by repo"]
+    RM --> LR["<b>Lane records</b><br/>one per repo<br/><code>lane-&lt;name&gt;.json</code>"]
+
+    LR --> L1["<b>Lane</b> — repo A<br/>one Claude session"]
+    LR --> L2["<b>Lane</b> — repo B<br/>one Claude session"]
+
+    L1 --> B1["Block → Block → Block<br/><i>run one at a time</i>"]
+    L2 --> B2["Block → Block<br/><i>run one at a time</i>"]
+
+    B1 --> EN["<b>Engines</b><br/>/sdlc-task · /sdlc-flow<br/><i>write the actual code</i>"]
+    B2 --> EN
+
+    EN --> ART["<b>Artifacts</b><br/>lane-log.jsonl · notes.md · review.md"]
+
+    L1 -.->|"claims + messages"| CO["<b>Coordination layer</b><br/>registry · leases · queue"]
+    L2 -.->|"claims + messages"| CO
+    CO -.->|"swept by"| CM["<b>Commander</b><br/>/orchestration-commander"]
+    CM -.->|"reports what needs you"| OP
+
+    style OP fill:#2d4a63,stroke:#5b8fb9,color:#fff
+    style CM fill:#4a3d5c,stroke:#8b7bab,color:#fff
+    style EN fill:#3d5c4a,stroke:#7bab8b,color:#fff
+```
+
+**In words:**
+
+1. **You write a roadmap** — the work, split up by which repo it lands in.
+2. **Each repo gets a lane record** — a small JSON file listing that repo's blocks, in order.
+3. **You open one lane per repo**, each in its own Claude Code session. They run at the same time.
+4. **Inside a lane, blocks run one at a time.** Each block hands off to an engine, and the engine
+   writes the code.
+5. **Lanes never share a working directory.** They coordinate through the layer underneath —
+   claiming identity, locking repos, and leaving each other messages.
+6. **The commander sweeps that layer** and tells you what needs a human.
+
+The only steps you personally do are 1, 3, and answering whatever the commander surfaces.
+
+---
+
+## Vocabulary
+
+Terms used everywhere in these docs. Skim once; come back when a word stops making sense.
+
+| Term | Plain English |
+|---|---|
+| **Brain root** | The top-level `agentic-portfolio/` directory — the one containing `brain.toml`. Almost every path in these docs is relative to it. |
+| **Corpus** | Every markdown document across every repo, treated as one searchable body. What `validate-brain` checks. |
+| **Repo** | One project with its own git — `learn-ai`, `mev`, `bastion`. There are ~18. |
+| **Roadmap** | A plan spanning several repos, at `planning/roadmaps/<slug>/roadmap.md`. |
+| **Block** | One unit of work with an ID like `LA.ticket.fix-the-thing`. The thing an engine actually builds. |
+| **Lane** | One repo + one Claude session + one ordered list of blocks from one roadmap. |
+| **Lane record** | The JSON file naming a lane's blocks: `<roadmap-dir>/lane-<name>.json`. |
+| **Chain** | The ordered blocks a lane will work through. |
+| **Engine** | The automation that writes code for one block — `/sdlc-task` (small) or `/sdlc-flow` (a whole spec). |
+| **Spec** | The instructions for one block: `planning/blocks/<ID>.json` + `planning/<ID>/tasks.json`. |
+| **Gate** | A check that must pass — tests, lint, build, `validate-brain`. A "red gate" is a failing one. |
+| **Worktree** | A second checkout of the same repo in a separate folder, so two pieces of work don't collide. |
+| **Lease** | A claim that says "this lane is using this repo right now, keep out." |
+| **Queue / drain** | Lanes leave each other messages in a queue. A *drain* is one pass that reads and routes them. |
+| **Commander** | The thing that performs a drain and reports the leftovers. Run it as `/orchestration-commander`. |
+| **Operator gate** | A point where the work stops because only a human can decide or do the next thing. That human is you. |
+| **Carryover** | A recorded loose end — a bug found in passing, a deferred fix — kept in `state.json` so it is not lost. |
+| **`state.json`** | Per repo. The real record of what work exists and what state it is in. If it is not here, it does not exist. |
+
+---
+
 ## The pipeline ladder
 
 ```

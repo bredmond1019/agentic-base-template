@@ -10,27 +10,54 @@ keywords: [lane coordination, registry, lease, message queue, commander, FLEET_L
 related: [base-template-workflows-index, base-template-orchestration-guide, plan-lane-coordination, base-template-docs-index]
 ---
 
+- [Lane coordination — the operator's guide to the layer under orchestration](#lane-coordination--the-operators-guide-to-the-layer-under-orchestration)
+  - [Quickstart](#quickstart)
+  - [1. The five pieces](#1-the-five-pieces)
+  - [2. Setup](#2-setup)
+  - [3. Verify it works (cold start)](#3-verify-it-works-cold-start)
+  - [4. Sending and receiving](#4-sending-and-receiving)
+  - [5. Running the commander](#5-running-the-commander)
+  - [6. Troubleshooting](#6-troubleshooting)
+  - [See also](#see-also)
+
+
 # Lane coordination — the operator's guide to the layer under orchestration
 
-Five mechanisms that let concurrent lanes claim identity, avoid each other's working trees, pass
-messages, and get swept automatically. [`orchestration.md`](orchestration.md) covers the lane
-lifecycle above this.
+**New here? Read [`index.md`](index.md) first** — diagram and vocabulary. Then
+[`orchestration.md`](orchestration.md), which is the layer above this one.
+
+## What this page is for
+
+Several lanes run at the same time, in different repos, in different Claude Code sessions. None of
+them can see the others. That creates four problems, and this layer is the four answers:
+
+1. **"Who is that?"** — sessions have throwaway names, so a lane could not be addressed by role.
+   → a **registry** where a lane writes down who it is.
+2. **"Is anyone else editing this repo?"** — two lanes in one folder is the single most damaging
+   thing that has happened in this system. → **leases**, a keep-out sign on a repo.
+3. **"How do I tell another lane something?"** — → a **message queue**: files in a folder.
+4. **"Who reads the queue?"** — → the **commander**, which sweeps it and reports what needs you.
+
+All of it is just JSON files in a shared folder. There is no server.
 
 > Paths are relative to the brain root (`agentic-portfolio/`) unless marked as this repo's.
 
----
-
 ## Quickstart
 
+Two read-only commands to see what is going on, and one that acts:
+
 ```bash
-# Where is the lock directory?  --lock-dir > $FLEET_LOCK_DIR > <brain.toml dir>/.fleet-locks
-python3 scripts/check_lane_agents.py          # registry claims + lease conflicts
-python3 scripts/check_messages.py             # queued messages
-./scripts/commander_drain.sh                  # sweep the queue  (WRITES TO THE REAL TREE — see §5)
+python3 scripts/check_lane_agents.py     # who is registered, and are any repo locks in conflict?
+python3 scripts/check_messages.py        # what messages are queued?
 ```
 
-**Read this before anything else:** both checkers exit `0` **silently on an empty corpus**, and
-`harness.json` gates on exactly that. **A green gate does not mean the system is running.**
+To sweep the queue, type **`/orchestration-commander`** in a Claude Code session. (There is also
+`./scripts/commander_drain.sh` for unattended runs — see [§5](#5-running-the-commander), and note
+it always writes to the real shared directory.)
+
+**Read this before you trust a green result.** Both checkers exit `0` **silently when there is
+nothing there**, and the automated gate checks exactly that. **A passing gate does not mean the
+system is running** — it may mean nothing has ever used it.
 
 | You see | It means |
 |---|---|
@@ -44,8 +71,8 @@ Only this page tells idle from running. The gate cannot.
 
 ## 1. The five pieces
 
-Each shipped to fix one measured incident. The artifact is authoritative; this page does not
-restate schemas.
+Each one exists because something went wrong once. The "Artifact" column is the file that actually
+defines it — this page explains, it does not restate.
 
 | Piece | Problem it solves | Artifact |
 |---|---|---|
@@ -61,7 +88,11 @@ Design rationale and deliberate cuts: [`planning/lane-coordination/plan.md`](../
 
 ## 2. Setup
 
-**Lock-directory precedence**, identical in every tool: `--lock-dir` flag → `FLEET_LOCK_DIR` env →
+There is nothing to install. Everything lives in one shared folder of JSON files, called the **lock
+directory**. Every tool finds it the same way, so if two tools disagree about what is going on, the
+first thing to check is that they resolved the same folder.
+
+**Precedence**, identical in every tool: `--lock-dir` flag → `FLEET_LOCK_DIR` env →
 `brain.toml` found by walking up, joined with `.fleet-locks`. The reference implementation is
 `resolve_lock_dir()` in `scripts/check_lane_agents.py`, mirrored in `check_messages.py` and
 `fleet_concurrency_check.py`.
@@ -79,6 +110,10 @@ Design rationale and deliberate cuts: [`planning/lane-coordination/plan.md`](../
 ---
 
 ## 3. Verify it works (cold start)
+
+Want to prove the machinery works without touching the live fleet? Point `FLEET_LOCK_DIR` at a
+throwaway folder and reproduce the four states below. Each one was actually executed; the outputs
+are real.
 
 Run against a **scratch** `FLEET_LOCK_DIR`, never the real `.fleet-locks`. Full captured output:
 `planning/BT.ticket.lane-coordination-operator-guide/evidence/`.
@@ -112,6 +147,9 @@ transition. Re-running the checker over the drained queue still exits 0.
 
 ## 4. Sending and receiving
 
+A message is a JSON file. Sending one means writing a file into a folder; receiving one means
+reading that folder. The folder path *is* the address.
+
 - **A message's address is its directory**, not a field inside it:
   `queue/<repo>/<lane>/inbox/<ts>-<uuid>.json`.
 - **To see what is queued:** list that lane's `inbox/` and `processing/`.
@@ -128,6 +166,17 @@ interrupt discipline, the four-verdict response — is owned by
 ---
 
 ## 5. Running the commander
+
+**Two ways, and the first is usually what you want:**
+
+| | How | When |
+|---|---|---|
+| **Interactive** | Type `/orchestration-commander` in a Claude Code session | You're at the keyboard. No arguments, no setup, and it cannot surprise you. |
+| **Unattended** | `./scripts/commander_drain.sh [--repo NAME] [--lane NAME]` | Cron or scripting. Wraps the same slash command and stamps a heartbeat file. |
+
+The script is not a separate implementation — it reads
+[`orchestration-commander.md`](../../.claude/commands/orchestration-commander.md) and hands it to a
+Claude turn via `bastion ask`. Same instructions either way.
 
 ```bash
 ./scripts/commander_drain.sh [--repo NAME] [--lane NAME]
@@ -162,6 +211,8 @@ minute heartbeat has no invoker: cron on the Mac Mini is blocked behind `HQ.8.A`
 ---
 
 ## 6. Troubleshooting
+
+Start from the symptom you can see.
 
 | Symptom | Likely cause | Check |
 |---|---|---|
