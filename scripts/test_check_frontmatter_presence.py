@@ -197,6 +197,33 @@ def main() -> int:
         cfp.check("planning/baz.md", ABSENT_IN_CORPUS) == 1,
     )
 
+    # --- ABSENT_EXEMPT_NAMES: root README.md/CLAUDE.md with zero frontmatter is a valid
+    # corpus leaf, mirroring mev's is_root_instruction_file (core/mev/src/brain/okf.rs) --
+    # base-template's own CLAUDE.md is exactly this case and validate-brain --structure
+    # reports 0 errors on it today; an unconditional ABSENT reject would red-gate it.
+    check(
+        "root CLAUDE.md with no frontmatter at all is accepted (mirrors mev's "
+        "is_root_instruction_file exemption)",
+        cfp.check("CLAUDE.md", ABSENT_IN_CORPUS) == 0,
+    )
+    check(
+        "root README.md with no frontmatter at all is accepted (same exemption)",
+        cfp.check("README.md", ABSENT_IN_CORPUS) == 0,
+    )
+    check(
+        "a nested CLAUDE.md (not unit root) is NOT exempt -- ABSENT still rejected",
+        cfp.check("planning/subdir/CLAUDE.md", ABSENT_IN_CORPUS) == 1,
+    )
+    check(
+        "root index.md with no frontmatter is NOT exempt (mev requires it) -- ABSENT rejected",
+        cfp.check("index.md", ABSENT_IN_CORPUS) == 1,
+    )
+    check(
+        "root CLAUDE.md is still rejected as UNTERMINATED, not swept into the ABSENT "
+        "exemption (deliberately stricter than mev here -- see ABSENT_EXEMPT_NAMES docstring)",
+        cfp.check("CLAUDE.md", UNTERMINATED) == 1,
+    )
+
     check(
         "leading-underscore file accepted regardless of content (out of corpus)",
         cfp.check("planning/_scratch.md", ABSENT_IN_CORPUS) == 0,

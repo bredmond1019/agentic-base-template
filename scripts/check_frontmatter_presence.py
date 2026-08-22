@@ -88,6 +88,19 @@ import sys
 
 EPHEMERAL_NAMES = frozenset({"handoff.md", "tasks.md", "breakdown.md", "worklog.md"})
 ROOT_SPECIAL_NAMES = frozenset({"README.md", "CLAUDE.md", "index.md"})
+# Corpus members that are nonetheless allowed to carry NO frontmatter at all, mirroring
+# mev's is_root_instruction_file (core/mev/src/brain/okf.rs): "Root instruction files
+# (README.md / CLAUDE.md) without frontmatter are valid corpus leaves — they must not
+# raise the OKF 'missing frontmatter' error." index.md is NOT in this set — mev requires
+# it. Confirmed live: base-template's own CLAUDE.md and this brain's own root CLAUDE.md
+# both carry zero frontmatter today and validate-brain --structure reports 0 errors on
+# either — an unconditional ABSENT reject for ROOT_SPECIAL_NAMES would red-gate both on
+# a file this gate has no real claim over. Deliberately narrower than mev: an
+# UNTERMINATED or DISPLACED block on one of these two files is still rejected here even
+# though mev's simpler extract_frontmatter() would silently accept it too — no currently
+# committed README.md/CLAUDE.md is in either state, so the stricter behavior costs
+# nothing today and closes a real gap mev also has.
+ABSENT_EXEMPT_NAMES = frozenset({"README.md", "CLAUDE.md"})
 
 # A frontmatter-looking line: `key:` or `key: value`, key made of word chars/hyphens.
 _KEY_LINE_RE = re.compile(r"^[A-Za-z0-9_-]+:")
@@ -157,6 +170,12 @@ def _looks_like_frontmatter_body(lines: list[str], start: int, end: int) -> bool
     return False
 
 
+def _is_absent_exempt(path: str) -> bool:
+    """True for the unit-root README.md/CLAUDE.md exemption — see ABSENT_EXEMPT_NAMES."""
+    parts = path.split("/")
+    return len(parts) == 1 and parts[0] in ABSENT_EXEMPT_NAMES
+
+
 def check(path: str, content: str) -> int:
     if not is_in_scope(path):
         return 0
@@ -164,6 +183,8 @@ def check(path: str, content: str) -> int:
     lines = content.splitlines()
 
     if not lines:
+        if _is_absent_exempt(path):
+            return 0
         print(f"{path}:1: ABSENT — in-corpus file has no frontmatter block", file=sys.stderr)
         print("  fix: add an OKF frontmatter block starting at line 1", file=sys.stderr)
         return 1
@@ -206,6 +227,8 @@ def check(path: str, content: str) -> int:
             return 1
 
     # No fence at line 1, and no displaced frontmatter-shaped block found -> ABSENT.
+    if _is_absent_exempt(path):
+        return 0
     print(f"{path}:1: ABSENT — in-corpus file has no frontmatter block", file=sys.stderr)
     print("  fix: add an OKF frontmatter block starting at line 1", file=sys.stderr)
     return 1
