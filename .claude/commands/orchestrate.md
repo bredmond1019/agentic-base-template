@@ -193,6 +193,14 @@ Each of these exists because it has already caused a real failure in this fleet.
     an operator gate, and anything requiring a spec slug you cannot resolve confidently (step 3
     says stop and ask — that still stands).
 
+12. **Urgent-item adoption.** A P0 raised mid-run may jump this chain; the full three-step
+    procedure — file the block, write the ledger row **at adoption time** with `origin_roadmap` set
+    explicitly (Rule 9's ledger contract), then ping the owning lane per the `ping-agent` skill — is
+    defined once, in `/begin-orchestration`'s standing rules; do not restate it here. Priority still
+    comes from `planning/decisions/D43-cross-domain-priority-graph.md`, never from the sender, and
+    this is not licence to reorder the chain for anything below P0. No field was added to
+    `.claude/workflows/lane.schema.json` for it, and no role enum exists in this fleet.
+
 ---
 
 ## How the pipeline works

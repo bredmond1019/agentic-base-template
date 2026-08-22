@@ -251,7 +251,7 @@ own standing rules, it adds to them.
 
 ---
 
-## The six rules
+## The seven rules
 
 Each has already cost a real run in this fleet.
 
@@ -357,6 +357,31 @@ Each has already cost a real run in this fleet.
    What you still must **not** decide alone: an operator gate (below), a bailed block's fate, two
    blocks that genuinely disagree about the same behaviour, and anything that would edit another
    lane's repo. Those stop and get reported.
+
+7. **Urgent-item adoption.** Nothing before this rule let a P0 raised mid-run jump a chain — the
+   2026-08-21 empty-tree P0 was adopted into a live lane ad hoc, with no defined procedure, because
+   none existed. Adoption is three steps, always in this order, and never fewer:
+
+   1. **File the block.** A real block record plus a `state.json` entry — never prose in a message,
+      a note, or this session's transcript. An adopted item that only exists as a ping is lost the
+      moment the session that received the ping ends.
+   2. **Write the ledger row at adoption time, not at lane close**, with `origin_roadmap` set
+      **explicitly** to the roadmap the block was originally allocated under — this is not a new
+      rule, it is Rule 5's existing ledger contract (per
+      `planning/decisions/D57-orchestration-run-artifact-contract.md`) applied the moment adoption
+      happens rather than deferred to lane close. Do not re-derive the ledger schema here.
+   3. **Ping the owning lane**, via the `ping-agent` skill, and write the same item to its durable
+      home (the block record and ledger row from steps 1–2). The ping accelerates the durable
+      channel; it never replaces it — a ping with no durable write behind it disappears the moment
+      the receiving session clears.
+
+   **What adoption is not.** It is not a licence to reorder this chain for anything below P0.
+   Priority comes from `planning/decisions/D43-cross-domain-priority-graph.md`, cited by doc_id,
+   never from the sender's own claim of urgency — the Standing operator convention below already
+   states this for lingering items at lane close; adoption is the same rule applied mid-run. No
+   field was added to `.claude/workflows/lane.schema.json` for this, and no role enum was
+   introduced anywhere in this fleet — every lane agent does the same job in a different repo; the
+   only distinct role is the commander (`BT.6.D`).
 
 ## Operator gates
 
