@@ -9,6 +9,33 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-22]
 
+### `BT.6.D` — The orchestration commander
+
+- **What:** Closed out the lane-coordination initiative's fourth block via `/sdlc-flow --worktree`
+  across all five tasks, review verdict PASS. Task 1 authored
+  `.claude/commands/orchestration-commander.md`, the six-step stateless drain procedure — drain the
+  queue, route/relay per D43, re-derive and commit only the paths `scripts/emit_state_write.sh`
+  proves it derived (via its `I_EMIT_WROTE` manifest), report authored orphans by lease state,
+  maintain `planning/open-work/index.md`, and stamp a last-drain heartbeat. Task 2 added
+  `scripts/commander_drain.sh`, wrapping `bastion ask` to wake one drain with an explicit
+  `--timeout 900`, a Sonnet `--launch-cmd`, and a per-(repo,lane) heartbeat file that alerts via
+  `send_alert()` when stale. Task 3 authored `scripts/test_commander_drain.sh`, a 5-case shimmed
+  suite covering commit-scope (running the real `commit_routine_updates.sh` with git shimmed),
+  authored-orphan lease routing, and empty-inbox heartbeat behavior. Task 4 registered
+  `commander-drain-tests` in `planning/harness.json`. Task 5 validated all 7 task-5 commands pass
+  and confirmed the block's stated boundaries held (no `.claude/workflows/*.js` change, no
+  `lane.schema.json`/`message.schema.json` field added, no cron entry). The commander commits only
+  what it can prove it derived rather than sweeping `git status` for lingering files — the
+  four-incident-causing pattern this design deliberately avoids.
+- **Next:** BT.6.C task 1 (author the `ping-agent` skill's core `SKILL.md`), then
+  `BT.ticket.bookkeep-leaves-derived-output-uncommitted`.
+
+```
+10e75a7 feat: implement BT.6.D-task3
+dedf719 feat: implement BT.6.D-task2
+469143b feat: implement BT.6.D-task1
+```
+
 ### `BT.6.B` / `BT.6.C` / `BT.6.E` — lane coordination, Scope A lane side
 
 - **What:** Three blocks of the `lane-coordination` initiative, driven as the `base-template` lane
