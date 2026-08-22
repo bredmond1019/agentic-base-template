@@ -9,6 +9,40 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-22]
 
+### `BT.6.B` / `BT.6.C` / `BT.6.E` — lane coordination, Scope A lane side
+
+- **What:** Three blocks of the `lane-coordination` initiative, driven as the `base-template` lane
+  of the `autonomous-foundation` roadmap. `BT.6.B` adds `.claude/workflows/message.schema.json`
+  (five kinds, `additionalProperties:false`, no priority field), `scripts/check_messages.py` with
+  `drain_queue()`/`complete_message()`, and a 31-case fixture suite; two gating checks registered.
+  `BT.6.C` adds the `ping-agent` skill in `.claude/skills/` plus its `.agents/` mirror, pinned in
+  `MirroredSkillBodiesMatch`. `BT.6.E` wires the registry claim, the repo lease, the block-boundary
+  inbox drain, the urgent-item adoption rule and `--stop-after` / `--autonomy` into
+  `/begin-orchestration` and `/orchestrate`.
+- **Why:** the largest measured incident class across 34 fleet orchestration-run records is lanes
+  destroying each other's uncommitted work, and the second is cross-lane facts noticed by luck.
+  Lanes had no address, no provable claim on a tree, and no durable channel. Full reasoning:
+  `planning/lane-coordination/plan.md`.
+- **Shape decisions worth keeping:** one file per message drained by atomic rename, never a JSONL
+  cursor — a cursor loses messages exactly when two lanes send during a drain. An append-only
+  `receipts.jsonl` per queue, because "reject a file written straight into `processing/`" is
+  unimplementable from the file alone and the ledger is also what makes exactly-once checkable.
+  No priority field on the envelope: `D43` owns priority, and a sender-declared one inflates.
+  `agent_name` is transport-stamped because a self-reported key is **unverifiable at the reader** —
+  and because the self-identity capability is measurably not uniform across sessions.
+- **Not done, deliberately:** no engine `.js` changed (leases are advisory and command-level in
+  Scope A); no field added to `lane.schema.json` (mev's `LaneRecord` is `deny_unknown_fields`, so
+  every field is a cross-repo add-then-install); `ping-agent` was not added to
+  `sync_downstream_harness.py`'s slug lists — the 18-repo fan-out stays one reviewed step, still
+  owed from `BT.5.B`.
+- **Caveat at close:** the two edited command files are launch-time snapshots (standing rule 10),
+  so the session that built this never exercised it. Nothing has yet claimed a registry entry or
+  taken a lease; filed as `carryover[]` `lane-coordination-scope-a-never-exercised-end-to-end`.
+
+---
+
+## [run: 2026-08-22]
+
 ### `derive-state-safely` + `edit-state-json` — cover mev's other authored-state write verbs
 
 - **What:** Both skills documented `state.json` mutation as either a hand edit or a bare
