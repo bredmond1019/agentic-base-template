@@ -95,9 +95,9 @@ That compilable-boundary rule is what actually governs decomposition today.
 pipeline in isolated worktrees merging independently of one another. That premise is false —
 `/orchestrate` runs one repo sequentially, one engine at a time, with no concurrent per-block
 isolation to merge back (see [orchestration.md](orchestration.md)) — so the disjoint-files
-requirement's stated justification did not survive contact with the command. This block does not
-delete or re-justify the requirement; whether it should still hold, and under what reason, is left
-for a follow-up to decide.
+requirement's stated justification did not survive contact with the command. The requirement is
+deliberately neither deleted nor re-justified here; whether it should still hold, and for what
+reason, is filed as `BT.ticket.disjoint-files-rule-needs-a-true-justification`.
 
 The full rule, its precedence, and the escape hatches (`additiveFiles`, `dependsOn`) live in
 [`generate-tasks.md`](../../.claude/commands/generate-tasks.md) — see its step 6 — rather than being
