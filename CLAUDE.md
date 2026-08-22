@@ -69,6 +69,20 @@ When a discovery in a downstream project improves the harness:
    alongside the SKILL.md change — never run `--update` without having actually re-checked the
    section first, or the tripwire becomes decorative.
 
+   The same obligation applies to `docs/workflows/sdlc-task.md` and `sdlc-flow.md` — the
+   human-readable prose explanation of each engine, distinct from the SKILL.md replication guides
+   above. They do **not** auto-sync from the `.js` either. `planning/harness.json`'s
+   `engine-docs-sync` check (`scripts/check_engine_docs_sync.py`, modelled on
+   `scripts/check_skill_sync.py`) hashes the same class of behaviour-defining regions — flags and
+   their defaults, the stage list, isolation/branch naming, the triage/bail taxonomy, the
+   bookkeep/state-write contract — against `scripts/engine_docs_sync_manifest.json`, and fails the
+   moment one changes without the docs page being re-verified. A failure there means "go re-read
+   `docs/workflows/*.md` against the engine," not "the doc is wrong" — a hash cannot tell whether
+   prose is true, only that the thing it describes moved. After re-verifying (and correcting the
+   page, if needed), re-stamp with `python3 scripts/check_engine_docs_sync.py --update` and commit
+   the manifest alongside the doc change — **never run `--update` without having actually re-read
+   the affected section first, or this tripwire becomes decorative too.**
+
 Downstream projects **do not auto-sync** — pulling is still a deliberate, reviewed step (the
 script never commits for you) — but it is no longer a fully manual copy-paste; `/sync-downstream-
 harness` does steps 5's mechanical part. Repos still diverge by design after the pull (their own
@@ -190,12 +204,20 @@ customizations are never touched) — keep changes here additive and well-docume
     `planning/orchestration-run/command-hardening/review.md`. This is a standing argument for moving
     orchestration into `engine-rs`, where the executing engine's version is explicit.
 
-11. **A command that creates a new `.md` must seed it with OKF frontmatter.** A file created under
-    `planning/` without frontmatter reports the same missing-fence error on `--graph`, `--state`,
-    `--links` **and** `--structure`, so a single omitted `---` looks like a corpus-wide regression
-    rather than one bad file. `/update-task` created the fleet's first `amendments.md` this way on
+11. **A command that creates a new `.md` must seed it with OKF frontmatter — and a command that
+    edits one must not displace or orphan its frontmatter.** A file created under `planning/`
+    without frontmatter reports the same missing-fence error on `--graph`, `--state`, `--links`
+    **and** `--structure`, so a single omitted `---` looks like a corpus-wide regression rather
+    than one bad file. `/update-task` created the fleet's first `amendments.md` this way on
     2026-08-19 and took the corpus from 0 to 7 errors. Seeding content without frontmatter is not a
-    smaller version of rule 5 — it is a breach of it.
+    smaller version of rule 5 — it is a breach of it. The edit case is the same failure by a
+    different door: on 2026-08-22 the `sdlc-task` bookkeep stage wrote its "Current focus"
+    paragraph into `base-template/planning/status.md` twice in the wrong places — once above the
+    opening `---` fence, once inside the block — and a file whose frontmatter no longer starts at
+    line 1 fails all four `validate-brain` flags at once, red-gating every concurrent lane on a
+    file it never touched. `hooks/check_frontmatter.py` (brain repo) and
+    `scripts/check_frontmatter_presence.py` (this repo, `harness.json`'s `frontmatter-presence`
+    check) both gate this at commit time and at gate time.
 
 <!-- BEGIN:response-style -->
 ## Response Style

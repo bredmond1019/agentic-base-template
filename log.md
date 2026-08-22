@@ -9,6 +9,46 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-22]
 
+### `BT.ticket.engine-docs-drift-tripwire` — Guard the docs surface at write time
+
+- **What:** Ran `/sdlc-flow` across all six tasks to PASS, review verdict PASS. HALF A (P1 live
+  defect): added `scripts/check_frontmatter_presence.py`, a standard-library-only presence/
+  placement gate for OKF frontmatter distinguishing ABSENT, UNTERMINATED, and DISPLACED (fence not
+  at line 1) — the class both of `hooks/check_frontmatter.py`'s `return 0` escape hatches were
+  blind to. Proven against a retro-fixture built from the real 2026-08-22 broken `status.md`
+  (displaced frontmatter), which the old hook passed at exit 0. Registered
+  `frontmatter-presence` gates:true in `planning/harness.json`; delegated both brain-repo
+  `hooks/check_frontmatter.py` escape hatches to the new check, with a new
+  `hooks/test_pre-commit.sh` case pinning that the retro-fixture is now blocked at commit time.
+  A scope bug found while wiring the gate (root `README.md`/`CLAUDE.md` wrongly required
+  frontmatter, contradicting mev's own `is_root_instruction_file` exemption) was fixed narrowly —
+  exempting only the ABSENT case for those two root files, not the stricter UNTERMINATED/DISPLACED
+  checks. HALF B: added `scripts/check_engine_docs_sync.py` + `scripts/engine_docs_sync_manifest.
+  json`, modelled on `check_skill_sync.py`, hashing 10 anchors (5 behaviour surfaces x 2 engines:
+  flags/defaults, stage list, isolation/branch naming, triage/bail taxonomy, bookkeep/state-write
+  contract) after auditing `docs/workflows/sdlc-task.md` and `sdlc-flow.md` against the current
+  engines — found and fixed one real gap (sdlc-task.md was missing the `--test-depth` flag, which
+  the engine has always parsed). Registered `engine-docs-sync` + `engine-docs-sync-tests`
+  gates:true. `CLAUDE.md`'s update-loop step 6 now documents the docs-sync tripwire alongside
+  skill-guide-sync, and standing rule 11 covers the displaced-frontmatter edit case beside the
+  existing create case. Full `harness.json` gate sweep and all four `validate-brain` flags run
+  clean; one pre-existing unrelated failure (`orchestration-run-contract-tests`, duplicate
+  doc_ids between HQ's planning and a sibling worktree) confirmed via git-stash not attributable
+  to this change.
+- **Next:** BT.6.C task 1 (author the `ping-agent` skill's core `SKILL.md`), then
+  `BT.ticket.bookkeep-leaves-derived-output-uncommitted`.
+
+```
+5e8bb73 feat: implement BT.ticket.engine-docs-drift-tripwire-task6
+7c4faa3 feat: implement BT.ticket.engine-docs-drift-tripwire-task5
+c1b804e feat: implement BT.ticket.engine-docs-drift-tripwire-task4
+5de6f72 feat: implement BT.ticket.engine-docs-drift-tripwire-task3
+793bdba feat: implement BT.ticket.engine-docs-drift-tripwire-task2
+b5efc92 feat: implement BT.ticket.engine-docs-drift-tripwire-task1
+```
+
+## [run: 2026-08-22]
+
 ### `BT.6.D` — The orchestration commander
 
 - **What:** Closed out the lane-coordination initiative's fourth block via `/sdlc-flow --worktree`

@@ -1,0 +1,62 @@
+{
+  ".claude/workflows/sdlc-task.js::flags-and-defaults": {
+    "hash": "3e8b57e2ab7820ec713997522dd713690ed0e85615a999dfe6d5a4af800b1ce6",
+    "lines": "111-148",
+    "docs_md": "docs/workflows/sdlc-task.md",
+    "section": "## Usage"
+  },
+  ".claude/workflows/sdlc-task.js::stage-list": {
+    "hash": "3ac6a107ee312c7b66702c7988d4defc0204cfa6eb4cc46fa5bf66ec9cec1657",
+    "lines": "87-96",
+    "docs_md": "docs/workflows/sdlc-task.md",
+    "section": "## Pipeline"
+  },
+  ".claude/workflows/sdlc-task.js::isolation-and-branch-naming": {
+    "hash": "cd3da34614fc3af38cb149863fbc7185ff87bd0bc399b72165839f2626d908a3",
+    "lines": "811-917",
+    "docs_md": "docs/workflows/sdlc-task.md",
+    "section": "## In-place vs. `--worktree`"
+  },
+  ".claude/workflows/sdlc-task.js::triage-bail-taxonomy": {
+    "hash": "9c3d570e6e1a04be485abef84915b19870045184f8e9a4efc0cc53e9cdd55488",
+    "lines": "1115-1395",
+    "docs_md": "docs/workflows/sdlc-task.md",
+    "section": "## Pipeline"
+  },
+  ".claude/workflows/sdlc-task.js::bookkeep-vault-commit": {
+    "hash": "9cbb4c646e6eeddbaf17cbd171fd5de3aecbb893772c8aa14e5eb4f226080744",
+    "lines": "1633-1752",
+    "docs_md": "docs/workflows/sdlc-task.md",
+    "section": "## Vaulted `planning/` writes in the per-task loop"
+  },
+  ".claude/workflows/sdlc-flow.js::flags-and-defaults": {
+    "hash": "9ad89d104c04ef21101d1f5a66f6a2693c4bd664a634fd32052bd93b21feb57c",
+    "lines": "238-251",
+    "docs_md": "docs/workflows/sdlc-flow.md",
+    "section": "## Usage"
+  },
+  ".claude/workflows/sdlc-flow.js::stage-list": {
+    "hash": "937fde2768582c641adb81cd44b29e8fa7bb10867e3b20fdaaa70f81c0a5fdd2",
+    "lines": "62-74",
+    "docs_md": "docs/workflows/sdlc-flow.md",
+    "section": "## Pipeline"
+  },
+  ".claude/workflows/sdlc-flow.js::isolation-and-branch-naming": {
+    "hash": "81b770d57571d5b0554255346191174061345d009d48b9e8285d9c9ea459a6c2",
+    "lines": "925-1096",
+    "docs_md": "docs/workflows/sdlc-flow.md",
+    "section": "## Isolation mode \u2014 branch (default) vs `--worktree`"
+  },
+  ".claude/workflows/sdlc-flow.js::triage-bail-taxonomy": {
+    "hash": "7d857fc36573f7b476d5f47e092d6f0f156b2d6981ad5b948e6424e783fbeab0",
+    "lines": "1316-1555",
+    "docs_md": "docs/workflows/sdlc-flow.md",
+    "section": "## Pipeline"
+  },
+  ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
+    "hash": "85ed8667ed4a1e2eebe8ffc7ecc34bfa67987d137642901ccab07910ce45b0e7",
+    "lines": "2071-2226",
+    "docs_md": "docs/workflows/sdlc-flow.md",
+    "section": "## Vaulted planning directories (D46)"
+  }
+}
