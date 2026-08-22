@@ -12,6 +12,10 @@ related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-commands, base-te
 
 # SDLC Workflows
 
+> **Start here.** Driving a lane? Read [orchestration.md](orchestration.md). Setting up or
+> troubleshooting the registry/leases/queue/commander underneath it? Read
+> [lane-coordination.md](lane-coordination.md).
+
 This is the canonical reference for the **harness's automated pipelines** — the `.claude/workflows/*.js`
 engines that drive a spec from a `tasks.md` to merged, tested, documented code, and the manual
 slash-command lifecycle they automate.
@@ -228,6 +232,9 @@ each engine's committed state file — check the state JSON for real figures fro
 - **[commands.md](commands.md)** — the manual command lifecycle the engines automate (Phase 1 → 7).
 - **[orchestration.md](orchestration.md)** — the lane lifecycle: what a lane is, the phases from
   `/begin-orchestration` through the terminal `review.md`, the mandatory artifacts, and the traps.
+- **[lane-coordination.md](lane-coordination.md)** — the operator's guide to the layer underneath
+  a lane: the registry, leases, message queue, ping contract and commander — setup, a cold-start
+  walkthrough, and troubleshooting.
 
 > A whole roadmap is driven **one repo (lane) at a time** by `/orchestrate` / `/begin-orchestration`
 > — an ordered block chain, sequential, one engine (`/sdlc-task` or `/sdlc-flow`, chosen per block)
