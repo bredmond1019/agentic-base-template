@@ -76,14 +76,16 @@ the registry and takes the repo lease (both released at lane close).
 For each block in the resolved chain:
 
 1. **Spec** — resolve the block ID to a spec slug and run `/generate-tasks` (or `--from <plan>`)
-   if `tasks.md` is missing.
+   if `tasks.json` is missing. Since D65 the spec is the block record at
+   `planning/blocks/<BlockID>.json` plus `planning/<BlockID>/tasks.json`; `tasks.md` is a legacy
+   path the engines still fall back to when no block record exists.
 2. **Engine** — launch `/sdlc-task` or `/sdlc-flow` per `/generate-tasks`' recommendation, as a
    background workflow. Spec preparation for the next blocks overlaps the running engine; the
    engine runs themselves are strictly serial (one repo, one engine run at a time).
 3. **Integrate** — merge/clean the worktree, resolve any merge conflict toward the incoming
    block's intent.
 4. **Verify the state write** — the engines' status bookkeeping is known-unreliable; check
-   `state.json`'s block status, `tasks.md`'s checkboxes, and `status.md` directly rather than
+   `state.json`'s block status and `status.md` directly rather than
    trusting the engine's own report.
 5. **One lane-log line** — append to `<roadmap_dir>/lane-log.jsonl` and commit it.
 6. **Append to `notes.md`** — this repo's local record (see Artifacts below).
@@ -134,12 +136,35 @@ deciding authority, not restated.
 
 ---
 
-## The commander is not built
+## The commander
 
-`BT.6.D` is specified but not implemented. Nothing drains a cross-lane queue on a schedule today —
-every cross-lane message is drained by the receiving lane itself, at its own block boundary, not by
-any standing process. Do not describe commander behaviour as though it exists. The design lives in
+`BT.6.D` landed on 2026-08-22. The commander is a **stateless drain**: one `bastion ask` turn that
+reads the queue and fleet state from disk, routes what it finds, re-derives the fleet's generated
+surfaces and commits exactly what it can prove is derived, then reports the remainder. Its context
+never grows, because nothing is carried between drains except what is on disk.
+
+Run one by hand:
+
+```bash
+./scripts/commander_drain.sh [--repo NAME] [--lane NAME]
+```
+
+`--repo`/`--lane` default to this repo's basename and `main`. Knobs, all with defaults:
+`COMMANDER_DRAIN_TIMEOUT_SECS` (900 — deliberately not `bastion ask`'s 180s default),
+`COMMANDER_LAUNCH_CMD` (Sonnet), `FLEET_LOCK_DIR`.
+
+**Nothing schedules it yet.** Kind-triggered drains need no scheduler — a lane sends `RENDEZVOUS`
+or `LEASE_RELEASE` and drains at its own block boundary — but the 20–30 minute heartbeat has no
+invoker, and cron on the Mac Mini is blocked behind `HQ.8.A`. Until then a drain happens when
+someone runs the wrapper. The full procedure is
+[`.claude/commands/orchestration-commander.md`](../../.claude/commands/orchestration-commander.md);
+the design and what was deliberately cut are in
 [`planning/lane-coordination/plan.md`](../../planning/lane-coordination/plan.md).
+
+The one rule worth knowing before you run it: **the commander re-derives, it never detects.** It
+does not scan `git status` for files that look derived — it runs the derivation and commits exactly
+the paths that reports back. Anything dirty outside that manifest is an authored orphan: reported,
+never committed.
 
 ---
 
