@@ -120,6 +120,67 @@ def check_positive_registry_and_lease_roundtrip() -> None:
           lease_problems == [], f"problems: {lease_problems}")
 
 
+# --- current_block / block_started_at: optional, load-bearing case is absence --------------
+
+# A REAL live claim, copied verbatim from .fleet-locks/lane-agents/agent-base-template-4c.json
+# on 2026-08-23 -- every claim on disk today lacks current_block and block_started_at, and a
+# regression here red-gates the whole fleet at once, so the absence case is asserted against an
+# actual on-disk record rather than an invented one.
+REAL_LIVE_CLAIM_WITHOUT_NEW_FIELDS = {
+    "agent_name": "base-template-4c",
+    "repo": "base-template",
+    "lane": "base-template",
+    "roadmap": "autonomous-foundation",
+    "started_at": "2026-08-23T12:17:35Z",
+    "heartbeat": "2026-08-23T17:11:53Z",
+}
+
+
+def check_real_live_claim_without_new_fields_validates() -> None:
+    problems = check_lane_agents.check_registry_record(REAL_LIVE_CLAIM_WITHOUT_NEW_FIELDS)
+    check("a real live claim lacking current_block/block_started_at validates exactly as today",
+          problems == [], f"problems: {problems}")
+
+
+def check_registry_with_both_new_fields_valid() -> None:
+    record = _valid_registry(
+        current_block="BT.ticket.lanes-do-not-record-their-current-block",
+        block_started_at=_iso(_now() - timedelta(minutes=3)),
+    )
+    problems = check_lane_agents.check_registry_record(record)
+    check("a registry claim with both current_block and block_started_at present validates",
+          problems == [], f"problems: {problems}")
+
+
+def check_registry_malformed_block_started_at_rejected() -> None:
+    record = _valid_registry(
+        current_block="BT.ticket.lanes-do-not-record-their-current-block",
+        block_started_at="not-a-timestamp",
+    )
+    problems = check_lane_agents.check_registry_record(record)
+    check("a malformed block_started_at is rejected",
+          any("block_started_at" in p for p in problems), f"problems: {problems}")
+
+
+def check_registry_empty_current_block_rejected() -> None:
+    record = _valid_registry(
+        current_block="",
+        block_started_at=_iso(_now() - timedelta(minutes=3)),
+    )
+    problems = check_lane_agents.check_registry_record(record)
+    check("an empty current_block is rejected",
+          any("current_block" in p for p in problems), f"problems: {problems}")
+
+
+def check_lane_schema_json_unchanged_by_this_task() -> None:
+    lane_schema = REPO_ROOT / ".claude" / "workflows" / "lane.schema.json"
+    text = lane_schema.read_text()
+    check("lane.schema.json does not define current_block (mev's LaneRecord is deny_unknown_fields)",
+          '"current_block"' not in text, "lane.schema.json unexpectedly mentions current_block")
+    check("lane.schema.json does not define block_started_at",
+          '"block_started_at"' not in text, "lane.schema.json unexpectedly mentions block_started_at")
+
+
 # --- scope: optional, defaults to repo, rejects unknown values -----------------------------
 
 def check_lease_scope_values() -> None:
@@ -402,6 +463,11 @@ def check_no_records_is_not_a_failure() -> None:
 def main() -> int:
     check_dependency_free()
     check_positive_registry_and_lease_roundtrip()
+    check_real_live_claim_without_new_fields_validates()
+    check_registry_with_both_new_fields_valid()
+    check_registry_malformed_block_started_at_rejected()
+    check_registry_empty_current_block_rejected()
+    check_lane_schema_json_unchanged_by_this_task()
     check_lease_scope_values()
     check_negative_missing_required_field()
     check_negative_duplicate_exclusive_lease()

@@ -59,9 +59,10 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
 
 REGISTRY_REQUIRED = ["agent_name", "repo", "lane", "roadmap", "started_at", "heartbeat"]
-REGISTRY_ALLOWED = set(REGISTRY_REQUIRED)
+REGISTRY_OPTIONAL = ["current_block", "block_started_at"]
+REGISTRY_ALLOWED = set(REGISTRY_REQUIRED) | set(REGISTRY_OPTIONAL)
 REGISTRY_SLUG_FIELDS = ("repo", "lane", "roadmap")
-REGISTRY_TIMESTAMP_FIELDS = ("started_at", "heartbeat")
+REGISTRY_TIMESTAMP_FIELDS = ("started_at", "heartbeat", "block_started_at")
 
 LEASE_REQUIRED = ["repo", "lane", "agent", "acquired_at", "kind"]
 LEASE_ALLOWED = set(LEASE_REQUIRED) | {"scope", "heartbeat"}
@@ -173,6 +174,9 @@ def check_registry_record(record) -> list:
         v = record.get("agent_name")
         if v is not None and not (isinstance(v, str) and v):
             problems.append("`agent_name` must be a non-empty string")
+        cb = record.get("current_block")
+        if cb is not None and not (isinstance(cb, str) and cb):
+            problems.append("`current_block` must be a non-empty string when present")
     return problems
 
 
