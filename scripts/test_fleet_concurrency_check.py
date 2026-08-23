@@ -20,7 +20,7 @@ import sys
 import tempfile
 import time
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -656,6 +656,198 @@ class ExclusiveLeaseRefusal(unittest.TestCase):
             0,
             f"lease fixture failed check_lane_agents.py --quiet: {result.stdout}",
         )
+
+
+class ExclusiveLeaseMatrix(unittest.TestCase):
+    """Task 3 of BT.ticket.fleet-exclusive-registration: the remaining cases from the block
+    record's testing_strategy, all driven through SEPARATE subprocess invocations of
+    fleet_concurrency_check.py (and, where named, check_lane_agents.py) -- never an in-process
+    call. Case (1) (blocking under a different agent) and the fixture-validity case already live
+    in `ExclusiveLeaseRefusal` above (task 1); this class adds cases (2)-(8) from that list.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.lock_dir = Path(self._tmp.name) / "locks"
+        self.leases_dir = self.lock_dir / "leases"
+        self.leases_dir.mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _write_lease(
+        self,
+        repo: str,
+        lane: str,
+        agent: str,
+        kind: str = "exclusive",
+        acquired_at: "datetime | None" = None,
+    ) -> Path:
+        path = self.leases_dir / f"lease-{lane}.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "repo": repo,
+                    "lane": lane,
+                    "agent": agent,
+                    "acquired_at": (acquired_at or datetime.now(timezone.utc)).isoformat(),
+                    "kind": kind,
+                }
+            )
+        )
+        return path
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(_MODULE_PATH), *args, "--lock-dir", str(self.lock_dir)],
+            capture_output=True,
+            text=True,
+        )
+
+    def _check_lane_agents(self) -> subprocess.CompletedProcess:
+        check_script = _MODULE_PATH.parent / "check_lane_agents.py"
+        return subprocess.run(
+            [sys.executable, str(check_script), "--quiet", "--lock-dir", str(self.lock_dir)],
+            capture_output=True,
+            text=True,
+        )
+
+    # (2) the holder's own agent is NOT refused -- a re-register/heartbeat, not a self-deadlock.
+    def test_holders_own_agent_is_not_refused(self) -> None:
+        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a")
+
+        result = self._run(
+            "register", "--repo", "base-template", "--category", "native-build",
+            "--agent", "agent-a",
+        )
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"the lease's OWN agent re-registering must not be refused, got exit "
+            f"{result.returncode}, stdout={result.stdout!r}",
+        )
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["allowed"])
+
+    # (3) a NON-HEAVY repo's exclusive lease still blocks a heavy register -- the HQ.8.A case.
+    # Heaviness is asserted NOT consulted: the leasing repo has no planning/harness.json at all
+    # (heavy_category() returns None for it), yet the block still fires for a heavy category.
+    def test_non_heavy_leasing_repo_still_blocks_a_heavy_register(self) -> None:
+        nonexistent_repo_path = str(Path(self._tmp.name) / "brain-repo-with-no-harness-json")
+        self.assertIsNone(
+            fcc.heavy_category(nonexistent_repo_path),
+            "test setup assumption broken: the leasing repo must have NO heavy signal",
+        )
+        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a")
+
+        result = self._run(
+            "register", "--repo", "engine-rs", "--category", "browser-automation",
+        )
+
+        self.assertEqual(
+            result.returncode,
+            3,
+            "a non-heavy leasing repo's exclusive hold must still block a heavy-category "
+            f"register; got exit {result.returncode}, stdout={result.stdout!r}",
+        )
+
+    # (4) acquiring exclusivity while ordinary lanes are active is refused -- exclusivity is
+    # admission control only, never pre-emption of a lane already running.
+    def test_acquire_exclusive_refused_while_ordinary_lanes_are_active(self) -> None:
+        reg = self._run(
+            "register", "--repo", "engine-rs", "--category", "native-build",
+            "--pid", str(os.getpid() + 1),
+        )
+        self.assertEqual(reg.returncode, 0, f"setup register failed: {reg.stdout!r}")
+
+        result = self._run("acquire-exclusive")
+
+        self.assertEqual(
+            result.returncode,
+            3,
+            f"acquiring exclusivity while an ordinary lane is active must be refused, got exit "
+            f"{result.returncode}, stdout={result.stdout!r}",
+        )
+        payload = json.loads(result.stdout)
+        self.assertIn("engine-rs", payload["active"])
+
+    # (5) an exclusive lease past the staleness threshold stops blocking.
+    def test_stale_exclusive_lease_stops_blocking(self) -> None:
+        stale_at = datetime.now(timezone.utc) - timedelta(
+            seconds=fcc._LANE_AGENTS.STALE_THRESHOLD_SECONDS + 300
+        )
+        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a", acquired_at=stale_at)
+
+        result = self._run(
+            "register", "--repo", "base-template", "--category", "native-build",
+        )
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            "a stale exclusive lease must not park the fleet, got exit "
+            f"{result.returncode}, stdout={result.stdout!r}",
+        )
+
+    # (6) `status` reports a held exclusive lease distinctly from an ordinary active lane.
+    def test_status_surfaces_the_exclusive_holder(self) -> None:
+        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a")
+
+        result = self._run("status")
+
+        self.assertEqual(result.returncode, 0, f"status must always exit 0: {result.stdout!r}")
+        payload = json.loads(result.stdout)
+        self.assertIn("exclusive_leases", payload)
+        self.assertTrue(
+            any("brain" in entry and "quiesce-lane" in entry for entry in payload["exclusive_leases"]),
+            f"expected the held exclusive lease to be surfaced distinctly, got {payload!r}",
+        )
+        self.assertFalse(
+            any("brain" in entry for entry in payload.get("active", [])),
+            "an exclusive lease must not also be reported as an ordinary active lane",
+        )
+
+    # (7) check_lane_agents.py --quiet still exits 0 over the leases this suite writes -- the
+    # guard against this ticket widening LEASE_ALLOWED, exercised across the lease shapes
+    # (fresh exclusive, shared) this class produces. A STALE lease is deliberately excluded here:
+    # check_lane_agents.py's own gated check treats an aged `acquired_at` as a FAILURE in its own
+    # right (a live-liveness warning it surfaces, distinct from fleet_concurrency_check.py's
+    # separate decision to stop treating it as a blocking hold) -- that is covered by
+    # test_stale_exclusive_lease_stops_blocking above, which asserts the fleet-concurrency
+    # behaviour, not check_lane_agents.py's schema gate.
+    def test_check_lane_agents_accepts_every_lease_shape_this_suite_writes(self) -> None:
+        self._write_lease(repo="brain", lane="fresh-exclusive", agent="agent-a")
+        self._write_lease(repo="bastion", lane="shared-lane", agent="agent-c", kind="shared")
+
+        result = self._check_lane_agents()
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"check_lane_agents.py --quiet must accept every lease shape this ticket's tests "
+            f"write, without any new key being introduced: {result.stdout!r}",
+        )
+
+    # (8) an unreadable leases/ directory still degrades open -- never a hard failure, and
+    # never treated as a live exclusive hold.
+    def test_unreadable_leases_dir_degrades_open(self) -> None:
+        os.chmod(self.leases_dir, 0o000)
+        try:
+            result = self._run(
+                "register", "--repo", "base-template", "--category", "native-build",
+            )
+        finally:
+            os.chmod(self.leases_dir, 0o700)
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"an unreadable leases/ must degrade open, not block registration: exit "
+            f"{result.returncode}, stdout={result.stdout!r}",
+        )
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["allowed"])
 
 
 if __name__ == "__main__":
