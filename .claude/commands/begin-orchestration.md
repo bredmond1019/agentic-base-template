@@ -188,6 +188,17 @@ this fleet-concurrency slot release** — delete `<lock_dir>/leases/lease-<repo>
 failure, or abandonment, so a reader looking for "what does this lane give back on exit" finds it
 in one place.
 
+**Fleet-exclusive lanes (`exclusive_repos`).** If the lane record's `exclusive_repos` array is
+non-empty, before the first block starts, write an additional `kind: exclusive` lease at
+`<lock_dir>/leases/lease-<repo>.json` for **each** repo named in `exclusive_repos` — same shape as
+any other lease record (`repo`, `lane`, `agent`, `acquired_at`, `kind: exclusive`; no new field).
+While any such lease is held, every other agent's `fleet_concurrency_check.py register` call is
+refused with exit `3` regardless of category or heaviness, so a lane that must run with the fleet
+quiesced can actually hold it — this is admission control only, never pre-emption of a lane
+already running. Remove every lease written this way at lane close — success, failure, or
+abandonment — alongside the ordinary lease and registry releases. `exclusive_repos` is read only
+here; no new field is added to `.claude/workflows/lane.schema.json` or to the lease record.
+
 ## Step 4 — Confirm
 
 Print, and stop for confirmation unless `--execute`:

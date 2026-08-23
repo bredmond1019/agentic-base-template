@@ -348,6 +348,17 @@ itself is unavailable (no brain root found, unwritable), the script reports `"de
 `planning/decisions/D61-fleet-concurrency-enforcement.md` and
 `planning/decisions/D66-tiered-heavy-lane-concurrency.md` for the full design.
 
+**Fleet-exclusive lanes (`exclusive_repos`).** If the lane record's `exclusive_repos` array is
+non-empty, before the first block starts, write an additional `kind: exclusive` lease at
+`<lock_dir>/leases/lease-<repo>.json` for **each** repo named in `exclusive_repos` — same shape as
+any other lease record (`repo`, `lane`, `agent`, `acquired_at`, `kind: exclusive`; no new field).
+While any such lease is held, every other agent's `fleet_concurrency_check.py register` call is
+refused with exit `3` regardless of category or heaviness, so a lane that must run with the fleet
+quiesced can actually hold it — this is admission control only, never pre-emption of a lane
+already running. Remove every lease written this way at lane close — success, failure, or
+abandonment — alongside the ordinary lease and registry releases. `exclusive_repos` is read only
+here; no new field is added to `.claude/workflows/lane.schema.json` or to the lease record.
+
 ### 6. Launch the engine — do not wait idly
 Invoke the workflow **in this session**:
 - `sdlc-task <spec-slug> [--worktree]`
