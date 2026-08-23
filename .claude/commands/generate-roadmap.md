@@ -259,14 +259,14 @@ later**, and the roadmap says so in the lane table. Do not simply hope the opera
 
 | Repo | Isolation | Why |
 |---|---|---|
-| `base-template` | **`--worktree` always** | It owns `.claude/workflows/sdlc-*.js`; a chain there edits the engines while they execute it. |
+| `base-template` | **`--no-worktree`** — `--worktree` is suspended fleet-wide by D81 and the engines now refuse it outright | A worktree never protected a running chain from its own engine edits: the Workflow harness executes a launch-time COPY of the engine (702 snapshots measured), so a chain editing `.claude/workflows/sdlc-*.js` does not change the engine currently executing it in EITHER isolation mode — re-measured 2026-08-23, a `--worktree` invocation launched after a refusal was committed still ran a snapshot lacking it. The residual exposure is between blocks in one chain, not within one; mitigate by sequencing engine edits to a chain boundary, not by isolation. See `D81-worktree-moratorium`. |
 | the brain root (HQ) | **`--no-worktree` always** | `validate-brain` in a worktree resolves the gitignored sub-repos against the worktree's own `brain.toml` — measured 64 structure / 601 state errors versus 0/0 in the main tree. |
-| everything else | `--no-worktree` | Cheaper. Use `--worktree` when a change deserves quarantine. |
+| everything else | `--no-worktree` | Cheaper. Use `--worktree` when a change deserves quarantine — subject to the D81 suspension above; the engines refuse it fleet-wide until D81 is lifted. |
 
 **If `base-template` is in the roadmap, decide its propagation timing explicitly.** Its work must
 land early (every other lane runs on those engines) but `/sync-downstream-harness` must not run
 while any lane is live — a mid-flight sync has already swapped a running lane's engine underneath
-it. The resolution is always the same: **land in the worktree early, defer propagation to an
+it. The resolution is always the same: **land early on a plain branch, defer propagation to an
 operator gate at the end.** Record both halves where they belong — the early landing as an
 ordinary block in `base-template`'s lane record, the deferred `/sync-downstream-harness` step as
 an `operator` edge in `depends_on` on the last `base-template` block, gating every other lane that
@@ -493,7 +493,7 @@ because a lane is not single-repo in this corpus).
 | `budget` | `{"heavy": bool, "not_with": [repo, ...]}`. **Every lane authors `heavy`** — Step 4's "heavy budget is the real constraint" rule means every lane already has a real classification, so there is no "constraint absent" case here. Add `not_with` only when this lane's heavy budget collides with another repo's. |
 | `held_until` | What this lane is held until before it may start: a block ID (waits for that block to land) or an `operator-`-prefixed kebab-case slug (waits on that operator/approval edge). **RETYPED, not renamed** (D71 follow-on) — the retired `.txt` `# HELD-UNTIL:` directive never carried a calendar date in any of the 70 live files, so a date-typed field was latent drift rather than a live one; the name `held_until` already reads correctly for either referent. This is the *only* kind of hold authored in the lane record — a block-to-block or block-to-operator-gate hold is **not** duplicated anywhere else; it is this field, full stop, and `/orchestrate` reads it here. |
 | `notes` | **LANE-LEVEL** constraints and context only — the SPEC / RISK / EXCEPTION / MERGE-DO-NOT-INSTALL / TRAPS class of prose the retired `.txt` format carried as comments: cross-lane warnings, sequencing rationale, known traps, anything an operator or agent driving this whole lane needs before running it. Free text, no fixed structure. **Per-block briefings do NOT go here** — see the routing table below; a per-block `note` property is deliberately absent from `blocks[]` and always will be. |
-| `isolation` | The isolation flag for this lane (e.g. `--worktree`). The *why* belongs in the roadmap's Isolation and CPU-budget table (Step 4), not in the lane record. |
+| `isolation` | The isolation flag for this lane (e.g. `--no-worktree`). The *why* belongs in the roadmap's Isolation and CPU-budget table (Step 4), not in the lane record. The leading token is checked — `check_lane_records.py` fails any record whose leading directive is `--worktree`, per D81. |
 | `exclusive_repos` | Repos this lane claims exclusive write access to, beyond its own — the cross-tree-writer case below. |
 | `spec_source` | Where this lane's block specs were sourced from, when the whole lane shares one (e.g. a `sequence.md` path) and it is not master-plan slug mode. |
 | `cut_blocks` | Block IDs originally planned for this lane but cut — mirror the roadmap's own cut list, do not silently drop them from both places. |
@@ -569,7 +569,7 @@ still lives on the block's own record, as the paragraph above shows).
   "budget": {
     "heavy": false
   },
-  "isolation": "--worktree",
+  "isolation": "--no-worktree",
   "exclusive_repos": ["mev"],
   "notes": "Exclusive against mev because this block writes planning/harness.json outside its own repo's tree; a concurrent mev lane could observe or clobber a half-written file. See the block's own record for the full trap list and the depends_on hold."
 }
