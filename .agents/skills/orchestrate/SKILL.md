@@ -180,6 +180,29 @@ Each of these exists because it has already caused a real failure in this fleet.
     lane that is not running. Surfacing it is never out of scope, even though acting on another
     lane's message is.
 
+12. **Hold the repo lease across a block, never across a boundary; re-stamp both heartbeats at the
+    same boundary.** `/begin-orchestration` Step 4 takes the repo lease
+    (`<lock_dir>/leases/lease-<repo>.json`) and the registry claim
+    (`<lock_dir>/lane-agents/agent-<agent_name>.json`) before this chain starts. At the block
+    boundary — step 10 below, "Re-check the next block's dependencies, then launch it" — re-stamp
+    the claim's `heartbeat`, release the lease, drain this lane's inbox (rule 11), re-take the
+    lease, and re-stamp its `heartbeat` before launching the next block. The boundary and not
+    mid-block, because a lane stopped mid-block loses exactly the context that cannot be written
+    down — the lease release and the drain both wait for a point where nothing is in flight.
+
+    **Leave `started_at` (on the claim) and `acquired_at` (on the lease) alone at every re-stamp.**
+    Those are acquisition timestamps set once, at first claim; re-stamping them on a later
+    heartbeat destroys the record of when the claim or lease was actually taken.
+
+    **This is a different clock from the fleet-concurrency re-registration** (step 5 below,
+    `fleet_concurrency_check.py register`, which bumps that separate
+    `<lock_dir>/fleet-concurrency/...` entry's own `started_at`) — heartbeating the claim or the
+    lease does not heartbeat the fleet-concurrency slot, and vice versa; do not conflate the two
+    clocks or the two files.
+
+    `--stop-after`/`--autonomy` stop the chain at exactly this same boundary — a stop releases the
+    lease and registry claim the same way ordinary lane close does.
+
 ---
 
 ## How the pipeline works
@@ -469,7 +492,16 @@ isolation (no other lane's cargo command in flight) before reporting it as **BRO
 as a clean pass.
 
 ### 10. Re-check the next block's dependencies, then launch it
-Cheap, and it catches anything that changed outside the chain. Then return to step 6.
+Cheap, and it catches anything that changed outside the chain.
+
+**This is the block boundary — release the lease, drain the inbox, re-take the lease, and
+re-stamp both heartbeats** (rule 12): before releasing, re-stamp the registry claim's `heartbeat`
+(`<lock_dir>/lane-agents/agent-<agent_name>.json`); release `<lock_dir>/leases/lease-<repo>.json`;
+drain `<lock_dir>/queue/<repo>/<lane>/`; re-take the lease and re-stamp its `heartbeat`
+(`<lock_dir>/leases/lease-<repo>.json`) before launching the next engine. Leave `started_at` and
+`acquired_at` untouched — see rule 12. If `--stop-after` has been reached, or `--autonomy` says
+this is a stopping point, release the lease and registry claim as at lane close and stop here.
+Otherwise return to step 6.
 
 ### 11. Repeat until the chain is done or stopped.
 

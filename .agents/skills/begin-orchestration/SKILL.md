@@ -211,6 +211,17 @@ Print, and stop for confirmation unless `--execute`:
 - **operator gates** — any block the roadmap marks as waiting on a human, with which item
 - the log path
 
+**Re-stamp both heartbeats at every block boundary, once `/orchestrate` is running.** The registry
+claim (`<lock_dir>/lane-agents/agent-<agent_name>.json`) and the repo lease
+(`<lock_dir>/leases/lease-<repo>.json`) each carry a `heartbeat` field. `/orchestrate`'s rule 10
+re-stamps both — the claim's `heartbeat` and the lease's `heartbeat` — each time it releases and
+re-takes the lease at a block boundary. **Leave `started_at` (on the claim) and `acquired_at` (on
+the lease) alone at every re-stamp** — those are acquisition timestamps set once, at first claim;
+re-stamping them on a later heartbeat destroys the record of when the claim or lease was actually
+taken. **This is a different clock from Step 3's fleet-concurrency re-registration above** — that
+heartbeat refreshes the separate `<lock_dir>/fleet-concurrency/...` entry (a different file, on
+its own TTL clock) and does nothing to the claim's or lease's `heartbeat`; do not conflate them.
+
 Then run `/orchestrate <chain> <isolation-flag> [--engine ...] [--continue-on-fail]`.
 
 Everything below is what you enforce *around* `/orchestrate` — it does not supersede that command's

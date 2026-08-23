@@ -259,6 +259,17 @@ not the checker's.
 No field is added to `.claude/workflows/lane.schema.json` by this claim — the registry and lease
 records are separate files, not lane-record fields.
 
+**Re-stamp both heartbeats at every block boundary, once `/orchestrate` is running.** The claim
+written here carries `heartbeat`; the lease written here does too. `/orchestrate` rule 10 re-stamps
+both — the claim's `heartbeat` and the lease's `heartbeat` — each time it releases and re-takes the
+lease at a block boundary (do not restate that mechanism here). **Leave `started_at` (on the claim)
+and `acquired_at` (on the lease) alone at every re-stamp** — those are acquisition timestamps set
+once, here, at first claim; re-stamping them on a later heartbeat destroys the record of when the
+claim or lease was actually taken. **This is a different clock from Step 3's fleet-concurrency
+re-registration above** — that heartbeat refreshes the separate `<lock_dir>/fleet-concurrency/...`
+entry (a different file, on its own TTL clock) and does nothing to the claim's or lease's
+`heartbeat`; the two must not be conflated.
+
 Then run `/orchestrate <chain> <isolation-flag> [--engine ...] [--continue-on-fail]`.
 
 Everything below is what you enforce *around* `/orchestrate` — it does not supersede that command's

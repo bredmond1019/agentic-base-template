@@ -172,6 +172,25 @@ Each of these exists because it has already caused a real failure in this fleet.
     `processing/`, then `complete_message()` per message once triaged — do not restate the queue
     layout or receipts ledger here, `BT.6.B` owns both.
 
+    **Re-stamp both heartbeats at this same boundary.** Before releasing, update the registry
+    claim's `heartbeat` field (`<lock_dir>/lane-agents/agent-<agent_name>.json`) to the current
+    time; after re-taking, update the lease's `heartbeat` field
+    (`<lock_dir>/leases/lease-<repo>.json`) the same way. **Leave `started_at` (on the claim) and
+    `acquired_at` (on the lease) alone** — those are acquisition timestamps, not liveness signals,
+    and re-stamping them destroys the record of when the claim or lease was actually taken (the
+    exact data loss `BT.ticket.lane-claim-and-lease-have-no-heartbeat` fixed: a lease heartbeated
+    via `acquired_at` loses its true acquisition time forever). **This is a different clock from
+    the fleet-concurrency re-registration** described in Step 5 below
+    (`fleet_concurrency_check.py register`, which bumps that separate
+    `<lock_dir>/fleet-concurrency/...` entry's own `started_at`) — heartbeating
+    the claim or the lease does not heartbeat the fleet-concurrency slot, and vice versa; do not
+    conflate the two clocks or the two files.
+
+    **In case of divergence:** the claim, the lease, and the fleet-concurrency slot are three
+    separate files, each heartbeated by its own instruction — the claim/lease heartbeat happens
+    at *every* block boundary (this rule); the fleet-concurrency heartbeat is periodic and only
+    for a heavy repo whose chain outruns its TTL (Step 5 below, "Decide engine and isolation").
+
 
     **While no `/orchestration-commander` is running — the current arrangement — a lane is the ONLY
     reader of any inbox, including its own.** Nothing sweeps the queue tree, so a message addressed
@@ -517,9 +536,12 @@ as a clean pass.
 ### 10. Re-check the next block's dependencies, then launch it
 Cheap, and it catches anything that changed outside the chain.
 
-**This is the block boundary — release the lease, drain the inbox, re-take the lease** (rule 10):
-release `<lock_dir>/leases/lease-<repo>.json`, drain `<lock_dir>/queue/<repo>/<lane>/` via
-`drain_queue()`/`complete_message()`, then re-take the lease before launching the next engine. If
+**This is the block boundary — release the lease, drain the inbox, re-take the lease, and
+re-stamp both heartbeats** (rule 10): before releasing, re-stamp the registry claim's `heartbeat`
+(`<lock_dir>/lane-agents/agent-<agent_name>.json`); release
+`<lock_dir>/leases/lease-<repo>.json`; drain `<lock_dir>/queue/<repo>/<lane>/` via
+`drain_queue()`/`complete_message()`; re-take the lease and re-stamp its `heartbeat` before
+launching the next engine. Leave `started_at` and `acquired_at` untouched — see rule 10. If
 `--stop-after` has been reached, or `--autonomy` says this is a stopping point, release the lease
 and registry claim as at lane close and stop here instead of continuing to step 6. Otherwise
 return to step 6.
