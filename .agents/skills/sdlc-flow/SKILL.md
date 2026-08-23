@@ -17,8 +17,10 @@ description: >
    Default: a plain branch (<spec>-flow) checked out IN THE MAIN WORKING TREE. No
    sparse-checkout worktree, so a relative planning/ symlink (brain-vaulted repos)
    stays intact. main is left on the branch until the PR merges.
-   --worktree: the isolated sparse-checkout worktree under trees/<spec>-flow/ —
-   opt in when you need true isolation (e.g. /sdlc-block fans out parallel children).
+   --worktree: SUSPENDED FLEET-WIDE (D81, 2026-08-23). The engine refuses the flag
+   unconditionally and exits before any setup — no override, no environment escape hatch.
+   Run on a plain branch instead. The sparse-checkout worktree machinery survives
+   intact for when D81 lifts.
 
  A compact, COMMITTED, AUTHORITATIVE state.json + one worklog.md replace the 5×N
  per-stage report files: resume + review + wrap-up read a structured index instead
@@ -30,8 +32,8 @@ description: >
    /sdlc-flow <spec-slug> 1-3              scope to a task range (1-3, 1,3,5, 5)
    /sdlc-flow <spec-slug> --auto-merge     merge the PR + clean up on success
    /sdlc-flow <spec-slug> --no-pr          stop after wrap-up; do not create a PR
-   /sdlc-flow <spec-slug> --worktree       run in an isolated worktree (default: plain branch)
-   /sdlc-flow <spec-slug> --resume         re-attach the branch/worktree, resume from state.json
+   /sdlc-flow <spec-slug> --resume         re-attach the branch, resume from state.json
+   (--worktree is refused per D81 -- do not pass it)
    /sdlc-flow <spec-slug> --test-depth full  run the FULL gating suite per task (default: fast)
 
  PIPELINE
@@ -92,8 +94,17 @@ description: >
 
 When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc-flow.js`. Instead, perform the flow execution yourself:
 
-1. **Worktree Setup**:
-   - Create (or re-attach) the one shared worktree at `trees/<spec-slug>-flow` and checkout branch `sdlc-flow/<spec-slug>`.
+1. **Setup — plain branch only**:
+   - **`--worktree` is REFUSED (D81 worktree moratorium, suspended fleet-wide as of 2026-08-23).** If
+     the invocation includes `--worktree`, stop immediately: report that --worktree is suspended per
+     D81 and the run must use a plain branch (drop the flag and re-invoke). Do NOT create a worktree,
+     a branch, or any commit. This mirrors the real engine, which refuses unconditionally right after
+     parsing the flag, before any setup — see `.claude/workflows/sdlc-flow.js` around the
+     `useWorktree = hasFlag('--worktree')` line. No override flag, no environment escape hatch.
+   - Otherwise (the normal path today): check out branch `sdlc-flow/<spec-slug>` IN THE MAIN WORKING
+     TREE — no sparse-checkout worktree, so a relative `planning/` symlink (brain-vaulted repos) stays
+     intact. (The sparse-checkout worktree recipe under `trees/<spec-slug>-flow/` is left intact in
+     the machinery for when D81 lifts; it is not the normal path today.)
    - **Spec location.** Paths are `planning/<spec-slug>/...` at the git root by default. If no spec
      exists there, ALSO check `<invoking-dir-relative-to-root>/planning/<spec-slug>/...` — a
      sub-brain tier (e.g. `business/`) has its own `planning/` without being its own git repo. The

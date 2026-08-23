@@ -138,6 +138,10 @@ function parseRange(spec) {
 }
 
 const useWorktree = hasFlag('--worktree')
+if (useWorktree) {
+  log(`ERROR: --worktree is suspended fleet-wide (D81). Run on a plain branch instead -- drop the --worktree flag and re-invoke. See docs/decisions/D81-worktree-moratorium.md.`)
+  return { error: 'worktree moratorium (D81)', blockId }
+}
 const resumeMode  = hasFlag('--resume')
 
 const VALID_TEST_DEPTHS = ['fast', 'full']

@@ -10,13 +10,12 @@ fixture carrying the parse with NO refusal must FAIL naming the file. A
 one-directional suite cannot tell a working checker from one that passes
 everything.
 
-Case (d) -- the real engines -- is written to assert the CURRENT state as of
-this task (task 1 of BT.ticket.engines-must-refuse-worktree-under-D81): the
-refusal has not been added yet, so the real engines must still FAIL here.
-Task 2 of that same spec adds the refusal to both engines and is responsible
-for tightening this exact assertion to expect PASS instead -- see the task 2
-description, which requires `check_worktree_moratorium.py` to exit 0 against
-the real engines once the guard lands.
+Case (d) -- the real engines -- asserts they PASS the checker. Task 1 of
+BT.ticket.engines-must-refuse-worktree-under-D81 recorded this assertion as a
+FAIL (the refusal had not landed yet); task 2 of that same spec adds the
+refusal to both engines and tightens this exact assertion to expect PASS, per
+the task 2 acceptance criterion that `check_worktree_moratorium.py` exits 0
+against the real engines once the guard lands.
 """
 
 from __future__ import annotations
@@ -117,9 +116,7 @@ def main() -> int:
         rc = mod.main([str(bad), "--quiet"])
         check("main() exits 1 for the failing fixture", rc == 1, f"rc={rc}")
 
-    # (d) the REAL engines, as of task 1: refusal not added yet -> must currently FAIL.
-    # See module docstring above -- task 2 of this spec is responsible for tightening this
-    # exact assertion to `rc == 0` once the refusal guard lands in both engines.
+    # (d) the REAL engines, as of task 2: the refusal now landed in both -> must PASS.
     real_task = REPO_ROOT / ".claude/workflows/sdlc-task.js"
     real_flow = REPO_ROOT / ".claude/workflows/sdlc-flow.js"
     proc = subprocess.run(
@@ -127,14 +124,14 @@ def main() -> int:
         cwd=str(REPO_ROOT), capture_output=True, text=True,
     )
     check(
-        "real engines (pre-refusal, task 1 state) currently FAIL the checker",
-        proc.returncode != 0,
+        "real engines (post-refusal, task 2 state) now PASS the checker",
+        proc.returncode == 0,
         f"rc={proc.returncode}, stdout={proc.stdout!r}",
     )
     err_task = mod.check_worktree_guard(real_task, ".claude/workflows/sdlc-task.js")
     err_flow = mod.check_worktree_guard(real_flow, ".claude/workflows/sdlc-flow.js")
-    check("sdlc-task.js still parses --worktree (pre-refusal)", err_task is not None and "not found" not in err_task)
-    check("sdlc-flow.js still parses --worktree (pre-refusal)", err_flow is not None and "not found" not in err_flow)
+    check("sdlc-task.js refuses --worktree", err_task is None, str(err_task))
+    check("sdlc-flow.js refuses --worktree", err_flow is None, str(err_flow))
 
     print(f"\n{'ALL PASS' if not FAILURES else f'{len(FAILURES)} FAILED'}")
     return 1 if FAILURES else 0

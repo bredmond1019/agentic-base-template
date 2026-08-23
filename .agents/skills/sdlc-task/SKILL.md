@@ -39,16 +39,17 @@ description: >
 
  ISOLATION
    Default: IN PLACE on the current branch (no worktree) — cheapest, like /sdlc-run.
-   --worktree: run in an isolated git worktree on its own branch (you integrate the
-   branch yourself when ready). Opt-in only.
+   --worktree: SUSPENDED FLEET-WIDE (D81, 2026-08-23). The engine refuses the flag
+   unconditionally and exits before any setup — no override, no environment escape hatch.
+   Run on a plain branch instead. The worktree machinery survives intact for when D81 lifts.
 
  USAGE
    /sdlc-task <spec-slug>                 run every task in the spec, in place
    /sdlc-task <spec-slug> 2               run only task 2
    /sdlc-task <spec-slug> 1-3             run a task range (1-3, 1,3,5, 5)
-   /sdlc-task <spec-slug> 2 --worktree    run task 2 in an isolated worktree/branch
    /sdlc-task <spec-slug> --resume        resume from the committed state file
    /sdlc-task <spec-slug> --test-depth full  full gating suite per task (default: fast)
+   (--worktree is refused per D81 -- do not pass it)
 
  PIPELINE
    setup (locate repo / create worktree) → enumerate (D16 lint) → [resume load]
@@ -139,13 +140,26 @@ only this section — not the `.js` — should end up doing exactly what the rea
   range (`1-3`), a comma list (`1,3,5`), or a mix (`1-3,7`). Parse into the sorted set of integers it
   names; if it doesn't match `\d+(-\d+)?` per comma-part, or names nothing, stop and report an error —
   do not guess.
-- `--worktree` — opt-in isolation (default is in-place on the current branch).
+- `--worktree` — **REFUSED (D81 worktree moratorium, suspended fleet-wide as of 2026-08-23).** If
+  `--worktree` is present, stop immediately: report that --worktree is suspended per D81 and the run
+  must use a plain branch (drop the flag and re-invoke). Do NOT proceed to Step 1, do NOT create a
+  worktree, a branch, or any commit. This mirrors the real engine, which refuses unconditionally
+  right after parsing the flag, before any setup — see `.claude/workflows/sdlc-task.js` around the
+  `useWorktree = hasFlag('--worktree')` line. No override flag, no environment escape hatch: an
+  escape hatch would make the moratorium documentation again, which is the exact failure D81 names.
+  The worktree machinery below (Steps 1b/1c) is left intact for when D81 lifts — it is not the
+  normal path today.
 - `--resume` — resume from the on-disk `sdlc-task-state.json`, reusing the existing worktree/branch by
   name and skipping the D19 thin-spec gate (see Step 1).
 - `--test-depth fast|full` — default `fast` (only `gates:true`-and-not-`perTask:false` checks run per
   task); `full` runs the whole harness suite on every task. Reject any other value.
 
 ### Step 1 — Setup: locate the repo, or create the isolated worktree
+
+**Reached only when `--worktree` was NOT passed** — Step 0 already refused and stopped if it was.
+Every worktree-mode branch below (`--worktree` fresh create, reuse, re-attach, Steps 1b/1c) is
+therefore dead code under the moratorium, kept only so the machinery is intact for when D81 lifts;
+go straight to "In-place mode" below.
 
 Run everything below from the **main repo root** unless noted.
 

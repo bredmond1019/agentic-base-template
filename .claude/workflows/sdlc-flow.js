@@ -242,6 +242,10 @@ const resumeMode    = hasFlag('--resume')
 // planning/ symlink intact — worktrees break it). --worktree opts back into the isolated sparse-checkout
 // worktree (needed for true isolation).
 const useWorktree   = hasFlag('--worktree')
+if (useWorktree) {
+  log(`ERROR: --worktree is suspended fleet-wide (D81). Run on a plain branch instead -- drop the --worktree flag and re-invoke. See docs/decisions/D81-worktree-moratorium.md.`)
+  return { error: 'worktree moratorium (D81)', blockId }
+}
 
 const VALID_TEST_DEPTHS = ['fast', 'full']
 const testDepthFlag = flagStr('--test-depth')
