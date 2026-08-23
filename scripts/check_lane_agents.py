@@ -21,8 +21,9 @@ deciding which to release. Two "shared" leases on the same repo are legal by des
 asymmetry is the entire point of lease.schema.json's `kind` field) and are never flagged.
 
 STALE-LEASE / STALE-CLAIM DETECTION AND ITS BOUNDARY: a record is "stale" when its liveness
-timestamp (a registry claim's `heartbeat`, or a lease's `acquired_at` -- lease.schema.json's
-`acquired_at` description states it "doubles as the lease's heartbeat") is older than
+timestamp (a registry claim's `heartbeat`, or a lease's `heartbeat` when present, else its
+`acquired_at` -- see `lease_liveness_timestamp()`; `acquired_at` is now immutable per
+lease.schema.json and no longer doubles as the heartbeat) is older than
 STALE_THRESHOLD_SECONDS. This script CANNOT call ListAgents -- it has no access to which agent
 nicknames are currently live -- so it never decides "abandoned" vs. "slow." It reports the
 timestamp age and the agent name only; joining that against ListAgents liveness to tell "agent
@@ -63,9 +64,9 @@ REGISTRY_SLUG_FIELDS = ("repo", "lane", "roadmap")
 REGISTRY_TIMESTAMP_FIELDS = ("started_at", "heartbeat")
 
 LEASE_REQUIRED = ["repo", "lane", "agent", "acquired_at", "kind"]
-LEASE_ALLOWED = set(LEASE_REQUIRED) | {"scope"}
+LEASE_ALLOWED = set(LEASE_REQUIRED) | {"scope", "heartbeat"}
 LEASE_SLUG_FIELDS = ("repo", "lane")
-LEASE_TIMESTAMP_FIELDS = ("acquired_at",)
+LEASE_TIMESTAMP_FIELDS = ("acquired_at", "heartbeat")
 LEASE_KIND_VALUES = {"exclusive", "shared"}
 LEASE_SCOPE_VALUES = {"repo", "fleet"}
 
@@ -197,6 +198,19 @@ def staleness_seconds(timestamp_value: str, now: Optional[datetime] = None) -> O
     return (reference - dt).total_seconds()
 
 
+def lease_liveness_timestamp(record: dict) -> str:
+    """The timestamp a lease's staleness is judged on: `heartbeat` when present, else
+    `acquired_at` -- the fallback that keeps every lease already on disk (none of which carry
+    `heartbeat` yet) judged exactly as before. `acquired_at` no longer doubles as the heartbeat
+    (lease.schema.json now documents it as immutable); this is the single place that rule lives
+    so fleet_concurrency_check.py's `_non_stale_exclusive_leases` can import it and the two
+    scripts can never disagree about which leases are live."""
+    heartbeat = record.get("heartbeat")
+    if isinstance(heartbeat, str) and heartbeat:
+        return heartbeat
+    return record.get("acquired_at", "")
+
+
 # --- discovery ----------------------------------------------------------------------------
 
 def _discover(directory: Path, file_re: re.Pattern) -> list:
@@ -265,10 +279,11 @@ def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None) -
         record, load_err = _load(path)
         problems = [load_err] if load_err else check_lease_record(record)
         if not problems and isinstance(record, dict):
-            age = staleness_seconds(record.get("acquired_at", ""), now)
+            liveness_field = "heartbeat" if record.get("heartbeat") else "acquired_at"
+            age = staleness_seconds(lease_liveness_timestamp(record), now)
             if age is not None and age > STALE_THRESHOLD_SECONDS:
                 problems.append(
-                    f"stale lease: agent `{record.get('agent')}` heartbeat (acquired_at) is "
+                    f"stale lease: agent `{record.get('agent')}` {liveness_field} is "
                     f"{age:.0f}s old (threshold {STALE_THRESHOLD_SECONDS}s) -- liveness against "
                     f"ListAgents is the caller's job, not this checker's"
                 )

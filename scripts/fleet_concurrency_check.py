@@ -278,19 +278,22 @@ def _readable_leases(lock_dir: Path) -> list:
 
 
 def _non_stale_exclusive_leases(lock_dir: Path) -> list:
-    """Held `kind: exclusive` leases whose `acquired_at` is not yet stale.
+    """Held `kind: exclusive` leases whose liveness timestamp is not yet stale.
 
     Staleness reuses check_lane_agents.py's OWN rule verbatim --
-    `staleness_seconds(record["acquired_at"])` compared against its `STALE_THRESHOLD_SECONDS` --
-    so an abandoned exclusive lease cannot park the fleet forever, and this script introduces no
+    `staleness_seconds(record["heartbeat"] or record["acquired_at"])`, via its
+    `lease_liveness_timestamp()` helper, compared against its `STALE_THRESHOLD_SECONDS` -- so an
+    abandoned exclusive lease cannot park the fleet forever, and this script introduces no
     second/third staleness heuristic alongside check_lane_agents.py's and its own TTL rule for
-    ordinary lock entries.
+    ordinary lock entries. Reusing `lease_liveness_timestamp()` (rather than reading `acquired_at`
+    directly, as before `heartbeat` existed) is what keeps this script and check_lane_agents.py
+    from ever disagreeing about which leases are live.
     """
     survivors = []
     for record in _readable_leases(lock_dir):
         if record.get("kind") != "exclusive":
             continue
-        age = _LANE_AGENTS.staleness_seconds(record.get("acquired_at", ""))
+        age = _LANE_AGENTS.staleness_seconds(_LANE_AGENTS.lease_liveness_timestamp(record))
         if age is not None and age > _LANE_AGENTS.STALE_THRESHOLD_SECONDS:
             continue
         survivors.append(record)

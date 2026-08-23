@@ -245,6 +245,116 @@ def check_shared_vs_exclusive_asymmetry() -> None:
               exclusive_rc == 1, f"rc: {exclusive_rc}")
 
 
+# --- lease heartbeat: present/absent, fallback, cross-script agreement -----------------------
+
+def check_lease_heartbeat_allowed_and_validated() -> None:
+    with_heartbeat = check_lane_agents.check_lease_record(
+        _valid_lease(heartbeat=_iso(_now() - timedelta(minutes=1))))
+    check("a lease with a `heartbeat` key round-trips with no problems",
+          with_heartbeat == [], f"problems: {with_heartbeat}")
+
+    bad_heartbeat = check_lane_agents.check_lease_record(
+        _valid_lease(heartbeat="not-a-timestamp"))
+    check("a lease with a malformed `heartbeat` is rejected",
+          any("heartbeat" in p for p in bad_heartbeat), f"problems: {bad_heartbeat}")
+
+
+def check_lease_liveness_timestamp_prefers_heartbeat() -> None:
+    old_acquired = _iso(_now() - timedelta(hours=5))
+    fresh_heartbeat = _iso(_now() - timedelta(minutes=1))
+    record = _valid_lease(acquired_at=old_acquired, heartbeat=fresh_heartbeat)
+    picked = check_lane_agents.lease_liveness_timestamp(record)
+    check("lease_liveness_timestamp() reads `heartbeat` when present, ignoring a stale `acquired_at`",
+          picked == fresh_heartbeat, f"picked: {picked}")
+
+
+def check_lease_without_heartbeat_falls_back_to_acquired_at() -> None:
+    """THE LOAD-BEARING CASE: a fixture copied verbatim from a real, currently-live lease on
+    disk (.fleet-locks/leases/lease-base-template.json, which -- like every lease in the fleet
+    today -- lacks `heartbeat`) must be judged on `acquired_at` exactly as before this change."""
+    real_lease_fixture = {
+        "repo": "base-template",
+        "lane": "base-template",
+        "agent": "base-template-4c",
+        "acquired_at": _iso(_now() - timedelta(minutes=2)),
+        "kind": "shared",
+    }
+    check("a real-shaped lease fixture has no `heartbeat` field",
+          "heartbeat" not in real_lease_fixture)
+    picked = check_lane_agents.lease_liveness_timestamp(real_lease_fixture)
+    check("lease_liveness_timestamp() falls back to `acquired_at` when `heartbeat` is absent",
+          picked == real_lease_fixture["acquired_at"], f"picked: {picked}")
+
+    problems = check_lane_agents.check_lease_record(real_lease_fixture)
+    check("the real-shaped lease fixture (no heartbeat) still validates cleanly",
+          problems == [], f"problems: {problems}")
+
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        stale_acquired = _now() - timedelta(seconds=check_lane_agents.STALE_THRESHOLD_SECONDS + 60)
+        no_heartbeat_stale = dict(real_lease_fixture)
+        no_heartbeat_stale["acquired_at"] = _iso(stale_acquired)
+        _write_json(lock_dir / "leases" / "lease-no-heartbeat.json", no_heartbeat_stale)
+        rc = check_lane_agents.run(lock_dir, quiet=True)
+        check("a lease with no heartbeat and a stale acquired_at is still flagged stale "
+              "(unchanged behavior)", rc == 1, f"rc: {rc}")
+
+
+def check_lease_with_fresh_heartbeat_survives_stale_acquired_at() -> None:
+    """A lease heartbeated recently must NOT be flagged stale even though its (immutable)
+    acquired_at is old -- this is the whole point of splitting the two fields."""
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        old_acquired = _now() - timedelta(seconds=check_lane_agents.STALE_THRESHOLD_SECONDS + 3600)
+        fresh_heartbeat = _now() - timedelta(minutes=1)
+        _write_json(lock_dir / "leases" / "lease-heartbeated.json",
+                    _valid_lease(acquired_at=_iso(old_acquired), heartbeat=_iso(fresh_heartbeat)))
+        rc = check_lane_agents.run(lock_dir, quiet=True)
+        check("a lease with a fresh heartbeat is NOT stale despite a very old acquired_at",
+              rc == 0, f"rc: {rc}")
+
+
+def check_lease_cross_script_agreement_with_fleet_concurrency_check() -> None:
+    """check_lane_agents.py and fleet_concurrency_check.py must reach the SAME liveness verdict
+    for the same lease record -- asserted directly, not inferred from the shared import."""
+    import importlib.util as _ilu
+
+    fcc_path = REPO_ROOT / "scripts" / "fleet_concurrency_check.py"
+    _fcc_spec = _ilu.spec_from_file_location("fleet_concurrency_check", fcc_path)
+    fleet_concurrency_check = _ilu.module_from_spec(_fcc_spec)
+    sys.modules["fleet_concurrency_check"] = fleet_concurrency_check
+    _fcc_spec.loader.exec_module(fleet_concurrency_check)
+
+    now = _now()
+    fresh_heartbeat_stale_acquired = _valid_lease(
+        acquired_at=_iso(now - timedelta(seconds=check_lane_agents.STALE_THRESHOLD_SECONDS + 3600)),
+        heartbeat=_iso(now - timedelta(minutes=1)),
+    )
+    no_heartbeat_stale_acquired = _valid_lease(
+        acquired_at=_iso(now - timedelta(seconds=check_lane_agents.STALE_THRESHOLD_SECONDS + 60)),
+    )
+
+    for label, record in [
+        ("fresh heartbeat / stale acquired_at", fresh_heartbeat_stale_acquired),
+        ("no heartbeat / stale acquired_at", no_heartbeat_stale_acquired),
+    ]:
+        with tempfile.TemporaryDirectory() as td:
+            lock_dir = Path(td) / ".fleet-locks"
+            _write_json(lock_dir / "leases" / "lease-agree.json", record)
+
+            checker_age = check_lane_agents.staleness_seconds(
+                check_lane_agents.lease_liveness_timestamp(record), now=now)
+            checker_is_live = not (checker_age is not None
+                                    and checker_age > check_lane_agents.STALE_THRESHOLD_SECONDS)
+
+            survivors = fleet_concurrency_check._non_stale_exclusive_leases(lock_dir)
+            fcc_is_live = len(survivors) == 1
+
+            check(f"check_lane_agents and fleet_concurrency_check agree on liveness ({label})",
+                  checker_is_live == fcc_is_live,
+                  f"checker_is_live={checker_is_live} fcc_is_live={fcc_is_live}")
+
+
 # --- boundary: heartbeat exactly at the threshold --------------------------------------------
 
 def check_boundary_heartbeat_exactly_at_threshold() -> None:
@@ -299,6 +409,11 @@ def main() -> int:
     check_negative_malformed_json()
     check_negative_nonexistent_path_is_named_error()
     check_shared_vs_exclusive_asymmetry()
+    check_lease_heartbeat_allowed_and_validated()
+    check_lease_liveness_timestamp_prefers_heartbeat()
+    check_lease_without_heartbeat_falls_back_to_acquired_at()
+    check_lease_with_fresh_heartbeat_survives_stale_acquired_at()
+    check_lease_cross_script_agreement_with_fleet_concurrency_check()
     check_boundary_heartbeat_exactly_at_threshold()
     check_no_records_is_not_a_failure()
 
