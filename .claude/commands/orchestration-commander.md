@@ -92,20 +92,40 @@ state, into exactly three cases:
 1. **Lease held, agent live** — the owning lane's `<lock_dir>/leases/lease-<repo>.json` names a
    claimant, and that agent name appears in `ListAgents`. **Silent.** The lane is mid-work; a dirty
    tree is exactly what mid-work looks like.
-2. **Lease held, agent absent or heartbeat stale** — the lease names a claimant, but that agent is
-   either missing from `ListAgents` or its registry claim's `heartbeat` is older than
-   `scripts/check_lane_agents.py`'s staleness threshold. **Named recovery item** — report the repo,
-   lane, agent name and file(s); this is a candidate abandoned lane, and a human decides its fate
-   (this drain never reaps a lease itself — see out-of-scope below).
+2. **Lease held, heartbeat stale** — the lease names a claimant, and its registry claim's
+   `heartbeat` (or, absent that, the lease's own `acquired_at`) is older than
+   `scripts/check_lane_agents.py`'s staleness threshold. Staleness alone is not the verdict — join
+   it against the claimant's live state, ONE decision procedure with three outcomes:
+   - **Stale + idle** (the claimant is missing from `ListAgents` entirely, or present but not
+     actively working) — **Named recovery item**, a candidate abandoned lane: report the repo,
+     lane, agent name and file(s), and a human decides its fate (this drain never reaps a lease
+     itself — see out-of-scope below).
+   - **Stale + busy** (the claimant is live in `ListAgents` and actively working — a long block,
+     not an abandoned one) — **report-only**, one line noting the repo/lane/agent and that it is
+     still busy. Never a named recovery item; nothing here needs a human decision.
+   - **Stale + blocked on a human** (the claimant is live and its current block is gated on an
+     unresolved `operator`/`approval` edge in that repo's `state.json`) — **report-only**, same as
+     above. A lane blocked on an operator is the HEALTHIEST state a blocked lane can be in — the
+     heartbeat goes stale precisely because the lane is correctly waiting, not because it died —
+     and must never be reported as abandoned. Three false recovery items on a previous run came
+     from exactly this conflation.
+
+   This is one decision procedure, not two, and it stays that way deliberately:
+   `BT.ticket.lanes-do-not-record-their-current-block` depends on this block because this
+   ListAgents-liveness gate is the FLOOR that must keep working when its new current-block fields
+   are absent — it will refine "busy" with block age later; do not implement that half here, and
+   do not add a second, parallel rule it would have to reconcile with this one.
 3. **No lease at all** on the repo the file lives in. **Alert** via the brain's `lib.sh`
    `send_alert()` — an authored file dirty with nothing holding the repo is unexplained by any
    lane this drain knows about.
 
 `scripts/check_lane_agents.py` gives you the timestamp-age half of case 2 (a lease's `acquired_at`
 or a registry claim's `heartbeat`) but **cannot call `ListAgents`** — by its own docstring, it
-"never decides 'abandoned' vs. 'slow.'" Joining that timestamp signal against live `ListAgents`
-membership to tell "agent absent" (case 2) apart from "agent live but heartbeat merely old" (still
-case 1) is **this drain's job**, not the script's.
+"never decides 'abandoned' vs. 'slow.'" It reports timestamp age only; no `ListAgents` logic
+belongs in the script. Joining that timestamp signal against live `ListAgents` membership and state
+to tell "agent absent or idle" (candidate abandoned lane) apart from "agent live and busy" or
+"agent live and blocked on a human" (both report-only, never a candidate) is **this drain's job**,
+not the script's.
 
 ### 5. Maintain the board
 Update `planning/open-work/index.md` — a single durable listing of everything step 4 surfaced that
