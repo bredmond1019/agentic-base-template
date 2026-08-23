@@ -112,6 +112,12 @@ def main():
     for cmd in h1_positive_cases:
         found = hazards_of("H1", cch.detect_hazards(cmd))
         check(f"H1 flags negated non-POSIX invocation: {cmd!r}", len(found) == 1, f"got {found}")
+        if found:
+            check(
+                f"H1 diagnostic names the same-code-path requirement: {cmd!r}",
+                "same-tool" in found[0]["fix"] and "positive-control" in found[0]["fix"],
+                f"got fix text: {found[0]['fix']!r}",
+            )
 
     fixed_form = "test -f /tmp/probe_hazard.txt && ! grep -q 'hello' /tmp/probe_hazard.txt"
     found = hazards_of("H1", cch.detect_hazards(fixed_form))

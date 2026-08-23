@@ -70,8 +70,12 @@ TAIL_FAMILY = {"tail", "head", "cat"}
 MATCH_TOOLS = {"grep", "rg"}
 
 H1_FIX = ("negated invocation of a non-POSIX tool -- a missing tool exits 127 and the "
-          "negation inverts that into a vacuous pass. Prescribed fix: "
-          "`test -f <path> && ! grep -q '<pat>' <path>`")
+          "negation inverts that into a vacuous pass, which is a same-tool violation of "
+          "the positive-control requirement (HQ CLAUDE.md standing rule 11, amended by "
+          "BT.ticket.positive-control-must-take-the-same-code-path): a control must run "
+          "the SAME tool as the claim it licenses, not a substitute that happens to sound "
+          "related -- here, a tool that may not even be on the engines' PATH. Prescribed "
+          "fix: `test -f <path> && ! grep -q '<pat>' <path>`")
 H2_FIX = ("the pipe's exit status discards the upstream command's failure. Prescribed "
           "fix: redirect to a file and check $? separately, or `set -o pipefail`")
 
