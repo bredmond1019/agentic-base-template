@@ -146,8 +146,21 @@ remainder = git status --porcelain (this run's snapshot) − I_EMIT_WROTE manife
 ```
 Every path left in the remainder is **authored** — a human or an agent wrote it and it is not a
 pure function of `state.json` — so it is **surfaced, never touched**. Route each one by lease
-state, into exactly three cases:
+state, checking case 0 first, then falling through to exactly three more cases:
 
+0. **No lease on the repo, but a live lane elsewhere is a known cross-repo writer.** Before
+   reaching for case 3's alert, check whether the file's dirty repo holds no lease *because* some
+   other live lane — found the same way case 1/2 already find one, by joining `ListAgents` against
+   lease/claim data — is a **known cross-repo writer** touching this repo as a side effect of its
+   own work (e.g. a run like `mev graph-findings . --write` that legitimately dirties many repos
+   from one lane). When that join identifies such a lane, **report once, attributed to that lane
+   and covering every file it explains** — never once per file. This is a REPORT, not a
+   suppression: the work stays fully visible, exactly as case 1/2's report-only outcomes do: it is
+   simply one line naming the writing lane and its files, not N separate alerts for N files one
+   lane legitimately touched. It introduces no new capability or data source — the `ListAgents`
+   join is the same one case 1/2 already perform, just checked against a different repo than the
+   one the lane holds a lease on. If no live lane can be identified as the writer for a given file,
+   that file is NOT case 0 — it falls through to case 3 and is alerted, unchanged.
 1. **Lease held, agent live** — the owning lane's `<lock_dir>/leases/lease-<repo>.json` names a
    claimant, and that agent name appears in `ListAgents`. **Silent.** The lane is mid-work; a dirty
    tree is exactly what mid-work looks like.
@@ -174,9 +187,10 @@ state, into exactly three cases:
    ListAgents-liveness gate is the FLOOR that must keep working when its new current-block fields
    are absent — it will refine "busy" with block age later; do not implement that half here, and
    do not add a second, parallel rule it would have to reconcile with this one.
-3. **No lease at all** on the repo the file lives in. **Alert** via the brain's `lib.sh`
-   `send_alert()` — an authored file dirty with nothing holding the repo is unexplained by any
-   lane this drain knows about.
+3. **No lease at all** on the repo the file lives in, and case 0 found no live cross-repo writer
+   to attribute it to. **Alert** via the brain's `lib.sh` `send_alert()` — an authored file dirty
+   with nothing holding the repo, and no lane explaining it, is unexplained by any lane this drain
+   knows about.
 
 `scripts/check_lane_agents.py` gives you the timestamp-age half of case 2 (a lease's `acquired_at`
 or a registry claim's `heartbeat`) but **cannot call `ListAgents`** — by its own docstring, it
@@ -185,6 +199,19 @@ belongs in the script. Joining that timestamp signal against live `ListAgents` m
 to tell "agent absent or idle" (candidate abandoned lane) apart from "agent live and busy" or
 "agent live and blocked on a human" (both report-only, never a candidate) is **this drain's job**,
 not the script's.
+
+**Walkthrough, case 0 (the measured scenario, `commander-retro.md` section E):** a single lane
+runs `mev graph-findings . --write`, which legitimately dirties 24 repos as a side effect of one
+piece of work; 8 of those repos are the lane's own held leases (case 1, silent) and 16 hold no
+lease at all. Read literally without case 0, each of those 16 repos' dirty files is case 3 —
+sixteen separate alerts for one lane's legitimate write. With case 0: the `ListAgents` join
+identifies the same lane as live and as the writer touching all 16 repos, so those files are
+reported **once**, attributed to that lane and listing all 16 repos/files together — visible on
+the board same as before, just not sixteen alerts for one cause. **Walkthrough, the genuine
+orphan (unchanged):** a file is dirty in a repo holding no lease, and no live lane in `ListAgents`
+is a known cross-repo writer touching that repo. Case 0 does not match — nothing to attribute it
+to — so it falls through to case 3 and is alerted exactly as before. A case that quiets both
+scenarios would be a regression wearing a fix's clothes; case 0 quiets only the first.
 
 ### 5. Maintain the board
 Update `planning/open-work/index.md` — a single durable listing of everything step 4 surfaced that
