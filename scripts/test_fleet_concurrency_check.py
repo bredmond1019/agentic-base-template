@@ -596,19 +596,23 @@ class ExclusiveLeaseRefusal(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def _write_exclusive_lease(self, repo: str, lane: str, agent: str) -> Path:
+    def _write_exclusive_lease(
+        self, repo: str, lane: str, agent: str, scope: "str | None" = "fleet"
+    ) -> Path:
+        # BT.ticket.exclusive-lease-refuses-every-register: `scope` defaults to "fleet" here
+        # (not absent) because this class's whole point is a lease that blocks a DIFFERENT
+        # repo's register -- that is now the fleet-quiesce case, not the ordinary default.
+        record = {
+            "repo": repo,
+            "lane": lane,
+            "agent": agent,
+            "acquired_at": datetime.now(timezone.utc).isoformat(),
+            "kind": "exclusive",
+        }
+        if scope is not None:
+            record["scope"] = scope
         path = self.leases_dir / f"lease-{lane}.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "repo": repo,
-                    "lane": lane,
-                    "agent": agent,
-                    "acquired_at": datetime.now(timezone.utc).isoformat(),
-                    "kind": "exclusive",
-                }
-            )
-        )
+        path.write_text(json.dumps(record))
         return path
 
     def _run(self, *args: str) -> subprocess.CompletedProcess:
@@ -682,19 +686,22 @@ class ExclusiveLeaseMatrix(unittest.TestCase):
         agent: str,
         kind: str = "exclusive",
         acquired_at: "datetime | None" = None,
+        scope: "str | None" = None,
     ) -> Path:
         path = self.leases_dir / f"lease-{lane}.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "repo": repo,
-                    "lane": lane,
-                    "agent": agent,
-                    "acquired_at": (acquired_at or datetime.now(timezone.utc)).isoformat(),
-                    "kind": kind,
-                }
-            )
-        )
+        record = {
+            "repo": repo,
+            "lane": lane,
+            "agent": agent,
+            "acquired_at": (acquired_at or datetime.now(timezone.utc)).isoformat(),
+            "kind": kind,
+        }
+        # `scope` is OPTIONAL on the lease record (absent means "repo") -- omit the key
+        # entirely when None so the scope-absent-default path is exercised by callers that
+        # don't pass it, rather than every fixture implicitly asserting `scope: null`.
+        if scope is not None:
+            record["scope"] = scope
+        path.write_text(json.dumps(record))
         return path
 
     def _run(self, *args: str) -> subprocess.CompletedProcess:
@@ -734,12 +741,15 @@ class ExclusiveLeaseMatrix(unittest.TestCase):
     # Heaviness is asserted NOT consulted: the leasing repo has no planning/harness.json at all
     # (heavy_category() returns None for it), yet the block still fires for a heavy category.
     def test_non_heavy_leasing_repo_still_blocks_a_heavy_register(self) -> None:
+        # BT.ticket.exclusive-lease-refuses-every-register: this is the HQ.8.A fleet-quiesce
+        # case, which now requires `scope: fleet` to keep blocking a DIFFERENT repo's register --
+        # a `scope: repo` (or scope-absent) lease on `brain` no longer blocks `engine-rs`.
         nonexistent_repo_path = str(Path(self._tmp.name) / "brain-repo-with-no-harness-json")
         self.assertIsNone(
             fcc.heavy_category(nonexistent_repo_path),
             "test setup assumption broken: the leasing repo must have NO heavy signal",
         )
-        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a")
+        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a", scope="fleet")
 
         result = self._run(
             "register", "--repo", "engine-rs", "--category", "browser-automation",
@@ -748,9 +758,163 @@ class ExclusiveLeaseMatrix(unittest.TestCase):
         self.assertEqual(
             result.returncode,
             3,
-            "a non-heavy leasing repo's exclusive hold must still block a heavy-category "
-            f"register; got exit {result.returncode}, stdout={result.stdout!r}",
+            "a non-heavy leasing repo's fleet-scoped exclusive hold must still block a "
+            f"heavy-category register; got exit {result.returncode}, stdout={result.stdout!r}",
         )
+
+    # BT.ticket.exclusive-lease-refuses-every-register, the difference-observing pair: (a) a
+    # repo-scoped lease on repo A does NOT block a register for a DIFFERENT repo B.
+    def test_repo_scoped_lease_on_a_allows_register_for_b(self) -> None:
+        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a", scope="repo")
+
+        result = self._run(
+            "register", "--repo", "base-template", "--category", "native-build",
+        )
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            "a repo-scoped exclusive lease on a DIFFERENT repo must not block this register; "
+            f"got exit {result.returncode}, stdout={result.stdout!r}",
+        )
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["allowed"])
+
+    # (b) the SAME lease at scope: fleet, identical call, is REFUSED -- one field changed,
+    # opposite outcome.
+    def test_fleet_scoped_lease_on_a_refuses_register_for_b(self) -> None:
+        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a", scope="fleet")
+
+        result = self._run(
+            "register", "--repo", "base-template", "--category", "native-build",
+        )
+
+        self.assertEqual(
+            result.returncode,
+            3,
+            "a fleet-scoped exclusive lease must refuse a register for ANY repo; got exit "
+            f"{result.returncode}, stdout={result.stdout!r}",
+        )
+        payload = json.loads(result.stdout)
+        self.assertIn("fleet", payload["reason"])
+
+    # (c) a repo-scoped lease on A still refuses a register for the SAME repo A by a different
+    # agent -- the ordinary case the lease exists for is not weakened.
+    def test_repo_scoped_lease_on_a_refuses_register_for_same_repo_a(self) -> None:
+        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a", scope="repo")
+
+        result = self._run(
+            "register", "--repo", "brain", "--category", "native-build", "--agent", "agent-b",
+        )
+
+        self.assertEqual(
+            result.returncode,
+            3,
+            "a repo-scoped exclusive lease must still refuse a register for its OWN repo by a "
+            f"different agent; got exit {result.returncode}, stdout={result.stdout!r}",
+        )
+
+    # (d) a lease with NO `scope` key behaves exactly as `scope: repo` -- asserted directly in
+    # both directions.
+    def test_scope_absent_behaves_as_repo_scoped(self) -> None:
+        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a", scope=None)
+
+        cross_repo = self._run(
+            "register", "--repo", "base-template", "--category", "native-build",
+        )
+        self.assertEqual(
+            cross_repo.returncode,
+            0,
+            "scope-absent must behave as scope:repo -- a different repo's register must be "
+            f"allowed; got exit {cross_repo.returncode}, stdout={cross_repo.stdout!r}",
+        )
+
+        same_repo = self._run(
+            "register", "--repo", "brain", "--category", "native-build", "--agent", "agent-b",
+        )
+        self.assertEqual(
+            same_repo.returncode,
+            3,
+            "scope-absent must behave as scope:repo -- a register for the SAME repo by a "
+            f"different agent must be refused; got exit {same_repo.returncode}, "
+            f"stdout={same_repo.stdout!r}",
+        )
+
+    # (e) the holder's own agent is not refused at EITHER scope.
+    def test_holders_own_agent_is_not_refused_at_either_scope(self) -> None:
+        for scope in ("repo", "fleet"):
+            with self.subTest(scope=scope):
+                lock_dir = Path(self._tmp.name) / f"locks-{scope}"
+                leases_dir = lock_dir / "leases"
+                leases_dir.mkdir(parents=True)
+                lease_path = leases_dir / "lease-quiesce-lane.json"
+                lease_record = {
+                    "repo": "brain",
+                    "lane": "quiesce-lane",
+                    "agent": "agent-a",
+                    "acquired_at": datetime.now(timezone.utc).isoformat(),
+                    "kind": "exclusive",
+                }
+                if scope is not None:
+                    lease_record["scope"] = scope
+                lease_path.write_text(json.dumps(lease_record))
+
+                result = subprocess.run(
+                    [
+                        sys.executable, str(_MODULE_PATH), "register", "--repo", "brain",
+                        "--category", "native-build", "--agent", "agent-a",
+                        "--lock-dir", str(lock_dir),
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+
+                self.assertEqual(
+                    result.returncode,
+                    0,
+                    f"the lease's own agent must not be refused at scope={scope}; got exit "
+                    f"{result.returncode}, stdout={result.stdout!r}",
+                )
+
+    # (f) an exclusive lease past STALE_THRESHOLD_SECONDS stops blocking at BOTH scopes.
+    def test_stale_exclusive_lease_stops_blocking_at_both_scopes(self) -> None:
+        stale_at = datetime.now(timezone.utc) - timedelta(
+            seconds=fcc._LANE_AGENTS.STALE_THRESHOLD_SECONDS + 300
+        )
+        for scope in ("repo", "fleet"):
+            with self.subTest(scope=scope):
+                lock_dir = Path(self._tmp.name) / f"stale-locks-{scope}"
+                leases_dir = lock_dir / "leases"
+                leases_dir.mkdir(parents=True)
+                lease_path = leases_dir / "lease-quiesce-lane.json"
+                lease_path.write_text(
+                    json.dumps(
+                        {
+                            "repo": "brain",
+                            "lane": "quiesce-lane",
+                            "agent": "agent-a",
+                            "acquired_at": stale_at.isoformat(),
+                            "kind": "exclusive",
+                            "scope": scope,
+                        }
+                    )
+                )
+
+                result = subprocess.run(
+                    [
+                        sys.executable, str(_MODULE_PATH), "register", "--repo", "base-template",
+                        "--category", "native-build", "--lock-dir", str(lock_dir),
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+
+                self.assertEqual(
+                    result.returncode,
+                    0,
+                    f"a stale exclusive lease must not block at scope={scope}; got exit "
+                    f"{result.returncode}, stdout={result.stdout!r}",
+                )
 
     # (4) acquiring exclusivity while ordinary lanes are active is refused -- exclusivity is
     # admission control only, never pre-emption of a lane already running.

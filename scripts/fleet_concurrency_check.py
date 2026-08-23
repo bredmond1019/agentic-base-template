@@ -297,17 +297,29 @@ def _non_stale_exclusive_leases(lock_dir: Path) -> list:
     return survivors
 
 
-def _find_blocking_exclusive_lease(lock_dir: Path, requester_agent: Optional[str]) -> Optional[dict]:
-    """The first non-stale exclusive lease NOT held by `requester_agent`, or None.
+def _find_blocking_exclusive_lease(
+    lock_dir: Path, requester_agent: Optional[str], requester_repo: Optional[str]
+) -> Optional[dict]:
+    """The first non-stale exclusive lease that blocks this requester, or None.
 
     A lease whose `agent` matches the requester is the holder re-registering (a heartbeat), not a
     conflict -- an agent can never be refused on account of its own hold. A requester with no
     agent identity supplied (`requester_agent is None`) can never match, by design: an
     unidentified caller cannot be recognized as the holder re-registering, so it is treated as a
     different agent and refused, same as any other outsider.
+
+    Beyond that (BT.ticket.exclusive-lease-refuses-every-register): a lease only blocks when its
+    `scope` is `"fleet"`, or its `repo` equals the requester's own repo. `scope` absent is
+    treated as `"repo"` -- every lease already on disk omits the field and none may change
+    meaning under this rule. This is what stops an ordinary lane's exclusive lease (protecting
+    its own working tree) from parking every OTHER lane's register fleet-wide, while a
+    `scope: fleet` lease still quiesces everything (the HQ.8.A case).
     """
     for record in _non_stale_exclusive_leases(lock_dir):
         if requester_agent is not None and record.get("agent") == requester_agent:
+            continue
+        scope = record.get("scope", "repo")
+        if scope != "fleet" and record.get("repo") != requester_repo:
             continue
         return record
     return None
@@ -333,7 +345,9 @@ def register(
     of whether `repo` is heavy-gated at all -- this is fleet-exclusive admission control, checked
     ahead of and independent from the per-category capacity count below. `agent` is this
     requester's own identity; passing the SAME agent that holds the exclusive lease is how the
-    holder re-registers/heartbeats without refusing itself.
+    holder re-registers/heartbeats without refusing itself. The lease blocks this call only when
+    it is `scope: fleet`, or its `repo` names THIS requester's own `repo` -- an ordinary
+    `scope: repo` (or scope-absent) lease held on some OTHER repo never blocks this call.
     """
     own_pid = os.getpid()
     # pid_source records WHY this entry's pid should (or should not) be trusted as a liveness
@@ -356,15 +370,20 @@ def register(
             "- degrading to advisory, same as the unenforced prose rule this replaces",
         )
 
-    blocking_lease = _find_blocking_exclusive_lease(lock_dir, agent)
+    blocking_lease = _find_blocking_exclusive_lease(lock_dir, agent, repo)
     if blocking_lease is not None:
+        lease_scope = blocking_lease.get("scope", "repo")
+        scope_desc = (
+            "fleet-wide - the fleet is quiesced"
+            if lease_scope == "fleet"
+            else f"scoped to repo `{blocking_lease.get('repo')}` - this repo is quiesced"
+        )
         return LockResult(
             allowed=False,
             reason=(
-                f"fleet-exclusive lease held on repo `{blocking_lease.get('repo')}` by lane "
-                f"`{blocking_lease.get('lane')}` agent `{blocking_lease.get('agent')}` - the "
-                "fleet is quiesced; no other register is granted until that lease is released "
-                "or goes stale"
+                f"exclusive lease (scope: {lease_scope}) held on repo `{blocking_lease.get('repo')}` "
+                f"by lane `{blocking_lease.get('lane')}` agent `{blocking_lease.get('agent')}` - "
+                f"{scope_desc}; no register is granted until that lease is released or goes stale"
             ),
             active=[],
         )
