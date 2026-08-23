@@ -105,6 +105,29 @@ HEAVY_COMMAND_SIGNALS = BROWSER_AUTOMATION_SIGNALS
 MAX_HEAVY_LANES = MAX_LANES_BY_CATEGORY["browser-automation"]
 
 
+def _import_check_lane_agents():
+    """Import check_lane_agents.py from this same scripts/ directory.
+
+    Load-bearing: `<lock_dir>/leases/lease-*.json` is BT.6.A's shape (check_lane_agents.py),
+    and this ticket is a READER of it, never a second implementation. Reusing that module's own
+    `discover_lease_files`, `staleness_seconds` and `STALE_THRESHOLD_SECONDS` is how "reuse
+    check_lane_agents.py's acquired_at staleness rule; add no third heuristic" is actually
+    satisfied, rather than merely claimed. A plain `import check_lane_agents` is not reliable
+    here: when this module is loaded via `importlib.util.spec_from_file_location` (the way the
+    test suite loads it) this directory is never added to `sys.path`, so the import must locate
+    it by this file's own path instead of trusting the caller's sys.path state.
+    """
+    scripts_dir = Path(__file__).resolve().parent
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import check_lane_agents  # noqa: E402 - deliberate late/local import, see docstring above
+
+    return check_lane_agents
+
+
+_LANE_AGENTS = _import_check_lane_agents()
+
+
 def _safe_repo_name(repo: str) -> str:
     """Filesystem-safe stand-in for a repo name used in a lock filename."""
     return "".join(c if (c.isalnum() or c in "-_.") else "_" for c in repo)
@@ -116,6 +139,10 @@ class LockResult:
     degraded: bool = False
     reason: str = ""
     active: list = field(default_factory=list)
+    # Held `kind: exclusive` leases, reported distinctly from `active` (ordinary heavy-lane
+    # entries) so a reader can tell WHY nothing may start -- see `status()` and the refusal
+    # path in `register()`.
+    exclusive_leases: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -123,6 +150,7 @@ class LockResult:
             "degraded": self.degraded,
             "reason": self.reason,
             "active": self.active,
+            "exclusive_leases": self.exclusive_leases,
         }
 
 
@@ -221,10 +249,75 @@ def _sweep_stale(lock_dir: Path, ttl_seconds: int) -> list:
     return survivors
 
 
+def _readable_leases(lock_dir: Path) -> list:
+    """Every syntactically-loadable lease record under `lock_dir`, fail-open.
+
+    An absent `leases/` directory (the normal state before any lane has ever taken an exclusive
+    lease -- true for every pre-existing test in this suite) or one that cannot be listed/read
+    (permission error) yields an empty list rather than raising: exclusivity is a READ this
+    script layers on top of BT.6.A's shape, and an unreadable/absent leases/ must never harden
+    `register`/`status` into a new way for a run to fail (per the block record's degraded-path
+    criterion). A malformed individual lease file is skipped the same way `_sweep_stale` skips a
+    corrupt ordinary lock entry -- reported nowhere here (check_lane_agents.py's own gated check
+    is what validates lease shape), just not treated as a live exclusive hold.
+    """
+    try:
+        lease_paths = _LANE_AGENTS.discover_lease_files(lock_dir)
+    except OSError:
+        return []
+
+    records = []
+    for path in lease_paths:
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    return records
+
+
+def _non_stale_exclusive_leases(lock_dir: Path) -> list:
+    """Held `kind: exclusive` leases whose `acquired_at` is not yet stale.
+
+    Staleness reuses check_lane_agents.py's OWN rule verbatim --
+    `staleness_seconds(record["acquired_at"])` compared against its `STALE_THRESHOLD_SECONDS` --
+    so an abandoned exclusive lease cannot park the fleet forever, and this script introduces no
+    second/third staleness heuristic alongside check_lane_agents.py's and its own TTL rule for
+    ordinary lock entries.
+    """
+    survivors = []
+    for record in _readable_leases(lock_dir):
+        if record.get("kind") != "exclusive":
+            continue
+        age = _LANE_AGENTS.staleness_seconds(record.get("acquired_at", ""))
+        if age is not None and age > _LANE_AGENTS.STALE_THRESHOLD_SECONDS:
+            continue
+        survivors.append(record)
+    return survivors
+
+
+def _find_blocking_exclusive_lease(lock_dir: Path, requester_agent: Optional[str]) -> Optional[dict]:
+    """The first non-stale exclusive lease NOT held by `requester_agent`, or None.
+
+    A lease whose `agent` matches the requester is the holder re-registering (a heartbeat), not a
+    conflict -- an agent can never be refused on account of its own hold. A requester with no
+    agent identity supplied (`requester_agent is None`) can never match, by design: an
+    unidentified caller cannot be recognized as the holder re-registering, so it is treated as a
+    different agent and refused, same as any other outsider.
+    """
+    for record in _non_stale_exclusive_leases(lock_dir):
+        if requester_agent is not None and record.get("agent") == requester_agent:
+            continue
+        return record
+    return None
+
+
 def register(
     repo: str,
     category: str = "browser-automation",
     pid: Optional[int] = None,
+    agent: Optional[str] = None,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
     lock_dir_override: Optional[str] = None,
     max_heavy_lanes: Optional[int] = None,
@@ -234,6 +327,13 @@ def register(
     Capacity is counted per category, not fleet-wide: a native-build lane never competes for a
     slot with a browser-automation lane. `max_heavy_lanes`, if given, overrides
     MAX_LANES_BY_CATEGORY[category]; otherwise the category's own default applies.
+
+    BEFORE any of that: a non-stale `kind: exclusive` lease held by a DIFFERENT agent (see
+    `_find_blocking_exclusive_lease`) refuses this call outright, in ANY category and regardless
+    of whether `repo` is heavy-gated at all -- this is fleet-exclusive admission control, checked
+    ahead of and independent from the per-category capacity count below. `agent` is this
+    requester's own identity; passing the SAME agent that holds the exclusive lease is how the
+    holder re-registers/heartbeats without refusing itself.
     """
     own_pid = os.getpid()
     # pid_source records WHY this entry's pid should (or should not) be trusted as a liveness
@@ -254,6 +354,19 @@ def register(
             degraded=True,
             reason="fleet lock store unavailable (no brain.toml found / directory not writable) "
             "- degrading to advisory, same as the unenforced prose rule this replaces",
+        )
+
+    blocking_lease = _find_blocking_exclusive_lease(lock_dir, agent)
+    if blocking_lease is not None:
+        return LockResult(
+            allowed=False,
+            reason=(
+                f"fleet-exclusive lease held on repo `{blocking_lease.get('repo')}` by lane "
+                f"`{blocking_lease.get('lane')}` agent `{blocking_lease.get('agent')}` - the "
+                "fleet is quiesced; no other register is granted until that lease is released "
+                "or goes stale"
+            ),
+            active=[],
         )
 
     survivors = _sweep_stale(lock_dir, ttl_seconds)
@@ -336,10 +449,56 @@ def status(lock_dir_override: Optional[str] = None, ttl_seconds: int = DEFAULT_T
             reason="fleet lock store unavailable",
         )
     survivors = _sweep_stale(lock_dir, ttl_seconds)
+    exclusive = _non_stale_exclusive_leases(lock_dir)
     return LockResult(
         allowed=True,
         active=[f"{e['repo']} ({e.get('category', 'browser-automation')})" for e in survivors],
+        # Reported distinctly from `active` (ordinary heavy-lane entries) so a reader can tell
+        # WHY nothing may start, per the block record's status criterion.
+        exclusive_leases=[
+            f"{e.get('repo')} (exclusive, lane `{e.get('lane')}`, agent `{e.get('agent')}`)"
+            for e in exclusive
+        ],
     )
+
+
+def acquire_exclusive(
+    lock_dir_override: Optional[str] = None,
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
+) -> LockResult:
+    """Check whether it is safe to ACQUIRE a fleet-exclusive lease -- the reverse direction.
+
+    This script does not write the lease itself (BT.6.E's lane-driver writers own that, and a
+    gate that also minted its own leases would give one artifact two writers, which
+    block-registration's C2 forbids). This is a pre-flight check only: a lane about to write
+    `<lock_dir>/leases/lease-<repo>.json` with `kind: exclusive` calls this first, and proceeds
+    to write only if `allowed` comes back true. Refusing here, rather than after the fact, is
+    what keeps exclusivity pure admission control: a running ordinary lane is never pre-empted,
+    only a NEW exclusive request is turned away while one is active.
+    """
+    lock_dir = resolve_lock_dir(lock_dir_override)
+    if lock_dir is None:
+        return LockResult(
+            allowed=True,
+            degraded=True,
+            reason="fleet lock store unavailable - degrading to advisory, same as an "
+            "unenforced rule",
+        )
+
+    survivors = _sweep_stale(lock_dir, ttl_seconds)
+    if survivors:
+        active_repos = [e["repo"] for e in survivors]
+        return LockResult(
+            allowed=False,
+            reason=(
+                f"cannot acquire a fleet-exclusive lease while {len(survivors)} ordinary "
+                f"lane(s) are active: {', '.join(active_repos)} - exclusivity is admission "
+                "control, never pre-emption of a lane already running"
+            ),
+            active=active_repos,
+        )
+
+    return LockResult(allowed=True)
 
 
 def heavy_category(repo_path: str) -> Optional[str]:
@@ -392,6 +551,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "Determine via `is-heavy --repo-path`.",
     )
     reg.add_argument("--pid", type=int, default=None)
+    reg.add_argument(
+        "--agent",
+        default=None,
+        help="This requester's own agent identity. A non-stale `kind: exclusive` lease held by "
+        "a DIFFERENT agent (any repo, any category) refuses this call with exit 3; a lease held "
+        "by THIS agent is a re-registration/heartbeat, not a refusal.",
+    )
     reg.add_argument("--ttl", type=int, default=DEFAULT_TTL_SECONDS)
     reg.add_argument("--lock-dir", default=None)
     reg.add_argument(
@@ -413,6 +579,14 @@ def _build_parser() -> argparse.ArgumentParser:
     heavy = sub.add_parser("is-heavy", help="Check whether a repo's harness.json is heavy-gated.")
     heavy.add_argument("--repo-path", required=True)
 
+    excl = sub.add_parser(
+        "acquire-exclusive",
+        help="Check (never writes) whether it is safe to acquire a fleet-exclusive lease -- "
+        "refused (exit 3) while any ordinary heavy-lane entry is active.",
+    )
+    excl.add_argument("--lock-dir", default=None)
+    excl.add_argument("--ttl", type=int, default=DEFAULT_TTL_SECONDS)
+
     return parser
 
 
@@ -425,6 +599,7 @@ def main(argv: Optional[list] = None) -> int:
             args.repo,
             category=args.category,
             pid=args.pid,
+            agent=args.agent,
             ttl_seconds=args.ttl,
             lock_dir_override=args.lock_dir,
             max_heavy_lanes=args.max_heavy_lanes,
@@ -451,6 +626,11 @@ def main(argv: Optional[list] = None) -> int:
             )
         )
         return 0 if category is not None else 1
+
+    if args.action == "acquire-exclusive":
+        result = acquire_exclusive(lock_dir_override=args.lock_dir, ttl_seconds=args.ttl)
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0 if result.allowed else 3
 
     parser.error(f"unknown action: {args.action}")
     return 2
