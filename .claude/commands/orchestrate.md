@@ -317,21 +317,15 @@ sparse-checkout worktree. Worktrees are **safe in brain-vaulted repos** — the 
 symlinked `planning/` and resolve it (D46), and `/init-worktree` was fixed to match
 (`BT.ticket.init-worktree-symlink-repair`, closed). Plain branch is simply *cheaper*, not safer.
 
-Use `--worktree` when:
-- **The repo owns the engines it is running — `base-template` ALWAYS.** A chain there edits
-  `.claude/workflows/sdlc-*.js` *while those engines are executing the chain*. Without isolation a
-  block's edits land in the working tree the next block's engine loads from, so a mid-chain change
-  silently alters how the rest of the chain runs. The worktree keeps each block's engine edits
-  quarantined until you merge them deliberately.
-- The change is risky enough to want quarantined until reviewed.
-- A `.env` or other untracked file is needed at runtime → check it copied; if not, prefer plain
-  branch for that block.
+**`--worktree` is currently suspended fleet-wide** (`D81-worktree-moratorium`) — the engines refuse
+the flag outright, so isolation is not a per-run choice today. The table below records the D81
+answer for when it lifts.
 
 **Two repos have a non-negotiable answer. Encode them, do not re-derive them per run:**
 
 | Repo | Isolation | Why |
 |---|---|---|
-| `base-template` | **`--worktree` ALWAYS** | See above — a chain there edits the engines running it. |
+| `base-template` | **`--no-worktree`** (D81) | D81 refuted the old reason with a mechanism: the Workflow harness executes a launch-time **copy** of the engine, so a chain editing `.claude/workflows/sdlc-*.js` does not change the engine already executing it, in either isolation mode — a worktree never protected a running chain. The residual exposure is narrower and *between* blocks, not within one: a block's engine edit lands in the working tree before the *next* block's launch snapshots it. Mitigate by sequencing engine edits to a chain boundary, not with `--worktree`. |
 | the brain root (HQ) | **`--no-worktree` ALWAYS** | Carryover `hq-specs-cannot-run-in-a-worktree`. Measured 2026-08-04 inside a real branch worktree: `validate-brain --structure` gave **64 errors** and `--state` **601**, against 0/0 in the main tree. `validate-brain` walks up to the worktree's own `brain.toml` and resolves the 17 sub-repos relative to it — and every sub-repo is gitignored, so absent from any checkout. Worktree creation itself is clean; it is specifically the corpus gates that cannot pass. Same root cause as the CI exclusion in D65. |
 
 `--worktree` / `--no-worktree` on the command line overrides all of the above **except those two** —
@@ -434,11 +428,22 @@ If any is wrong: set `status` to `closed`, then run **`mev emit-state --write`**
 **`mev validate-brain --state`** (expect 0 errors). **Record every repair** — a pattern of them is
 evidence for that open ticket.
 
-**Then check the corpus, then commit, then report** (rules 7, 8 and 9):
+**Then check the corpus, then commit, then report** (rules 7, 8 and 9). Run the four read-only
+checks, **one invocation per flag** — `validate-brain`'s flags do not compose (`main.rs` is an
+if/else-if chain, first flag wins; passing more than one silently runs only the highest-precedence
+one and reports a real, passing result for a check that never ran):
 
 ```
-./scripts/validate_brain.sh          # from the brain root — delta against the last good push
+bastion validate-brain --state
+bastion validate-brain --graph
+bastion validate-brain --links
+bastion validate-brain --structure
 ```
+
+`./scripts/validate_brain.sh` is **not** this check — on a `primary` host it ends in an
+`emit-state --write`, a commit, and a `git push` (see `derive-state-safely`), so a lane using it as
+its closing verification is committing and pushing whatever the shared index holds, not just its
+own work.
 
 Concurrent lanes pushing into one corpus is exactly the condition that accumulated 32
 `validate-brain` errors across four lanes on 2026-08-04 and blocked `git push` fleet-wide. Rule 6

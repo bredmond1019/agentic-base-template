@@ -127,11 +127,14 @@ none.
 
 `--isolation auto` resolves as:
 
+**`--worktree` is currently suspended fleet-wide** (`D81-worktree-moratorium`) — the engines refuse
+the flag outright. The table records the D81 answer.
+
 | Repo | Isolation | Why |
 |---|---|---|
-| `base-template` | **`--worktree`, always** | A chain there edits `.claude/workflows/sdlc-*.js` *while those engines are running it*. |
+| `base-template` | **`--no-worktree`** (D81) | D81 refuted the old reason with a mechanism: the Workflow harness executes a launch-time **copy** of the engine, so a chain editing `.claude/workflows/sdlc-*.js` does not change the engine already executing it, in either isolation mode — a worktree never protected a running chain. The residual exposure is narrower and *between* blocks, not within one: a block's engine edit lands in the working tree before the *next* block's launch snapshots it. Mitigate by sequencing engine edits to a chain boundary, not with `--worktree`. |
 | the brain root (HQ) | **`--no-worktree`, always** | `validate-brain` inside a worktree resolves the gitignored sub-repos against the worktree's own `brain.toml` and they are absent from any checkout. Measured: 64 structure / 601 state errors versus 0/0 in the main tree. Worktree creation is clean — it is the corpus gates that cannot pass. |
-| anything else | `--no-worktree` | Cheaper, and worktrees are safe but rarely needed. Use `--worktree` when a change deserves quarantine. |
+| anything else | `--no-worktree` | Cheaper, and worktrees are safe but rarely needed. |
 
 An explicit `--isolation` that contradicts either of the first two rows → **stop and report.** Do
 not run a chain whose gates cannot pass.
@@ -140,9 +143,10 @@ not run a chain whose gates cannot pass.
 once — it's
 a measurement ("64 structure / 601 state errors versus 0/0 in the main tree") that can go stale the
 moment the corpus or the worktree machinery changes. The same applies to any carryover caveat this
-lane inherits from a prior run or a sibling lane's notes file. Before treating either as fact: run
-the one command that checks it (`./scripts/validate_brain.sh` in a scratch worktree for the isolation
-row; whatever the carryover names for a carried-forward one) and record the result. An orchestration
+lane inherits from a prior run or a sibling lane's notes file. Before treating either as fact:
+re-derive it — the HQ row from a fresh `bastion validate-brain --structure` / `--state` inside a
+real worktree, `base-template`'s from D81 itself, and any carried-forward caveat from whatever the
+carryover names — and record the result. An orchestration
 run inherited at least one caveat that had since changed and planned a block on it — this is the
 same failure class `/generate-roadmap`'s Step 2 exists to close ("Inventory, and re-verify before you
 plan on it"); this step is its equivalent for isolation decisions and carryovers.
@@ -422,11 +426,21 @@ work that has to be redone.
 
 ## Before finishing
 
-Run this repo's own gates from `planning/harness.json`, then the corpus gate from `BRAIN_ROOT`:
+Run this repo's own gates from `planning/harness.json`, then the corpus gate from `BRAIN_ROOT`.
+Use the four read-only checks, **one invocation per flag** — `validate-brain`'s flags do not
+compose (`main.rs` is an if/else-if chain, first flag wins; passing more than one silently runs
+only the highest-precedence one and reports a real, passing result for a check that never ran):
 
 ```
-./scripts/validate_brain.sh
+bastion validate-brain --state
+bastion validate-brain --graph
+bastion validate-brain --links
+bastion validate-brain --structure
 ```
+
+`./scripts/validate_brain.sh` is **not** this check — on a `primary` host it ends in an
+`emit-state --write`, a commit, and a `git push` (see `derive-state-safely`), so using it as a
+closing verification commits and pushes whatever the shared index holds, not just this lane's work.
 
 Concurrent lanes pushing into one corpus is the exact condition that accumulated 32
 `validate-brain` errors across four lanes and blocked pushes fleet-wide.

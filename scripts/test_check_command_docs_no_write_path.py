@@ -11,10 +11,9 @@ Two directions, both required:
 Plus a live-corpus exercise so the check cannot pass by finding nothing:
   (c) the real .agents/skills/derive-state-safely/SKILL.md passes, unmodified, and the real
       .claude/commands/begin-orchestration.md and orchestrate.md (plus their two
-      .agents/skills/ mirrors) are named as findings -- the corpus is RED until task 2 fixes
-      those four files, and this suite pins that red rather than hiding it. Task 1 does not
-      fix the command files, so this suite asserts the pre-fix (red) state; task 2 flips the
-      assertion on those four files to green in its own validation run.
+      .agents/skills/ mirrors) pass too -- task 1 recorded those four files RED (pre-fix);
+      task 2 fixed them, so this suite now pins the post-fix GREEN state instead. See task 1's
+      recorded red in that task's notes for the pre-fix evidence this flip replaces.
 
 Dependency-free, same discipline as scripts/test_check_command_hazards.py-style siblings.
 """
@@ -140,11 +139,12 @@ def test_live_derive_state_safely_passes():
           f"expected 0 findings, got {findings!r}")
 
 
-def test_live_corpus_is_red_before_task2_fix():
-    """Pins the RED state task 1 leaves behind: begin-orchestration.md, orchestrate.md and
-    both .agents/skills/ mirrors still instruct the write path until task 2 lands. If this
-    assertion ever flips green without task 2's edits, the checker has gone blind, not the
-    corpus gone clean -- keep this assertion aligned with the real fix state."""
+def test_live_corpus_is_clean_after_task2_fix():
+    """Task 1 pinned begin-orchestration.md, orchestrate.md and both .agents/skills/ mirrors as
+    RED (still instructing the write path). Task 2 replaced those instructions with the four
+    read-only bastion validate-brain --<flag> calls -- this pins the resulting GREEN state. If
+    this assertion ever fails, one of the four files has regressed back to instructing the
+    write path."""
     targets = [
         REPO_ROOT / ".claude/commands/begin-orchestration.md",
         REPO_ROOT / ".claude/commands/orchestrate.md",
@@ -157,22 +157,22 @@ def test_live_corpus_is_red_before_task2_fix():
             continue
         text = path.read_text(encoding="utf-8")
         findings = checker.find_instructions(text, str(path))
-        check(f"live {path.relative_to(REPO_ROOT)} is named (still instructs the write path)",
-              len(findings) > 0, f"expected >=1 finding, got {findings!r}")
+        check(f"live {path.relative_to(REPO_ROOT)} passes (no longer instructs the write path)",
+              len(findings) == 0, f"expected 0 findings, got {findings!r}")
 
 
-def test_main_exits_nonzero_against_live_root():
+def test_main_exits_zero_against_live_root():
     exit_code = checker.main(["--root", str(REPO_ROOT), "--quiet"])
-    check("main() exits non-zero against the unfixed live corpus", exit_code == 1,
-          f"expected exit 1, got {exit_code}")
+    check("main() exits zero against the fixed live corpus", exit_code == 0,
+          f"expected exit 0, got {exit_code}")
 
 
 def main():
     test_instructing_fixtures_fail()
     test_discussion_fixture_passes()
     test_live_derive_state_safely_passes()
-    test_live_corpus_is_red_before_task2_fix()
-    test_main_exits_nonzero_against_live_root()
+    test_live_corpus_is_clean_after_task2_fix()
+    test_main_exits_zero_against_live_root()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s): {FAILURES}")
