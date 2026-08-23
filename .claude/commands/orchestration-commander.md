@@ -13,11 +13,70 @@ why that is deliberate, not a limitation.
 
 ## The six steps, in order
 
-### 1. Drain the queue
-Use `scripts/check_messages.py`'s `drain_queue()` to move everything from this lane's
-`inbox/` into `processing/`, then `complete_message()` per message once it has been triaged in
-step 2. **Do not restate the queue layout or the receipts ledger here** — `BT.6.B` (shipped as
-`scripts/check_messages.py`) owns both; read its module docstring if the layout is unclear.
+### 1. Validate and survey the whole queue tree, then drain this lane's inbox
+`drain_queue()` and `complete_message()` are Python functions inside `scripts/check_messages.py`
+— a drain is a Claude turn with shell access, not a Python process, so naming a function is not an
+instruction a drain can execute. Everything below is a **shell command**, run as written.
+
+**a. Validate every message record and layout invariant across every lane, not just this one's.**
+```
+python3 scripts/check_messages.py --quiet
+```
+`discover_queues()` walks `<lock_dir>/queue/<repo>/<lane>/` for every repo and lane under the
+resolved lock dir — this single invocation already covers the whole tree, which is exactly what
+thirteen consecutive drains never ran. Exit 0 means every record and receipt-backed transition in
+every lane's `inbox/`/`processing/`/`done/` is well-formed; a nonzero exit means at least one is
+broken, and its `FAIL <path>` lines name which. Resolve `<lock_dir>` the same way the script does
+— `--lock-dir`, else `FLEET_LOCK_DIR`, else a `brain.toml` found by walking up from cwd — never
+assume a repo-relative path (see `scripts/check_lane_agents.py`'s identical precedence).
+
+**b. Age-check every inbox file, and report an absent queue directory and an empty one as
+different findings.** `check_messages.py` validates message shape; it does not report how long a
+file has waited, and it does not distinguish "this lane has never written a queue dir" from "this
+lane's queue dir exists and is empty." Both distinctions matter — a count of undrained messages
+reads as backlog, "10 hours old" reads as a failure; and "no queue dir for my lane" is why the
+first thirteen drains read "nothing to drain" instead of "never checked."
+```
+for q in "$LOCK_DIR"/queue/*/*/; do
+  q="${q%/}"
+  inbox="$q/inbox"
+  if [ ! -d "$inbox" ]; then
+    echo "ABSENT  $inbox"
+  elif [ -z "$(ls -A "$inbox" 2>/dev/null)" ]; then
+    echo "EMPTY   $inbox"
+  else
+    for f in "$inbox"/*.json; do
+      [ -e "$f" ] || continue
+      now=$(date +%s)
+      mtime=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f")
+      echo "MSG     $f  age=$(( (now - mtime) / 60 ))m"
+    done
+  fi
+done
+```
+Run this over every `<lock_dir>/queue/<repo>/<lane>/` the tree contains — not only the drain's
+own lane. Every `MSG` line surfaced for a lane other than this one is **reported, not acted on**
+(step 4's board is where it lands) — routing another lane's message is that lane's call, never
+this drain's (see "Out of scope" precedent in the block that shipped this step,
+`BT.ticket.commander-must-validate-the-whole-queue-tree`).
+
+**c. Drain this lane's own inbox for step 2 to triage.** Only this lane's messages get moved and
+routed here; every other lane's `MSG`/`EMPTY`/`ABSENT` finding from (b) is report-only.
+```
+python3 -c "
+import sys; sys.path.insert(0, 'scripts')
+from check_messages import resolve_lock_dir, drain_queue
+lock_dir = resolve_lock_dir()
+queue_dir = lock_dir / 'queue' / '<this repo>' / '<this lane>'
+for record in drain_queue(queue_dir):
+    print(record['message_id'])
+"
+```
+substituting this lane's actual `<repo>`/`<lane>` path segments. Each printed `message_id` is now
+sitting in `processing/`, ready for step 2; `complete_message(queue_dir, message_id)` moves it to
+`done/` the same way, once triaged. **Do not restate the queue layout or the receipts ledger
+here** — `BT.6.B` (shipped as `scripts/check_messages.py`) owns both; read its module docstring
+if the layout is unclear.
 
 ### 2. Route and relay
 For each drained message, decide where it goes and how urgently, then relay it (post a reply, file
