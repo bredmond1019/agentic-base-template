@@ -172,6 +172,31 @@ Each of these exists because it has already caused a real failure in this fleet.
     `processing/`, then `complete_message()` per message once triaged — do not restate the queue
     layout or receipts ledger here, `BT.6.B` owns both.
 
+
+    **While no `/orchestration-commander` is running — the current arrangement — a lane is the ONLY
+    reader of any inbox, including its own.** Nothing sweeps the queue tree, so a message addressed
+    to a lane that is not running is read by nobody, and the sender goes on believing it has
+    communicated. Measured 2026-08-23: three messages, one of them a P0, sat unread for seven hours.
+    Three obligations follow, and they are the pre-commander practice restored deliberately, not a
+    regression:
+
+    1. **Ping a peer whenever a peer is affected**, rather than waiting for anything to route it for
+       you — use the `ping-agent` skill's envelope and the four-verdict response contract.
+    2. **Write every message to a durable home as well as sending it.** The ping accelerates the
+       durable channel; it never replaces it. A finding that exists only as a ping dies with the
+       receiving session.
+    3. **Record every issue, decision and surprise in this run's
+       `planning/orchestration-run/<roadmap-slug>/notes.md`**, with a status (`OPEN` / `DONE` /
+       `HELD` / `WONTFIX`), even when you have also pinged someone about it. The notes file is the
+       only channel that survives both sessions ending.
+
+    Additionally, **glance at the whole queue tree at each block boundary**, not just your own
+    inbox: `python3 <path-to-base-template>/scripts/check_messages.py` validates every lane's queue
+    in about a second. If you see an undrained inbox belonging to a lane that is not running, say so
+    in your report and in `notes.md` — surfacing it is never out of scope, even though acting on
+    another lane's message is. `BT.ticket.commander-must-validate-the-whole-queue-tree` moves this
+    to the commander once it is fixed.
+
     **Interrupt discipline**: only `RENDEZVOUS` and `LEASE_RELEASE` may interrupt a block in
     flight — both concern the tree and are objectively time-critical. Every other kind
     (`EDGE_RELEASED`, `FINDING`, `QUERY`) is triaged at the next block boundary, never before. See

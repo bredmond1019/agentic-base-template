@@ -158,6 +158,28 @@ Each of these exists because it has already caused a real failure in this fleet.
     an operator gate, and anything requiring a spec slug you cannot resolve confidently (step 3
     says stop and ask — that still stands).
 
+11. **While no `/orchestration-commander` is running — the current arrangement — a lane is the ONLY
+    reader of any inbox, including its own.** Nothing sweeps the queue tree, so a message addressed
+    to a lane that is not running is read by nobody, and the sender goes on believing it has
+    communicated. Measured 2026-08-23: three messages, one a P0, sat unread for seven hours while
+    the only agent that could see them reported "drained 0" thirteen times. Three obligations, which
+    are the pre-commander practice restored deliberately rather than a regression:
+
+    1. **Ping a peer whenever a peer is affected**, rather than waiting for something to route it —
+       use the `ping-agent` skill's envelope and its four-verdict response contract.
+    2. **Write every message to a durable home as well as sending it.** The ping accelerates the
+       durable channel; it never replaces it. A finding that exists only as a ping dies with the
+       receiving session.
+    3. **Record every issue, decision and surprise in this run's
+       `planning/orchestration-run/<roadmap-slug>/notes.md`** with a status (`OPEN` / `DONE` /
+       `HELD` / `WONTFIX`), even when you have also pinged someone. The notes file is the only
+       channel that survives both sessions ending.
+
+    At each block boundary also run `python3 <path-to-base-template>/scripts/check_messages.py` —
+    about a second — to validate the whole queue tree, and report any undrained inbox belonging to a
+    lane that is not running. Surfacing it is never out of scope, even though acting on another
+    lane's message is.
+
 ---
 
 ## How the pipeline works
