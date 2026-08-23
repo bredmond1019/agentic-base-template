@@ -20,6 +20,7 @@ import sys
 import tempfile
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -567,6 +568,94 @@ class CrossProcessSurvival(unittest.TestCase):
         stat_out = json.loads(stat.stdout)
         self.assertTrue(any("release-b" in entry for entry in stat_out["active"]))
         self.assertFalse(any("release-a" in entry for entry in stat_out["active"]))
+
+
+class ExclusiveLeaseRefusal(unittest.TestCase):
+    """Task 1 of BT.ticket.fleet-exclusive-registration: a `kind:exclusive` lease naming one
+    repo must refuse a `register` for a DIFFERENT repo, in any category, regardless of
+    heaviness -- the join BT.6.A's lease vocabulary (validated by check_lane_agents.py) has
+    never had to the admission gate that actually decides. Recorded red, 2026-08-22: from a
+    scratch FLEET_LOCK_DIR, registering `brain` then `base-template` in the same category
+    returned `allowed: true` for the second call -- the fleet had no way to say no.
+
+    This case reproduces that gap through the LEASE mechanism specifically: a lease on `brain`,
+    held by a different agent than the one registering, must block a register for
+    `base-template`. It MUST fail against the unmodified script -- do NOT touch
+    fleet_concurrency_check.py to make this pass; that is task 2's job. The `base-template`
+    target and `native-build` category are deliberate: the leasing repo (`brain`) has no heavy
+    signal at all, which is exactly the HQ.8.A failure mode (a non-heavy lane's exclusivity
+    need was invisible to the gate twice over).
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.lock_dir = Path(self._tmp.name) / "locks"
+        self.leases_dir = self.lock_dir / "leases"
+        self.leases_dir.mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _write_exclusive_lease(self, repo: str, lane: str, agent: str) -> Path:
+        path = self.leases_dir / f"lease-{lane}.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "repo": repo,
+                    "lane": lane,
+                    "agent": agent,
+                    "acquired_at": datetime.now(timezone.utc).isoformat(),
+                    "kind": "exclusive",
+                }
+            )
+        )
+        return path
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(_MODULE_PATH), *args, "--lock-dir", str(self.lock_dir)],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_exclusive_lease_on_another_repo_refuses_a_different_repos_register(self) -> None:
+        # The lease is written directly by this test process (standing in for the lane driver
+        # that would have written it via BT.6.E's mechanism), naming a DIFFERENT agent than the
+        # one that will attempt to register below.
+        self._write_exclusive_lease(repo="brain", lane="quiesce-lane", agent="agent-a")
+
+        # The register call under test runs as its own SEPARATE OS process -- exactly like the
+        # recorded 2026-08-22 reproduction (register brain, then register base-template, same
+        # category, from two independent invocations).
+        result = self._run(
+            "register", "--repo", "base-template", "--category", "native-build"
+        )
+
+        self.assertEqual(
+            result.returncode,
+            3,
+            "expected refusal (exit 3) while an exclusive lease is held on `brain`, got exit "
+            f"{result.returncode}, stdout={result.stdout!r} -- pre-fix this is EXPECTED to fail "
+            "(the unmodified script returns exit 0 / allowed:true here; that recorded red is "
+            "this ticket's evidence the gate can fail, see task 1's acceptance criteria)",
+        )
+
+    def test_lease_fixture_validates_against_check_lane_agents(self) -> None:
+        # Guards against a case that only "passes" because the fixture itself is malformed:
+        # the lease this test writes must be a genuinely valid record under BT.6.A's own gated
+        # schema check, not just something fleet_concurrency_check.py happens to tolerate.
+        self._write_exclusive_lease(repo="brain", lane="quiesce-lane", agent="agent-a")
+        check_script = _MODULE_PATH.parent / "check_lane_agents.py"
+        result = subprocess.run(
+            [sys.executable, str(check_script), "--quiet", "--lock-dir", str(self.lock_dir)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"lease fixture failed check_lane_agents.py --quiet: {result.stdout}",
+        )
 
 
 if __name__ == "__main__":
