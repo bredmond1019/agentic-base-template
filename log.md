@@ -3,7 +3,64 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-22
+**Last updated:** 2026-08-23
+
+---
+
+## [run: 2026-08-23]
+
+### The ten-block D81 + commander chain — worktrees refused, commits proven, the lease model repaired
+
+- **What:** Drove the `base-template` lane of the `autonomous-foundation` roadmap to **10/10 closed**
+  via `/sdlc-task`, in-place on `main`. **D81 is now enforced rather than documented:** both engines
+  refuse `--worktree` before any setup (`sdlc-task.js:142`, `sdlc-flow.js:246`), a new gated
+  `check_worktree_moratorium.py` stops the refusal being deleted, `check_lane_records.py` fails a lane
+  record whose isolation *leading token* is `--worktree`, and `/generate-roadmap`'s isolation table lost
+  both its stale verdict and its refuted reason. **D81 lift condition 2 landed:** `renderWorkAssertion`,
+  byte-identical across both engines, asserts each task's commit is non-empty, intersects the task's
+  declared `files[]`, and deletes nothing undeclared — the EN.11.O shape (443 files, 177,867 deletions,
+  `PASS 8/8`) now fails it while still passing the old guard. **The fleet stopped serialising itself:**
+  the lease record gained `scope: repo|fleet` (absent = `repo`), so an ordinary lane's exclusive lease
+  no longer refuses every other lane's `register`. **The lease stopped destroying its own history:**
+  `acquired_at` is immutable with a separate `heartbeat`. Claims gained optional `current_block` /
+  `block_started_at`; both orchestration commands now instruct re-stamping at each block boundary; the
+  staleness threshold was re-derived from measurement to 180 min with the derivation in the code.
+  `/orchestration-commander` step 1 now runs an executable shell sweep over the *whole* queue tree
+  (it previously named a Python function as if it were a command, which is why thirteen drains reported
+  "drained 0" while a P0 sat unread), and step 4 gained the missing cross-repo-writer case. Both
+  orchestration commands stopped telling lanes to run `./scripts/validate_brain.sh` — a write-and-push
+  path on this `primary` host — with a gated check preventing the instruction's return. Repo now gates
+  **43** checks, up from 38.
+- **Why:** D81 suspended `--worktree` fleet-wide after whole-repo deletion behind a green run happened
+  three times in three weeks, the third *after* the ticket for it closed — but the moratorium existed
+  only as prose in 21 rewritten lane records, which a stale record, a `--resume`, or an agent working
+  from memory all route around. The rest of the chain came from the first `/orchestration-commander`
+  retrospective and from four peer lanes' findings during the run.
+- **Refs:** [`planning/orchestration-run/autonomous-foundation/notes.md`](planning/orchestration-run/autonomous-foundation/notes.md)
+  (full record, every decision with its reasoning) ·
+  [`review.md`](planning/orchestration-run/autonomous-foundation/review.md) (what changed + executed
+  verification recipes) · [`handoff.md`](planning/handoff.md) · brain decision `D81-worktree-moratorium`
+
+### The run's own findings: a gate that cannot be green while the fleet is working
+
+- **What:** Six bails across the chain, **five caused by state this lane did not own** — four foreign
+  stale registry claims and one `tmux` session orphaned since Aug 22 that hung a gated suite fleet-wide.
+  The sixth was a spec defect this lane authored (a task told to expect a red gating check, which both
+  engines forbid by construction) and re-cut. Filed six `carryover[]` entries, including
+  `fleet-concurrency-pool-is-keyed-on-pid` as **one** entry carrying three symptoms and one root cause
+  (`_lock_path` keys on `{repo}__{pid}` while the docs forbid passing `--pid`): `register` leaks a slot
+  per heartbeat, and `release` is a **silent no-op returning `allowed: true`** while the entry stays on
+  disk — so **TTL has been the only thing ever freeing a native-build slot, fleet-wide**.
+- **Why:** The count reached **nine task-losses plus one blocked close-out across two repos in one day**,
+  and then the close-out itself measured the conclusion: three lanes that re-stamped promptly on request
+  all went stale again within hours, because — per `agentic-portfolio-fc` — a lane heartbeats only on
+  tool rounds and a live-but-idle session structurally *cannot*. So `lane-agent-schema` is red
+  essentially continuously in every repo, and **no threshold value can be correct**; the gating verdict
+  has to stop depending on another lane's timestamp at all. That retires the "lanes should heartbeat
+  better" reading entirely.
+- **Refs:** carryover `staleness-threshold-cannot-be-correct-for-an-idle-lane` ·
+  `BT.ticket.fleet-wide-gates-red-on-another-lanes-data` (block record authored, **no spec, in no chain**
+  — the top handoff recommendation)
 
 ---
 
