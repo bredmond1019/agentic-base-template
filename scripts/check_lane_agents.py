@@ -70,13 +70,36 @@ LEASE_TIMESTAMP_FIELDS = ("acquired_at", "heartbeat")
 LEASE_KIND_VALUES = {"exclusive", "shared"}
 LEASE_SCOPE_VALUES = {"repo", "fleet"}
 
-# STALE THRESHOLD: measured block durations in this fleet run 20-60 minutes (base-template
-# CLAUDE.md standing rules, D57 measurement), so the threshold must clear a normal long block
-# with margin or every healthy lane reports stale on its own longest block. Matched to
-# fleet_concurrency_check.py's DEFAULT_TTL_SECONDS (90 minutes), which was set against the same
-# fleet measurement for the same reason -- one number for "how long is too long" across both
-# advisory mechanisms rather than two that could drift apart.
-STALE_THRESHOLD_SECONDS = 90 * 60
+# STALE THRESHOLD -- DERIVED, 2026-08-23, from measured block durations, not chosen by feel.
+# The old value (90 minutes) is exactly what produced the incident this threshold exists to fix:
+# mev-23 went stale at 94 minutes, base-template-f8 at 91, engine-rs-37 at 95 -- three healthy
+# lanes tripping within a 4-minute band is the threshold measuring itself, not three slow lanes.
+#
+# MEASUREMENT: consecutive same-lane "closed"/"bailed" timestamp deltas in this roadmap's
+# planning/roadmaps/autonomous-foundation/lane-log.jsonl, across every repo in the fleet (not
+# just base-template) -- 46 samples spanning base-template, engine-rs, bastion, mev, okf-core and
+# brain. Distribution: median 50 min, p90 120 min, max observed 215 min (base-template's
+# BT.ticket.sdlc-task-tier-spec-resolution). One concrete datum from THIS chain: block 1
+# (BT.ticket.exclusive-lease-refuses-every-register) ran 12:33Z-13:06Z, 33 minutes, for a
+# four-task ticket whose Validate task alone runs 38 gated checks -- a ten-block chain of those
+# spends much of its life within a factor of two of a 90-minute window, which is why 90 trips so
+# often it looks like three separate incidents instead of one systematic one.
+#
+# CHOSEN VALUE: 180 minutes (3 hours) -- comfortably above the measured p90 (120 min, 1.5x
+# headroom) and above the single largest measured interval (215 min is within ~1x, the rest of
+# the corpus sits well under half of 180), so a normal block, even a slow one, cannot trip it on
+# its own. Re-check this number the same way if lane-log.jsonl gathers a materially different
+# distribution -- do not bump it by feel.
+#
+# WHAT ELSE THIS CONTROLS: fleet_concurrency_check.py's `_non_stale_exclusive_leases` reads this
+# exact constant (via `_LANE_AGENTS.STALE_THRESHOLD_SECONDS`, not a second copy) to decide when an
+# exclusive lease stops blocking the fleet, so raising it also raises how long an abandoned
+# exclusive lease can block everyone else. Raising it now is safe only because
+# BT.ticket.exclusive-lease-refuses-every-register (earlier in this same chain) already scoped
+# the exclusive-lease refusal to the requesting repo -- before that fix, a longer threshold would
+# have meant a longer fleet-wide stall instead of a longer single-repo stall. That ordering is why
+# this block depends on that one.
+STALE_THRESHOLD_SECONDS = 180 * 60
 
 REGISTRY_FILE_RE = re.compile(r"^agent-.*\.json$")
 LEASE_FILE_RE = re.compile(r"^lease-.*\.json$")
