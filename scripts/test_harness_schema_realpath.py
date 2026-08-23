@@ -48,8 +48,8 @@ and `scaffold/.claude/` must never exist (would violate the two-halves rule in C
 Asserting resolution on it here would be asserting a false thing about a template. It is
 therefore EXCLUDED from the pass/fail resolution assertion and reported on its own line
 instead -- never silently dropped from the discovery count, since a file that vanishes from a
-report is indistinguishable from a file that was never discovered. The gate is **18 of 18
-live configs**, not 19 of 19.
+report is indistinguishable from a file that was never discovered. The gate is **19 of 19
+live configs**, not 20 of 20.
 
 DISCOVERY
 ---------
@@ -117,16 +117,18 @@ MIN_EXPECTED_FILES = 18
 # Of the discovered files, exactly one is the scaffold template
 # (`base-template/scaffold/planning/harness.json`) -- excluded from the resolution assertion
 # per the module docstring. The remaining files are live project configs, and the fleet gate is
-# "18 of 18 live configs resolve", not "19 of 19 discovered files resolve".
+# "19 of 19 live configs resolve", not "20 of 20 discovered files resolve".
 #
 # This is a closed-corpus census, the same failure mode test_d16_tasks_json_fallback.py's
 # MeasuredBaseline class already documents: it goes stale the moment a legitimate new project is
-# scaffolded (bumped 17 -> 18 on 2026-08-14 when client/jardins-fitness landed), and it will need
+# scaffolded (bumped 17 -> 18 on 2026-08-14 when client/jardins-fitness landed; 18 -> 19 on
+# 2026-08-23 when core/jynx landed, registered in brain.toml and resolving on both faces), and it
+# will need
 # bumping again the next time the fleet grows. That is expected maintenance, not a sign the check
 # is wrong -- do not raise it speculatively ahead of a real new repo, and do not delete the exact
 # count in favor of a floor just to stop having to bump it; the whole point is catching a file
 # that silently STOPPED resolving, which a floor cannot detect.
-LIVE_EXPECTED_FILES = 18
+LIVE_EXPECTED_FILES = 19
 
 # Suffix identifying the scaffold template's lexical path, regardless of which brain-root
 # absolute prefix it is discovered under.
