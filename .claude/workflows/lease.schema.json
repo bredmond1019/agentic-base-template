@@ -38,6 +38,11 @@
       "type": "string",
       "description": "Whether this lease excludes other claimants. Two 'shared' leases on the same repo are legal — read-only or non-conflicting concurrent work — but two 'exclusive' leases on the same repo are not: exclusive means this lane is about to write to the tree and no one else may hold any lease on it at the same time. This asymmetry is the entire reason the field exists.",
       "enum": ["exclusive", "shared"]
+    },
+    "scope": {
+      "type": "string",
+      "description": "OPTIONAL. How far an `exclusive` lease's refusal reaches. Absent means `repo`: the lease only refuses a register naming this same `repo` — an ordinary lane protecting its own working tree. `fleet` means the whole fleet is quiesced: the lease refuses every register, in any repo, until it is released or goes stale. Most leases should omit this field or set `repo`; `fleet` is reserved for the rare case (e.g. a cross-repo write through the vault symlinks) that genuinely needs every other lane parked.",
+      "enum": ["repo", "fleet"]
     }
   }
 }

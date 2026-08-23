@@ -120,6 +120,23 @@ def check_positive_registry_and_lease_roundtrip() -> None:
           lease_problems == [], f"problems: {lease_problems}")
 
 
+# --- scope: optional, defaults to repo, rejects unknown values -----------------------------
+
+def check_lease_scope_values() -> None:
+    absent = check_lane_agents.check_lease_record(_valid_lease())
+    repo_scoped = check_lane_agents.check_lease_record(_valid_lease(scope="repo"))
+    fleet_scoped = check_lane_agents.check_lease_record(_valid_lease(scope="fleet"))
+    bad = check_lane_agents.check_lease_record(_valid_lease(scope="everything"))
+    check("a lease with no `scope` key is valid (absent means repo)",
+          absent == [], f"problems: {absent}")
+    check("a lease with `scope: repo` is valid",
+          repo_scoped == [], f"problems: {repo_scoped}")
+    check("a lease with `scope: fleet` is valid",
+          fleet_scoped == [], f"problems: {fleet_scoped}")
+    check("a lease with `scope: everything` is rejected and names the bad value",
+          bad != [] and any("everything" in p for p in bad), f"problems: {bad}")
+
+
 # --- negative (a): missing required field --------------------------------------------------
 
 def check_negative_missing_required_field() -> None:
@@ -275,6 +292,7 @@ def check_no_records_is_not_a_failure() -> None:
 def main() -> int:
     check_dependency_free()
     check_positive_registry_and_lease_roundtrip()
+    check_lease_scope_values()
     check_negative_missing_required_field()
     check_negative_duplicate_exclusive_lease()
     check_negative_stale_heartbeat()

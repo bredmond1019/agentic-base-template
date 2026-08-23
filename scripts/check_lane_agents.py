@@ -63,10 +63,11 @@ REGISTRY_SLUG_FIELDS = ("repo", "lane", "roadmap")
 REGISTRY_TIMESTAMP_FIELDS = ("started_at", "heartbeat")
 
 LEASE_REQUIRED = ["repo", "lane", "agent", "acquired_at", "kind"]
-LEASE_ALLOWED = set(LEASE_REQUIRED)
+LEASE_ALLOWED = set(LEASE_REQUIRED) | {"scope"}
 LEASE_SLUG_FIELDS = ("repo", "lane")
 LEASE_TIMESTAMP_FIELDS = ("acquired_at",)
 LEASE_KIND_VALUES = {"exclusive", "shared"}
+LEASE_SCOPE_VALUES = {"repo", "fleet"}
 
 # STALE THRESHOLD: measured block durations in this fleet run 20-60 minutes (base-template
 # CLAUDE.md standing rules, D57 measurement), so the threshold must clear a normal long block
@@ -163,6 +164,11 @@ def check_lease_record(record) -> list:
         if kind is not None and kind not in LEASE_KIND_VALUES:
             problems.append(
                 f"`kind` value `{kind}` is not one of {sorted(LEASE_KIND_VALUES)}"
+            )
+        scope = record.get("scope")
+        if scope is not None and scope not in LEASE_SCOPE_VALUES:
+            problems.append(
+                f"`scope` value `{scope}` is not one of {sorted(LEASE_SCOPE_VALUES)}"
             )
     return problems
 
