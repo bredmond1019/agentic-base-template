@@ -316,6 +316,82 @@ def check_negative_per_block_note() -> None:
               len(named) == 1, f"problems: {problems}")
 
 
+def check_negative_leading_worktree_isolation() -> None:
+    """D81: a lane record whose isolation LEADING TOKEN is --worktree fails, naming D81."""
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "lane-bad-worktree.json"
+        _write_json(path, {
+            "lane": "bad-worktree",
+            "roadmap": "my-roadmap",
+            "blocks": [
+                {"id": "BT.1.A", "origin_roadmap": "my-roadmap", "repo": "consumer-repo"},
+            ],
+            "isolation": "--worktree",
+        })
+        problems, _ = check_lane_records.check(path, {})
+        named = [p for p in problems if "D81" in p and "--worktree" in p]
+        check("a leading --worktree isolation directive is rejected, naming D81",
+              len(named) == 1, f"problems: {problems}")
+
+
+def check_positive_d81_preserved_isolation() -> None:
+    """The load-bearing case: a D81-rewritten record leads with --no-worktree but PRESERVES the
+    prior --worktree directive verbatim later in the string, for restoration when the moratorium
+    lifts. Copied verbatim from a real lane record
+    (planning/roadmaps/cli-surface-to-skills/lane-factory.json in the brain root), not
+    paraphrased. A substring check would fail this; the rule must only look at the leading token.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "lane-preserved.json"
+        _write_json(path, {
+            "lane": "preserved",
+            "roadmap": "my-roadmap",
+            "blocks": [
+                {"id": "BT.1.A", "origin_roadmap": "my-roadmap", "repo": "consumer-repo"},
+            ],
+            "isolation": (
+                "--no-worktree — FORCED by D81 (worktree moratorium, 2026-08-23). Do not "
+                "override until D81 is lifted. Prior directive, preserved verbatim for when it "
+                "is: --worktree — POLICY, always. base-template owns .claude/workflows/"
+                "sdlc-*.js; a chain here edits the engines while they are executing it."
+            ),
+        })
+        problems, _ = check_lane_records.check(path, {})
+        check("a D81-preserved isolation string (leading --no-worktree) validates cleanly",
+              problems == [], f"problems: {problems}")
+
+
+def check_positive_plain_no_worktree_isolation() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "lane-plain.json"
+        _write_json(path, {
+            "lane": "plain",
+            "roadmap": "my-roadmap",
+            "blocks": [
+                {"id": "BT.1.A", "origin_roadmap": "my-roadmap", "repo": "consumer-repo"},
+            ],
+            "isolation": "--no-worktree",
+        })
+        problems, _ = check_lane_records.check(path, {})
+        check("a plain --no-worktree isolation directive validates cleanly",
+              problems == [], f"problems: {problems}")
+
+
+def check_positive_absent_isolation() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "lane-noisolation.json"
+        _write_json(path, {
+            "lane": "noisolation",
+            "roadmap": "my-roadmap",
+            "blocks": [
+                {"id": "BT.1.A", "origin_roadmap": "my-roadmap", "repo": "consumer-repo"},
+            ],
+        })
+        problems, _ = check_lane_records.check(path, {})
+        check("a lane record with no isolation field at all validates cleanly",
+              problems == [], f"problems: {problems}")
+
+
 def check_negative_missing_origin_roadmap() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -450,6 +526,10 @@ def main() -> int:
     check_positive_two_repos()
     check_positive_no_top_level_repo()
     check_positive_notes_field()
+    check_negative_leading_worktree_isolation()
+    check_positive_d81_preserved_isolation()
+    check_positive_plain_no_worktree_isolation()
+    check_positive_absent_isolation()
     check_negative_per_block_note()
     check_legacy_and_roadmaps_discovery()
     check_derived_artifacts_at_the_planning_root_are_not_lane_records()

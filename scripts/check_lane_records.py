@@ -251,6 +251,21 @@ def check(path, repo_paths: dict | None = None):
         if v is not None and not (isinstance(v, str) and v):
             problems.append(f"`{field}` must be a non-empty string")
 
+    isolation = record.get("isolation")
+    if isinstance(isolation, str) and isolation:
+        # D81 (worktree moratorium): the field is authored free text whose EFFECTIVE directive
+        # is its LEADING TOKEN only -- never a substring match. 20 of the fleet's 42 live lane
+        # records deliberately CONTAIN the string "--worktree" later in the field, preserving
+        # the prior directive verbatim for when the moratorium lifts (e.g. "--no-worktree --
+        # FORCED by D81 ... Prior directive, preserved verbatim for when it is: --worktree
+        # (policy)"). A substring check would red-gate all of those on their own history.
+        leading_token = isolation.split()[0].rstrip(",;:")
+        if leading_token == "--worktree":
+            problems.append(
+                f"`isolation` leading directive is `--worktree`, which D81 (worktree "
+                f"moratorium) forbids -- file: {path}"
+            )
+
     for field in ("exclusive_repos", "cut_blocks"):
         v = record.get(field)
         if v is not None and not isinstance(v, list):
