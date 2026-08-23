@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
-"""Fixtures over check_command_docs_no_write_path.py's instruction-vs-discussion rule.
+"""Fixtures over check_command_docs_no_write_path.py's instructing-vs-discussing rule
+(BT.ticket.validate-brain-is-a-write-and-push-path, task 1).
 
-Dependency-free, same discipline as the module it tests.
+Two directions, both required:
+  (a) a fixture INSTRUCTING execution of one of the three write-and-push wrappers must FAIL.
+  (b) a fixture reproducing derive-state-safely's real discussion style (writer-table row,
+      ban list, and an inline "Call `./scripts/emit_state_write.sh` instead" mid-sentence
+      mention) must PASS.
 
-The whole check is one distinction: INSTRUCTING execution of `validate_brain.sh` /
-`emit_state_write.sh` / `routine.sh` must fail; DISCUSSING one of them -- a writer-table row, a
-ban list, prose explaining behaviour -- must pass. A naive substring match fails
-`.agents/skills/derive-state-safely/SKILL.md`, which legitimately names all three; a checker that
-fails a correct file gets disabled, so both directions are asserted here, plus the live corpus in
-both its current (RED) and post-fix (GREEN, once the later task lands) states.
+Plus a live-corpus exercise so the check cannot pass by finding nothing:
+  (c) the real .agents/skills/derive-state-safely/SKILL.md passes, unmodified, and the real
+      .claude/commands/begin-orchestration.md and orchestrate.md (plus their two
+      .agents/skills/ mirrors) are named as findings -- the corpus is RED until task 2 fixes
+      those four files, and this suite pins that red rather than hiding it. Task 1 does not
+      fix the command files, so this suite asserts the pre-fix (red) state; task 2 flips the
+      assertion on those four files to green in its own validation run.
+
+Dependency-free, same discipline as scripts/test_check_command_hazards.py-style siblings.
 """
 
 from __future__ import annotations
@@ -31,141 +39,145 @@ def check(label, condition, detail=""):
 
 
 # ---------------------------------------------------------------------------
-# Fixture (a): an executable instruction. Modelled directly on the two real instances in
-# begin-orchestration.md / orchestrate.md -- a fenced code block whose body IS the command.
+# (a) instructing fixtures -- each must produce at least one finding.
 # ---------------------------------------------------------------------------
 
-FIXTURE_INSTRUCTION_FENCED = """\
+INSTRUCTING_FIXTURES = {
+    "bare_fenced_line": """\
 ## Before finishing
 
-Run this repo's own gates from `planning/harness.json`, then the corpus gate from `BRAIN_ROOT`:
+Run this repo's own gates, then the corpus gate:
 
 ```
 ./scripts/validate_brain.sh
 ```
-
-Concurrent lanes pushing into one corpus is bad.
-"""
-
-FIXTURE_INSTRUCTION_FENCED_WITH_COMMENT = """\
+""",
+    "bare_line_with_comment": """\
 ```
-./scripts/validate_brain.sh          # from the brain root — delta against the last good push
+./scripts/validate_brain.sh          # from the brain root -- delta against the last good push
 ```
-"""
+""",
+    "emit_state_write_bare": """\
+When you're done, write and commit:
 
-FIXTURE_INSTRUCTION_IMPERATIVE_PROSE = """\
-Run the brain's `scripts/emit_state_write.sh`. Do not stage or commit anything yourself beyond
-what it wrote.
-"""
-
-FIXTURE_INSTRUCTION_ROUTINE_FENCED = """\
-```bash
-./scripts/routine.sh
 ```
-"""
+./scripts/emit_state_write.sh
+```
+""",
+    "routine_with_flag": """\
+Nightly, this repo runs:
+
+```
+scripts/routine.sh --apply
+```
+""",
+}
+
+
+def test_instructing_fixtures_fail():
+    for name, text in INSTRUCTING_FIXTURES.items():
+        findings = checker.find_instructions(text, name)
+        check(f"instructing fixture '{name}' FAILS", len(findings) > 0,
+              f"expected >=1 finding, got {findings!r}")
+
 
 # ---------------------------------------------------------------------------
-# Fixture (b): discussion-only, reproducing derive-state-safely's real style -- a writer-table
-# row and a ban-list sentence, plus the same file's "cron run, where `validate_brain.sh` runs"
-# construction that has the word "run" and a script mention on the same line WITHOUT the imperative
-# governing it.
+# (b) discussion fixture -- reproduces derive-state-safely's real style. Must be clean.
 # ---------------------------------------------------------------------------
 
-FIXTURE_DISCUSSION_TABLE_AND_BANLIST = """\
+DISCUSSION_FIXTURE = """\
+---
+name: derive-state-safely-style-fixture
+description: >
+  Discussion-only fixture modelled on the real derive-state-safely/SKILL.md -- names all
+  three wrappers in a table row, a ban list, and an inline mid-sentence mention, and must
+  PASS the checker exactly like the real file does.
+---
+
 | Command | Shape | Re-runs `emit-state --write` |
 |---|---|---|
-| `mev emit-state --write` | the write itself | — |
 | `./scripts/emit_state_write.sh` · `validate_brain.sh` · `routine.sh` | wrappers | yes |
 
 While any measurement block is live, `syn refresh` / `emit-state --write` / `routine.sh` /
-`validate_brain.sh` are **banned** -- corpus changes invalidate a measurement in flight.
+`validate_brain.sh` are **banned** -- corpus changes invalidate a retrieval measurement in
+flight.
 
-The gate exists for exactly one thing: `scripts/routine.sh`'s **unattended nightly cron** run,
-where `validate_brain.sh` runs `emit-state` read-only unless `BRAIN_ROLE=primary`.
+**`BRAIN_ROLE` gates two scripts, not this command.** Only `scripts/commit_routine_updates.sh`
+and `scripts/validate_brain.sh` check it -- `grep -rn BRAIN_ROLE scripts/*.sh` is the full
+consumer list. `scripts/routine.sh`'s unattended nightly cron run is where `validate_brain.sh`
+runs `emit-state`.
+
+**Don't hand-craft the commit pathspec from `git status`, and don't call `bastion emit-state
+--write` directly.** Call `./scripts/emit_state_write.sh` instead -- it's the one place the
+write-then-commit sequence is defined. `validate_brain.sh` delegates to this same script for
+its own emit-state step, so the two are identical here; use `emit_state_write.sh` directly
+when you only need the write-and-commit, without a full validate-brain pass first.
 """
 
-FIXTURE_DISCUSSION_CALL_INSTEAD = """\
-Don't hand-craft the commit pathspec from `git status`, and don't call `bastion emit-state
---write` directly. Call `./scripts/emit_state_write.sh` instead -- it's the one place the
-write-then-commit sequence is defined.
-"""
+
+def test_discussion_fixture_passes():
+    findings = checker.find_instructions(DISCUSSION_FIXTURE, "discussion-fixture")
+    check("discussion fixture (derive-state-safely style) PASSES", len(findings) == 0,
+          f"expected 0 findings, got {findings!r}")
 
 
-def spec_lines(findings):
-    return [(no, shape) for no, _text, shape in findings]
+# ---------------------------------------------------------------------------
+# (c) live corpus: the real derive-state-safely SKILL.md passes unmodified, and the four
+#     files this block will fix in task 2 are named RED (task 1 does not fix them).
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_live_derive_state_safely_passes():
+    path = REPO_ROOT / ".agents/skills/derive-state-safely/SKILL.md"
+    if not path.is_file():
+        check("live derive-state-safely/SKILL.md exists", False, f"missing: {path}")
+        return
+    text = path.read_text(encoding="utf-8")
+    findings = checker.find_instructions(text, str(path))
+    check("live derive-state-safely/SKILL.md passes, unmodified", len(findings) == 0,
+          f"expected 0 findings, got {findings!r}")
+
+
+def test_live_corpus_is_red_before_task2_fix():
+    """Pins the RED state task 1 leaves behind: begin-orchestration.md, orchestrate.md and
+    both .agents/skills/ mirrors still instruct the write path until task 2 lands. If this
+    assertion ever flips green without task 2's edits, the checker has gone blind, not the
+    corpus gone clean -- keep this assertion aligned with the real fix state."""
+    targets = [
+        REPO_ROOT / ".claude/commands/begin-orchestration.md",
+        REPO_ROOT / ".claude/commands/orchestrate.md",
+        REPO_ROOT / ".agents/skills/begin-orchestration/SKILL.md",
+        REPO_ROOT / ".agents/skills/orchestrate/SKILL.md",
+    ]
+    for path in targets:
+        if not path.is_file():
+            check(f"live file exists: {path}", False, f"missing: {path}")
+            continue
+        text = path.read_text(encoding="utf-8")
+        findings = checker.find_instructions(text, str(path))
+        check(f"live {path.relative_to(REPO_ROOT)} is named (still instructs the write path)",
+              len(findings) > 0, f"expected >=1 finding, got {findings!r}")
+
+
+def test_main_exits_nonzero_against_live_root():
+    exit_code = checker.main(["--root", str(REPO_ROOT), "--quiet"])
+    check("main() exits non-zero against the unfixed live corpus", exit_code == 1,
+          f"expected exit 1, got {exit_code}")
 
 
 def main():
-    # (a) instruction fixtures FAIL -- each must produce at least one finding.
-    check("fenced bare instruction is flagged",
-          len(checker.find_instructions(FIXTURE_INSTRUCTION_FENCED)) >= 1,
-          checker.find_instructions(FIXTURE_INSTRUCTION_FENCED))
-    check("fenced instruction with trailing comment is flagged",
-          len(checker.find_instructions(FIXTURE_INSTRUCTION_FENCED_WITH_COMMENT)) >= 1,
-          checker.find_instructions(FIXTURE_INSTRUCTION_FENCED_WITH_COMMENT))
-    check("imperative 'Run the brain's `scripts/emit_state_write.sh`' is flagged",
-          len(checker.find_instructions(FIXTURE_INSTRUCTION_IMPERATIVE_PROSE)) >= 1,
-          checker.find_instructions(FIXTURE_INSTRUCTION_IMPERATIVE_PROSE))
-    check("fenced routine.sh instruction is flagged",
-          len(checker.find_instructions(FIXTURE_INSTRUCTION_ROUTINE_FENCED)) >= 1,
-          checker.find_instructions(FIXTURE_INSTRUCTION_ROUTINE_FENCED))
-
-    # (b) discussion-only fixtures PASS -- zero findings, reproducing derive-state-safely's real
-    # shapes: a writer-table row, a ban-list sentence, and the "cron run, where `X` runs" sentence
-    # that has "run" and a script mention on the same line without one governing the other.
-    check("writer-table row + ban-list + 'cron run, where' construction is NOT flagged",
-          checker.find_instructions(FIXTURE_DISCUSSION_TABLE_AND_BANLIST) == [],
-          checker.find_instructions(FIXTURE_DISCUSSION_TABLE_AND_BANLIST))
-    check("'Call `./scripts/emit_state_write.sh` instead' is NOT flagged",
-          checker.find_instructions(FIXTURE_DISCUSSION_CALL_INSTEAD) == [],
-          checker.find_instructions(FIXTURE_DISCUSSION_CALL_INSTEAD))
-
-    # (c) the LIVE corpus: derive-state-safely's real SKILL.md must pass, unmodified -- this is
-    # not just a fixture reproduction, it exercises the actual file so the check cannot pass by
-    # never looking at the real thing.
-    root = Path(__file__).resolve().parent.parent
-    derive_state_safely = root / ".agents" / "skills" / "derive-state-safely" / "SKILL.md"
-    if derive_state_safely.exists():
-        text = derive_state_safely.read_text(encoding="utf-8")
-        findings = checker.find_instructions(text)
-        check("derive-state-safely/SKILL.md (real file) is NOT flagged",
-              findings == [], findings)
-    else:
-        print("[skip] .agents/skills/derive-state-safely/SKILL.md not present from this checkout")
-
-    # (d) the LIVE, CURRENTLY-UNFIXED corpus: this is task 1 -- the command files have not been
-    # corrected yet (that is task 2), so the checker MUST currently exit non-zero and name
-    # begin-orchestration.md and orchestrate.md (and their .agents/skills/ mirrors). A checker
-    # green on its first run against the unfixed corpus has detected nothing. Once task 2 lands
-    # this fixture will need updating to assert GREEN instead -- that is expected and is task 2's
-    # job, not this one's; recording RED now is the point.
-    exit_code = checker.main(["--root", str(root), "--quiet"])
-    check("the live corpus is currently RED (task 2 has not run yet)", exit_code == 1,
-          f"exit code was {exit_code}")
-
-    begin_orch = root / ".claude" / "commands" / "begin-orchestration.md"
-    orchestrate = root / ".claude" / "commands" / "orchestrate.md"
-    begin_orch_mirror = root / ".agents" / "skills" / "begin-orchestration" / "SKILL.md"
-    orchestrate_mirror = root / ".agents" / "skills" / "orchestrate" / "SKILL.md"
-    for label, path in (
-        ("begin-orchestration.md", begin_orch),
-        ("orchestrate.md", orchestrate),
-        ("begin-orchestration/SKILL.md mirror", begin_orch_mirror),
-        ("orchestrate/SKILL.md mirror", orchestrate_mirror),
-    ):
-        if not path.exists():
-            print(f"[skip] {label} not present from this checkout")
-            continue
-        findings = checker.find_instructions(path.read_text(encoding="utf-8"))
-        check(f"{label} is currently flagged (unfixed instruction still present)",
-              len(findings) >= 1, findings)
+    test_instructing_fixtures_fail()
+    test_discussion_fixture_passes()
+    test_live_derive_state_safely_passes()
+    test_live_corpus_is_red_before_task2_fix()
+    test_main_exits_nonzero_against_live_root()
 
     if FAILURES:
-        print(f"\n{len(FAILURES)} check(s) failed:")
-        for f in FAILURES:
-            print(f"  - {f}")
+        print(f"\n{len(FAILURES)} failure(s): {FAILURES}")
         return 1
-    print("\nOK -- check_command_docs_no_write_path.py's instruction-vs-discussion rule holds.")
+    print(f"\nall checks passed")
     return 0
 
 
