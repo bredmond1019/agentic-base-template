@@ -182,11 +182,39 @@ state, checking case 0 first, then falling through to exactly three more cases:
      and must never be reported as abandoned. Three false recovery items on a previous run came
      from exactly this conflation.
 
-   This is one decision procedure, not two, and it stays that way deliberately:
-   `BT.ticket.lanes-do-not-record-their-current-block` depends on this block because this
-   ListAgents-liveness gate is the FLOOR that must keep working when its new current-block fields
-   are absent — it will refine "busy" with block age later; do not implement that half here, and
-   do not add a second, parallel rule it would have to reconcile with this one.
+   This is one decision procedure, not two, and it stays that way deliberately. The branch above —
+   `ListAgents` liveness joined against heartbeat staleness — is the FLOOR: it alone decides which
+   of the three outcomes applies, and it must keep deciding that identically whether or not the
+   claim carries `current_block`/`block_started_at`. **When those fields ARE present
+   (`BT.ticket.lanes-do-not-record-their-current-block`), use `block_started_at`'s age only to
+   ANNOTATE the outcome the floor already picked — never to move a file between outcomes:**
+   - Outcome **Stale + busy**: report the block age alongside the existing one-liner (e.g. "still
+     busy, 6m into `<current_block>`"). A recent `block_started_at` is the ordinary shape of this
+     outcome — a long block naturally leaves the heartbeat stale between the boundary re-stamps
+     that move both fields together — so it confirms "slow, not stuck" without changing the
+     verdict, which was already report-only.
+   - Outcome **Stale + idle**: report the block age alongside the named recovery item (e.g.
+     "abandoned mid-`<current_block>`, block age 3h12m"). A large block age here is the strongest
+     form of the same candidate signal `ListAgents` idleness already produced — it sharpens what
+     the human is told, it does not create the candidate; `ListAgents` idleness alone already did.
+   - Outcome **Stale + blocked on a human**: report the block age the same way, for context; the
+     operator/approval gate is still what makes this report-only, unchanged.
+   - **Fields absent on the claim**: no annotation is possible, and none is attempted — the three
+     outcomes above are reached and reported exactly as they were before this refinement existed.
+
+   **Walkthrough (recorded because a schema test cannot show this — see task 3 of
+   `BT.ticket.lanes-do-not-record-their-current-block`):**
+   1. *Fields absent.* Claimant live and busy, heartbeat stale, no `current_block`/
+      `block_started_at` on the claim → outcome **Stale + busy**, report-only, one line, no block
+      age mentioned — identical to this block's pre-refinement behaviour.
+   2. *Fields present, block 3 minutes old.* Same claimant/heartbeat state, claim now carries
+      `current_block`/`block_started_at` and the block started 3 minutes ago → outcome is still
+      **Stale + busy** (the floor did not change), report-only, now annotated "6m busy, 3m into
+      `<current_block>`" — read as *slow*, not stuck.
+   3. *Fields present, block 3 hours old, heartbeat stale, session idle.* `ListAgents` shows the
+      claimant absent or idle (the floor's own idle condition, unchanged) and the claim's block age
+      is 3 hours → outcome **Stale + idle**, Named recovery item, annotated with the 3h block age —
+      the candidate the human should look at first.
 3. **No lease at all** on the repo the file lives in, and case 0 found no live cross-repo writer
    to attribute it to. **Alert** via the brain's `lib.sh` `send_alert()` — an authored file dirty
    with nothing holding the repo, and no lane explaining it, is unexplained by any lane this drain
