@@ -755,9 +755,15 @@ class ExclusiveLeaseMatrix(unittest.TestCase):
     # (4) acquiring exclusivity while ordinary lanes are active is refused -- exclusivity is
     # admission control only, never pre-emption of a lane already running.
     def test_acquire_exclusive_refused_while_ordinary_lanes_are_active(self) -> None:
+        # No --pid: an unsupplied pid registers under the "self" convention (pid_source=="self"),
+        # which relies on TTL expiry rather than a real os.kill liveness check. Passing a
+        # synthetic --pid (e.g. os.getpid() + 1) here would be genuinely non-deterministic across
+        # this SEPARATE subprocess call - whether that made-up pid happens to belong to some
+        # unrelated live process on the host is outside the test's control (the same hazard the
+        # module-level docstring at the top of this file documents for in-process tests, except
+        # here there is no importable module to mock.patch across a subprocess boundary).
         reg = self._run(
             "register", "--repo", "engine-rs", "--category", "native-build",
-            "--pid", str(os.getpid() + 1),
         )
         self.assertEqual(reg.returncode, 0, f"setup register failed: {reg.stdout!r}")
 
