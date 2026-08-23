@@ -473,9 +473,13 @@ def status(lock_dir_override: Optional[str] = None, ttl_seconds: int = DEFAULT_T
         allowed=True,
         active=[f"{e['repo']} ({e.get('category', 'browser-automation')})" for e in survivors],
         # Reported distinctly from `active` (ordinary heavy-lane entries) so a reader can tell
-        # WHY nothing may start, per the block record's status criterion.
+        # WHY nothing may start, per the block record's status criterion. Each entry also carries
+        # its effective scope -- the authored value, or `repo` when the key is absent -- so a
+        # reader can tell a fleet-quiesce hold from an ordinary same-repo hold without opening
+        # the lease file (BT.ticket.exclusive-lease-refuses-every-register).
         exclusive_leases=[
-            f"{e.get('repo')} (exclusive, lane `{e.get('lane')}`, agent `{e.get('agent')}`)"
+            f"{e.get('repo')} (exclusive, scope `{e.get('scope', 'repo')}`, "
+            f"lane `{e.get('lane')}`, agent `{e.get('agent')}`)"
             for e in exclusive
         ],
     )

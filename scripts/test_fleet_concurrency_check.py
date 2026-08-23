@@ -978,6 +978,39 @@ class ExclusiveLeaseMatrix(unittest.TestCase):
             "an exclusive lease must not also be reported as an ordinary active lane",
         )
 
+    # BT.ticket.exclusive-lease-refuses-every-register, task 3: `status` reports each held
+    # exclusive lease's effective scope, so a reader can tell a fleet-quiesce hold from an
+    # ordinary same-repo hold without opening the lease file. A lease with no `scope` key must
+    # report as `repo`, not as missing or null.
+    def test_status_distinguishes_fleet_scoped_from_repo_scoped_holds(self) -> None:
+        self._write_lease(repo="brain", lane="fleet-lane", agent="agent-a", scope="fleet")
+        self._write_lease(repo="engine-rs", lane="repo-lane", agent="agent-b", scope="repo")
+        self._write_lease(repo="mev", lane="absent-lane", agent="agent-c", scope=None)
+
+        result = self._run("status")
+
+        self.assertEqual(result.returncode, 0, f"status must always exit 0: {result.stdout!r}")
+        payload = json.loads(result.stdout)
+        entries = payload["exclusive_leases"]
+
+        fleet_entries = [e for e in entries if "brain" in e]
+        self.assertEqual(len(fleet_entries), 1, f"expected exactly one `brain` entry: {entries!r}")
+        self.assertIn("fleet", fleet_entries[0])
+
+        repo_entries = [e for e in entries if "engine-rs" in e]
+        self.assertEqual(len(repo_entries), 1, f"expected exactly one `engine-rs` entry: {entries!r}")
+        self.assertIn("repo", repo_entries[0])
+        self.assertNotIn("fleet", repo_entries[0])
+
+        absent_entries = [e for e in entries if "mev" in e]
+        self.assertEqual(len(absent_entries), 1, f"expected exactly one `mev` entry: {entries!r}")
+        self.assertIn(
+            "repo",
+            absent_entries[0],
+            "a lease with no `scope` key must report as `repo`, not missing or null",
+        )
+        self.assertNotIn("fleet", absent_entries[0])
+
     # (7) check_lane_agents.py --quiet still exits 0 over the leases this suite writes -- the
     # guard against this ticket widening LEASE_ALLOWED, exercised across the lease shapes
     # (fresh exclusive, shared) this class produces. A STALE lease is deliberately excluded here:
