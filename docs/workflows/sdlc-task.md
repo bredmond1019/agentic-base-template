@@ -323,6 +323,26 @@ and exercises the guard against a poisoned worktree, a clean control, a no-`HEAD
 vaulted `git -C <vault>` call shape, and is registered as the gating `commit-safety-guard-tests`
 check in `planning/harness.json`.
 
+The guard above only catches a *totally* empty index. It does not catch a commit whose index is
+non-empty but whose content is still wrong — a mass-deletion commit with one surviving file, for
+instance, which is exactly the shape that shipped as a green PASS in EN.11.O (443 files changed,
+177,867 deletions, zero insertions). `renderWorkAssertion(gitCmd='git', taskNum, tasksJsonPath)`
+(D81 lift condition 2 — `BT.ticket.a-run-must-prove-its-commits-contain-the-work`) is the
+complement: it runs immediately *after* the per-task work commit in both engines' per-task loop
+(never before — it inspects the commit it is checking via `git diff --name-status HEAD~1 HEAD`),
+reading `tasksJsonPath` at run time to get task `taskNum`'s declared `files[]`, and aborts
+(`WORK_ASSERTION_ABORT`, nonzero exit) when: (1) the commit's diff is empty; (2) no changed path
+intersects the declared `files[]`; (3) the commit **deletes** a path that is *not* declared — the
+EN.11.O shape. Deleting a file the task *did* declare passes cleanly; deletion is not itself the
+signal, undeclared deletion is. It is exempt — never invoked — at the worktree-init commit, the
+D16 fallback commits, and the vault commit (a different repo, with its own `HEAD~1` and
+`planning/`-prefixed paths, that other concurrent lanes also write to). `renderCommitSafetyGuard()`
+itself is unchanged — the two guards are complements, not a replacement. `sdlc-flow.js` defines a
+byte-identical copy; `scripts/test_work_assertion.py` pins the two engines' function source and
+rendered snippet in agreement, reproduces the EN.11.O fixture to show it now fails the new guard
+while still passing the old one unchanged, and is registered as the gating `work-assertion-tests`
+check in `planning/harness.json`.
+
 Separately, every executable `git` invocation in both engines' recipes is routed through a shared
 `GIT` prefix constant — `env -u` of the nine `GIT_REPO_ENV_VARS` mev recognizes — so a
 hook-inherited `GIT_INDEX_FILE`/`GIT_DIR`/etc. can no longer silently redirect a recipe's git

@@ -93,6 +93,30 @@ description: >
  If this prints COMMIT_GUARD_ABORT, STOP — do not run the commit; the index is empty against a
  non-empty HEAD, which is exactly the shape that deletes every tracked file.
 
+ POST-COMMIT WORK ASSERTION (D81 lift condition 2 —
+ BT.ticket.a-run-must-prove-its-commits-contain-the-work) — the COMMIT-SAFETY GUARD above only
+ catches a TOTALLY empty index; it does NOT catch a commit whose index is non-empty but whose
+ content is still wrong — e.g. many undeclared deletions with one surviving file (measured live:
+ EN.11.O, 443 files changed, 177,867 deletions, zero insertions, and it PASSED the guard above).
+ Run this immediately AFTER every PER-TASK work commit in step 7 (never before — it reads the
+ commit it is checking), chained with `&&` onto the commit itself, substituting the real task id
+ for `<task-id>` and the real tasks.json path for `<tasks-json-path>`:
+   NAME_STATUS=$(git diff --name-status HEAD~1 HEAD); if [ -z "$NAME_STATUS" ]; then echo "WORK_ASSERTION_ABORT: task <task-id> commit diff is EMPTY (condition 1) - no work was committed"; exit 1; fi; WA_DECLARED=$(python3 -c "
+import json
+d = json.load(open('<tasks-json-path>'))
+t = [x for x in d if x.get('task_id') == <task-id>]
+print(chr(10).join(t[0].get('files', []) if t else []))
+"); WA_MATCH=0; WA_BADDEL=""; while IFS=$'\t' read -r WA_ST WA_P1 WA_P2; do WA_CHK="$WA_P1"; case "$WA_ST" in R*) WA_CHK="$WA_P2" ;; esac; if printf '%s\n' "$WA_DECLARED" | grep -qFx "$WA_CHK"; then WA_MATCH=1; else case "$WA_ST" in D*) WA_BADDEL="$WA_CHK" ;; esac; fi; done <<< "$NAME_STATUS"; if [ "$WA_MATCH" -eq 0 ]; then echo "WORK_ASSERTION_ABORT: task <task-id> commit's changed paths do not intersect declared files[] (condition 2) - declared: [$WA_DECLARED] - changed: [$NAME_STATUS]"; exit 1; fi; if [ -n "$WA_BADDEL" ]; then echo "WORK_ASSERTION_ABORT: task <task-id> commit deletes undeclared file '$WA_BADDEL' not present in files[] (condition 3) - declared: [$WA_DECLARED]"; exit 1; fi
+ It aborts (WORK_ASSERTION_ABORT, nonzero exit) when: (1) the commit's diff is empty; (2) no
+ changed path matches the task's declared `files[]`; (3) the commit DELETES a path that is NOT in
+ `files[]` (the EN.11.O shape — undeclared/collateral deletion). Deleting a file the task DID
+ declare is fine and passes. If this prints WORK_ASSERTION_ABORT, treat the task as FAILED —
+ investigate, fix, and re-commit; do not report success. EXEMPT (never run this check at these
+ sites): the worktree-init commit, the two D16 `chore: derive tasks.json ...` fallback commits, and
+ the vault commit (step 7b) — the vault commits into a different repo whose own HEAD~1 and
+ `planning/`-prefixed paths this check does not attempt to reconcile, and which other concurrent
+ lanes also write to.
+
  GIT ENVIRONMENT STRIP (BT.ticket.worktree-run-can-commit-an-empty-tree, half (a)) — git exports
  nine repository-scoping variables to the hooks it runs, and a hook-spawned process inherits them;
  they OVERRIDE `-C` and cwd, so a later `git commit` can silently build its tree from a stale/foreign
@@ -414,6 +438,11 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
      ```
      (fix pass: `fix: fix pass <attempt-1> for <stem>`, e.g. attempt 2's fix commit reads
      `fix: fix pass 1 for <stem>`.) Capture the short hash via `git log --oneline -1`.
+   - **Post-commit work assertion.** Immediately after the commit above lands, run the POST-COMMIT
+     WORK ASSERTION `&&`-joined onto it, with `<task-id>` = this `taskNum` and `<tasks-json-path>` =
+     `<tasksJsonFile>`. `WORK_ASSERTION_ABORT` means the task FAILED — the commit does not actually
+     contain (or over-reaches beyond) the task's declared `files[]`; fix and re-commit, do not report
+     success.
    - **Vault-aware commit (D46 — if planning/ is a vaulted symlink)**: Planning/ is a relative symlink pointing to
      a brain-owned vault repository (e.g., agentic-portfolio HQ). Its bytes live at a DIFFERENT git repo,
      invisible to the commit made above. If this attempt created or edited ANY file under planning/

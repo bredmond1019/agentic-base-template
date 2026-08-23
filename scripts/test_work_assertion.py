@@ -14,9 +14,15 @@ never fires) -- and records the CONTROL: the current `renderCommitSafetyGuard()`
 recorded pass is this block's central piece of evidence and the whole reason a second guard is
 needed.
 
-This task deliberately says nothing about the not-yet-written `renderWorkAssertion()` -- it does
-not exist yet at this task's boundary. A later task extends this suite to assert the NEW guard
-fails the same fixture.
+Task 2 adds `renderWorkAssertion()` itself and extends this suite: cross-engine byte-identical
+agreement (function source AND rendered snippet); the SAME EN.11.O fixture from task 1 now FAILS
+the new guard (condition 3 -- undeclared deletion) while the old `renderCommitSafetyGuard()`
+still PASSES it, unchanged -- the difference-observing pair D81 calls for; an empty-diff commit
+fails condition (1); a commit whose paths do not intersect files[] fails condition (2); an honest
+commit touching exactly its declared files passes; a commit that deletes a file it DID declare
+passes (deletion is not itself the signal); and each named exemption (worktree-init, the two D16
+fallback commits, the vault path) is exercised by construction -- they simply never call the new
+guard at their commit sites, mirrored by the fact this suite never renders it for their shape.
 
 Reuses `scripts/test_commit_safety_guard.py`'s harness shape: extract a guard function's SOURCE
 from the engine via regex (never re-typed), render it via a real `node -e` invocation (never
@@ -55,12 +61,30 @@ COMMIT_SAFETY_GUARD_FN_RE = re.compile(
     re.MULTILINE,
 )
 
+# The new guard's body is a multi-line template literal (it embeds a `python3 -c "..."` block),
+# unlike renderCommitSafetyGuard()'s single-line one -- hence DOTALL + non-greedy up to the first
+# closing backtick immediately followed by a newline and the function's closing brace.
+WORK_ASSERTION_FN_RE = re.compile(
+    r"function renderWorkAssertion\(gitCmd = 'git', taskNum, tasksJsonPath\) \{\n"
+    r"  return `.*?`\n"
+    r"\}",
+    re.DOTALL,
+)
+
 
 def extract_commit_safety_guard_fn(path: Path) -> str:
     text = path.read_text(encoding="utf-8")
     m = COMMIT_SAFETY_GUARD_FN_RE.search(text)
     if not m:
         raise AssertionError(f"renderCommitSafetyGuard() definition not found in {path}")
+    return m.group(0)
+
+
+def extract_work_assertion_fn(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    m = WORK_ASSERTION_FN_RE.search(text)
+    if not m:
+        raise AssertionError(f"renderWorkAssertion() definition not found in {path}")
     return m.group(0)
 
 
@@ -85,6 +109,14 @@ def render_fn(fn_source: str, fn_name: str, args: list[str] | None = None) -> st
 def render_commit_safety_guard(fn_source: str, git_cmd: str | None = None) -> str:
     args = [] if git_cmd is None else [f"'{git_cmd}'"]
     return render_fn(fn_source, "renderCommitSafetyGuard", args)
+
+
+def render_work_assertion(
+    fn_source: str, task_num: int, tasks_json_path: str, git_cmd: str | None = None
+) -> str:
+    gc = git_cmd or "git"
+    args = [f"'{gc}'", str(task_num), f"'{tasks_json_path}'"]
+    return render_fn(fn_source, "renderWorkAssertion", args)
 
 
 def run(cmd, cwd, env=None, check=True):
@@ -209,6 +241,230 @@ class WorkAssertionTaskOneTests(unittest.TestCase):
             self.fn_flow, self.fn_task,
             "renderCommitSafetyGuard() has drifted between sdlc-flow.js and sdlc-task.js",
         )
+
+
+def write_tasks_json(repo: Path, task_id: int, files: list[str]) -> Path:
+    import json
+
+    path = repo / "tasks.json"
+    path.write_text(json.dumps([{"task_id": task_id, "files": files}]))
+    return path
+
+
+class WorkAssertionTaskTwoTests(unittest.TestCase):
+    """Task 2 boundary: `renderWorkAssertion()` now exists in both engines. Exercises all three
+    failure conditions, both PASS directions (honest touch, honest declared-deletion), and the
+    EN.11.O difference-observing pair against the SAME fixture shape as task 1's control."""
+
+    fn_flow: str
+    fn_task: str
+
+    @classmethod
+    def setUpClass(cls):
+        cls.fn_flow = extract_work_assertion_fn(SOURCE_FILES["sdlc-flow.js"])
+        cls.fn_task = extract_work_assertion_fn(SOURCE_FILES["sdlc-task.js"])
+
+    def _scratch(self) -> Path:
+        d = Path(tempfile.mkdtemp(prefix="work-assertion-test2-"))
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        return d
+
+    # -- cross-engine agreement --------------------------------------------------------------
+
+    def test_00_fn_source_byte_identical_across_engines(self):
+        self.assertEqual(
+            self.fn_flow, self.fn_task,
+            "renderWorkAssertion() function source has drifted between the two engines",
+        )
+
+    def test_00b_rendered_snippet_byte_identical_across_engines(self):
+        rendered_flow = render_work_assertion(self.fn_flow, 3, "tasks.json")
+        rendered_task = render_work_assertion(self.fn_task, 3, "tasks.json")
+        self.assertEqual(
+            rendered_flow, rendered_task,
+            "renderWorkAssertion() rendered snippet has drifted between the two engines",
+        )
+
+    # -- (1) empty diff fails -----------------------------------------------------------------
+
+    def test_01_empty_diff_fails(self):
+        root = self._scratch()
+        repo = root / "repo"
+        init_repo(repo)
+        (repo / "a.txt").write_text("a\n")
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "init"], cwd=repo)
+        write_tasks_json(repo, 1, ["a.txt"])
+        run(["git", "commit", "--allow-empty", "-qm", "empty"], cwd=repo)
+
+        guard = render_work_assertion(self.fn_task, 1, "tasks.json")
+        result = run(guard, cwd=repo, check=False)
+        self.assertNotEqual(result.returncode, 0, "empty-diff commit should FAIL the assertion")
+        self.assertIn("WORK_ASSERTION_ABORT", result.stdout)
+        self.assertIn("condition 1", result.stdout)
+
+    # -- (2) no intersection with declared files[] fails ---------------------------------------
+
+    def test_02_no_intersection_with_declared_files_fails(self):
+        root = self._scratch()
+        repo = root / "repo"
+        init_repo(repo)
+        (repo / "a.txt").write_text("a\n")
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "init"], cwd=repo)
+        write_tasks_json(repo, 7, ["a.txt"])
+        (repo / "unrelated.txt").write_text("z\n")
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "touch an undeclared file only"], cwd=repo)
+
+        guard = render_work_assertion(self.fn_task, 7, "tasks.json")
+        result = run(guard, cwd=repo, check=False)
+        self.assertNotEqual(result.returncode, 0, "non-intersecting commit should FAIL the assertion")
+        self.assertIn("WORK_ASSERTION_ABORT", result.stdout)
+        self.assertIn("condition 2", result.stdout)
+        self.assertIn("a.txt", result.stdout)
+        self.assertIn("unrelated.txt", result.stdout)
+
+    # -- (3) THE EN.11.O REPRODUCTION: undeclared deletion fails, even with intersection -------
+
+    def _build_en11o_fixture_for_task_two(self, root: Path, task_id: int) -> Path:
+        """Same EN.11.O shape as task 1's control (many tracked files, a commit that deletes
+        nearly all of them, zero insertions), but this time the surviving/modified file IS a
+        declared file -- so condition (2)'s intersection check passes and condition (3)
+        (undeclared deletion) is the one that must fire. This is the fixture the block's central
+        acceptance criterion is asserted against: 'a commit with many deletions, zero insertions,
+        and a small declared file set.'"""
+        repo = root / "repo"
+        init_repo(repo)
+        tracked = [f"file_{i:03d}.txt" for i in range(20)]
+        for name in tracked:
+            (repo / name).write_text(f"{name}\n")
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "init: 20 tracked files"], cwd=repo)
+
+        survivor = tracked[0]
+        write_tasks_json(repo, task_id, [survivor])
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "declare files[] for the task"], cwd=repo)
+
+        (repo / survivor).write_text("modified by the declared task\n")
+        for name in tracked[1:]:
+            (repo / name).unlink()
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "touch declared file + delete 19 undeclared files"], cwd=repo)
+        return repo
+
+    def test_03_en11o_shape_fails_new_guard_but_still_passes_old_guard(self):
+        root = self._scratch()
+        repo = self._build_en11o_fixture_for_task_two(root, 5)
+
+        # The difference-observing pair: the OLD guard still passes this commit (unchanged,
+        # complementary signal -- its only condition is TRACKED>0 && STAGED==0, and this fixture's
+        # index is non-empty).
+        old_guard_flow = extract_commit_safety_guard_fn(SOURCE_FILES["sdlc-flow.js"])
+        old_result = run(render_commit_safety_guard(old_guard_flow), cwd=repo, check=False)
+        self.assertEqual(
+            old_result.returncode, 0,
+            f"unchanged renderCommitSafetyGuard() must still pass the EN.11.O shape: "
+            f"{old_result.stdout}{old_result.stderr}",
+        )
+
+        # The NEW guard fails it -- condition (3), undeclared deletion.
+        new_guard = render_work_assertion(self.fn_task, 5, "tasks.json")
+        new_result = run(new_guard, cwd=repo, check=False)
+        self.assertNotEqual(
+            new_result.returncode, 0,
+            "renderWorkAssertion() must FAIL the EN.11.O-shape commit (undeclared deletions)",
+        )
+        self.assertIn("WORK_ASSERTION_ABORT", new_result.stdout)
+        self.assertIn("condition 3", new_result.stdout)
+
+    # -- (4) honest commit touching exactly its declared files PASSES --------------------------
+
+    def test_04_honest_commit_touching_declared_files_passes(self):
+        root = self._scratch()
+        repo = root / "repo"
+        init_repo(repo)
+        (repo / "a.txt").write_text("a\n")
+        (repo / "b.txt").write_text("b\n")
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "init"], cwd=repo)
+        write_tasks_json(repo, 2, ["a.txt", "b.txt"])
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "declare files"], cwd=repo)
+
+        (repo / "a.txt").write_text("edited\n")
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "honest edit of a declared file"], cwd=repo)
+
+        guard = render_work_assertion(self.fn_task, 2, "tasks.json")
+        result = run(guard, cwd=repo, check=False)
+        self.assertEqual(
+            result.returncode, 0,
+            f"honest commit touching a declared file must PASS: {result.stdout}{result.stderr}",
+        )
+
+    # -- (5) a task that DELETES a file it DECLARED passes (deletion is not itself the signal) -
+
+    def test_05_declared_file_deletion_passes(self):
+        root = self._scratch()
+        repo = root / "repo"
+        init_repo(repo)
+        (repo / "old.txt").write_text("old\n")
+        (repo / "keep.txt").write_text("keep\n")
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "init"], cwd=repo)
+        write_tasks_json(repo, 9, ["old.txt"])
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "declare files"], cwd=repo)
+
+        run(["git", "rm", "-q", "old.txt"], cwd=repo)
+        run(["git", "commit", "-qm", "remove old.txt, which was declared"], cwd=repo)
+
+        guard = render_work_assertion(self.fn_task, 9, "tasks.json")
+        result = run(guard, cwd=repo, check=False)
+        self.assertEqual(
+            result.returncode, 0,
+            f"deleting a DECLARED file must PASS -- deletion is not itself the signal: "
+            f"{result.stdout}{result.stderr}",
+        )
+
+    # -- (6) exemptions: engine source never calls the new guard at these commit sites ---------
+
+    def test_06_worktree_init_and_d16_fallback_commits_are_exempt(self):
+        for name, path in SOURCE_FILES.items():
+            text = path.read_text(encoding="utf-8")
+            # D16 fallback commit lines: `chore: derive tasks.json from ...` -- must not be
+            # immediately preceded by a renderWorkAssertion() call on the same commit chain.
+            for m in re.finditer(r"chore: derive tasks\.json from [^\n]*\(D16 fallback\)", text):
+                line_start = text.rfind("\n", 0, m.start()) + 1
+                prev_line_start = text.rfind("\n", 0, line_start - 1) + 1
+                context = text[prev_line_start:m.end()]
+                self.assertNotIn(
+                    "renderWorkAssertion", context,
+                    f"{name}: D16 fallback commit must stay exempt from renderWorkAssertion()",
+                )
+            # Worktree-init commit is marked explicitly in a comment -- confirm the marker is
+            # still present (its exemption is structural: the guard is simply never invoked
+            # anywhere near it).
+            self.assertIn(
+                "COMMIT-SAFETY GUARD EXEMPT", text,
+                f"{name}: worktree-init exemption marker missing",
+            )
+
+    def test_06b_vault_commit_path_is_exempt(self):
+        """The vault commit path (step 7b) is exempted outright -- see the code comment beside
+        renderWorkAssertion() for the reasoning (foreign repo, foreign HEAD~1, concurrent
+        lanes). Confirm no vault (`-C <vault path>`) commit site calls renderWorkAssertion()."""
+        for name, path in SOURCE_FILES.items():
+            text = path.read_text(encoding="utf-8")
+            for m in re.finditer(r"\$\{GIT\} -C \$\{vault\.planningPath\}[^\n]*commit -m", text):
+                line_start = text.rfind("\n", 0, m.start()) + 1
+                line = text[line_start:text.find("\n", m.end())]
+                self.assertNotIn(
+                    "renderWorkAssertion", line,
+                    f"{name}: vault commit site must not call renderWorkAssertion()",
+                )
 
 
 class GitStatusUnchangedTest(unittest.TestCase):
