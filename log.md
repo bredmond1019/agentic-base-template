@@ -9,6 +9,34 @@ records changes to the **factory** — it is never copied into generated project
 
 ## [run: 2026-08-22]
 
+### Harness sync now distributes the two newest authoring skills, and `stop-or-continue` reaches the vendor-neutral surface
+
+- **What:** `scripts/sync_downstream_harness.py` widens both slug lists — `CLAUDE_SKILL_SLUGS` gains
+  `ping-agent` and `write-repo-doc`; `AGENT_SKILL_SLUGS` gains those two plus
+  `report-to-the-operator`, which was already in the `.claude` list and in the mirror-parity test but
+  had never been named for the `.agents` surface. Created `.agents/skills/stop-or-continue/SKILL.md`,
+  the one mirror that did not exist: the slug was already listed in `AGENT_SKILL_SLUGS`, and
+  `agent_skill_files()` filters on `is_file()`, so its absence was **silent** — no downstream repo has
+  ever received it. `MirroredSkillBodiesMatch.MIRRORED` in `scripts/test_sync_downstream_harness.py`
+  gains `stop-or-continue` and `write-repo-doc`, so all nine mirrored guides are now pinned rather
+  than seven.
+- **Why:** the enumerate-per-slug design (deliberate, so an unreviewed skill is never fanned out to 18
+  repos) has no tripwire for the opposite failure — a reviewed skill that nobody adds to the list.
+  `ping-agent` shipped with BT.6.C and `write-repo-doc` with the write-repo-doc block; neither had
+  reached a single downstream repo. `stop-or-continue` shows the sharper version: listed, wanted,
+  and dropped by a silent `is_file()` filter.
+- **Effect:** the sync run that had 52 files pending went to 108 across 18 repos, all applied and
+  committed per repo. The brain root receives the skills too — `.claude/skills/` and
+  `.agents/skills/` are not gated on `engines_only`, since D54 excludes commands that diverge per
+  repo and these do not.
+- **Gates:** all 37 gating checks in `planning/harness.json` run individually, every one exit 0.
+- **Files:** `scripts/sync_downstream_harness.py`, `scripts/test_sync_downstream_harness.py`,
+  `.agents/skills/stop-or-continue/SKILL.md`.
+
+---
+
+## [run: 2026-08-22]
+
 ### Hotfix — `test_orchestration_run_contract.py` skips linked git worktrees
 
 - **What:** `discover_records()` now excludes any record inside a **linked git worktree**, detected

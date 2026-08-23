@@ -241,6 +241,8 @@ class MirroredSkillBodiesMatch(unittest.TestCase):
         "derive-state-safely",
         "run-the-gates",
         "ping-agent",
+        "stop-or-continue",
+        "write-repo-doc",
     ]
 
     def _body(self, path: Path) -> str:

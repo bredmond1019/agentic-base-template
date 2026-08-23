@@ -330,6 +330,9 @@ AGENT_SKILL_SLUGS: list[str] = [
     "derive-state-safely",
     "run-the-gates",
     "stop-or-continue",
+    "report-to-the-operator",
+    "ping-agent",
+    "write-repo-doc",
 ]
 
 
@@ -352,6 +355,8 @@ CLAUDE_SKILL_SLUGS: list[str] = [
     "derive-state-safely",
     "run-the-gates",
     "stop-or-continue",
+    "ping-agent",
+    "write-repo-doc",
 ]
 
 
