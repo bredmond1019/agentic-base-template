@@ -175,7 +175,11 @@ Each of these exists because it has already caused a real failure in this fleet.
     **Re-stamp both heartbeats at this same boundary.** Before releasing, update the registry
     claim's `heartbeat` field (`<lock_dir>/lane-agents/agent-<agent_name>.json`) to the current
     time; after re-taking, update the lease's `heartbeat` field
-    (`<lock_dir>/leases/lease-<repo>.json`) the same way. **Leave `started_at` (on the claim) and
+    (`<lock_dir>/leases/lease-<repo>.json`) the same way. **At that same claim update, if the claim
+    carries the optional `current_block` and `block_started_at` fields, re-stamp them too** — set
+    `current_block` to the id of the block about to launch and `block_started_at` to the current
+    time, in the same write as `heartbeat`, not a separate one. Both fields are optional; a claim
+    without them is unaffected. **Leave `started_at` (on the claim) and
     `acquired_at` (on the lease) alone** — those are acquisition timestamps, not liveness signals,
     and re-stamping them destroys the record of when the claim or lease was actually taken (the
     exact data loss `BT.ticket.lane-claim-and-lease-have-no-heartbeat` fixed: a lease heartbeated
@@ -538,7 +542,9 @@ Cheap, and it catches anything that changed outside the chain.
 
 **This is the block boundary — release the lease, drain the inbox, re-take the lease, and
 re-stamp both heartbeats** (rule 10): before releasing, re-stamp the registry claim's `heartbeat`
-(`<lock_dir>/lane-agents/agent-<agent_name>.json`); release
+(`<lock_dir>/lane-agents/agent-<agent_name>.json`) — and, if the claim carries the optional
+`current_block`/`block_started_at` fields, re-stamp those too, to the next block's id and now,
+in the same write; release
 `<lock_dir>/leases/lease-<repo>.json`; drain `<lock_dir>/queue/<repo>/<lane>/` via
 `drain_queue()`/`complete_message()`; re-take the lease and re-stamp its `heartbeat` before
 launching the next engine. Leave `started_at` and `acquired_at` untouched — see rule 10. If

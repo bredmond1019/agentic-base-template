@@ -190,6 +190,11 @@ Each of these exists because it has already caused a real failure in this fleet.
     mid-block, because a lane stopped mid-block loses exactly the context that cannot be written
     down — the lease release and the drain both wait for a point where nothing is in flight.
 
+    **At that same claim re-stamp, if the claim carries the optional `current_block` and
+    `block_started_at` fields, update them too** — `current_block` to the id of the block about to
+    launch, `block_started_at` to the current time, in the same write as `heartbeat`, not a
+    separate pass. Both fields are optional; a claim without them is unaffected.
+
     **Leave `started_at` (on the claim) and `acquired_at` (on the lease) alone at every re-stamp.**
     Those are acquisition timestamps set once, at first claim; re-stamping them on a later
     heartbeat destroys the record of when the claim or lease was actually taken.
@@ -496,7 +501,9 @@ Cheap, and it catches anything that changed outside the chain.
 
 **This is the block boundary — release the lease, drain the inbox, re-take the lease, and
 re-stamp both heartbeats** (rule 12): before releasing, re-stamp the registry claim's `heartbeat`
-(`<lock_dir>/lane-agents/agent-<agent_name>.json`); release `<lock_dir>/leases/lease-<repo>.json`;
+(`<lock_dir>/lane-agents/agent-<agent_name>.json`) — and, if the claim carries the optional
+`current_block`/`block_started_at` fields, re-stamp those too, to the next block's id and now, in
+the same write; release `<lock_dir>/leases/lease-<repo>.json`;
 drain `<lock_dir>/queue/<repo>/<lane>/`; re-take the lease and re-stamp its `heartbeat`
 (`<lock_dir>/leases/lease-<repo>.json`) before launching the next engine. Leave `started_at` and
 `acquired_at` untouched — see rule 12. If `--stop-after` has been reached, or `--autonomy` says

@@ -215,7 +215,11 @@ Print, and stop for confirmation unless `--execute`:
 claim (`<lock_dir>/lane-agents/agent-<agent_name>.json`) and the repo lease
 (`<lock_dir>/leases/lease-<repo>.json`) each carry a `heartbeat` field. `/orchestrate`'s rule 10
 re-stamps both — the claim's `heartbeat` and the lease's `heartbeat` — each time it releases and
-re-takes the lease at a block boundary. **Leave `started_at` (on the claim) and `acquired_at` (on
+re-takes the lease at a block boundary. **At that same re-stamp, if the claim carries the optional
+`current_block` and `block_started_at` fields, update them too** — `current_block` to the id of the
+block about to start, `block_started_at` to the current time, alongside the `heartbeat` write, not
+as a separate pass. Both fields are optional; a claim without them is unaffected. **Leave
+`started_at` (on the claim) and `acquired_at` (on
 the lease) alone at every re-stamp** — those are acquisition timestamps set once, at first claim;
 re-stamping them on a later heartbeat destroys the record of when the claim or lease was actually
 taken. **This is a different clock from Step 3's fleet-concurrency re-registration above** — that
