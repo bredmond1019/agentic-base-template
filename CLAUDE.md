@@ -172,12 +172,23 @@ customizations are never touched) — keep changes here additive and well-docume
    graph wins.
 
 10. **The running engine is a snapshot — editing `.claude/` mid-session does not change the session.**
-    The Workflow harness copies the engine `.js` at launch into
+    The Workflow harness copies the engine `.js` into
     `~/.claude/projects/<proj>/<session>/workflows/scripts/sdlc-<engine>-wf_<runid>.js` and executes
     that copy. Committing an engine fix to `main` — even rebasing the running worktree onto it —
-    does **not** reliably change what the next run executes. The same holds for
-    `.claude/commands/*.md`. **Only restarting the session reliably picks the change up, and a long
+    does **not** change what the next run executes. The same holds for
+    `.claude/commands/*.md`. **Only restarting the session picks the change up, and a long
     `/orchestrate` chain cannot restart itself.**
+
+    **The snapshot is per-SESSION, not per-launch — the `-wf_<runid>` filename invites the wrong
+    inference and is the single most misleading thing about this rule.** A second Workflow call in
+    the same session does not re-read the source; it re-executes the same cached bytes, however many
+    times the engine was edited and committed in between. Measured by md5 on 2026-08-24: two launches
+    one session apart, separated by two commits that provably changed `sdlc-task.js`, produced
+    **byte-identical** snapshots (`071241e01a07ddc0e727f2d50d7a36cc` both times) against a working
+    tree at `457eb3dda65f9969307cc204734d830f` — 3 `new Date()` calls in each snapshot versus 2 in
+    the tree. So the operative consequence is stronger than "not reliably": **a block whose subject
+    IS the engine can never verify its own fix in the session that wrote it.** The fix will be on
+    disk, committed, and provably absent from the engine actually executing.
 
     **Why this rule exists rather than a note: the failure is self-concealing.** A stale engine
     emits the pre-fix command, the stage runs it faithfully, and the pre-fix failure comes back —
@@ -192,11 +203,15 @@ customizations are never touched) — keep changes here additive and well-docume
        or a script the engine shells out to. Rescoping a task's `files[]` is what finally unblocked
        the block above; the two engine-side fixes for the same bug did not.
     2. **If it must be the engine, verify the snapshot before re-running**, and read an unchanged
-       snapshot as "this re-run proves nothing" rather than as evidence about the fix:
+       snapshot as "this re-run proves nothing" rather than as evidence about the fix. Prefer md5
+       over grep — a count can match by coincidence, and an identical hash is unarguable:
        ```
-       grep -c '<a string unique to the fix>' \
-         ~/.claude/projects/<proj>/<session>/workflows/scripts/sdlc-*-wf_<runid>.js
+       md5 -q .claude/workflows/sdlc-task.js
+       md5 -q ~/.claude/projects/<proj>/<session>/workflows/scripts/sdlc-*-wf_<runid>.js
        ```
+       Equal hashes mean the snapshot IS the tree. Unequal means it is stale, and per the
+       per-session note above it will stay stale for the rest of this session — re-launching does
+       not refresh it, so go to step 3.
     3. **Otherwise record the fix as pending** in the run record and let a fresh session take it.
 
     Never conclude an engine fix "did not work" from a run whose snapshot predates it. Full evidence:
