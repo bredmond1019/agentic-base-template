@@ -367,7 +367,7 @@ end/reconcile. Before starting a heavy repo, determine this by reading the targe
 `python3 <path-to-base-template>/scripts/fleet_concurrency_check.py is-heavy --repo-path <target-repo>`
 (the JSON `category` field is `"browser-automation"` or `"native-build"`), then register it with
 that category:
-`python3 <path-to-base-template>/scripts/fleet_concurrency_check.py register --repo <name> --category <category>`.
+`python3 <path-to-base-template>/scripts/fleet_concurrency_check.py register --repo <name> --category <category> --agent <this lane's agent identity>`.
 Exit code `3` (or `"allowed": false` in the JSON output) means that category's pool is already at
 capacity (`MAX_LANES_BY_CATEGORY`: 2 browser-automation, 4 native-build) — put this repo on a
 cheap-gate block instead, or wait.
@@ -375,13 +375,18 @@ cheap-gate block instead, or wait.
 **Do not pass `--pid`.** The process running `register` is the short-lived Claude Code command
 invocation itself — it exits as soon as this step returns, so its own pid is never a valid
 liveness signal for a later process to check. Leave `pid_source` at its default (`"self"`); the
-entry is then held by **TTL (90 minutes) plus explicit release only**, never by pid liveness. If a
-heavy chain runs longer than that, **re-register periodically as a heartbeat**
-(`... register --repo <name> --category <category>` again) — registration is idempotent-refresh,
-so the same repo+category bumps `started_at` instead of consuming a second slot.
+entry is then held by **TTL (90 minutes) plus explicit release only**, never by pid liveness.
+**Pass `--agent <this lane's agent identity>`** on every `register` and `release` call — the
+entry is keyed on that identity, not on the caller's pid, which is what lets a `release` run
+from a different process than the one that registered actually free the slot. If a heavy chain
+runs longer than that, re-register periodically as a heartbeat (`... register --repo <name>
+--category <category> --agent <this lane's agent identity>` again): a repeat register for the
+SAME agent refreshes `started_at` on the existing entry in place rather than consuming a second
+slot.
 
 **The lane MUST release its slot on exit** — success, failure, or abandonment — with
-`... release --repo <name>` when the heavy repo's chain finishes. A stale entry (one past the TTL,
+`... release --repo <name> --agent <this lane's agent identity>` when the heavy repo's chain
+finishes. A stale entry (one past the TTL,
 or one with an *explicitly*-supplied `--pid` that has died) is swept automatically on the next
 registration, so a lane that dies without releasing does not block the fleet permanently — but
 release on exit is still required, since TTL is the fallback, not the norm. If the lock store
