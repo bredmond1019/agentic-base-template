@@ -160,7 +160,7 @@ def check_dependency_free() -> None:
 
     stdlib_and_local = {
         "argparse", "json", "os", "re", "sys", "datetime", "pathlib", "typing",
-        "__future__", "check_messages",
+        "__future__", "check_messages", "tomllib",
     }
     third_party = imported - stdlib_and_local
     check("check_messages.py imports no third-party package (no jsonschema)",

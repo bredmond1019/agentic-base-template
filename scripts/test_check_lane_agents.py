@@ -102,7 +102,7 @@ def check_dependency_free() -> None:
 
     stdlib_and_local = {
         "argparse", "json", "os", "re", "sys", "datetime", "pathlib", "typing",
-        "__future__", "check_lane_agents",
+        "__future__", "check_lane_agents", "tomllib",
     }
     third_party = imported - stdlib_and_local
     check("check_lane_agents.py imports no third-party package (no jsonschema)",

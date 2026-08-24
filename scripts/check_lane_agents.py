@@ -121,6 +121,69 @@ def find_brain_root(start: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
+def load_repo_paths(brain_root: Path) -> dict:
+    """slug -> absolute repo path, from brain.toml's [[repos]] table. {} if unreadable. Mirrors
+    check_lane_records.py's helper of the same name so the two scripts can never disagree about
+    which slug a given repo path resolves to."""
+    toml_path = brain_root / "brain.toml"
+    try:
+        import tomllib
+    except ImportError:  # pragma: no cover - Python < 3.11 fallback, not expected in this fleet
+        return {}
+    try:
+        with open(toml_path, "rb") as fh:
+            data = tomllib.load(fh)
+    except Exception:                               # noqa: BLE001 - report, never raise
+        return {}
+    out = {}
+    for entry in data.get("repos", []):
+        slug = entry.get("slug")
+        repo_path = entry.get("repo_path")
+        if slug and repo_path:
+            out[slug] = (brain_root / repo_path).resolve()
+    return out
+
+
+def resolve_own_repo(explicit: Optional[str] = None, start: Optional[Path] = None) -> Optional[str]:
+    """The repo slug THIS checker run is attributed to (BT.ticket.fleet-wide-gates-red-on-
+    another-lanes-data) -- used to scope the GATING VERDICT to this repo's own records while
+    still reporting every record the scan finds, fleet-wide. Precedence: explicit `--repo`, else
+    the brain.toml `[[repos]]` slug whose `repo_path` resolves to `start` (default: cwd).
+
+    Returns None when it cannot be determined -- callers must then treat every record as OWN
+    (fail closed): narrowing the verdict without knowing which repo "this one" is would silently
+    waive every foreign-looking record instead of gating on all of them, which is the wrong
+    direction to fail in."""
+    if explicit:
+        return explicit
+    brain_root = find_brain_root(start)
+    if brain_root is None:
+        return None
+    repo_paths = load_repo_paths(brain_root)
+    here = (start or Path.cwd()).resolve()
+    for slug, path in repo_paths.items():
+        if path == here:
+            return slug
+    return None
+
+
+def _record_repo(record) -> Optional[str]:
+    """The `repo` field a record declares, or None if the record is not a dict or the field is
+    missing/not a string -- ownership can't be determined for it either way."""
+    if isinstance(record, dict):
+        v = record.get("repo")
+        if isinstance(v, str) and v:
+            return v
+    return None
+
+
+def is_foreign(record_repo: Optional[str], own_repo: Optional[str]) -> bool:
+    """True only when BOTH `record_repo` and `own_repo` are known and they differ. The
+    fail-closed default -- `own_repo` unresolved, or a record with no readable `repo` field --
+    is False (treated as OWN, so it still gates); never silently treated as foreign."""
+    return own_repo is not None and record_repo is not None and record_repo != own_repo
+
+
 def resolve_lock_dir(explicit: Optional[str] = None) -> Optional[Path]:
     """Resolve the shared lock directory. Precedence: explicit --lock-dir, then FLEET_LOCK_DIR
     env var, then a brain.toml discovered by walking up from cwd. Returns None (never raises) if
@@ -273,9 +336,18 @@ def _load(path: Path):
 
 # --- main check pass ------------------------------------------------------------------------
 
-def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None) -> int:
+def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None,
+        repo: Optional[str] = None) -> int:
+    """`repo`, if given, pins the repo this run is attributed to (else resolved from cwd via
+    brain.toml -- see `resolve_own_repo`). A record whose own `repo` field differs from that is
+    FOREIGN: still fully validated and still printed under FAIL, but it does not add to `failed`
+    and therefore cannot flip the exit code (BT.ticket.fleet-wide-gates-red-on-another-lanes-
+    data) -- reporting is unchanged, only the gating verdict is scoped."""
+    own_repo = resolve_own_repo(repo)
+
     total = 0
     failed = 0
+    foreign_failed = 0
     lines = []
 
     registry_files = discover_registry_files(lock_dir) if lock_dir else []
@@ -294,8 +366,13 @@ def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None) -
                     f"ListAgents is the caller's job, not this checker's"
                 )
         if problems:
-            failed += 1
-            lines.append(f"FAIL {path}")
+            foreign = is_foreign(_record_repo(record), own_repo)
+            if foreign:
+                foreign_failed += 1
+            else:
+                failed += 1
+            tag = " [FOREIGN -- reported, not gating]" if foreign else ""
+            lines.append(f"FAIL {path}{tag}")
             lines.extend(f"       {p}" for p in problems)
         elif not quiet:
             lines.append(f"ok   {path}")
@@ -315,28 +392,40 @@ def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None) -
                     f"ListAgents is the caller's job, not this checker's"
                 )
         if problems:
-            failed += 1
-            lines.append(f"FAIL {path}")
+            foreign = is_foreign(_record_repo(record), own_repo)
+            if foreign:
+                foreign_failed += 1
+            else:
+                failed += 1
+            tag = " [FOREIGN -- reported, not gating]" if foreign else ""
+            lines.append(f"FAIL {path}{tag}")
             lines.extend(f"       {p}" for p in problems)
         else:
             valid_leases.append((path, record))
             if not quiet:
                 lines.append(f"ok   {path}")
 
-    # Duplicate-exclusive-lease detection, over records that individually validated.
+    # Duplicate-exclusive-lease detection, over records that individually validated. Both
+    # claimants share the same `repo` (the dict key), so that key is what ownership is judged
+    # against.
     by_repo: dict = {}
     for path, record in valid_leases:
         by_repo.setdefault(record["repo"], []).append((path, record))
 
-    for repo, entries in by_repo.items():
+    for repo_key, entries in by_repo.items():
         exclusive = [(p, r) for p, r in entries if r.get("kind") == "exclusive"]
         if len(exclusive) > 1:
-            failed += 1
+            foreign = is_foreign(repo_key, own_repo)
+            if foreign:
+                foreign_failed += 1
+            else:
+                failed += 1
+            tag = " [FOREIGN -- reported, not gating]" if foreign else ""
             claimants = ", ".join(
                 f"lane `{r['lane']}` agent `{r['agent']}` ({p})" for p, r in exclusive
             )
             lines.append(
-                f"FAIL duplicate exclusive lease(s) on repo `{repo}`: {claimants}"
+                f"FAIL duplicate exclusive lease(s) on repo `{repo_key}`: {claimants}{tag}"
             )
 
     for line in lines:
@@ -346,7 +435,11 @@ def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None) -
         print("no lane-agent records found (not a failure)")
         return 0
 
-    print(f"\n{total} record(s) checked, {failed} failed")
+    if foreign_failed:
+        print(f"\n{total} record(s) checked, {failed} failed (own-repo, gating) + "
+              f"{foreign_failed} failed (foreign repo, reported only, not gating)")
+    else:
+        print(f"\n{total} record(s) checked, {failed} failed")
     return 1 if failed else 0
 
 
@@ -355,10 +448,13 @@ def main() -> int:
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--lock-dir", default=None)
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--repo", default=None,
+                     help="pin the repo this run is attributed to for gating-verdict scoping "
+                          "(default: resolved from cwd via brain.toml's [[repos]] table)")
     args = ap.parse_args()
 
     lock_dir = resolve_lock_dir(args.lock_dir)
-    return run(lock_dir, args.quiet)
+    return run(lock_dir, args.quiet, repo=args.repo)
 
 
 if __name__ == "__main__":

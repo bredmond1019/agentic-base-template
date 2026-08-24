@@ -38,6 +38,19 @@ Amendment Log. It is intentionally NOT registered in `planning/harness.json` yet
 task 5, once the fix has actually landed) -- a red gate would block every unrelated task in
 this same spec from committing.
 
+VERDICT SCOPED TO THIS REPO'S OWN SUBTREE (BT.ticket.fleet-wide-gates-red-on-another-lanes-data)
+---------------------------------------------------------------------------------------------
+This script's INPUT is fleet-shared state -- every repo's `harness.json`, discovered by walking
+the whole brain root. Per D64's push-gate delta-attribution rule, now applied to this Test-stage
+check too: the SCAN stays fleet-wide (every file is still discovered, evaluated, and printed),
+but the GATING VERDICT (the exit code) is scoped to this repo's own subtree -- base-template's
+own live `harness.json` and its own scaffold-template invariant. A broken resolution, a content
+mismatch, or a fleet-wide census drift (`LIVE_EXPECTED_FILES`, `MIN_EXPECTED_FILES`) caused by
+ANOTHER repo landing, moving, or breaking is still printed under `FAILURE:`/`BROKEN`, but does
+NOT fail this run -- that is instance (2) from the block record's `why`: core/jynx landing
+elsewhere flipped the census 18 vs 19 and bailed a task that touched neither file. Only a result
+where `is_own_repo_config()` is true (base-template's own live config) can set the exit code.
+
 THE SCAFFOLD TEMPLATE IS NOT A LIVE CONFIG
 -------------------------------------------
 `base-template/scaffold/planning/harness.json` is discovered by the walk like every other
@@ -138,6 +151,20 @@ _SCAFFOLD_SUFFIX = os.path.join("base-template", "scaffold", "planning", "harnes
 def is_scaffold_template(lexical_path: str) -> bool:
     """True if `lexical_path` is the scaffold template, not a live project config."""
     return os.path.normpath(lexical_path).endswith(_SCAFFOLD_SUFFIX)
+
+
+# Suffix identifying THIS repo's (base-template's) own live harness.json, distinct from the
+# scaffold template above (`base-template/scaffold/planning/harness.json`) even though both
+# path strings contain "base-template".
+_OWN_REPO_SUFFIX = os.path.join("base-template", "planning", "harness.json")
+
+
+def is_own_repo_config(lexical_path: str) -> bool:
+    """True only for base-template's own live harness.json -- never the scaffold stub, which
+    also lives under `base-template/` but is a template, not a live config (see
+    `is_scaffold_template`)."""
+    norm = os.path.normpath(lexical_path)
+    return norm.endswith(_OWN_REPO_SUFFIX) and not is_scaffold_template(lexical_path)
 
 
 def find_brain_root(start: str) -> str:
@@ -270,7 +297,12 @@ def main() -> int:
     raw_paths = discover_harness_json(brain_root)
     canonical = group_by_physical_location(raw_paths)
 
+    # `failures` is REPORTED and GATING (own-repo concerns: this script's own discovery
+    # mechanism, and base-template's own scaffold-template invariant -- neither is "another
+    # repo's data"). `reported_only` is REPORTED but NEVER gating: a fleet-wide census that
+    # drifted because some OTHER repo landed, moved, or removed a harness.json.
     failures: list[str] = []
+    reported_only: list[str] = []
 
     if len(canonical) < MIN_EXPECTED_FILES:
         failures.append(
@@ -296,28 +328,47 @@ def main() -> int:
         )
 
     if len(live_results) != LIVE_EXPECTED_FILES:
-        failures.append(
+        # FLEET-WIDE CENSUS, NOT AN OWN-REPO CONCERN (BT.ticket.fleet-wide-gates-red-on-
+        # another-lanes-data, measured instance 2): this count moves whenever ANY repo's
+        # harness.json is added or removed, so gating base-template's own run on it makes
+        # every lane's landing/retiring a repo bail base-template. Reported only.
+        reported_only.append(
             f"LIVE CONFIG COUNT: expected exactly {LIVE_EXPECTED_FILES} live harness.json "
-            f"configs (excluding the scaffold template), found {len(live_results)}."
+            f"configs (excluding the scaffold template), found {len(live_results)}. This is a "
+            "fleet-wide census, not necessarily base-template's own regression -- not gating."
         )
 
     broken_physical: list[Result] = []
     broken_lexical: list[Result] = []
+    own_broken_physical: list[Result] = []
+    own_broken_lexical: list[Result] = []
     content_errors: list[str] = []
+    own_content_errors: list[str] = []
 
     for r in live_results:
+        is_own = is_own_repo_config(r.lexical_path)
         if not r.physical_ok:
             broken_physical.append(r)
+            if is_own:
+                own_broken_physical.append(r)
         else:
             err = validate_schema_content(r.physical_target)
             if err:
-                content_errors.append(f"[physical] {err}")
+                tagged = f"[physical] {err}"
+                content_errors.append(tagged)
+                if is_own:
+                    own_content_errors.append(tagged)
         if not r.lexical_ok:
             broken_lexical.append(r)
+            if is_own:
+                own_broken_lexical.append(r)
         else:
             err = validate_schema_content(r.lexical_target)
             if err:
-                content_errors.append(f"[lexical] {err}")
+                tagged = f"[lexical] {err}"
+                content_errors.append(tagged)
+                if is_own:
+                    own_content_errors.append(tagged)
 
     print(f"Discovered {len(canonical)} distinct harness.json files "
           f"({len(raw_paths)} raw paths before dedup) under {brain_root}: "
@@ -333,30 +384,61 @@ def main() -> int:
     print(f"PHYSICAL face (realpath-canonicalized): {len(live_results) - len(broken_physical)}/"
           f"{len(live_results)} live configs resolve")
     for r in broken_physical:
-        print(f"  BROKEN (physical): {r.physical_dir}/harness.json -> {r.physical_target}")
+        own_tag = "" if is_own_repo_config(r.lexical_path) else " [FOREIGN -- reported, not gating]"
+        print(f"  BROKEN (physical): {r.physical_dir}/harness.json -> {r.physical_target}{own_tag}")
 
     print(f"\nLEXICAL face (planning/ symlink face, textual normalisation): "
           f"{len(live_results) - len(broken_lexical)}/{len(live_results)} live configs resolve")
     for r in broken_lexical:
-        print(f"  BROKEN (lexical):  {r.lexical_path} -> {r.lexical_target}")
+        own_tag = "" if is_own_repo_config(r.lexical_path) else " [FOREIGN -- reported, not gating]"
+        print(f"  BROKEN (lexical):  {r.lexical_path} -> {r.lexical_target}{own_tag}")
 
     if content_errors:
         print("\nSchema content mismatches on resolved targets:")
         for err in content_errors:
-            print(f"  {err}")
+            own_tag = "" if err in own_content_errors else " [FOREIGN -- reported, not gating]"
+            print(f"  {err}{own_tag}")
 
     if failures:
         print()
         for f in failures:
             print(f"FAILURE: {f}")
 
-    if broken_physical or broken_lexical or failures or content_errors:
+    if reported_only:
+        print()
+        for f in reported_only:
+            print(f"REPORTED (foreign, not gating): {f}")
+
+    # GATING VERDICT: scoped to base-template's own subtree -- own-repo broken resolution/
+    # content, plus the own-repo concerns in `failures` (discovery health, scaffold invariant).
+    # Anything foreign (broken_physical/broken_lexical/content_errors entries that are not in
+    # the "own_*" lists, and everything in `reported_only`) is printed above but never sets the
+    # exit code -- see the module docstring's "VERDICT SCOPED TO THIS REPO'S OWN SUBTREE".
+    gating_failed = bool(own_broken_physical or own_broken_lexical or own_content_errors or failures)
+
+    total_broken_physical = len(broken_physical)
+    total_broken_lexical = len(broken_lexical)
+    total_content_errors = len(content_errors)
+
+    if gating_failed:
         print(
-            f"\nFAIL: {len(broken_physical)} broken on the physical face, "
-            f"{len(broken_lexical)} broken on the lexical face, "
-            f"{len(content_errors)} content mismatch(es)."
+            f"\nFAIL: {len(own_broken_physical)} broken on the physical face (own repo), "
+            f"{len(own_broken_lexical)} broken on the lexical face (own repo), "
+            f"{len(own_content_errors)} content mismatch(es) (own repo). "
+            f"[fleet-wide totals: {total_broken_physical} physical, {total_broken_lexical} "
+            f"lexical, {total_content_errors} content -- foreign entries reported above, not "
+            f"gating]"
         )
         return 1
+
+    if broken_physical or broken_lexical or content_errors or reported_only:
+        print(
+            f"\nPASS (own subtree clean): {total_broken_physical} broken on the physical face, "
+            f"{total_broken_lexical} broken on the lexical face, {total_content_errors} content "
+            f"mismatch(es) reported fleet-wide, all belonging to other repos -- not gating this "
+            f"run."
+        )
+        return 0
 
     print(f"\nPASS: all {len(live_results)} live harness.json files resolve on both faces "
           f"(1 scaffold template reported separately, asserted at its destination instead).")

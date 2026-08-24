@@ -107,6 +107,70 @@ def find_brain_root(start: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
+def load_repo_paths(brain_root: Path) -> dict:
+    """slug -> absolute repo path, from brain.toml's [[repos]] table. {} if unreadable. Mirrors
+    check_lane_agents.py's helper of the same name so the two scripts can never disagree about
+    which slug a given repo path resolves to."""
+    toml_path = brain_root / "brain.toml"
+    try:
+        import tomllib
+    except ImportError:  # pragma: no cover - Python < 3.11 fallback, not expected in this fleet
+        return {}
+    try:
+        with open(toml_path, "rb") as fh:
+            data = tomllib.load(fh)
+    except Exception:                               # noqa: BLE001 - report, never raise
+        return {}
+    out = {}
+    for entry in data.get("repos", []):
+        slug = entry.get("slug")
+        repo_path = entry.get("repo_path")
+        if slug and repo_path:
+            out[slug] = (brain_root / repo_path).resolve()
+    return out
+
+
+def resolve_own_repo(explicit: Optional[str] = None, start: Optional[Path] = None) -> Optional[str]:
+    """The repo slug THIS checker run is attributed to (BT.ticket.fleet-wide-gates-red-on-
+    another-lanes-data) -- used to scope the GATING VERDICT to this repo's own queue while still
+    reporting every queue the scan finds, fleet-wide. Precedence: explicit `--repo`, else the
+    brain.toml `[[repos]]` slug whose `repo_path` resolves to `start` (default: cwd).
+
+    Returns None when it cannot be determined -- callers must then treat every message as OWN
+    (fail closed): narrowing the verdict without knowing which repo "this one" is would silently
+    waive every foreign-looking queue instead of gating on all of them."""
+    if explicit:
+        return explicit
+    brain_root = find_brain_root(start)
+    if brain_root is None:
+        return None
+    repo_paths = load_repo_paths(brain_root)
+    here = (start or Path.cwd()).resolve()
+    for slug, path in repo_paths.items():
+        if path == here:
+            return slug
+    return None
+
+
+def queue_repo(queue_dir: Path) -> Optional[str]:
+    """The repo a queue directory belongs to: THE RECIPIENT IS THE DIRECTORY (see module
+    docstring) -- a message's ownership for gating purposes is the `<repo>` component of
+    `<lock_dir>/queue/<repo>/<lane>/` it sits in, never its `sender.repo` or `subject.repo`
+    (a sender can write into another repo's inbox on purpose, and `subject.repo` names the block
+    the message is ABOUT, not whose queue is being checked). Returns None if `queue_dir`'s parent
+    chain does not look like `queue/<repo>/<lane>/`."""
+    if queue_dir.parent.parent.name != QUEUE_SUBDIR:
+        return None
+    return queue_dir.parent.name
+
+
+def is_foreign(record_repo: Optional[str], own_repo: Optional[str]) -> bool:
+    """True only when BOTH `record_repo` and `own_repo` are known and they differ. The
+    fail-closed default -- `own_repo` unresolved, or a queue whose repo can't be determined --
+    is False (treated as OWN, so it still gates); never silently treated as foreign."""
+    return own_repo is not None and record_repo is not None and record_repo != own_repo
+
+
 def resolve_lock_dir(explicit: Optional[str] = None) -> Optional[Path]:
     """Resolve the shared lock directory. Precedence: explicit --lock-dir, then FLEET_LOCK_DIR
     env var, then a brain.toml discovered by walking up from cwd. Returns None (never raises) if
@@ -366,19 +430,33 @@ def complete_message(queue_dir: Path, message_id: str) -> bool:
 
 # --- main check pass ------------------------------------------------------------------------
 
-def _check_one_queue(queue_dir: Path, quiet: bool) -> tuple:
+def _check_one_queue(queue_dir: Path, quiet: bool, own_repo: Optional[str]) -> tuple:
     """Validate every message file in one queue's inbox/processing/done directories against the
     schema, the filename<->message_id identity, and the receipt-backed layout invariant. Returns
-    (total, failed, lines)."""
+    (total, failed, foreign_failed, lines).
+
+    Ownership for gating purposes is `queue_repo(queue_dir)` -- see that function's docstring --
+    applied uniformly to every finding in this queue, including a malformed receipts.jsonl line:
+    a foreign queue's problems are still fully validated and printed under FAIL, but do not add
+    to `failed` and therefore cannot flip the exit code (BT.ticket.fleet-wide-gates-red-on-
+    another-lanes-data)."""
     total = 0
     failed = 0
+    foreign_failed = 0
     lines: list = []
+
+    this_queue_repo = queue_repo(queue_dir)
+    foreign = is_foreign(this_queue_repo, own_repo)
+    tag = " [FOREIGN -- reported, not gating]" if foreign else ""
 
     receipts = load_receipts(queue_dir)
     for r in receipts:
         if "_error" in r:
-            failed += 1
-            lines.append(f"FAIL {r['_error']}")
+            if foreign:
+                foreign_failed += 1
+            else:
+                failed += 1
+            lines.append(f"FAIL {r['_error']}{tag}")
     counts = _receipt_counts(receipts)
 
     for state in STATE_DIRS:
@@ -437,26 +515,39 @@ def _check_one_queue(queue_dir: Path, quiet: bool) -> tuple:
                         )
 
             if problems:
-                failed += 1
-                lines.append(f"FAIL {path}")
+                if foreign:
+                    foreign_failed += 1
+                else:
+                    failed += 1
+                lines.append(f"FAIL {path}{tag}")
                 lines.extend(f"       {p}" for p in problems)
             elif not quiet:
                 lines.append(f"ok   {path}")
 
-    return total, failed, lines
+    return total, failed, foreign_failed, lines
 
 
-def run(lock_dir: Optional[Path], quiet: bool) -> int:
+def run(lock_dir: Optional[Path], quiet: bool, repo: Optional[str] = None) -> int:
+    """`repo`, if given, pins the repo this run is attributed to (else resolved from cwd via
+    brain.toml -- see `resolve_own_repo`). A queue belonging to another repo (`queue_repo()`
+    differs from the attributed repo) is FOREIGN: still fully validated and still printed under
+    FAIL, but it does not add to `failed` and therefore cannot flip the exit code
+    (BT.ticket.fleet-wide-gates-red-on-another-lanes-data) -- reporting is unchanged, only the
+    gating verdict is scoped."""
+    own_repo = resolve_own_repo(repo)
+
     total = 0
     failed = 0
+    foreign_failed = 0
     lines: list = []
 
     queues = discover_queues(lock_dir) if lock_dir else []
 
     for queue_dir in queues:
-        q_total, q_failed, q_lines = _check_one_queue(queue_dir, quiet)
+        q_total, q_failed, q_foreign_failed, q_lines = _check_one_queue(queue_dir, quiet, own_repo)
         total += q_total
         failed += q_failed
+        foreign_failed += q_foreign_failed
         lines.extend(q_lines)
 
     for line in lines:
@@ -466,7 +557,11 @@ def run(lock_dir: Optional[Path], quiet: bool) -> int:
         print("no message records found (not a failure)")
         return 0
 
-    print(f"\n{total} record(s) checked, {failed} failed")
+    if foreign_failed:
+        print(f"\n{total} record(s) checked, {failed} failed (own-repo, gating) + "
+              f"{foreign_failed} failed (foreign repo, reported only, not gating)")
+    else:
+        print(f"\n{total} record(s) checked, {failed} failed")
     return 1 if failed else 0
 
 
@@ -475,10 +570,13 @@ def main() -> int:
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--lock-dir", default=None)
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--repo", default=None,
+                     help="pin the repo this run is attributed to for gating-verdict scoping "
+                          "(default: resolved from cwd via brain.toml's [[repos]] table)")
     args = ap.parse_args()
 
     lock_dir = resolve_lock_dir(args.lock_dir)
-    return run(lock_dir, args.quiet)
+    return run(lock_dir, args.quiet, repo=args.repo)
 
 
 if __name__ == "__main__":
