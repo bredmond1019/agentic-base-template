@@ -917,17 +917,30 @@ async function writeTaskState(label, { cwd }) {
         entries.splice(branchIdx + 1, 0, ['started_at', cachedStartedAt])
         return Object.fromEntries(entries)
       })(), null, 2)
+  // The two JS-side `state.bails` mutation sites (inline bail-assignment, terminal reconcile —
+  // BT.ticket.bails-must-not-mint-time-in-the-engine) have no JS clock legal under the Workflow
+  // runtime shim, so they stamp the same "__BAIL_OCCURRED_AT__" sentinel buildBailPayload already
+  // uses and leave it in the LIVE `state` object for this dedicated writer to resolve — this is
+  // the ONLY place either sentinel ever reaches disk from that route, so the substitution below is
+  // what keeps the guarantee that no bails[] entry persists with it unresolved.
+  const bailOccurredAtNote = stateJson.includes('__BAIL_OCCURRED_AT__')
+    ? `\n\nThe object below also contains one or more literal "__BAIL_OCCURRED_AT__" placeholder
+  strings inside \`bails[]\` entries (a JS-side bail was just recorded, which has no shim-legal
+  clock of its own). Replace EVERY occurrence of that exact literal with NOW — the same value you
+  read as the first line of STEP 1's output — in this SAME turn, alongside the
+  started_at/updated_at insertion. Never leave one unresolved on disk.`
+    : ''
   const stepTwoText = firstWrite
     ? `STEP 2 — write ${stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
   "started_at" (preserved or NOW, per STEP 1) and "updated_at" (NOW) right after "branch". Valid JSON only
   (double quotes, no trailing commas, no markdown fences). The object to write (verbatim except for
-  adding those two timestamp keys):
+  adding those two timestamp keys):${bailOccurredAtNote}
 ${stateJson}`
     : `STEP 2 — write ${stateFile} with EXACTLY this JSON, but inserting exactly one extra top-level
   key: "updated_at" (NOW), right after "started_at" (already present in the object below,
   immediately after "branch" — it was set from the value given in STEP 1). Valid JSON only
   (double quotes, no trailing commas, no markdown fences). The object to write (verbatim except for
-  adding that one timestamp key):
+  adding that one timestamp key):${bailOccurredAtNote}
 ${stateJson}`
   const result = await agent(`
 You maintain the run-state for an /sdlc-task pipeline. You run from the run root. Write ONE JSON
@@ -1981,7 +1994,7 @@ Return via StructuredOutput:
   // resume merge below can recover this run's bail even on the rare path where the dedicated
   // `bails` read comes back empty; the merge deletes it the moment it is consumed, so it is
   // transient scaffolding, never load-bearing on its own.
-  if (bailed && !taskPassed) { state.status = 'blocked'; state.bail_reason = bailReason }; if (bailed && !taskPassed) { const bailEntry = { occurred_at: new Date().toISOString(), task_id: state.current_task, check_id: null, failing_artifact: null, ownership: null, bail_class: null, reason: bailReason, resolution: null }; state.bails = [...state.bails, bailEntry]; state.tasks.__pendingBails = [...(state.tasks.__pendingBails || []), bailEntry] }
+  if (bailed && !taskPassed) { state.status = 'blocked'; state.bail_reason = bailReason }; if (bailed && !taskPassed) { const bailEntry = { occurred_at: '__BAIL_OCCURRED_AT__', task_id: state.current_task, check_id: null, failing_artifact: null, ownership: null, bail_class: null, reason: bailReason, resolution: null }; state.bails = [...state.bails, bailEntry]; state.tasks.__pendingBails = [...(state.tasks.__pendingBails || []), bailEntry] }
   // Reliability net: either the pass-path fold (runTests' onPass) or the terminal-bail fold
   // (triage's onBail) already wrote sdlc-task-state.json in the SAME turn as the resolving
   // test/triage call when taskStateWritten is true — skip the dedicated writer in that case.
@@ -2104,7 +2117,7 @@ if (reconcileFailed) {
   const reconcileBailReason = `Terminal reconcile failed (D56): ${reconcileFailBlob}`
   // APPEND-ONLY (BT.ticket.bails-must-be-append-only) — no task to attribute this to (D56: it
   // fires after every task already passed its own tripwire), so task_id stays null.
-  state.bails = [...state.bails, { occurred_at: new Date().toISOString(), task_id: null, check_id: 'terminal-reconcile', failing_artifact: null, ownership: null, bail_class: null, reason: reconcileBailReason, resolution: null }]
+  state.bails = [...state.bails, { occurred_at: '__BAIL_OCCURRED_AT__', task_id: null, check_id: 'terminal-reconcile', failing_artifact: null, ownership: null, bail_class: null, reason: reconcileBailReason, resolution: null }]
   state.bail_reason = reconcileBailReason
 }
 
