@@ -277,6 +277,87 @@ r=0
 grep -qi "empty" "$DRAIN_LOG_OUT" || r=1
 check "empty inbox: drain exits 0, stamps the heartbeat, and logs that it was empty" "$r"
 
+# ==============================================================================================
+# Cases 6-12: BT.ticket.commander-prompt-must-read-the-board — the command file must instruct
+# the drain to read the open-work board FIRST, report a recurring finding as an instance count
+# against the existing row rather than a new row, and carry a forward-looking note naming the
+# eventual bail-record source. Each positive assertion is paired with a NEGATIVE FIXTURE: a copy
+# of the real (fixed) command file with exactly that instruction stripped back out — i.e. the
+# fix reverted in-process — so the assertion is shown capable of failing, not only of matching.
+# ==============================================================================================
+
+CMD_FILE="$REPO_ROOT/.claude/commands/orchestration-commander.md"
+CMD_SCRATCH="$WORK/cmd_fixtures"
+mkdir -p "$CMD_SCRATCH"
+
+# --- assertion 1: step 1 names planning/open-work/index.md as a read, before the queue sweep ---
+check_step1_reads_board() { # check_step1_reads_board <file> -> 0 if the board read precedes the sweep
+  local f="$1"
+  # Slice from the "### 1." header up to (not including) the queue-sweep invocation; the board
+  # read must appear somewhere in that slice, i.e. before the sweep runs.
+  awk '/^### 1\./{flag=1} flag{print} /check_messages\.py --quiet/{exit}' "$f" \
+    | grep -q 'planning/open-work/index\.md'
+}
+
+r=0; check_step1_reads_board "$CMD_FILE" || r=1
+check "step 1 names planning/open-work/index.md as a read, before the queue sweep" "$r"
+
+# Negative fixture: strip the step-0 board-read paragraph back out (revert the fix in-process).
+FIXTURE_NO_STEP0="$CMD_SCRATCH/no-step0-board-read.md"
+awk '
+  /^\*\*0\. Read the open-work board FIRST/ { skip=1 }
+  skip && /^\*\*a\. Validate every message record/ { skip=0 }
+  !skip { print }
+' "$CMD_FILE" > "$FIXTURE_NO_STEP0"
+
+r=0; check_step1_reads_board "$FIXTURE_NO_STEP0" && r=1
+check "negative fixture (step-0 board read removed) fails the same assertion" "$r"
+
+# --- assertion 2: a recurring item is reported as an instance count against the existing row ---
+check_instance_count_instruction() { # 0 if the instance-count instruction is present
+  grep -qF 'instance N of <row>' "$1"
+}
+
+r=0; check_instance_count_instruction "$CMD_FILE" || r=1
+check "command instructs reporting a recurring item as an instance count against the existing row" "$r"
+
+FIXTURE_NO_INSTANCE="$CMD_SCRATCH/no-instance-count.md"
+grep -vF 'instance N of <row>' "$CMD_FILE" \
+  | grep -v 'A recurring cause updates its existing row instead of appending a new one' \
+  | grep -v 'Before filing any of the four cases below as a fresh finding' \
+  > "$FIXTURE_NO_INSTANCE"
+
+r=0; check_instance_count_instruction "$FIXTURE_NO_INSTANCE" && r=1
+check "negative fixture (instance-count instruction removed) fails the same assertion" "$r"
+
+# --- assertion 3: a forward-looking note names the bail record by block id -----------------
+check_forward_looking_note() { # 0 if the note names the bail-record block id
+  grep -qF 'BT.ticket.bails-must-be-append-only' "$1"
+}
+
+r=0; check_forward_looking_note "$CMD_FILE" || r=1
+check "forward-looking note names BT.ticket.bails-must-be-append-only as the eventual count source" "$r"
+
+FIXTURE_NO_NOTE="$CMD_SCRATCH/no-forward-note.md"
+grep -vF 'BT.ticket.bails-must-be-append-only' "$CMD_FILE" > "$FIXTURE_NO_NOTE"
+
+r=0; check_forward_looking_note "$FIXTURE_NO_NOTE" && r=1
+check "negative fixture (forward-looking note removed) fails the same assertion" "$r"
+
+# --- assertion 4: the quiet-pass one-line report rule is byte-unchanged ---------------------
+QUIET_PASS_EXPECTED='Silence on the empty lines is the normal case for most of the ~48+ drains a day; do not pad the
+report to look busy.'
+
+check_quiet_pass_unchanged() { # 0 if the exact two-line rule is present verbatim
+  local f="$1"
+  local actual
+  actual="$(awk '/^Silence on the empty lines/{flag=1} flag{print} flag && /report to look busy\.$/{exit}' "$f")"
+  [ "$actual" = "$QUIET_PASS_EXPECTED" ]
+}
+
+r=0; check_quiet_pass_unchanged "$CMD_FILE" || r=1
+check "quiet-pass one-line report rule is byte-unchanged" "$r"
+
 # footer --------------------------------------------------------------------------------------
 echo
 if [ "$fail" -eq 0 ]; then echo "ALL PASS ($n cases)"; else echo "FAILURES ($n cases)"; fi

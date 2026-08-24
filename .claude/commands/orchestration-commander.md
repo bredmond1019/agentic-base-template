@@ -18,6 +18,16 @@ why that is deliberate, not a limitation.
 — a drain is a Claude turn with shell access, not a Python process, so naming a function is not an
 instruction a drain can execute. Everything below is a **shell command**, run as written.
 
+**0. Read the open-work board FIRST — before the queue sweep in (a), before anything else in this
+drain.** `planning/open-work/index.md` is the fleet's single durable listing of every named
+recovery item and alert a past drain has already surfaced and left open. Read its open rows now,
+so every later step in this drain already knows what has been found before, and a repeat can be
+reported as an instance of an existing row (see steps 4-5) instead of being rediscovered from
+scratch. Measured cost of skipping this: a finding written to this board at 05:45Z was
+re-diagnosed from first principles five hours later by a different role, because that role never
+read the board before it started. If `planning/open-work/index.md` does not exist yet, note that
+and continue — step 5 creates it on the first drain that needs it.
+
 **a. Validate every message record and layout invariant across every lane, not just this one's.**
 ```
 python3 scripts/check_messages.py --quiet
@@ -148,6 +158,12 @@ Every path left in the remainder is **authored** — a human or an agent wrote i
 pure function of `state.json` — so it is **surfaced, never touched**. Route each one by lease
 state, checking case 0 first, then falling through to exactly three more cases:
 
+**Before filing any of the four cases below as a fresh finding, check it against the open-work
+board read in step 1.** If this repo/cause already has an open row on `planning/open-work/index.md`,
+report this occurrence as `instance N of <row>` and update that row's count — never append a new
+row for a cause already on the board. Re-deriving a finding that is already written down is
+costly and invisible, because it looks exactly like fresh work while producing nothing new.
+
 0. **No lease on the repo, but a live lane elsewhere is a known cross-repo writer.** Before
    reaching for case 3's alert, check whether the file's dirty repo holds no lease *because* some
    other live lane — found the same way case 1/2 already find one, by joining `ListAgents` against
@@ -248,6 +264,19 @@ past drain, not just this one. Append/update rather than rewrite: an item closes
 resolves it or a later drain observes it gone, not when a newer drain simply forgets to relist it.
 Create the file (with OKF frontmatter — this repo's standing rule 5) and its `planning/index.md`
 row on the first drain that needs it.
+
+**A recurring cause updates its existing row instead of appending a new one.** When step 4 matched
+this occurrence against a row already open on the board (per the check added there), write the
+match back here as `instance N of <row>` on that same row — incrementing its count — rather than
+adding a fresh row for the same cause. A board with fewer, denser rows that each carry an accurate
+instance count is the point: anything reading this file afterward sees how many times a cause has
+recurred instead of re-deriving that count from N separate rows.
+
+**Forward-looking note.** Once `BT.ticket.bails-must-be-append-only`
+(`planning/blocks/BT.ticket.bails-must-be-append-only.json`) lands, this step stops counting
+instances by comparing against the board by hand — the instance count is READ from the append-only
+bail records themselves, which become the source of truth for how many times a cause has recurred.
+Until then, the board comparison above is the only mechanism.
 
 ### 6. Stamp the heartbeat
 Write the last-drain heartbeat file (the same file `scripts/commander_drain.sh` checks for
