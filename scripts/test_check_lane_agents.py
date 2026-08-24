@@ -445,6 +445,84 @@ def check_boundary_heartbeat_exactly_at_threshold() -> None:
               rc == 1, f"rc: {rc}")
 
 
+# --- BT.ticket.fleet-wide-gates-red-on-another-lanes-data: foreign vs. own verdict scope -----
+#
+# Task 1 of that block: replay the measured instance (3) from the block record as a FAILING
+# fixture against the UNCHANGED checker -- today a bad record belonging to ANOTHER repo is just
+# as fatal as one belonging to this repo, which is the bug. These two functions assert the
+# TARGET (post-task-3) behavior, so they are expected to be RED until the verdict is scoped:
+#   - the foreign case asserts rc == 0 (not fatal) -- FAILS today, because today it is fatal.
+#   - the own case asserts rc != 0 (still fatal) -- PASSES today AND after the fix, proving the
+#     fix narrows the verdict rather than loosening it entirely.
+#
+# The measured incident: BT.ticket.validate-brain-is-a-write-and-push-path bailed at task 1 on a
+# registry claim belonging to agent `agentic-portfolio-01` (repo `agentic-portfolio`, i.e. HQ,
+# NOT base-template) whose heartbeat was 6439s old against the THEN-current 5400s (90min)
+# threshold -- a margin of 1039s past threshold. STALE_THRESHOLD_SECONDS has since been
+# independently raised to 180min (see the constant's own derivation comment above), so replaying
+# the literal 6439s would not even trip staleness under today's threshold. The fixture below
+# reproduces the same SHAPE -- a claim just past whatever the current threshold is, by the same
+# ~1039s margin -- rather than the now-stale literal value, so it exercises the real bug (verdict
+# not scoped by ownership) instead of a threshold that has already moved on.
+
+def check_foreign_stale_registry_claim_reports_but_is_not_fatal() -> None:
+    """TARGET behavior (task 3): a stale registry claim belonging to ANOTHER repo is reported but
+    does not fail the gating verdict. RED today -- the unchanged checker fails it just like an
+    own-repo record."""
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        stale_seconds = check_lane_agents.STALE_THRESHOLD_SECONDS + 1039
+        stale_heartbeat = _now() - timedelta(seconds=stale_seconds)
+        _write_json(
+            lock_dir / "lane-agents" / "agent-agentic-portfolio-01.json",
+            _valid_registry(
+                agent_name="agentic-portfolio-01",
+                repo="agentic-portfolio",
+                lane="lane-coordination",
+                heartbeat=_iso(stale_heartbeat),
+            ),
+        )
+
+        proc = subprocess.run(
+            [sys.executable, str(MODULE_PATH), "--lock-dir", str(lock_dir), "--quiet"],
+            capture_output=True, text=True,
+        )
+        check("a stale registry claim belonging to ANOTHER repo is still REPORTED in the output",
+              "agentic-portfolio-01" in proc.stdout, proc.stdout + proc.stderr)
+        check("EXPECTED RED before task 3: a stale claim belonging to ANOTHER repo must NOT fail "
+              "the gating verdict (rc == 0) -- today it does, because the verdict is not yet "
+              "scoped by record ownership",
+              proc.returncode == 0, f"rc: {proc.returncode}, output: {proc.stdout + proc.stderr}")
+
+
+def check_own_stale_registry_claim_is_still_fatal() -> None:
+    """The other direction of the same fixture: a stale registry claim belonging to THIS repo
+    (base-template) must still fail the gating verdict, both today and after task 3 -- proving
+    the eventual fix narrows the verdict rather than loosening it for everyone."""
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        stale_seconds = check_lane_agents.STALE_THRESHOLD_SECONDS + 1039
+        stale_heartbeat = _now() - timedelta(seconds=stale_seconds)
+        _write_json(
+            lock_dir / "lane-agents" / "agent-base-template-own.json",
+            _valid_registry(
+                agent_name="base-template-own",
+                repo="base-template",
+                heartbeat=_iso(stale_heartbeat),
+            ),
+        )
+
+        proc = subprocess.run(
+            [sys.executable, str(MODULE_PATH), "--lock-dir", str(lock_dir), "--quiet"],
+            capture_output=True, text=True,
+        )
+        check("a stale registry claim belonging to THIS repo is REPORTED in the output",
+              "base-template-own" in proc.stdout, proc.stdout + proc.stderr)
+        check("a stale registry claim belonging to THIS repo still fails the gating verdict "
+              "(rc != 0), both today and after task 3",
+              proc.returncode != 0, f"rc: {proc.returncode}, output: {proc.stdout + proc.stderr}")
+
+
 # --- positive: no records is not a failure ----------------------------------------------------
 
 def check_no_records_is_not_a_failure() -> None:
@@ -481,6 +559,8 @@ def main() -> int:
     check_lease_with_fresh_heartbeat_survives_stale_acquired_at()
     check_lease_cross_script_agreement_with_fleet_concurrency_check()
     check_boundary_heartbeat_exactly_at_threshold()
+    check_foreign_stale_registry_claim_reports_but_is_not_fatal()
+    check_own_stale_registry_claim_is_still_fatal()
     check_no_records_is_not_a_failure()
 
     if FAILURES:

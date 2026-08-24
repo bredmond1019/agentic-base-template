@@ -270,6 +270,63 @@ def check_boundary_filename_uuid_mismatch() -> None:
               proc.stdout + proc.stderr)
 
 
+# --- BT.ticket.fleet-wide-gates-red-on-another-lanes-data: foreign vs. own verdict scope -----
+#
+# Task 1 of that block: replay the block record's measured instance (1) as a FAILING fixture
+# against the UNCHANGED checker. The measured incident: `bastion-61` wrote a message into
+# ENGINE-RS's inbox with an extended-form timestamp (`2026-08-23T025258Z-<uuid>.json`) where
+# FILENAME_RE requires basic form (`20260823T025258Z-<uuid>.json`) -- one lane's sender bug, in a
+# THIRD lane's queue, bailed base-template's task. These two functions assert the TARGET
+# (post-task-3) behavior, so the foreign one is expected to be RED until the verdict is scoped:
+#   - the foreign case (queue/engine-rs/...) asserts rc == 0 -- FAILS today, because today it is
+#     fatal regardless of which repo's queue the bad file sits in.
+#   - the own case (queue/base-template/...) asserts rc != 0 -- PASSES today AND after the fix.
+
+def check_foreign_malformed_filename_reports_but_is_not_fatal() -> None:
+    """TARGET behavior (task 3): a malformed filename in ANOTHER repo's queue is reported but
+    does not fail the gating verdict. RED today."""
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        queue_dir = lock_dir / "queue" / "engine-rs" / "lane-coordination"
+        inbox_dir = queue_dir / "inbox"
+        inbox_dir.mkdir(parents=True)
+        record = _valid_message("EDGE_RELEASED", sender=_valid_sender(agent_name="bastion-61"))
+        # Extended-form timestamp (dashes in the date), exactly the measured sender bug -- basic
+        # form is required by FILENAME_RE.
+        bad_path = inbox_dir / f"2026-08-23T025258Z-{record['message_id']}.json"
+        _write_json(bad_path, record)
+
+        proc = _run_cli(lock_dir)
+        check("a malformed filename in ANOTHER repo's queue is still REPORTED in the output",
+              "does not match" in proc.stdout or "does not match" in proc.stderr,
+              proc.stdout + proc.stderr)
+        check("EXPECTED RED before task 3: a malformed filename in ANOTHER repo's queue must NOT "
+              "fail the gating verdict (rc == 0) -- today it does, because the verdict is not yet "
+              "scoped by record ownership",
+              proc.returncode == 0, f"rc: {proc.returncode}, output: {proc.stdout + proc.stderr}")
+
+
+def check_own_malformed_filename_is_still_fatal() -> None:
+    """The other direction: a malformed filename in THIS repo's own queue (base-template) must
+    still fail the gating verdict, both today and after task 3."""
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        queue_dir = lock_dir / "queue" / "base-template" / "lane-coordination"
+        inbox_dir = queue_dir / "inbox"
+        inbox_dir.mkdir(parents=True)
+        record = _valid_message("EDGE_RELEASED")
+        bad_path = inbox_dir / f"2026-08-23T025258Z-{record['message_id']}.json"
+        _write_json(bad_path, record)
+
+        proc = _run_cli(lock_dir)
+        check("a malformed filename in THIS repo's own queue is REPORTED in the output",
+              "does not match" in proc.stdout or "does not match" in proc.stderr,
+              proc.stdout + proc.stderr)
+        check("a malformed filename in THIS repo's own queue still fails the gating verdict "
+              "(rc != 0), both today and after task 3",
+              proc.returncode != 0, f"rc: {proc.returncode}, output: {proc.stdout + proc.stderr}")
+
+
 # --- concurrent-drain: two messages, one drain, both processed exactly once --------------------
 
 def check_concurrent_drain_exactly_once() -> None:
@@ -368,6 +425,8 @@ def main() -> int:
     check_negative_direct_write_to_processing()
     check_negative_done_missing_second_receipt()
     check_boundary_filename_uuid_mismatch()
+    check_foreign_malformed_filename_reports_but_is_not_fatal()
+    check_own_malformed_filename_is_still_fatal()
     check_concurrent_drain_exactly_once()
     check_interleaved_drain_race()
     check_no_records_is_not_a_failure()
