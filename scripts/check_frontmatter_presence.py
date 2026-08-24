@@ -141,15 +141,38 @@ def is_in_scope(path: str) -> bool:
     return True
 
 
+def _in_code_fence_mask(lines: list[str]) -> list[bool]:
+    """True for every line inside a ``` ... ``` fenced code block (the opening/closing
+    ``` lines themselves count as inside — only content strictly between two `---` lines
+    matters to the caller, so including the ``` markers costs nothing and keeps this
+    simple). A `---` inside a code fence is an ILLUSTRATIVE EXAMPLE (e.g. this file's own
+    module docstring, or CLAUDE.md's "```yaml\\n---\\ntype: ...\\n---\\n```" OKF sample),
+    never real frontmatter — the DISPLACED check below must not flag it. Doesn't
+    distinguish fence languages/indentation; any line whose stripped content starts with
+    ``` toggles fence state, matching how every renderer treats it.
+    """
+    mask = [False] * len(lines)
+    in_fence = False
+    for i, line in enumerate(lines):
+        if line.strip().startswith("```"):
+            mask[i] = True
+            in_fence = not in_fence
+            continue
+        mask[i] = in_fence
+    return mask
+
+
 def _find_fence_pairs(lines: list[str]) -> list[tuple[int, int]]:
-    """Return (start_idx, end_idx) 0-indexed pairs for every `---` ... `---` block in lines."""
+    """Return (start_idx, end_idx) 0-indexed pairs for every `---` ... `---` block in
+    lines, skipping any `---` that falls inside a ``` fenced code block."""
+    in_code = _in_code_fence_mask(lines)
     pairs = []
     i = 0
     n = len(lines)
     while i < n:
-        if lines[i].strip() == "---":
+        if not in_code[i] and lines[i].strip() == "---":
             for j in range(i + 1, n):
-                if lines[j].strip() == "---":
+                if not in_code[j] and lines[j].strip() == "---":
                     pairs.append((i, j))
                     i = j  # resume scanning after this block's closing fence
                     break

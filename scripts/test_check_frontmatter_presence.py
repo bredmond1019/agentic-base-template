@@ -137,6 +137,28 @@ More prose after a bare horizontal rule. No key-looking lines follow the rule, s
 scan must not mistake this bare rule for a frontmatter fence.
 """
 
+# The 2026-08-24 shape: a root CLAUDE.md (ABSENT-exempt, no real frontmatter at line 1) whose
+# prose later includes a fenced ```yaml OKF example -- a genuine `---`...`---` pair WITH
+# key-looking lines inside (type:, title:, ...), which is exactly what _looks_like_frontmatter_body
+# alone would flag. This is agentic-portfolio's own root CLAUDE.md's actual shape (the "Every new
+# file must use OKF format" standing rule's worked example) and it blocked a real commit with a
+# false DISPLACED before the code-fence-aware fix.
+CLAUDE_MD_WITH_FENCED_YAML_EXAMPLE = """# CLAUDE.md -- some repo
+
+Some standing rules here.
+
+6. Every new file must use OKF format:
+   ```yaml
+   ---
+   type: <Doc type>
+   title: <Human-readable title>
+   description: <One-line summary>
+   ---
+   ```
+
+More prose after the example.
+"""
+
 
 def main() -> int:
     # --- retro-fixture: the central case ------------------------------------------------
@@ -252,6 +274,26 @@ def main() -> int:
         absent_rule_proc.returncode == 1
         and "ABSENT" in absent_rule_proc.stderr
         and "DISPLACED" not in absent_rule_proc.stderr,
+    )
+
+    check(
+        "root CLAUDE.md with a fenced ```yaml OKF example later in the body is accepted, "
+        "not misreported as DISPLACED (2026-08-24 regression)",
+        cfp.check("CLAUDE.md", CLAUDE_MD_WITH_FENCED_YAML_EXAMPLE) == 0,
+    )
+
+    fenced_example_no_fm_proc = subprocess.run(
+        [sys.executable, str(MODULE_PATH), "planning/guide.md"],
+        input=CLAUDE_MD_WITH_FENCED_YAML_EXAMPLE,
+        capture_output=True,
+        text=True,
+    )
+    check(
+        "a nested (non-exempt) in-corpus doc with no line-1 frontmatter and only a fenced "
+        "```yaml example is rejected as ABSENT, never misreported as DISPLACED",
+        fenced_example_no_fm_proc.returncode == 1
+        and "ABSENT" in fenced_example_no_fm_proc.stderr
+        and "DISPLACED" not in fenced_example_no_fm_proc.stderr,
         f"stderr={absent_rule_proc.stderr!r}",
     )
 
