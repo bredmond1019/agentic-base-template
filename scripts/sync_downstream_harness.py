@@ -333,6 +333,7 @@ AGENT_SKILL_SLUGS: list[str] = [
     "report-to-the-operator",
     "ping-agent",
     "write-repo-doc",
+    "notify-operator",
 ]
 
 
@@ -357,6 +358,7 @@ CLAUDE_SKILL_SLUGS: list[str] = [
     "stop-or-continue",
     "ping-agent",
     "write-repo-doc",
+    "notify-operator",
 ]
 
 
