@@ -204,7 +204,11 @@ Each of these exists because it has already caused a real failure in this fleet.
     regression:
 
     1. **Ping a peer whenever a peer is affected**, rather than waiting for anything to route it for
-       you — use the `ping-agent` skill's envelope and the four-verdict response contract.
+       you — use the `ping-agent` skill's envelope and the four-verdict response contract. Every
+       envelope requires `verified_by`: fill it with the literal command you ran and its real
+       output when you checked the claim yourself, or `UNVERIFIED: <who claimed it>` when you are
+       relaying a claim you did not independently verify — never restate someone else's finding as
+       your own without one of those two.
     2. **Write every message to a durable home as well as sending it.** The ping accelerates the
        durable channel; it never replaces it. A finding that exists only as a ping dies with the
        receiving session.
