@@ -54,6 +54,8 @@ cases:
   # historical context only — expectations here are re-derived against the live corpus.)
 
   - id: archive-01-rates
+    source: archived
+    category: archive
     query: "What are my hourly rates for contracting engagements?"
     expect_docs: ["business/docs/rates.md"]
     expect_abstain: false
@@ -71,6 +73,8 @@ cases:
       unchanged and the case was NOT re-scoped to flatter a metric.
 
   - id: archive-02-blog-posts
+    source: archived
+    category: archive
     query: "What blog posts have I published so far?"
     expect_docs: ["docs/content/blog-tracker.md"]
     expect_abstain: false
@@ -85,6 +89,8 @@ cases:
       un-archived/re-worded, not a retrieval defect in the code under test.
 
   - id: archive-03-parallelnode
+    source: archived
+    category: archive
     query: "How does ParallelNode handle thread safety and merging?"
     expect_docs: []
     expect_abstain: true
@@ -101,6 +107,8 @@ cases:
       deliberately-tracked instrument reading, not a bug to fix in OR.K2.
 
   - id: archive-04-toptal
+    source: archived
+    category: archive
     query: "What is my Toptal application prep strategy?"
     expect_docs: ["business/docs/interview-prep/paths/toptal/toptal-prep.md"]
     expect_abstain: false
@@ -118,6 +126,8 @@ cases:
       for a moved file; query text and expect_abstain unchanged.
 
   - id: archive-05-distrito
+    source: archived
+    category: archive
     query: "Tell me about the Distrito job application"
     expect_docs: ["business/docs/applications/distrito/posting.md"]
     expect_abstain: false
@@ -138,6 +148,8 @@ cases:
       latent false-positive generator. Query text and expect_abstain unchanged.
 
   - id: archive-06-next-task
+    source: archived
+    category: archive
     query: "What should I work on next in the orchestrator repo?"
     expect_docs:
       - core/orchestrator/planning/status.md
@@ -154,6 +166,8 @@ cases:
       something to fix in this block.
 
   - id: archive-07-structural-graph
+    source: archived
+    category: archive
     query: "How does the structural graph expansion in brain RAG retrieval work?"
     expect_docs: ["core/orchestrator/docs/brain-rag.md"]
     expect_abstain: false
@@ -176,6 +190,8 @@ cases:
       and expect_abstain unchanged; not a re-scope.
 
   - id: archive-08-filevault
+    source: archived
+    category: archive
     query: "What is the FileVault decision about the Mac Mini?"
     expect_docs: ["docs/decisions/D12-filevault-disabled.md"]
     expect_abstain: false
@@ -185,6 +201,8 @@ cases:
       ranks #1 (score 5.626, via=semantic) — clean.
 
   - id: archive-09-amistad
+    source: archived
+    category: archive
     query: "What is amistad and what stage is it in?"
     expect_docs:
       - side/amistad/docs/business/amistad-product-roadmap.md
@@ -201,6 +219,8 @@ cases:
       I25 edit. Query text and expect_abstain unchanged; not a re-scope.
 
   - id: archive-10-local-dev
+    source: archived
+    category: archive
     query: "How do I set up local development for this repo?"
     expect_docs: ["core/orchestrator/docs/getting-started.md"]
     expect_abstain: false
@@ -221,6 +241,8 @@ cases:
       text and expect_abstain unchanged; not a re-scope.
 
   - id: archive-11-or-v-hijack
+    source: archived
+    category: archive
     query: "OR.V graph resolver cleanup"
     expect_docs:
       - core/orchestrator/planning/status.md
@@ -250,6 +272,8 @@ cases:
       reproduced by this harness; see the file-header note.
 
   - id: archive-12-content-ideas
+    source: archived
+    category: archive
     query: "What content ideas are queued for publishing?"
     expect_docs: ["docs/content/ideas.md"]
     expect_abstain: false
@@ -260,6 +284,8 @@ cases:
       top-5 despite the self-referencing archive doc occupying #1-#2 again.
 
   - id: archive-13-d20
+    source: archived
+    category: archive
     query: "What is decision D20 about?"
     expect_docs: ["docs/decisions/D20-shared-data-contract.md"]
     expect_abstain: false
@@ -284,6 +310,8 @@ cases:
   #     code/id + domain terms should score highly via exact-id/keyword fusion) ---
 
   - id: id-d47-workspace-contract
+    source: authored
+    category: identifier
     query: "D47 workspace contract"
     expect_docs: ["docs/decisions/D47-workspace-contract.md"]
     expect_abstain: false
@@ -295,6 +323,8 @@ cases:
       > 5.0 fused.
 
   - id: id-d26-bastion-naming
+    source: authored
+    category: identifier
     query: "D26 bastion naming"
     expect_docs: ["docs/decisions/D26-bastion-system-naming-and-demand-first.md"]
     expect_abstain: false
@@ -304,27 +334,33 @@ cases:
       via=semantic) — clean.
 
   - id: id-or-k2-self
+    source: authored
+    category: identifier
     query: "OR.K2 retrieval eval harness"
-    expect_docs: [core/orchestrator/planning/or-k2-retrieval-eval-harness/tasks.md]
-    expect_abstain: false
+    expect_docs: []
+    expect_abstain: true
     scope: orchestrator
     notes: >
-      Re-derived 2026-08-01 via hybrid + `project=orchestrator` scope: this
-      block's own `tasks.md` ranks #1/#2 (score 6.383/6.376, via=semantic) —
-      confirms this block's own tasks file is correctly indexed and
-      workspace-scoping doesn't exclude it.
+      Mirrors the real golden set's OR.2.D conversion: this block's own
+      `tasks.md` lives under an archived planning path that is not present in
+      this mock CI fixture's tree, so this case is scored as a deliberate
+      negative here rather than pointing at a path this harness can't verify.
 
   - id: id-or-k1-query-log
+    source: authored
+    category: identifier
     query: "OR.K1 query log retrieval"
-    expect_docs: [core/orchestrator/planning/or-k1-retrieval-query-log/tasks.md]
-    expect_abstain: false
+    expect_docs: []
+    expect_abstain: true
     scope: null
     notes: >
-      Re-derived 2026-08-01 via hybrid: ranks #1/#2 (score 6.369/6.365,
-      via=semantic) — clean. `OR.K1` is the sibling block that inherits this
-      block's retrieval-core promotion (see this spec's Coordination note).
+      Mirrors the real golden set's OR.2.D conversion — see id-or-k2-self's
+      note; same reasoning, same archived-path unavailability in this mock
+      fixture's tree.
 
   - id: id-d51-boundary-test
+    source: authored
+    category: identifier
     query: "D51 boundary test brain engine factory"
     expect_docs: ["docs/decisions/D51-brain-engine-boundary-and-synapse.md"]
     expect_abstain: false
@@ -339,6 +375,8 @@ cases:
   # --- Negatives: broad NL questions with no in-corpus answer -> expect_abstain ---
 
   - id: neg-01-souffle
+    source: authored
+    category: negative
     query: "What is the meaning of life and how do I bake a soufflé?"
     expect_docs: []
     expect_abstain: true
@@ -351,6 +389,8 @@ cases:
       fused score — correct behavior is abstain.
 
   - id: neg-02-jupiter-moons
+    source: authored
+    category: negative
     query: "How many moons does Jupiter have?"
     expect_docs: []
     expect_abstain: true
@@ -362,6 +402,8 @@ cases:
       abstain.
 
   - id: neg-03-exchange-rate
+    source: authored
+    category: negative
     query: "What is the exchange rate between the yen and the euro today?"
     expect_docs: []
     expect_abstain: true
@@ -376,6 +418,8 @@ cases:
   #     incidental token, right behavior is semantic retrieval) ---
 
   - id: hijack-01-us2024-visa
+    source: authored
+    category: hijack
     query: "US2024 visa requirements"
     expect_docs: []
     expect_abstain: true
@@ -394,6 +438,8 @@ cases:
       the two paths diverge on a query with a real answer.
 
   - id: hijack-02-ai3-conference
+    source: authored
+    category: hijack
     query: "AI3 conference notes"
     expect_docs: []
     expect_abstain: true
