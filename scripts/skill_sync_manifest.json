@@ -28,5 +28,15 @@
     "hash": "7815b0ff69129b3889c4f4d7b039d1948c2e6afa3a81162898f14c8391f48720",
     "lines": "2104-2259",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
+  },
+  ".claude/workflows/sdlc-task.js::record-a-bail-vocabulary": {
+    "hash": "b9603ebea34bd5ade3b160d607bf399fe3ce2cbd4a9c400a34cd9b061e36edcb",
+    "lines": "1969-1975",
+    "skill_md": ".agents/skills/record-a-bail/SKILL.md"
+  },
+  ".claude/workflows/sdlc-flow.js::record-a-bail-vocabulary": {
+    "hash": "639346a5fe95f2d658eef13d19b6b767f540f5c67876cd2fb02852bdaf5429cc",
+    "lines": "2092-2098",
+    "skill_md": ".agents/skills/record-a-bail/SKILL.md"
   }
 }
