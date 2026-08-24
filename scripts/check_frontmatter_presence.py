@@ -208,7 +208,8 @@ def check(path: str, content: str) -> int:
     if not lines:
         if _is_absent_exempt(path):
             return 0
-        print(f"{path}:1: ABSENT — in-corpus file has no frontmatter block", file=sys.stderr)
+        print(f"FAIL {path} {path}:1: ABSENT — in-corpus file has no frontmatter block",
+              file=sys.stderr)
         print("  fix: add an OKF frontmatter block starting at line 1", file=sys.stderr)
         return 1
 
@@ -221,8 +222,8 @@ def check(path: str, content: str) -> int:
                 break
         if end is None:
             print(
-                f"{path}:1: UNTERMINATED — frontmatter opens at line 1 but no closing "
-                f"'---' line follows it",
+                f"FAIL {path} {path}:1: UNTERMINATED — frontmatter opens at line 1 but no "
+                f"closing '---' line follows it",
                 file=sys.stderr,
             )
             print("  " + lines[0].strip(), file=sys.stderr)
@@ -238,7 +239,7 @@ def check(path: str, content: str) -> int:
         if _looks_like_frontmatter_body(lines, start, end):
             file_line = start + 1  # 1-indexed
             print(
-                f"{path}:{file_line}: DISPLACED — frontmatter fence found at line "
+                f"FAIL {path} {path}:{file_line}: DISPLACED — frontmatter fence found at line "
                 f"{file_line}, not line 1 (content precedes it)",
                 file=sys.stderr,
             )
@@ -252,7 +253,8 @@ def check(path: str, content: str) -> int:
     # No fence at line 1, and no displaced frontmatter-shaped block found -> ABSENT.
     if _is_absent_exempt(path):
         return 0
-    print(f"{path}:1: ABSENT — in-corpus file has no frontmatter block", file=sys.stderr)
+    print(f"FAIL {path} {path}:1: ABSENT — in-corpus file has no frontmatter block",
+          file=sys.stderr)
     print("  fix: add an OKF frontmatter block starting at line 1", file=sys.stderr)
     return 1
 
