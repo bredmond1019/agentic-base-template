@@ -1512,10 +1512,14 @@ STEP W1 — run this as ONE Bash call, exactly as written. Do not split it into 
   started_at below. Otherwise started_at = NOW.
 
 STEP W2 — write ${onBail.stateFile} with EXACTLY this JSON, but: (a) inserting two extra top-level
-  keys "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch", and
-  (b) replacing the literal placeholder string "__BAIL_REASON__" (the top-level "bail_reason" field)
-  with the effective bail reason computed above. Valid JSON only (double quotes, no trailing commas,
-  no markdown fences). The object to write (verbatim except for those substitutions):
+  keys "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch",
+  (b) replacing the literal placeholder string "__BAIL_REASON__" (the top-level "bail_reason" field
+  AND the "reason" field inside the new bails[] entry — both occurrences) with the effective bail
+  reason computed above, and (c) replacing the literal placeholder string "__BAIL_OCCURRED_AT__"
+  (the "occurred_at" field inside that same new bails[] entry) with NOW, the exact value you read
+  as the first line of STEP W1's output — do this substitution in this SAME turn, alongside (b).
+  Valid JSON only (double quotes, no trailing commas, no markdown fences). The object to write
+  (verbatim except for those substitutions):
 ${onBail.stateJson}
 
 STEP W3 — use the Write tool for the file. Do NOT run \`git add\`, \`git commit\`, \`git checkout\`,
@@ -1553,12 +1557,17 @@ function buildBailPayload(taskNum, t, majorFallback, exhaustionFallback = null) 
   snapshot.bail_reason = '__BAIL_REASON__'
   // APPEND-ONLY (BT.ticket.bails-must-be-append-only) — one entry per bail, never overwritten.
   // `reason` carries the SAME "__BAIL_REASON__" placeholder as `bail_reason` above (b) below), so
-  // the one substitution the writing agent performs keeps both in sync. check_id best-effort from
+  // the one substitution the writing agent performs for the reason keeps both in sync.
+  // `occurred_at` carries the sibling "__BAIL_OCCURRED_AT__" placeholder (BT.ticket.bails-must-
+  // not-mint-time-in-the-engine) — a JS-side clock call is illegal under the Workflow runtime
+  // shim, so the writing agent substitutes NOW (already obtained via STEP W1's `date -u` call)
+  // for this sentinel in the SAME turn it substitutes __BAIL_REASON__; see (c) in
+  // renderBailStateWriteRecipe's STEP W2 below. check_id best-effort from
   // the task's own recorded issues (the harness check name already on `t`, never reimplemented);
   // failing_artifact/ownership/bail_class stay null here — not yet derivable at this call site
   // (see out_of_scope: checks-must-name-their-failing-artifact is separate work).
   snapshot.bails = [...(snapshot.bails || []), {
-    occurred_at: new Date().toISOString(),
+    occurred_at: '__BAIL_OCCURRED_AT__',
     task_id: taskNum,
     check_id: (t.issues && t.issues.length) ? t.issues[t.issues.length - 1] : null,
     failing_artifact: null,
