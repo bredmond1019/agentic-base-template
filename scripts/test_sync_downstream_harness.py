@@ -1,10 +1,37 @@
 #!/usr/bin/env python3
-"""Regression tests for sync_downstream_harness.py's engines-only guard (D54).
+"""Regression tests for sync_downstream_harness.py's engines-only guard (D54) and its skill
+slug registration (CLAUDE_SKILL_SLUGS / AGENT_SKILL_SLUGS).
 
 The guard exists because HQ authors its own brain-specific commands under names that
 base-template also ships — /prime, /log-work, /handoff, /capture and 8 others. Since the sync
 script only ever adds/updates and never deletes, a regression here would overwrite all twelve
 and report it as a routine "changed" line in a 17-repo run. These tests fail loudly instead.
+
+SkillSlugRegistrationGuard below covers the other failure mode: CLAUDE_SKILL_SLUGS and
+AGENT_SKILL_SLUGS are hand-enumerated (deliberately — see their own docstrings), so a skill
+authored but not registered, or registered but never authored, is a silent no-op on the next
+17-repo sync. Each of its four cases was shown capable of failing before this suite existed to
+catch it (D68):
+
+  - Case A (a known slug present in both lists): at commit 1e3f822 (the parent of the commit
+    that registered notify-operator), loading that revision's sync_downstream_harness.py in
+    isolation and checking `"notify-operator" in CLAUDE_SKILL_SLUGS` returned False, and the
+    AGENT_SKILL_SLUGS check returned False too — confirmed 2026-08-24 by importing the historical
+    file directly, not by inspection.
+  - Case B (every registered slug has its file): exercised by hand against a scratch copy of the
+    module with an extra slug appended to CLAUDE_SKILL_SLUGS that has no matching SKILL.md on
+    disk — the loop-based check in test_every_registered_slug_has_its_file raised AssertionError
+    for that slug.
+  - Case C (every skill directory on disk is registered or allowlisted): exercised by hand by
+    creating a scratch `.claude/skills/zz-scratch-unregistered/SKILL.md` with no corresponding
+    list entry — the loop-based reverse check in
+    test_every_skill_directory_is_registered_or_allowlisted flagged it.
+  - Case D (mirror bodies match, computed generically): MirroredSkillBodiesMatch already covers
+    this over a hardcoded MIRRORED list that does not include notify-operator;
+    test_mirrored_bodies_match_generically instead derives the mirrored-slug set from
+    CLAUDE_SKILL_SLUGS ∩ AGENT_SKILL_SLUGS, so a newly-registered mirrored slug needs no second
+    manual edit. Checked 2026-08-24: all ten currently-mirrored pairs already match byte-for-byte
+    after the frontmatter block, so there is no pre-existing violation to except.
 
 Run: python3 scripts/test_sync_downstream_harness.py
 """
@@ -272,6 +299,119 @@ class MirroredSkillBodiesMatch(unittest.TestCase):
                 continue
             fm = mirror.read_text(encoding="utf-8").split("---", 2)[1]
             self.assertNotIn("allowed-tools", fm, f"{slug}: allowed-tools is Claude-only")
+
+
+class SkillSlugRegistrationGuard(unittest.TestCase):
+    """Generic, list-driven checks over CLAUDE_SKILL_SLUGS / AGENT_SKILL_SLUGS — see the module
+    docstring for how each case was shown capable of failing (D68)."""
+
+    # .agents/skills/<slug> directories that are NOT registered in AGENT_SKILL_SLUGS and are
+    # deliberately undistributed — factory-local tooling for base-template's OWN skill/command
+    # sync process, never meant to reach the 17 scaffolded repos. Checked by hand 2026-08-24:
+    # every OTHER unregistered .agents/skills/<slug> corresponds one-to-one to a
+    # .claude/commands/**/<slug>.md file and is populated by a wholly separate mechanism
+    # (.agents/skills/sync-skills/scripts/sync_skills.py, invoked by
+    # scripts/sync_all_skills_commands.py) that mirrors commands into Gemini-style skills — out
+    # of this script's remit entirely, so those are excluded from the reverse check below by
+    # matching against .claude/commands rather than allowlisted one slug at a time.
+    UNDISTRIBUTED_AGENT_SKILL_DIRS = {
+        "compare": "base-template's own drift check between .agents/skills and .claude "
+                   "commands/workflows — a tool ABOUT the sync, not a guide to be synced",
+        "compare-contents": "text-diff companion to `compare`, same reason",
+        "record-a-bail": "documents this repo's own bail-recording convention; not authored "
+                          "for downstream distribution",
+        "sync-skills": "the generator that populates .agents/skills from .claude/commands; "
+                        "shipping it downstream would ship the generator, not a guide",
+    }
+
+    def setUp(self) -> None:
+        self.root = Path(sync.__file__).resolve().parent.parent
+
+    def _command_stems(self) -> set[str]:
+        commands_dir = self.root / ".claude" / "commands"
+        return {p.stem for p in commands_dir.rglob("*.md")}
+
+    def test_notify_operator_is_registered_in_both_lists(self):
+        """Case A."""
+        self.assertIn("notify-operator", sync.CLAUDE_SKILL_SLUGS)
+        self.assertIn("notify-operator", sync.AGENT_SKILL_SLUGS)
+
+    def test_every_registered_slug_has_its_file(self):
+        """Case B — a loop over both lists, not a hardcoded slug, so it also protects the
+        existing nine (plus sdlc-task/sdlc-flow on the .agents side)."""
+        for slug in sync.CLAUDE_SKILL_SLUGS:
+            path = self.root / ".claude" / "skills" / slug / "SKILL.md"
+            self.assertTrue(
+                path.is_file(),
+                f"CLAUDE_SKILL_SLUGS has '{slug}' but {path} is missing",
+            )
+        for slug in sync.AGENT_SKILL_SLUGS:
+            path = self.root / ".agents" / "skills" / slug / "SKILL.md"
+            self.assertTrue(
+                path.is_file(),
+                f"AGENT_SKILL_SLUGS has '{slug}' but {path} is missing",
+            )
+
+    def test_every_skill_directory_is_registered_or_allowlisted(self):
+        """Case C — the reverse direction. A directory that is neither registered, nor a
+        command mirror populated by the separate sync_skills.py process, nor named in the
+        explicit UNDISTRIBUTED_AGENT_SKILL_DIRS allowlist is exactly the "authored but
+        undistributed" failure this block exists to prevent."""
+        claude_skills_dir = self.root / ".claude" / "skills"
+        for entry in sorted(claude_skills_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            self.assertIn(
+                entry.name,
+                sync.CLAUDE_SKILL_SLUGS,
+                f".claude/skills/{entry.name}/ exists but is not in CLAUDE_SKILL_SLUGS — "
+                "register it or add it to an explicit allowlist",
+            )
+
+        agent_skills_dir = self.root / ".agents" / "skills"
+        command_stems = self._command_stems()
+        for entry in sorted(agent_skills_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            if entry.name in sync.AGENT_SKILL_SLUGS:
+                continue
+            if entry.name in command_stems:
+                # Populated by sync_skills.py mirroring .claude/commands/**, not by this
+                # script's AGENT_SKILL_SLUGS — out of scope for this registration guard.
+                continue
+            self.assertIn(
+                entry.name,
+                self.UNDISTRIBUTED_AGENT_SKILL_DIRS,
+                f".agents/skills/{entry.name}/ exists, is not registered in AGENT_SKILL_SLUGS, "
+                "does not mirror a .claude/commands file, and is not in the explicit "
+                "UNDISTRIBUTED_AGENT_SKILL_DIRS allowlist — register it or add it with a "
+                "one-line reason",
+            )
+
+    def test_mirrored_bodies_match_generically(self):
+        """Case D, computed from the lists themselves (CLAUDE_SKILL_SLUGS ∩ AGENT_SKILL_SLUGS)
+        instead of MirroredSkillBodiesMatch's hardcoded MIRRORED constant, so a newly-registered
+        mirrored slug (notify-operator, absent from that constant) is covered without a second
+        manual edit."""
+        mirrored = sorted(set(sync.CLAUDE_SKILL_SLUGS) & set(sync.AGENT_SKILL_SLUGS))
+        self.assertTrue(mirrored, "expected at least one slug registered in both lists")
+        checked = 0
+        for slug in mirrored:
+            src = self.root / ".claude" / "skills" / slug / "SKILL.md"
+            mirror = self.root / ".agents" / "skills" / slug / "SKILL.md"
+            if not src.is_file() or not mirror.is_file():
+                continue
+            checked += 1
+            src_body = src.read_text(encoding="utf-8").split("---", 2)[2]
+            mirror_body = mirror.read_text(encoding="utf-8").split("---", 2)[2]
+            self.assertEqual(
+                src_body,
+                mirror_body,
+                f"{slug}: .agents mirror body has drifted from its .claude source",
+            )
+        self.assertEqual(
+            checked, len(mirrored), "a mirrored slug is missing its file on one side"
+        )
 
 
 if __name__ == "__main__":
