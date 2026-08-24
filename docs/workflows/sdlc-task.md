@@ -72,7 +72,7 @@ flowchart TD
 | **Scout / setup** | haiku | Reads the spec and existing report state (for `--resume`). Runs in-place only — `--worktree` is refused before this stage is ever reached (see [In-place vs. `--worktree`](#in-place-vs-worktree) above); the `trees/<branch>/` cone-mode sparse-checkout recipe survives in the codebase, unreachable, for when D81 lifts. Resolves the spec source (D65 stage 2): checks `planning/blocks/<BlockID>.json` first and prefers it when present; falls back to the legacy `planning/<spec>/tasks.md` only when no block record exists. `specSource` (`'block-record'` / `'tasks-md'` / `'missing'`) drives which file the run treats as the spec and, downstream, which D16 derive branch fires (see below). The D19 thin-spec check runs only when `specSource == 'tasks-md'`. |
 | **Implement** | sonnet | Executes every task (or the selected range) against `tasks.md` (and `breakdown.md` if present). Runs the [D8](../../planning/decisions/D8-implement-completeness-self-check.md) completeness self-check before committing `feat:`/`fix:`. |
 | **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` plus the universal emoji gate on changed markdown. Falls back to the spec's `## Validation Commands` if no config. |
-| **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. Stuck → commit the current state as `FAIL` and exit. |
+| **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. Stuck → commit the current state as `FAIL` and exit, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution: null`) rather than only overwriting `bail_reason` — see [BT.ticket.bails-must-be-append-only](../../planning/blocks/BT.ticket.bails-must-be-append-only.json). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail that is later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **Commit + state** | haiku | Writes `sdlc-task-state.json` (per-task status + token usage) and commits all work + state, in-place: one final `chore:` commit. (The per-phase-write, throwaway-branch commit shape under `--worktree` is unreachable while D81 refuses the flag.) |
 | **Terminal reconcile** ([D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md)) | haiku | Runs once, after every task has passed on a full spec run, before bookkeep. See [Terminal authoritative reconcile](#terminal-authoritative-reconcile-d56) below. |
@@ -296,6 +296,8 @@ Registered `gates: true` in `planning/harness.json`.
   "tasks": [
     { "task": 1, "status": "pass", "tokens": { "implement": 45000, "test": 1200, "total": 46200 } }
   ],
+  "bail_reason": null,
+  "bails": [],
   "tokens": { "total": 46200 }
 }
 ```
@@ -303,6 +305,13 @@ Registered `gates: true` in `planning/harness.json`.
 In-place mode: written once, swept into the final `chore:` commit alongside `status.md` and
 `log.md` updates. `--worktree` mode: written per-phase, committed to the worktree branch and
 applied at `/clean-worktree` merge time.
+
+`bails[]` is append-only — one entry per bail (`occurred_at, task_id, check_id, failing_artifact,
+ownership, bail_class, reason, resolution`), never truncated or overwritten; `bail_reason` stays as
+a plain mirror of the newest entry's `reason`, null when `bails` is empty. `resolution` starts
+`null` and is set to `"resumed-clean"` when a later `--resume` carries an open entry forward and
+that task then passes. See
+[BT.ticket.bails-must-be-append-only](../../planning/blocks/BT.ticket.bails-must-be-append-only.json).
 
 > **Token roll-up note:** `tokens.total` covers substantive stages (implement, test, fix).
 > Cheap Haiku helper agents are excluded. See [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md).

@@ -112,7 +112,7 @@ flowchart TD
 | **update-task** | haiku | Marks the current task in-progress in `tasks.md` (surgical checkbox edit). Disk-only, like the state-writer — neither commits. |
 | **Implement** | sonnet | Executes task N against the spec (and `breakdown.md` if present). Runs the D8 completeness self-check before committing `feat:`. |
 | **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` (the per-task tripwire). Falls back to the spec's `## Validation Commands` if no config. Also runs the universal emoji gate on changed markdown. |
-| **Triage** | sonnet | Classifies a test failure as `RETRYABLE` (transient, or the failure changed — progress is possible) or `MAJOR` (an immediate-bail reason fires, or no progress). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. See [D32](../../planning/decisions/D32-triage-gated-bail.md). Bail means: break to end-review with `draft` flag. |
+| **Triage** | sonnet | Classifies a test failure as `RETRYABLE` (transient, or the failure changed — progress is possible) or `MAJOR` (an immediate-bail reason fires, or no progress). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. See [D32](../../planning/decisions/D32-triage-gated-bail.md). Bail means: break to end-review with `draft` flag, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution: null`) rather than only overwriting `bail_reason` — see [BT.ticket.bails-must-be-append-only](../../planning/blocks/BT.ticket.bails-must-be-append-only.json). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **End-review** | sonnet | ONE consolidated review over the integrated tree. Re-runs the **full** gating suite (authoritative). Reads `git diff <prBase>..HEAD` + `tasks.md` acceptance criteria + the on-disk (uncommitted) `state.json` as the localization index. Verdict: `PASS` / `PARTIAL` / `FAIL`. |
 | **Review fix** | sonnet | Bounded fix for localized end-review findings. Escalates to `opus` on the final pass. A broad or structural finding bails instead (triage decision). |
@@ -246,8 +246,11 @@ committed.
 `state.json` keys: `spec_slug`, `branch`, `mode` (`branch|worktree`), `worktree_path` (the repo root in branch mode), `started_at`, `updated_at`,
 `status` (`running|review|docs|wrapup|blocked|done`), `current_task`, `tasks` (per-task
 `status/attempts/summary/issues/fixes/decisions/files_changed/commit/validated`), `review`
-(`verdict/findings/attempts`), `docs` (`changed/created`), `bail_reason`, `pr` (`url/number`),
-`tokens` (per-task and per-stage token usage + cumulative `total`).
+(`verdict/findings/attempts`), `docs` (`changed/created`), `bail_reason`, `bails` (append-only array,
+one entry per bail — `occurred_at, task_id, check_id, failing_artifact, ownership, bail_class,
+reason, resolution`; `bail_reason` mirrors the newest entry's `reason` and is null when `bails` is
+empty — see [BT.ticket.bails-must-be-append-only](../../planning/blocks/BT.ticket.bails-must-be-append-only.json)),
+`pr` (`url/number`), `tokens` (per-task and per-stage token usage + cumulative `total`).
 
 > **Token roll-up note:** `tokens.total` covers substantive stages (implement, test, fix, review,
 > docs, wrap-up). Cheap Haiku helper agents (state writers, enumerate, update-task) are excluded.

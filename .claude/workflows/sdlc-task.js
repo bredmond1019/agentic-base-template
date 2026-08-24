@@ -875,6 +875,8 @@ const state = {
   // check_id, failing_artifact, ownership, bail_class, reason, resolution}. A bail that is later
   // resumed cleanly is ANNOTATED (resolution: 'resumed-clean'), never removed. `bail_reason` above
   // stays as a mirror of the newest entry's `reason` — never independently truthful on its own.
+  // Nothing reads `bails` yet (clustering/counting is separate, out-of-scope work); this is the
+  // durable per-run record that work will consume.
   bails: [],
   tokens: { stages: [], total: { promptTokEst: 0, filesReadKb: 0, inTokEst: 0, outTok: 0 } },  // Block A — refreshed on every write
 }
