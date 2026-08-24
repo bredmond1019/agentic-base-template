@@ -116,6 +116,7 @@ def _valid_message(kind: str, message_id: str | None = None, **overrides) -> dic
         "subject": {"repo": "bastion", "block": "BA.21.A"},
         "body": bodies[kind],
         "durable_home": durable_homes[kind],
+        "verified_by": "$ ls -la core/bastion/trees/\ntotal 0 -- directory is empty",
     }
     record.update(overrides)
     return record
@@ -211,6 +212,184 @@ def check_negative_priority_field_present() -> None:
     check("`urgency` nested inside `sender` is also rejected, naming D43",
           any("urgency" in p and "D43" in p for p in nested_problems),
           f"problems: {nested_problems}")
+
+
+# --- BT.ticket.messages-must-carry-verified-by: the evidence field ----------------------------
+#
+# One case per accepted shape and one per rejected shape. The bare-adjective case (b1) is the
+# exact measured defect (three relays believed an adjective in place of evidence) and is proved
+# capable of failing in check_defect_reproduction_and_fix_demonstrated() below, which reverts
+# `_check_verified_by` in-process to the pre-fix (unvalidated) behaviour and shows the SAME record
+# validate clean under it -- without ever leaving a gated check red, since the revert and the
+# re-check both happen inside this one test process.
+
+def check_verified_by_accepted_command_and_output() -> None:
+    record = _valid_message(
+        "FINDING",
+        verified_by="$ ls -la core/bastion/trees/\ntotal 0 -- directory is empty, refuting the "
+                     "relayed claim",
+    )
+    problems = check_messages.check_message_record(record)
+    check("a `verified_by` carrying a command and its real output validates",
+          problems == [], f"problems: {problems}")
+
+
+def check_verified_by_accepted_unverified_prefix() -> None:
+    record = _valid_message("FINDING", verified_by="UNVERIFIED: base-template-b6")
+    problems = check_messages.check_message_record(record)
+    check("a `verified_by` of `UNVERIFIED: <claimant>` validates",
+          problems == [], f"problems: {problems}")
+
+
+def check_verified_by_rejected_missing() -> None:
+    record = _valid_message("FINDING")
+    del record["verified_by"]
+    problems = check_messages.check_message_record(record)
+    check("an envelope omitting `verified_by` fails validation",
+          any("verified_by" in p for p in problems), f"problems: {problems}")
+
+
+def check_verified_by_rejected_empty() -> None:
+    record = _valid_message("FINDING", verified_by="")
+    problems = check_messages.check_message_record(record)
+    check("an envelope with `verified_by` as an empty string fails validation",
+          any("verified_by" in p for p in problems), f"problems: {problems}")
+
+
+def check_verified_by_rejected_whitespace() -> None:
+    record = _valid_message("FINDING", verified_by="   \n\t  ")
+    problems = check_messages.check_message_record(record)
+    check("an envelope with `verified_by` as whitespace-only fails validation",
+          any("verified_by" in p for p in problems), f"problems: {problems}")
+
+
+def check_verified_by_rejected_bare_adjective() -> None:
+    """THE MEASURED DEFECT: a bare adjective like 'measured' asserted with nothing behind it --
+    exactly what the sending envelope in the bastion incident carried (block record `why`, case
+    1). Must be rejected by the fixed logic; check_defect_reproduction_and_fix_demonstrated()
+    below shows it PASSING under the pre-fix logic, in-process, as the reproduction."""
+    record = _valid_message("FINDING", verified_by="measured")
+    problems = check_messages.check_message_record(record)
+    check("a bare adjective `verified_by` such as 'measured' fails validation "
+          "(the measured defect)",
+          any("verified_by" in p for p in problems), f"problems: {problems}")
+
+    verified_record = _valid_message("FINDING", verified_by="verified")
+    verified_problems = check_messages.check_message_record(verified_record)
+    check("a bare adjective `verified_by` such as 'verified' also fails validation",
+          any("verified_by" in p for p in verified_problems), f"problems: {verified_problems}")
+
+
+def check_defect_reproduction_and_fix_demonstrated() -> None:
+    """Demonstrates, in-process, that the bare-adjective fixture is capable of failing --
+    without ever leaving a gated check red. Mirrors the pattern test_bail_path_runtime.py's
+    runtime half uses (and BT.ticket.notify-operator-skill task 4's correct specification of it):
+    temporarily revert the fix, show the SAME fixture record now validates clean (the pre-fix
+    defect, reproduced), then restore the fix and show it fails again (the fixed behaviour, which
+    every other check in this file already exercises against the real, un-reverted module)."""
+    record = _valid_message("FINDING", verified_by="measured")
+
+    original_required = list(check_messages.MESSAGE_REQUIRED)
+    original_check_fn = check_messages._check_verified_by
+    try:
+        # Pre-fix simulation: `verified_by` was neither required nor validated.
+        check_messages.MESSAGE_REQUIRED = [f for f in original_required if f != "verified_by"]
+        check_messages.MESSAGE_ALLOWED = set(check_messages.MESSAGE_REQUIRED) | {"verified_by"}
+        check_messages._check_verified_by = lambda value: []
+
+        pre_fix_problems = check_messages.check_message_record(record)
+        check("REPRODUCED pre-fix: the bare-adjective envelope validates clean when `verified_by` "
+              "is neither required nor checked -- this is the measured defect",
+              pre_fix_problems == [], f"problems: {pre_fix_problems}")
+    finally:
+        check_messages.MESSAGE_REQUIRED = original_required
+        check_messages.MESSAGE_ALLOWED = set(original_required)
+        check_messages._check_verified_by = original_check_fn
+
+    post_fix_problems = check_messages.check_message_record(record)
+    check("FIXED: the same bare-adjective envelope fails validation once restored",
+          any("verified_by" in p for p in post_fix_problems), f"problems: {post_fix_problems}")
+
+
+# --- BT.ticket.messages-must-carry-verified-by: legacy envelope, built from a real one on disk --
+
+def check_legacy_envelope_without_verified_by_does_not_crash() -> None:
+    """A real envelope already on disk before this field existed (no synthesized fixture): copied
+    verbatim from .fleet-locks/queue/base-template/base-template/done/ as it was measured
+    2026-08-24. It lacks `verified_by`. Per the block's stated deterministic choice (out_of_scope:
+    no retrofit migration onto envelopes already on disk), an otherwise schema-valid legacy
+    envelope missing ONLY `verified_by` is reported -- tagged LEGACY -- but does not fail the
+    gating verdict and never crashes the checker or the drain machinery. At the `check_message_
+    record()` level (schema conformance, no legacy exemption) it still reports the missing field
+    by name, which is what a NEW envelope omitting the field is held to."""
+    legacy_record = {
+        "message_id": "drain-log-call-site-unwired",
+        "sender": {
+            "agent_name": "agentic-portfolio-01",
+            "repo": "hq",
+            "lane": "brain",
+            "roadmap": "autonomous-foundation",
+        },
+        "sent_at": "2026-08-23T13:10:44Z",
+        "kind": "FINDING",
+        "subject": {"repo": "base-template"},
+        "body": (
+            "HQ closed HQ.ticket.fleet-locks-have-no-history and shipped scripts/drain_log.py "
+            "in the brain repo. The call site is unwired and is yours."
+        ),
+        "durable_home": {
+            "channel": "carryover",
+            "ref": "hq:planning/state.json carryover[] drain-does-not-write-the-durable-drain-log",
+        },
+        # verified_by deliberately absent -- this is the pre-field shape.
+    }
+    assert "verified_by" not in legacy_record
+
+    problems = check_messages.check_message_record(legacy_record)
+    check("a real pre-existing envelope missing `verified_by` is reported as failing, not exempt",
+          any("verified_by" in p for p in problems), f"problems: {problems}")
+
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        queue_dir = lock_dir / "queue" / "base-template" / "lane-coordination"
+        try:
+            _write_message_file(queue_dir / "done", legacy_record)
+            check_messages.append_receipt(queue_dir, legacy_record["message_id"], "inbox",
+                                           "processing")
+            check_messages.append_receipt(queue_dir, legacy_record["message_id"], "processing",
+                                           "done")
+            proc = _run_cli(lock_dir)
+            crashed = proc.returncode not in (0, 1)
+            check("the CLI does not crash (exits 0 or 1, never a traceback/other code) reading a "
+                  "legacy envelope without `verified_by`",
+                  not crashed, f"rc: {proc.returncode}, output: {proc.stdout + proc.stderr}")
+            check("the CLI does NOT fail the gating verdict (rc == 0) for a legacy envelope "
+                  "missing only `verified_by` -- the stated deterministic choice, so a real "
+                  "pre-existing corpus does not red-gate the harness",
+                  proc.returncode == 0, f"rc: {proc.returncode}, output: {proc.stdout + proc.stderr}")
+            check("the CLI still names the field, tagged LEGACY, in its report",
+                  "verified_by" in (proc.stdout + proc.stderr)
+                  and "LEGACY" in (proc.stdout + proc.stderr),
+                  proc.stdout + proc.stderr)
+        except Exception as exc:                    # noqa: BLE001 -- a raise here IS the failure
+            check("the drain machinery does not crash on a legacy envelope without `verified_by`",
+                  False, f"raised: {exc!r}")
+
+        # drain_queue()/complete_message() never inspect verified_by -- confirm no crash there.
+        try:
+            replay_dir = lock_dir / "queue" / "base-template" / "lane-replay"
+            inbox_dir = replay_dir / "inbox"
+            _write_message_file(inbox_dir, legacy_record)
+            moved = check_messages.drain_queue(replay_dir)
+            check("drain_queue() moves a legacy envelope without `verified_by` without raising",
+                  len(moved) == 1, f"moved: {moved}")
+            done = check_messages.complete_message(replay_dir, legacy_record["message_id"])
+            check("complete_message() completes a legacy envelope without `verified_by` without "
+                  "raising",
+                  done is True)
+        except Exception as exc:                    # noqa: BLE001 -- a raise here IS the failure
+            check("drain/complete do not crash on a legacy envelope without `verified_by`",
+                  False, f"raised: {exc!r}")
 
 
 # --- negative (d): message written directly into processing/, no receipt ----------------------
@@ -422,6 +601,14 @@ def main() -> int:
     check_negative_unknown_kind()
     check_negative_missing_durable_home()
     check_negative_priority_field_present()
+    check_verified_by_accepted_command_and_output()
+    check_verified_by_accepted_unverified_prefix()
+    check_verified_by_rejected_missing()
+    check_verified_by_rejected_empty()
+    check_verified_by_rejected_whitespace()
+    check_verified_by_rejected_bare_adjective()
+    check_defect_reproduction_and_fix_demonstrated()
+    check_legacy_envelope_without_verified_by_does_not_crash()
     check_negative_direct_write_to_processing()
     check_negative_done_missing_second_receipt()
     check_boundary_filename_uuid_mismatch()

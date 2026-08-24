@@ -5,8 +5,9 @@ Dependency-free on purpose, same discipline as check_lane_agents.py, check_lane_
 check_block_records.py: `jsonschema` is not installed anywhere in this fleet, so a validator that
 imports it validates nothing and reports success. This checks the constraints in
 message.schema.json -- required/allowed keys at every object level, the slug and timestamp
-grammars, the five-value kind enum, and the explicit absence of a priority/urgency field -- by
-hand, plus the queue layout invariants message.schema.json cannot express on its own.
+grammars, the five-value kind enum, the required `verified_by` evidence field's two accepted
+shapes (BT.ticket.messages-must-carry-verified-by), and the explicit absence of a priority/urgency
+field -- by hand, plus the queue layout invariants message.schema.json cannot express on its own.
 
 FILE LAYOUT: queues live under the same shared advisory lock directory check_lane_agents.py and
 fleet_concurrency_check.py already resolve -- this script mirrors their identical --lock-dir /
@@ -50,6 +51,13 @@ Usage:
 Exit code 1 if any record fails validation or any layout invariant is violated. Exit code 0 on a
 clean corpus, INCLUDING a corpus with zero queues -- that is the state of every repo today, before
 BT.6.C ever writes a message, and must stay silent (matches check_lane_agents.py's precedent).
+
+LEGACY `verified_by` (BT.ticket.messages-must-carry-verified-by): an envelope already on disk
+before this field existed, and otherwise schema-valid, is reported with a `[LEGACY -- pre-dates
+verified_by, not gating]` tag but does NOT flip the exit code and never crashes a drain --
+retrofitting the field onto envelopes already on disk is out of scope for that block. Any OTHER
+problem on the same record (a bad kind, a missing durable_home, a layout violation, or a
+`verified_by` that is PRESENT but does not satisfy either accepted shape) still fails it normally.
 """
 
 from __future__ import annotations
@@ -70,8 +78,20 @@ FILENAME_RE = re.compile(r"^(\d{8}T\d{6}(?:\.\d+)?Z)-(.+)\.json$")
 KIND_VALUES = ["EDGE_RELEASED", "FINDING", "RENDEZVOUS", "LEASE_RELEASE", "QUERY"]
 DURABLE_HOME_CHANNELS = {"lane-log", "state-edge", "carryover", "run-record"}
 
-MESSAGE_REQUIRED = ["message_id", "sender", "sent_at", "kind", "subject", "body", "durable_home"]
+MESSAGE_REQUIRED = [
+    "message_id", "sender", "sent_at", "kind", "subject", "body", "durable_home", "verified_by",
+]
 MESSAGE_ALLOWED = set(MESSAGE_REQUIRED)
+
+# verified_by (BT.ticket.messages-must-carry-verified-by): two accepted shapes, both enforced by
+# regex, mirroring message.schema.json's `pattern`. (1) `UNVERIFIED: <claimant>` -- the sender is
+# relaying, not independently checking, and names who claimed it. (2) a command-plus-output
+# block -- asserted here as multi-line text carrying a non-whitespace command line and a
+# non-whitespace output line on a following line. A bare adjective like "measured" (no newline,
+# no UNVERIFIED prefix) matches neither shape -- that IS the measured defect this field exists to
+# catch: a claim asserted with nothing behind it.
+VERIFIED_BY_UNVERIFIED_RE = re.compile(r"^UNVERIFIED: \S[\s\S]*$")
+VERIFIED_BY_EVIDENCE_RE = re.compile(r"^[\s\S]*\S[\s\S]*\n[\s\S]*\S[\s\S]*$")
 
 SENDER_REQUIRED = ["agent_name", "repo", "lane", "roadmap"]
 SENDER_ALLOWED = set(SENDER_REQUIRED)
@@ -221,6 +241,22 @@ def _check_object(record, required, allowed, label) -> list:
     return problems
 
 
+def _check_verified_by(value) -> list:
+    """Validate `verified_by`'s two accepted shapes. Returns a list of problems (empty if the
+    value satisfies either shape). Factored out of `check_message_record` so a fixture can
+    monkeypatch it directly to reproduce the pre-fix (unvalidated) behaviour in-process, without
+    reverting the schema or the required-field list."""
+    if not isinstance(value, str) or not value.strip():
+        return ["`verified_by` must be a non-empty, non-whitespace string"]
+    if VERIFIED_BY_UNVERIFIED_RE.match(value) or VERIFIED_BY_EVIDENCE_RE.match(value):
+        return []
+    return [
+        f"`verified_by` value `{value}` is neither `UNVERIFIED: <claimant>` nor a "
+        f"command-plus-output block (a command line, then its output on a following line) -- "
+        f"a bare adjective such as 'measured' does not satisfy this field"
+    ]
+
+
 def check_message_record(record) -> list:
     """Return every error for one message envelope, against message.schema.json's constraints."""
     problems = _check_object(record, MESSAGE_REQUIRED, MESSAGE_ALLOWED, "message")
@@ -284,6 +320,10 @@ def check_message_record(record) -> list:
             ref = durable_home.get("ref")
             if ref is not None and not (isinstance(ref, str) and ref):
                 problems.append("`durable_home.ref` must be a non-empty string")
+
+    verified_by = record.get("verified_by")
+    if verified_by is not None:
+        problems.extend(_check_verified_by(verified_by))
 
     return problems
 
@@ -468,19 +508,38 @@ def _check_one_queue(queue_dir: Path, quiet: bool, own_repo: Optional[str]) -> t
 
             message_id = record.get("message_id") if isinstance(record, dict) else None
 
+            # BT.ticket.messages-must-carry-verified-by: a pre-existing envelope written before
+            # this field existed, and otherwise schema-valid, is LEGACY -- reported but never
+            # gating and never a crash. Retrofitting the field onto envelopes already on disk is
+            # explicitly out of scope (block record `out_of_scope`); this is the deterministic
+            # behaviour chosen for them instead. Any OTHER problem (schema or layout) still fails
+            # the record normally -- only the exact missing-`verified_by` complaint is downgraded.
+            legacy_missing_verified_by = (
+                not load_err
+                and isinstance(record, dict)
+                and record.get("verified_by") is None
+                and bool(problems)
+                and all("`verified_by`" in p for p in problems)
+            )
+
+            def _gating(probs: list) -> list:
+                if legacy_missing_verified_by:
+                    return [p for p in probs if "`verified_by`" not in p]
+                return probs
+
             m = FILENAME_RE.match(path.name)
             if not m:
                 problems.append(
                     f"filename `{path.name}` does not match `<ts>-<uuid>.json` "
                     f"(ISO-8601 basic-form UTC timestamp, then a dash, then the uuid)"
                 )
-            elif not problems and message_id is not None and m.group(2) != message_id:
+            elif not _gating(problems) and message_id is not None and m.group(2) != message_id:
                 problems.append(
                     f"filename uuid `{m.group(2)}` does not match in-file message_id "
                     f"`{message_id}`"
                 )
 
-            if not problems and message_id is not None:
+            if not _gating(problems) and message_id is not None:
                 inbox_to_processing = counts.get((message_id, "inbox", "processing"), 0)
                 processing_to_done = counts.get((message_id, "processing", "done"), 0)
 
@@ -514,12 +573,17 @@ def _check_one_queue(queue_dir: Path, quiet: bool, own_repo: Optional[str]) -> t
                             f"directly into done/, skipping the receipted transition"
                         )
 
-            if problems:
+            gating_problems = _gating(problems)
+            if gating_problems:
                 if foreign:
                     foreign_failed += 1
                 else:
                     failed += 1
                 lines.append(f"FAIL {path}{tag}")
+                lines.extend(f"       {p}" for p in problems)
+            elif problems:
+                # legacy_missing_verified_by, and nothing else wrong: reported, not gating.
+                lines.append(f"FAIL {path}{tag} [LEGACY -- pre-dates verified_by, not gating]")
                 lines.extend(f"       {p}" for p in problems)
             elif not quiet:
                 lines.append(f"ok   {path}")
