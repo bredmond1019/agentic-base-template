@@ -416,6 +416,33 @@ If the engine **bailed** (triage MAJOR, immediate-bail, review FAIL after its bo
 - `--continue-on-fail` → record it, leave the block `open`, continue. **Never mark a bailed block
   closed.**
 
+**Record the bail in the run-state's `bails[]` shape (BT.ticket.bails-must-be-append-only).** An
+engine-driven bail already appends this entry to the spec's `sdlc-*state.json` itself; a
+hand-driven bail — one this chain records from a lane's report rather than from a live engine
+invocation — must produce the same append so the two are indistinguishable on disk later. APPEND
+(never overwrite) an entry shaped:
+```
+{occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution: null}
+```
+- `occurred_at` — ISO-8601 timestamp of the bail, not of when you're writing this entry after.
+- `task_id` — the task the engine was on when it bailed.
+- `check_id` — the harness check name from the failure output, if the report names one; `null`
+  otherwise.
+- `failing_artifact` — the path the check named in its failure output, or `null` when it named
+  none. Never fabricate a path the report didn't give you.
+- `ownership` — `self` when `failing_artifact` intersects the task's declared `files[]`, `foreign`
+  when it does not — the same set-intersection `renderWorkAssertion()` already computes; `null`
+  when `failing_artifact` is `null`.
+- `bail_class` — the immediate-bail reason number if the report gives one, else `null`.
+- `reason` — the human-readable bail reason (mirrors what would otherwise have gone into
+  `bail_reason`).
+- `resolution` — `null` at record time; filled in later (`resumed-clean`, `respec`, or
+  `abandoned`) on whichever run clears the bail — never delete or overwrite the original entry to
+  do so.
+Load the `record-a-bail` skill for the classification vocabulary (artifact-vs-detector, same-vs-
+different defect) before deciding `check_id`/`failing_artifact`/`bail_class` for a report that
+doesn't spell them out directly.
+
 If the engine did **not** bail but `sdlc-flow`'s return has `stranded: true` — a `PASS` verdict
 that ended with no PR opened and (under `--auto-merge`) no merge, because the PR stage was
 attempted and either errored or could not be independently verified via `gh pr view` — **treat it
