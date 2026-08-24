@@ -255,6 +255,27 @@ staleness) with the current UTC timestamp, unconditionally — even a drain that
 steps 1-5 (empty inbox, nothing dirty, no orphans) still proves the drain ran by stamping this. A
 missing or stale heartbeat is itself the signal that drains have stopped happening.
 
+**Then append this drain's record to the durable evidence log.** Track three counts as you work
+steps 1-2 — `DRAINED` (messages step 1c moved out of this lane's `inbox/`), `ROUTED` (messages
+step 2 relayed), `COMPLETED` (messages step 2 moved into `done/`) — and pass them here:
+```
+python3 "<brain_root>/scripts/drain_log.py" record \
+  --roadmap "<roadmap>" --lock-dir "$LOCK_DIR" --brain-root "<brain_root>" \
+  --drained "$DRAINED" --routed "$ROUTED" --completed "$COMPLETED"
+```
+`<brain_root>` is the same walk-up-for-`brain.toml` resolution step 3 already uses — never a
+repo-relative path. `<roadmap>` is this drain's roadmap slug, resolved by finding every
+`planning/roadmaps/*/lane-<this repo>.json` under `<brain_root>` (step 1's own repo name) whose
+`"lane"` matches this drain's lane: if exactly one such lane file exists, its `"roadmap"` field
+names the roadmap. **Degrade-and-report, never abort, when a roadmap cannot be resolved this
+way** — zero matching lane files (this repo/lane is not part of any roadmap run right now) or
+more than one (this repo/lane is in-flight on two roadmaps at once, and this drain does not
+guess which one the queue activity belongs to) both mean: skip the `drain_log.py` call, note
+"no roadmap resolved — drain-log record skipped" in this drain's report line, and continue —
+the heartbeat above has already been stamped, and steps 1-5's work is already done regardless.
+`drain_log.py` itself exits 2 if `--roadmap` names a directory that does not exist; treat that
+identically — log it, do not fail the drain over it.
+
 ## Stateless per drain
 
 Nothing is carried between drains except what is already on disk: the queue directories, the
@@ -281,8 +302,8 @@ that the next drain cannot reconstruct from disk.
 - **The commander never runs an SDLC engine and never implements a block.** Its only writes are:
   queue-directory transitions (step 1), relayed messages (step 2), whatever
   `emit_state_write.sh` derives and commits (step 3), `planning/open-work/index.md` (step 5), and
-  the heartbeat file (step 6). If a drain finds itself about to touch application code or a spec's
-  `tasks.json`, stop — that is a lane's job, not this one's.
+  the heartbeat file and drain-log record (step 6). If a drain finds itself about to touch
+  application code or a spec's `tasks.json`, stop — that is a lane's job, not this one's.
 
 ## Out of scope (do not attempt here)
 
@@ -319,7 +340,7 @@ One line per drain, appended to the running log the wrapper maintains (never a n
 drain — see "Stateless per drain"):
 
 ```
-<UTC timestamp> · drained <n> · routed <n> · committed <manifest paths, or "none"> · orphans: <silent n / recovery n / alert n> · heartbeat stamped
+<UTC timestamp> · drained <n> · routed <n> · committed <manifest paths, or "none"> · orphans: <silent n / recovery n / alert n> · heartbeat stamped · drain-log: <recorded to <roadmap> | no roadmap resolved, skipped>
 ```
 
 Then, only if non-empty:
