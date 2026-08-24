@@ -1053,5 +1053,138 @@ class ExclusiveLeaseMatrix(unittest.TestCase):
         self.assertTrue(payload["allowed"])
 
 
+class AgentKeyedPoolLeak(unittest.TestCase):
+    """Task 1 of BT.ticket.register-leaks-a-slot-and-the-commands-teach-it: reproduce the
+    measured defect as failing fixtures BEFORE any fix lands.
+
+    `_lock_path()` keys the on-disk entry filename on the CALLING process's pid
+    (`os.getpid()` when `--pid` is omitted). Every invocation below omits `--pid` deliberately --
+    that is exactly how `.claude/commands/begin-orchestration.md` and `orchestrate.md` teach the
+    call today. Each `_run` is its own OS process, so each one gets its own real pid, the same
+    way a lane's register call and its later release call are two genuinely separate processes
+    in production.
+
+    The intended fix (task 2) keys the entry on `--agent` instead. These fixtures are written
+    against that INTENDED behaviour, not today's, so cases (a) and (c) are expected to be RED
+    against the unmodified script -- that redness is the reproduction the block calls for.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.lock_dir = str(Path(self._tmp.name) / "locks")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(_MODULE_PATH), *args, "--lock-dir", self.lock_dir],
+            capture_output=True,
+            text=True,
+        )
+
+    # (a) register in one process, release in another (same agent identity, no --pid on either
+    # call -- the documented invocation), must free the slot. RED before the fix: today's
+    # release computes its own path from ITS OWN pid, which never matches the register call's
+    # pid, so the entry survives.
+    def test_cross_process_release_by_agent_frees_the_slot(self) -> None:
+        reg = self._run("register", "--repo", "agent-repo-a", "--agent", "agent-a")
+        self.assertEqual(reg.returncode, 0, f"register unexpectedly refused: {reg.stdout!r}")
+
+        rel = self._run("release", "--repo", "agent-repo-a", "--agent", "agent-a")
+
+        stat = self._run("status")
+        stat_out = json.loads(stat.stdout)
+        self.assertFalse(
+            any("agent-repo-a" in entry for entry in stat_out["active"]),
+            "the measured defect: a release from a DIFFERENT process than the register call "
+            f"did not free the slot -- release exit {rel.returncode}, release output "
+            f"{rel.stdout!r} {rel.stderr!r}, status after release {stat_out}",
+        )
+
+    # (b) release of an entry that was never registered must report that nothing was removed,
+    # not `allowed: true` unconditionally.
+    def test_release_of_absent_entry_reports_nothing_removed(self) -> None:
+        rel = self._run("release", "--repo", "never-registered-agent-repo")
+        rel_out = json.loads(rel.stdout)
+        self.assertIn(
+            "removed",
+            rel_out,
+            f"release must report whether it actually removed an entry, not just allowed: "
+            f"true unconditionally -- got {rel_out}",
+        )
+        self.assertFalse(rel_out["removed"])
+
+    # (c) five successive registers of the SAME agent (no --pid on any call -- the documented
+    # heartbeat invocation) must consume exactly one slot, not five. RED before the fix: each
+    # subprocess gets its own real pid, so today's pid-keyed scheme writes five distinct entries.
+    def test_five_successive_registers_same_agent_consume_one_slot(self) -> None:
+        for _ in range(5):
+            reg = self._run(
+                "register", "--repo", "agent-repo-b", "--agent", "agent-b",
+                "--category", "native-build", "--max-heavy-lanes", "10",
+            )
+            self.assertEqual(
+                reg.returncode, 0, f"a same-agent re-register was refused: {reg.stdout!r}"
+            )
+
+        lock_files = list(Path(self.lock_dir).glob("agent-repo-b__*.json"))
+        self.assertEqual(
+            len(lock_files),
+            1,
+            f"five re-registers of the same agent must occupy one slot, not five -- found "
+            f"{len(lock_files)} on-disk entries: {[p.name for p in lock_files]}",
+        )
+
+    # (d) a lane must never be refused on account of its own prior registration. Fill capacity
+    # with two OTHER agents, then have the first of them re-register (heartbeat) its own slot --
+    # that must never trip the at-capacity refusal.
+    def test_lane_never_refuses_its_own_prior_registration(self) -> None:
+        r1 = self._run("register", "--repo", "agent-repo-x", "--agent", "agent-x")
+        self.assertEqual(r1.returncode, 0)
+        r2 = self._run("register", "--repo", "agent-repo-y", "--agent", "agent-y")
+        self.assertEqual(r2.returncode, 0)
+
+        # agent-x heartbeats its own slot from a separate process, with the fleet already at the
+        # 2-lane browser-automation cap.
+        r3 = self._run("register", "--repo", "agent-repo-x", "--agent", "agent-x")
+        self.assertEqual(
+            r3.returncode,
+            0,
+            f"agent-x's own re-registration must never be refused on account of its own prior "
+            f"hold, even at capacity: {r3.stdout!r}",
+        )
+
+    # (e) a pre-existing OLD-scheme entry (pid-keyed, no `agent` field -- exactly what today's
+    # unmodified `register` writes) already on disk must be handled deterministically once the
+    # new agent-keyed scheme is in place: it is not silently dropped, and it still counts toward
+    # category capacity via the ordinary staleness sweep -- no separate migration path. This
+    # documents the chosen policy for task 2; it is not required to be RED pre-fix.
+    def test_pre_existing_old_scheme_entry_still_counts_toward_capacity(self) -> None:
+        lock_dir = Path(self.lock_dir)
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        old_entry = lock_dir / "agent-repo-old__424242.json"
+        old_entry.write_text(
+            json.dumps(
+                {
+                    "repo": "agent-repo-old",
+                    "pid": 424242,
+                    "pid_source": "self",
+                    "category": "browser-automation",
+                    "started_at": time.time(),
+                },
+                indent=2,
+            )
+        )
+
+        stat = self._run("status")
+        stat_out = json.loads(stat.stdout)
+        self.assertTrue(
+            any("agent-repo-old" in entry for entry in stat_out["active"]),
+            f"a pre-existing old-scheme entry must still be visible/counted, not silently "
+            f"dropped: {stat_out}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

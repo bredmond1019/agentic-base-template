@@ -29,11 +29,18 @@ Design (recorded in full in planning/decisions/D61-fleet-concurrency-enforcement
   90 minutes, matched to a real lane segment) plus an explicit `release`. Either way, an entry is
   removed during the sweep, unconditionally before it can block anyone, once it is stale by
   whichever rule applies to it.
-- **Clean release**: `release` removes exactly the lock file this repo+pid registered. A lane that
-  exits cleanly should always call this; a lane that dies without calling it is caught by TTL
-  expiry (or, for an explicit pid, liveness) on the next registration attempt instead. A long lane
-  should re-register periodically as a heartbeat — `register` is idempotent-refresh, so a
-  re-register of the same repo+pid+category bumps `started_at` instead of consuming a second slot.
+- **Clean release**: `release` removes exactly the lock file this repo+agent (or, absent an
+  `--agent`, repo+pid) registered — entries are keyed on the caller's `--agent` identity when one
+  is supplied, precisely so that a `register` call and a LATER, separate-process `release` call for
+  the same agent compute the identical on-disk path
+  (BT.ticket.register-leaks-a-slot-and-the-commands-teach-it; before this, `release` computed its
+  path from its OWN pid, which never matched the registering process's pid, so the entry survived
+  and `release` still reported success). `release` reports `removed: true`/`false` for whether an
+  entry genuinely existed and was deleted. A lane that exits cleanly should always call `release`;
+  a lane that dies without calling it is caught by TTL expiry (or, for an explicit pid, liveness) on
+  the next registration attempt instead. A long lane should re-register periodically as a
+  heartbeat — `register` is idempotent-refresh, so a re-register of the same repo+agent+category
+  bumps `started_at` instead of consuming a second slot.
 - **Degrade to advisory, never hard-fail**: if the lock directory cannot be resolved, created, or
   written to for any reason (no brain.toml found, permission error, read-only filesystem, ...),
   every operation reports success with `degraded: true` and a reason — the caller proceeds exactly
@@ -48,8 +55,8 @@ Design (recorded in full in planning/decisions/D61-fleet-concurrency-enforcement
   per category — a native-build lane never competes with a browser-automation lane for a slot.
 
 CLI:
-  python3 scripts/fleet_concurrency_check.py register --repo <name> [--pid PID] [--ttl SECONDS] [--lock-dir DIR]
-  python3 scripts/fleet_concurrency_check.py release  --repo <name> [--pid PID] [--lock-dir DIR]
+  python3 scripts/fleet_concurrency_check.py register --repo <name> --agent <id> [--pid PID] [--ttl SECONDS] [--lock-dir DIR]
+  python3 scripts/fleet_concurrency_check.py release  --repo <name> --agent <id> [--pid PID] [--lock-dir DIR]
   python3 scripts/fleet_concurrency_check.py status   [--lock-dir DIR]
   python3 scripts/fleet_concurrency_check.py is-heavy --repo-path <path>
 
@@ -143,6 +150,10 @@ class LockResult:
     # entries) so a reader can tell WHY nothing may start -- see `status()` and the refusal
     # path in `register()`.
     exclusive_leases: list = field(default_factory=list)
+    # Set only by `release()` -- whether an on-disk entry actually existed and was removed, as
+    # opposed to the pre-fix behaviour of reporting `allowed: true` unconditionally regardless of
+    # whether anything was there to remove (BT.ticket.register-leaks-a-slot-and-the-commands-teach-it).
+    removed: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -151,6 +162,7 @@ class LockResult:
             "reason": self.reason,
             "active": self.active,
             "exclusive_leases": self.exclusive_leases,
+            "removed": self.removed,
         }
 
 
@@ -210,7 +222,21 @@ def _pid_running(pid: int) -> bool:
     return True
 
 
-def _lock_path(lock_dir: Path, repo: str, pid: int) -> Path:
+def _lock_path(lock_dir: Path, repo: str, agent: Optional[str], pid: int) -> Path:
+    """Filesystem path for `repo`'s lock entry.
+
+    Keyed on the caller's AGENT identity when one is supplied
+    (BT.ticket.register-leaks-a-slot-and-the-commands-teach-it) -- a `register` call and a LATER
+    `release` call for the same agent then compute the identical path even though they run as two
+    separate OS processes with two different pids, which is what makes `release` actually free the
+    slot it was given instead of unlinking a path nothing ever wrote. Falls back to the old
+    pid-keyed scheme when no `--agent` is supplied by either caller -- deliberately NOT migrated:
+    a pre-existing old-scheme on-disk entry keeps its own pid-keyed filename and is still swept and
+    counted identically by `_sweep_stale`/`register`'s capacity check, since both operate over
+    every `*.json` file in the directory regardless of which naming scheme produced it.
+    """
+    if agent:
+        return lock_dir / f"{_safe_repo_name(repo)}__agent-{_safe_repo_name(agent)}.json"
     return lock_dir / f"{_safe_repo_name(repo)}__{pid}.json"
 
 
@@ -394,9 +420,9 @@ def register(
     survivors = _sweep_stale(lock_dir, ttl_seconds)
     category_survivors = [e for e in survivors if e.get("category", "browser-automation") == category]
 
-    # Idempotent: if this exact repo+pid already holds a slot, re-registering succeeds without
+    # Idempotent: if this exact repo+agent (or, absent an agent, repo+pid) already holds a slot, re-registering succeeds without
     # consuming a second slot.
-    own_path = _lock_path(lock_dir, repo, pid)
+    own_path = _lock_path(lock_dir, repo, agent, pid)
     already_registered = any(entry.get("_path") == str(own_path) for entry in category_survivors)
     active_repos = [e["repo"] for e in category_survivors]
 
@@ -415,6 +441,7 @@ def register(
                     "repo": repo,
                     "pid": pid,
                     "pid_source": pid_source,
+                    "agent": agent,
                     "category": category,
                     "started_at": time.time(),
                 },
@@ -423,15 +450,16 @@ def register(
         )
         active_repos.append(repo)
     else:
-        # Idempotent-refresh: a re-register of the same repo+pid+category is a heartbeat, not a
-        # no-op - it bumps started_at so a long lane's slot doesn't age past the TTL out from
-        # under it.
+        # Idempotent-refresh: a re-register of the same repo+agent (or, absent an agent,
+        # repo+pid)+category is a heartbeat, not a no-op - it bumps started_at so a long lane's
+        # slot doesn't age past the TTL out from under it, and consumes no second slot.
         own_path.write_text(
             json.dumps(
                 {
                     "repo": repo,
                     "pid": pid,
                     "pid_source": pid_source,
+                    "agent": agent,
                     "category": category,
                     "started_at": time.time(),
                 },
@@ -445,8 +473,19 @@ def register(
 def release(
     repo: str,
     pid: Optional[int] = None,
+    agent: Optional[str] = None,
     lock_dir_override: Optional[str] = None,
 ) -> LockResult:
+    """Release `repo`'s heavy-lane slot.
+
+    `agent`, when supplied, must match the identity `register` was called with -- `_lock_path`
+    keys the entry on agent identity when one is given, which is what lets a release from a
+    DIFFERENT process than the one that registered still compute the SAME on-disk path and
+    actually free the slot (the measured defect this ticket fixes). Reports `removed: True` only
+    when an entry genuinely existed and was deleted, never unconditionally -- the pre-fix
+    behaviour of `allowed: true` regardless of whether anything was there to remove is what let a
+    release-of-nothing look like a successful release.
+    """
     pid = pid if pid is not None else os.getpid()
     lock_dir = resolve_lock_dir(lock_dir_override)
 
@@ -457,9 +496,10 @@ def release(
             reason="fleet lock store unavailable - nothing to release",
         )
 
-    own_path = _lock_path(lock_dir, repo, pid)
+    own_path = _lock_path(lock_dir, repo, agent, pid)
+    removed = own_path.exists()
     own_path.unlink(missing_ok=True)
-    return LockResult(allowed=True)
+    return LockResult(allowed=True, removed=removed)
 
 
 def status(lock_dir_override: Optional[str] = None, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> LockResult:
@@ -596,6 +636,12 @@ def _build_parser() -> argparse.ArgumentParser:
     rel = sub.add_parser("release", help="Release this lane's heavy-repo slot.")
     rel.add_argument("--repo", required=True)
     rel.add_argument("--pid", type=int, default=None)
+    rel.add_argument(
+        "--agent",
+        default=None,
+        help="This requester's own agent identity -- must match the --agent a prior register "
+        "call used, so the entry it wrote can be found and actually freed.",
+    )
     rel.add_argument("--lock-dir", default=None)
 
     stat = sub.add_parser("status", help="List active heavy lanes.")
@@ -634,7 +680,9 @@ def main(argv: Optional[list] = None) -> int:
         return 0 if result.allowed else 3
 
     if args.action == "release":
-        result = release(args.repo, pid=args.pid, lock_dir_override=args.lock_dir)
+        result = release(
+            args.repo, pid=args.pid, agent=args.agent, lock_dir_override=args.lock_dir
+        )
         print(json.dumps(result.to_dict(), indent=2))
         return 0
 
