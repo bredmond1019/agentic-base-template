@@ -39,7 +39,23 @@ jobs:
         working-directory: mock-hq/core/orchestrator
     services:
       postgres:
-        image: postgres:15
+        # Stock `postgres:15` has no pgvector, so orchestrator's own
+        # `enable_pgvector_extension` migration (`CREATE EXTENSION IF NOT
+        # EXISTS vector;`) fails with `FeatureNotSupported: extension
+        # "vector" is not available` the moment migrations actually run
+        # against this service (see the "Apply DB migrations" step below,
+        # added the same day this comment was).
+        #
+        # `supabase/postgres` (this repo's own local-dev choice per
+        # docs/app-architecture-overview.md) was tried first and rejected —
+        # verified locally with `docker run`: it needs Supabase's own
+        # bootstrap stack (a `supabase_admin` role, JWT secrets, etc.) and
+        # crash-loops on the plain POSTGRES_USER/PASSWORD/DB interface a bare
+        # CI `services:` container provides. `pgvector/pgvector:pg15` is the
+        # pgvector project's own image — stock Postgres 15 plus the
+        # extension, nothing else — and was verified locally to accept the
+        # standard env interface and `CREATE EXTENSION vector` cleanly.
+        image: pgvector/pgvector:pg15
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
