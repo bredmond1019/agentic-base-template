@@ -229,8 +229,11 @@ Print, and stop for confirmation unless `--execute`:
   (`agent_name`, `repo`, `lane`, `roadmap`, `started_at`, `heartbeat`), to
   `<lock_dir>/lane-agents/agent-<agent_name>.json`.
 - Take the repo lease, per `.claude/workflows/lease.schema.json` (`repo`, `lane`, `agent`,
-  `acquired_at`, `kind`), at `<lock_dir>/leases/lease-<repo>.json`. `kind` is `exclusive` for a
-  lane that will commit — every real lane.
+  `acquired_at`, `heartbeat`, `kind`), at `<lock_dir>/leases/lease-<repo>.json`. `kind` is
+  `exclusive` for a lane that will commit — every real lane. `acquired_at` is IMMUTABLE, set once
+  here and never re-stamped; `heartbeat` is the field that gets re-stamped to prove liveness — a
+  lease written without it falls back to judging staleness on `acquired_at` and can never recover
+  once that ages past the threshold, however live its holder actually is.
 - Both writes happen before the first block launches. If either write fails, stop; do not start
   the chain holding only one of the two.
 
