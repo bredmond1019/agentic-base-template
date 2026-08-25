@@ -3,7 +3,49 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-23
+**Last updated:** 2026-08-25
+
+---
+
+## [run: 2026-08-24]
+
+### The eight-block close of the autonomous-foundation lane, and the fleet-wide harness sync
+
+- **What:** Closed all 8 remaining chain blocks in one session. **The P0 is dead and proven:** both
+  engines now record a bail instead of crashing the Workflow runtime, verified end to end by three
+  real bails writing `bails[]` entries with resolved ISO timestamps. **Fleet-shared gates stopped
+  red-gating innocent lanes:** a gated check now reports every finding but fails only on records this
+  repo owns (`[FOREIGN -- reported, not gating]`), verified behaviourally in a scratch lock dir.
+  **The concurrency pool works for the first time:** keyed on agent identity, `release` actually
+  deletes, and both commands teach `--agent` and the lease's `heartbeat` — TTL had previously been the
+  only thing that ever freed a native-build slot fleet-wide. Plus the commander's drain log, failure
+  output naming its artifact, `verified_by` on cross-lane messages with legacy envelopes staying
+  legal, the drain reading the open-work board, and the `notify-operator` skill. Then applied
+  `/sync-downstream-harness`: **225 files across 19 repos**, two commits in two repos, verified
+  landed by counting the bail placeholder in nine repos' engines.
+- **Why:** The morning's append-only `bails[]` work shipped six `new Date()` calls into a runtime
+  that forbids them, so every bail path in the fleet crashed instead of recording. Everything else in
+  the chain came from the nine bails across two repos that the previous run had measured, plus four
+  peer lanes' findings relayed during this one.
+- **Refs:** [`planning/orchestration-run/autonomous-foundation/notes.md`](planning/orchestration-run/autonomous-foundation/notes.md)
+  (full record) · [`review.md`](planning/orchestration-run/autonomous-foundation/review.md)
+  (executed verification recipes) · [`handoff.md`](planning/handoff.md)
+
+### What the close-out found, which is most of the value
+
+- **What:** Re-reading files instead of trusting verdicts caught two tasks that passed while changing
+  nothing, one block that would have closed half-fixed, and a `record-a-bail` allowlist entry resting
+  on a premise its own text contradicts (measured: 4 bails today, 3 with all four classification
+  fields null). Verifying every CLEARED carryover by hand before deleting it caught **five predicates
+  resolving against the wrong git root** — two that false-cleared live findings, three of them written
+  by this lane the same day that could never clear at all. Six carryovers deleted after verification,
+  ten filed, five repaired.
+- **Why:** Four separate times this session an instrument could not have returned the answer being
+  inferred — a truncated grep, a plural field name, a substring already present before the change, an
+  ISO timestamp crashing a script. Each cost one command to catch and would have shipped a confident
+  wrong fact otherwise.
+- **Refs:** carryover `predicates-built-on-git-rev-parse-show-toplevel-resolve-to-the-wrong-root` ·
+  `record-a-bail-is-allowlisted-on-a-false-premise` · `agent-keyed-register-does-not-supersede-a-pid-keyed-entry`
 
 ---
 
