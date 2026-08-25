@@ -196,7 +196,9 @@ costly and invisible, because it looks exactly like fresh work while producing n
      above. A lane blocked on an operator is the HEALTHIEST state a blocked lane can be in — the
      heartbeat goes stale precisely because the lane is correctly waiting, not because it died —
      and must never be reported as abandoned. Three false recovery items on a previous run came
-     from exactly this conflation.
+     from exactly this conflation. If this drain's own report is the thing that should reach the
+     operator (not merely note the healthy-blocked lane in the written report) — see the
+     `notify-operator` skill for whether that rises to a real notification and which verb to use.
 
    This is one decision procedure, not two, and it stays that way deliberately. The branch above —
    `ListAgents` liveness joined against heartbeat staleness — is the FLOOR: it alone decides which
@@ -234,7 +236,9 @@ costly and invisible, because it looks exactly like fresh work while producing n
 3. **No lease at all** on the repo the file lives in, and case 0 found no live cross-repo writer
    to attribute it to. **Alert** via the brain's `lib.sh` `send_alert()` — an authored file dirty
    with nothing holding the repo, and no lane explaining it, is unexplained by any lane this drain
-   knows about.
+   knows about. `send_alert()` is the automation-side alert path; reaching the human operator
+   directly mid-run is a separate decision — see the `notify-operator` skill for when that is
+   warranted and which verb to use.
 
 `scripts/check_lane_agents.py` gives you the timestamp-age half of case 2 (a lease's `acquired_at`
 or a registry claim's `heartbeat`) but **cannot call `ListAgents`** — by its own docstring, it
