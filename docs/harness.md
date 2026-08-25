@@ -65,7 +65,7 @@ implement it this way:
    record must still be fatal. A test suite that only proves the first direction cannot tell you the
    check still catches anything.
 
-See `scripts/check_lane_agents.py` and `scripts/check_messages.py` for a worked implementation
+See [`scripts/check_lane_agents.py`](../scripts/check_lane_agents.py) and [`scripts/check_messages.py`](../scripts/check_messages.py) for a worked implementation
 (`resolve_own_repo`, `is_foreign`), and their test files for the both-directional fixtures.
 
 ## The FAIL line format (BT.ticket.checks-must-name-their-failing-artifact)
@@ -83,7 +83,7 @@ text. When a check has genuinely no artifact to name for a given failure, it emi
 `<no-artifact>` token in the path position — never a guessed or fabricated path, and never silent
 omission of the field.
 
-The reference implementation is `scripts/check_lane_agents.py`, which already emits this shape —
+The reference implementation is [`scripts/check_lane_agents.py`](../scripts/check_lane_agents.py), which already emits this shape —
 one `FAIL <path>` line per bad record, e.g.:
 
 ```
@@ -110,7 +110,7 @@ Audited every check registered in `planning/harness.json` (45 total) against the
 
 | Check | Script |
 |---|---|
-| `lane-agent-schema` | `scripts/check_lane_agents.py` (the reference) |
+| `lane-agent-schema` | [`scripts/check_lane_agents.py`](../scripts/check_lane_agents.py) (the reference) |
 | `block-record-schema` | `scripts/check_block_records.py` |
 | `lane-record-schema` | `scripts/check_lane_records.py` |
 | `message-schema` | `scripts/check_messages.py` |
