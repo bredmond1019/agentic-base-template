@@ -69,6 +69,39 @@ OPERATOR_EDGE_TYPES = ("operator", "approval")
 
 KNOWN_STATUS_VALUES = {"done", "blocked", "docs", "running", "passed", "completed"}
 
+# BT.6.A/B shared advisory lock directory layout (leases, lane-agent registry, message queues) --
+# same subdirectory names check_lane_agents.py and check_messages.py already use, cited here
+# rather than reinvented so a rename in either place is a single-file change, not three.
+LOCK_SUBDIR = ".fleet-locks"
+REGISTRY_SUBDIR = "lane-agents"
+LEASE_SUBDIR = "leases"
+QUEUE_SUBDIR = "queue"
+
+
+def _import_check_lane_agents():
+    """Import check_lane_agents.py from this same scripts/ directory.
+
+    Load-bearing, same discipline as fleet_concurrency_check.py's helper of the same name: this
+    module is a READER of BT.6.A's shapes (lease.schema.json / lane-agent.schema.json), never a
+    second implementation. Reusing `lease_liveness_timestamp`, `staleness_seconds` and
+    `STALE_THRESHOLD_SECONDS` from check_lane_agents.py is how "project state, don't re-implement
+    validation" (this module's own docstring) is actually satisfied rather than merely claimed --
+    check_lane_agents.py owns the staleness rule and the duplicate-exclusive-lease check; this
+    module only reports what is currently on disk. A plain `import check_lane_agents` is not
+    reliable when this file is loaded by path (e.g. via `importlib.util.spec_from_file_location`)
+    rather than run as `python3 roadmap_status_discovery.py`, so the import locates its sibling by
+    this file's own path instead of trusting the caller's sys.path state.
+    """
+    scripts_dir = Path(__file__).resolve().parent
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import check_lane_agents  # noqa: E402 - deliberate late/local import, see docstring above
+
+    return check_lane_agents
+
+
+_LANE_AGENTS = _import_check_lane_agents()
+
 # Dated snapshot for the realpath-dedup relation (never a hard constant -- the fleet moves under
 # concurrent lanes and any fixed pair would go stale the moment a new spec runs). The self-test's
 # live-measurement case re-runs this exact command against the real corpus at test time and asserts
@@ -532,6 +565,193 @@ def discover_carryover(state_json_path: Path) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# 7. Leases + lane-agent registry (BT.6.A), under the shared advisory lock directory. This module
+#    PROJECTS current state only -- check_lane_agents.py owns validation (schema conformance,
+#    duplicate-exclusive-lease detection); reusing its staleness helpers and
+#    STALE_THRESHOLD_SECONDS constant here (imported, not copied) means the two can never quietly
+#    disagree about what counts as stale.
+# ---------------------------------------------------------------------------
+
+
+def resolve_lock_dir(root: Path) -> Path:
+    """Shared advisory lock directory for one already-resolved brain `root`. Mirrors
+    check_lane_agents.py's resolve_lock_dir() precedence (FLEET_LOCK_DIR env override, else
+    <brain_root>/.fleet-locks) minus its walk-up-from-cwd step, which is unnecessary here --
+    `root` passed to discover() IS the resolved brain root already."""
+    override = os.environ.get("FLEET_LOCK_DIR")
+    if override:
+        return Path(override)
+    return root / LOCK_SUBDIR
+
+
+def lane_names_by_repo(entries: list[dict[str, Any]]) -> dict[str, str]:
+    """First-seen lane name per repo from lane-log entries. Needed because both the message
+    queue (`queue/<repo>/<lane>/`) and the lane-agent registry are lane-addressed, not merely
+    repo-addressed, and lane-log.jsonl is the only one of the four already-joined artifact
+    families that carries the lane name at all."""
+    out: dict[str, str] = {}
+    for e in entries:
+        repo = e.get("repo")
+        lane = e.get("lane")
+        if repo and lane and repo not in out:
+            out[repo] = lane
+    return out
+
+
+def discover_lane_registry(lock_dir: Path, roadmap_slug: str, now: Optional[datetime] = None) -> list[dict[str, Any]]:
+    """Project every lane-agent registry claim under <lock_dir>/lane-agents/agent-*.json whose
+    own `roadmap` field matches this roadmap -- registry.schema.json carries a `roadmap` field, so
+    (unlike leases) claims can be scoped without relying on the repo-membership fallback. Heartbeat
+    age comes from check_lane_agents.py's own `staleness_seconds`/`STALE_THRESHOLD_SECONDS` --
+    liveness is judged on that age, never on an authored status field, same rule
+    `compute_liveness()` above applies to sdlc state. A record that fails to parse is reported with
+    an explicit error, never silently dropped."""
+    registry_dir = lock_dir / REGISTRY_SUBDIR
+    out: list[dict[str, Any]] = []
+    if not registry_dir.is_dir():
+        return out
+    for path in sorted(registry_dir.glob("agent-*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            out.append({"path": str(path), "error": f"does not parse: {exc}"})
+            continue
+        if data.get("roadmap") != roadmap_slug:
+            continue
+        heartbeat = data.get("heartbeat")
+        age = _LANE_AGENTS.staleness_seconds(heartbeat, now) if heartbeat else None
+        out.append({
+            "path": str(path),
+            "agent_name": data.get("agent_name"),
+            "repo": data.get("repo"),
+            "lane": data.get("lane"),
+            "roadmap": data.get("roadmap"),
+            "started_at": data.get("started_at"),
+            "heartbeat": heartbeat,
+            "heartbeat_age_seconds": round(age, 1) if age is not None else None,
+            "stale": age is not None and age > _LANE_AGENTS.STALE_THRESHOLD_SECONDS,
+            "current_block": data.get("current_block"),
+        })
+    return out
+
+
+def discover_leases(lock_dir: Path, repos: set[str], now: Optional[datetime] = None) -> list[dict[str, Any]]:
+    """Project every lease under <lock_dir>/leases/lease-*.json scoped to `repos` (the repos this
+    roadmap touches) -- lease.schema.json carries no `roadmap` field, so repo membership is the
+    only filter available, unlike the registry join above. Heartbeat age is via
+    `lease_liveness_timestamp()`'s heartbeat-else-acquired_at fallback, imported from
+    check_lane_agents.py so the two modules can never disagree about which timestamp a lease's
+    liveness is judged on. `kind` (exclusive/shared) and `holder` are reported verbatim -- this
+    module does not flag a duplicate exclusive lease; that verdict stays check_lane_agents.py's."""
+    lease_dir = lock_dir / LEASE_SUBDIR
+    out: list[dict[str, Any]] = []
+    if not lease_dir.is_dir():
+        return out
+    for path in sorted(lease_dir.glob("lease-*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            out.append({"path": str(path), "error": f"does not parse: {exc}"})
+            continue
+        if data.get("repo") not in repos:
+            continue
+        liveness_ts = _LANE_AGENTS.lease_liveness_timestamp(data)
+        age = _LANE_AGENTS.staleness_seconds(liveness_ts, now) if liveness_ts else None
+        out.append({
+            "path": str(path),
+            "repo": data.get("repo"),
+            "lane": data.get("lane"),
+            "holder": data.get("agent"),
+            "kind": data.get("kind"),
+            "scope": data.get("scope"),
+            "acquired_at": data.get("acquired_at"),
+            "heartbeat": data.get("heartbeat"),
+            "heartbeat_age_seconds": round(age, 1) if age is not None else None,
+            "stale": age is not None and age > _LANE_AGENTS.STALE_THRESHOLD_SECONDS,
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 8. Message queue depth (BT.6.B), `<lock_dir>/queue/<repo>/<lane>/{inbox,processing,done}`. A
+#    MISSING queue directory is reported as an explicit state distinct from zero ("exists": False,
+#    "inbox_count": None) -- the liaison retro measured 3 of 6 lanes launching with no queue dir at
+#    all (no durable address), and a silent 0 there would hide exactly that finding. This function
+#    only counts and ages inbox/ files; it does not validate receipts or state transitions --
+#    check_messages.py owns that.
+# ---------------------------------------------------------------------------
+
+
+def discover_queue_state(lock_dir: Path, repo: str, lane: str, now: Optional[datetime] = None) -> dict[str, Any]:
+    """Unread (inbox/) depth and the age of the oldest unread item for one repo x lane queue."""
+    queue_dir = lock_dir / QUEUE_SUBDIR / repo / lane
+    if not queue_dir.is_dir():
+        return {
+            "queue_dir": str(queue_dir),
+            "exists": False,
+            "inbox_count": None,
+            "oldest_unread_sent_at": None,
+            "oldest_unread_age_seconds": None,
+        }
+    inbox_dir = queue_dir / "inbox"
+    files = sorted(inbox_dir.glob("*.json")) if inbox_dir.is_dir() else []
+    now = now or datetime.now(timezone.utc)
+    oldest_sent_at: Optional[str] = None
+    oldest_dt: Optional[datetime] = None
+    for path in files:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        sent_at = data.get("sent_at")
+        dt = _parse_iso(sent_at) if isinstance(sent_at, str) else None
+        if dt is None:
+            continue
+        if oldest_dt is None or dt < oldest_dt:
+            oldest_dt = dt
+            oldest_sent_at = sent_at
+    oldest_age = round((now - oldest_dt).total_seconds(), 1) if oldest_dt is not None else None
+    return {
+        "queue_dir": str(queue_dir),
+        "exists": True,
+        "inbox_count": len(files),
+        "oldest_unread_sent_at": oldest_sent_at,
+        "oldest_unread_age_seconds": oldest_age,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 9. `validate-brain --state` exit code for the WHOLE corpus, once per sweep -- NOT per repo.
+#    `bastion validate-brain --help` documents [PATH] as "Path to search from when locating
+#    brain.toml (walks up to find it)": it always validates the whole corpus, never a single
+#    repo, no matter what path is passed. A per-repo join is therefore not merely redundant, it
+#    is a FALSE GREEN for every repo but one -- confirmed empirically (2026-08-26): invoking it
+#    against a vault-collapsed path and against a real repo root produces byte-identical output
+#    and the same exit code either way, because the binary ignores everything about the path
+#    except "where do I start walking up". One flag per invocation -- validate-brain's flags do
+#    not compose (`main.rs` is an if/else-if chain, first flag wins, per CLAUDE.md's standing
+#    rule) -- so this NEVER combines --state with another flag. Uses a direct list-form
+#    subprocess.run (no shell=True, no pipe), so the captured returncode IS validate-brain's own
+#    exit code, not a pipe's -- the exact trap CLAUDE.md warns about ("a piped command's $? is
+#    the pipe's, not the command's"). `runner` is injectable so --self-test can shim this call
+#    and never invoke the real binary against the real corpus.
+# ---------------------------------------------------------------------------
+
+
+def run_validate_brain(root: Path, runner=subprocess.run) -> dict[str, Any]:
+    cmd = ["bastion", "validate-brain", "--state", str(root)]
+    try:
+        result = runner(cmd, capture_output=True, text=True)
+    except (OSError, FileNotFoundError) as exc:
+        return {"cmd": " ".join(cmd), "exit_code": None,
+                "error": f"could not invoke: {exc}"}
+    return {
+        "cmd": " ".join(cmd),
+        "exit_code": result.returncode,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Top-level join.
 # ---------------------------------------------------------------------------
 
@@ -543,11 +763,18 @@ class LaneResult:
     run_record: Optional[dict[str, Any]] = None
     operator_gates: dict[str, Any] = field(default_factory=lambda: {"gates": [], "coverage_count": 0})
     carryover: list[dict[str, Any]] = field(default_factory=list)
+    lane_registry: list[dict[str, Any]] = field(default_factory=list)
+    leases: list[dict[str, Any]] = field(default_factory=list)
+    message_queue: dict[str, Any] = field(default_factory=dict)
 
 
-def discover(root: Path, roadmap_slug: str) -> dict[str, Any]:
+def discover(root: Path, roadmap_slug: str, *, now: Optional[datetime] = None,
+             validate_brain_runner=subprocess.run) -> dict[str, Any]:
     """The full join for one roadmap. Writes nothing. Returns a plain-dict result the command
-    layer renders; empty sections are represented explicitly (empty list/dict), never omitted."""
+    layer renders; empty sections are represented explicitly (empty list/dict), never omitted.
+
+    `now` and `validate_brain_runner` are injectable so --self-test can pin a clock and shim the
+    `bastion validate-brain` invocation -- neither is meant to be passed by real callers."""
     roadmap_dir = resolve_roadmap_dir(root, roadmap_slug)
     lane_entries = read_lane_log(roadmap_dir)
     repos_in_log = repos_from_lane_log(lane_entries)
@@ -597,6 +824,40 @@ def discover(root: Path, roadmap_slug: str) -> dict[str, Any]:
         coverage_total += gates["coverage_count"]
         lanes[repo].carryover = discover_carryover(path)
 
+    # 7/8/9: leases + lane-agent registry, message queue depth, validate-brain exit code -- each
+    # joined per repo, same as the operator-gates/carryover loop above.
+    lock_dir = resolve_lock_dir(root)
+    lane_names = lane_names_by_repo(lane_entries)
+    registry_entries = discover_lane_registry(lock_dir, roadmap_slug, now=now)
+    lease_entries = discover_leases(lock_dir, set(lanes.keys()), now=now)
+
+    for repo in lanes:
+        lanes[repo].lane_registry = [r for r in registry_entries if r.get("repo") == repo]
+        lanes[repo].leases = [l for l in lease_entries if l.get("repo") == repo]
+
+        lane_name = lane_names.get(repo)
+        if lane_name:
+            lanes[repo].message_queue = discover_queue_state(lock_dir, repo, lane_name, now=now)
+        else:
+            # No lane name known for this repo (absent from lane-log.jsonl) -- reported as an
+            # explicit distinct state, same discipline as the missing-queue-dir case, rather than
+            # guessing at a lane or silently omitting the field.
+            lanes[repo].message_queue = {
+                "queue_dir": None,
+                "exists": None,
+                "inbox_count": None,
+                "oldest_unread_sent_at": None,
+                "oldest_unread_age_seconds": None,
+                "note": "no lane name known for this repo (absent from lane-log.jsonl)",
+            }
+
+    # One corpus-wide validate-brain call per sweep, reported once at the top level of the
+    # result -- never per lane. See the block comment on run_validate_brain() for why a
+    # per-repo join cannot work: the binary always validates the whole corpus regardless of
+    # the path given, so a per-repo field would be a false green for every repo but one, and
+    # it would also mean N full-corpus validations per sweep instead of one.
+    validate_brain = run_validate_brain(root, runner=validate_brain_runner)
+
     return {
         "roadmap": roadmap_slug,
         "roadmap_dir": str(roadmap_dir),
@@ -608,6 +869,7 @@ def discover(root: Path, roadmap_slug: str) -> dict[str, Any]:
             "gates recorded only in roadmap prose tables (e.g. planning/operator-surface/roadmap.md) "
             "are invisible to this graph-only read"
         ),
+        "validate_brain": validate_brain,
     }
 
 
@@ -627,6 +889,28 @@ def check(name: str, cond: bool) -> None:
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+class _FakeCompletedProcess:
+    """Minimal subprocess.CompletedProcess stand-in for the validate-brain shim below."""
+
+    def __init__(self, returncode: int):
+        self.returncode = returncode
+        self.stdout = ""
+        self.stderr = ""
+
+
+def _fake_validate_brain_runner(exit_code: int = 0, calls: Optional[list] = None):
+    """Build a `runner` for `run_validate_brain()`/`discover()`'s `validate_brain_runner` param
+    that never invokes the real `bastion` binary -- required by this module's own contract (never
+    writes, and --self-test must not depend on the real corpus or an installed binary). `calls`,
+    when given, collects each invoked cmd list so a case can assert the exact command shape (one
+    flag, `--state`, never combined with another)."""
+    def _runner(cmd, **kwargs):
+        if calls is not None:
+            calls.append(cmd)
+        return _FakeCompletedProcess(exit_code)
+    return _runner
 
 
 def case_roadmap_dir_resolution() -> None:
@@ -766,12 +1050,12 @@ def case_roadmap_isolation() -> None:
         notes_b = base / "core" / "repo-beta" / "planning" / "orchestration-run" / "roadmap-b" / "notes.md"
         _write(notes_b, "---\nlifecycle: lane-complete\n---\n\n| # | Item |\n|---|---|\n| 1 | b |\n")
 
-        result_a = discover(base, "roadmap-a")
+        result_a = discover(base, "roadmap-a", validate_brain_runner=_fake_validate_brain_runner())
         check("--roadmap A reports A's lane (repo-alpha)", "repo-alpha" in result_a["lanes"])
         check("--roadmap A never leaks B's lane (repo-beta)", "repo-beta" not in result_a["lanes"])
         check("--roadmap A's roadmap_dir is A's own directory", result_a["roadmap_dir"] == str(roadmap_a))
 
-        result_b = discover(base, "roadmap-b")
+        result_b = discover(base, "roadmap-b", validate_brain_runner=_fake_validate_brain_runner())
         check("--roadmap B reports B's lane (repo-beta)", "repo-beta" in result_b["lanes"])
         check("--roadmap B never leaks A's lane (repo-alpha)", "repo-alpha" not in result_b["lanes"])
         check("--roadmap B's roadmap_dir is B's own directory", result_b["roadmap_dir"] == str(roadmap_b))
@@ -836,7 +1120,7 @@ def case_no_writes() -> None:
         _write(base / "planning" / "roadmaps" / "demo" / "lane-log.jsonl",
                '{"ts":"2026-08-12T00:00:00Z","lane":"a","repo":"widget","block":"BT.ticket.x","status":"closed","note":"n"}\n')
         before = sorted(str(p) for p in base.rglob("*"))
-        discover(base, "demo")
+        discover(base, "demo", validate_brain_runner=_fake_validate_brain_runner())
         after = sorted(str(p) for p in base.rglob("*"))
         check("discover() creates or modifies no files", before == after)
 
@@ -845,7 +1129,7 @@ def case_empty_roadmap_is_explicit() -> None:
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
         (base / "planning" / "roadmaps" / "ghost").mkdir(parents=True)
-        result = discover(base, "ghost")
+        result = discover(base, "ghost", validate_brain_runner=_fake_validate_brain_runner())
         check("empty lane-log yields explicit empty lanes dict, not a missing key", result["lanes"] == {})
         check("repos_in_lane_log is explicitly empty list", result["repos_in_lane_log"] == [])
         check("operator_coverage_total is explicitly 0, not an omitted key", result["operator_coverage_total"] == 0)
@@ -876,13 +1160,166 @@ def case_full_join_end_to_end() -> None:
                        "| # | Item | Owner | Priority | Status |\n|---|---|---|---|---|\n"
                        "| 1 | thing | widget | P2 | **OPEN** |\n")
 
-        result = discover(base, "demo")
+        now = datetime(2026, 8, 12, 12, 0, 0, tzinfo=timezone.utc)
+
+        registry_path = base / LOCK_SUBDIR / REGISTRY_SUBDIR / "agent-widget-a.json"
+        _write(registry_path, json.dumps({
+            "agent_name": "widget-a", "repo": "widget", "lane": "a", "roadmap": "demo",
+            "started_at": "2026-08-12T10:00:00Z", "heartbeat": "2026-08-12T11:55:00Z",
+        }))
+
+        lease_path = base / LOCK_SUBDIR / LEASE_SUBDIR / "lease-widget.json"
+        _write(lease_path, json.dumps({
+            "repo": "widget", "lane": "a", "agent": "widget-a",
+            "acquired_at": "2026-08-12T10:00:00Z", "kind": "exclusive",
+        }))
+
+        inbox_msg = base / LOCK_SUBDIR / QUEUE_SUBDIR / "widget" / "a" / "inbox" / "20260812T113000Z-msg1.json"
+        _write(inbox_msg, json.dumps({
+            "message_id": "msg1", "sender": {"agent_name": "peer", "repo": "widget", "lane": "b",
+                                              "roadmap": "demo"},
+            "sent_at": "2026-08-12T11:30:00Z", "kind": "QUERY", "subject": {"repo": "widget"},
+            "body": "x", "durable_home": {"channel": "run-record", "ref": "x"},
+            "verified_by": "UNVERIFIED: peer",
+        }))
+
+        calls: list = []
+        result = discover(base, "demo", now=now,
+                           validate_brain_runner=_fake_validate_brain_runner(exit_code=0, calls=calls))
         check("end-to-end: one lane discovered", list(result["lanes"].keys()) == ["widget"])
         lane = result["lanes"]["widget"]
         check("end-to-end: block resolved to spec slug", lane["blocks"][0]["spec_slug"] == "ticket-thing")
         check("end-to-end: sdlc state joined onto the block", lane["blocks"][0]["sdlc_state"]["status"] == "done")
         check("end-to-end: run record joined with open_count", lane["run_record"]["notes"]["open_count"] == 1)
         check("end-to-end: carryover joined", lane["carryover"] == [{"priority": "P2", "note": "leftover"}])
+
+        check("end-to-end: lane-agent registry claim joined", len(lane["lane_registry"]) == 1
+              and lane["lane_registry"][0]["agent_name"] == "widget-a")
+        check("end-to-end: registry heartbeat age is live (5 min old)", lane["lane_registry"][0]["stale"] is False)
+        check("end-to-end: lease joined with holder + kind", len(lane["leases"]) == 1
+              and lane["leases"][0]["holder"] == "widget-a" and lane["leases"][0]["kind"] == "exclusive")
+        check("end-to-end: message queue exists with one unread item", lane["message_queue"]["exists"] is True
+              and lane["message_queue"]["inbox_count"] == 1)
+        check("end-to-end: oldest unread age computed (30 min)", lane["message_queue"]["oldest_unread_age_seconds"] == 1800.0)
+        check("end-to-end: validate-brain exit code joined once at top level (shimmed, exit 0)",
+              result["validate_brain"]["exit_code"] == 0)
+        check("end-to-end: validate-brain is NOT a per-lane field", "validate_brain" not in lane)
+        check("end-to-end: validate-brain invoked with exactly one flag (--state)",
+              len(calls) == 1 and calls[0].count("--state") == 1
+              and not any(c.startswith("--") and c != "--state" for c in calls[0]))
+        check("end-to-end: validate-brain invoked with the corpus root, not a vault-collapsed repo path",
+              calls[0] == ["bastion", "validate-brain", "--state", str(base)])
+
+
+def case_stale_heartbeat_and_lease_kinds() -> None:
+    """(7) Lease + lane-agent registry join: a heartbeat past STALE_THRESHOLD_SECONDS is flagged
+    stale (age from `_LANE_AGENTS.staleness_seconds`, never from a status field -- same rule as
+    `compute_liveness()` applied to heartbeats), and exclusive vs. shared leases are both reported
+    verbatim with their `kind` intact (this module does not adjudicate the duplicate-exclusive
+    case -- that stays check_lane_agents.py's)."""
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        roadmap_dir = base / "planning" / "roadmaps" / "demo2"
+        roadmap_dir.mkdir(parents=True)
+        _write(roadmap_dir / "lane-log.jsonl",
+               '{"ts":"2026-08-12T00:00:00Z","lane":"a","repo":"repo-x","block":"BT.ticket.thing",'
+               '"status":"closed","note":"n"}\n'
+               '{"ts":"2026-08-12T00:00:00Z","lane":"b","repo":"repo-y","block":"BT.ticket.other",'
+               '"status":"closed","note":"n"}\n')
+
+        now = datetime(2026, 8, 12, 12, 0, 0, tzinfo=timezone.utc)
+
+        # repo-x: a registry claim whose heartbeat is 4 hours old -- past STALE_THRESHOLD_SECONDS
+        # (3 hours) -- must be flagged stale even though nothing calls it "abandoned" anywhere.
+        _write(base / LOCK_SUBDIR / REGISTRY_SUBDIR / "agent-repo-x-a.json", json.dumps({
+            "agent_name": "repo-x-a", "repo": "repo-x", "lane": "a", "roadmap": "demo2",
+            "started_at": "2026-08-12T06:00:00Z", "heartbeat": "2026-08-12T08:00:00Z",
+        }))
+        # A registry claim for a DIFFERENT roadmap must never leak in.
+        _write(base / LOCK_SUBDIR / REGISTRY_SUBDIR / "agent-repo-x-foreign.json", json.dumps({
+            "agent_name": "repo-x-foreign", "repo": "repo-x", "lane": "a", "roadmap": "other-roadmap",
+            "started_at": "2026-08-12T06:00:00Z", "heartbeat": "2026-08-12T11:59:00Z",
+        }))
+
+        # repo-x holds an exclusive lease; repo-y holds a shared one -- both must round-trip
+        # verbatim, `kind` intact.
+        _write(base / LOCK_SUBDIR / LEASE_SUBDIR / "lease-repo-x.json", json.dumps({
+            "repo": "repo-x", "lane": "a", "agent": "repo-x-a",
+            "acquired_at": "2026-08-12T06:00:00Z", "kind": "exclusive",
+        }))
+        _write(base / LOCK_SUBDIR / LEASE_SUBDIR / "lease-repo-y.json", json.dumps({
+            "repo": "repo-y", "lane": "b", "agent": "repo-y-b",
+            "acquired_at": "2026-08-12T11:50:00Z", "kind": "shared",
+        }))
+
+        calls: list = []
+        result = discover(base, "demo2", now=now,
+                           validate_brain_runner=_fake_validate_brain_runner(calls=calls))
+
+        check("stale heartbeat: two repos in this roadmap yield exactly ONE validate-brain call, not one per repo",
+              len(calls) == 1)
+
+        rx_registry = result["lanes"]["repo-x"]["lane_registry"]
+        check("stale heartbeat: only the matching-roadmap claim is joined (foreign roadmap excluded)",
+              len(rx_registry) == 1 and rx_registry[0]["agent_name"] == "repo-x-a")
+        check("stale heartbeat: a 4h-old heartbeat is flagged stale", rx_registry[0]["stale"] is True)
+        check("stale heartbeat: age is reported in seconds", rx_registry[0]["heartbeat_age_seconds"] == 4 * 3600.0)
+
+        rx_leases = result["lanes"]["repo-x"]["leases"]
+        ry_leases = result["lanes"]["repo-y"]["leases"]
+        check("lease kind: repo-x's lease reports kind=exclusive", rx_leases[0]["kind"] == "exclusive")
+        check("lease kind: repo-y's lease reports kind=shared", ry_leases[0]["kind"] == "shared")
+        check("lease kind: repo-y's lease (10 min old) is not stale", ry_leases[0]["stale"] is False)
+
+
+def case_missing_queue_dir_is_distinct_from_zero() -> None:
+    """(8) A repo/lane with no queue directory at all reports `exists: False` and
+    `inbox_count: None` -- distinct from an existing-but-empty queue reporting `inbox_count: 0`.
+    Conflating the two would hide exactly what the liaison retro measured: 3 of 6 lanes launched
+    with no queue dir, i.e. no durable address, not merely an empty one."""
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        roadmap_dir = base / "planning" / "roadmaps" / "demo3"
+        roadmap_dir.mkdir(parents=True)
+        _write(roadmap_dir / "lane-log.jsonl",
+               '{"ts":"2026-08-12T00:00:00Z","lane":"a","repo":"repo-nolane","block":"BT.ticket.x",'
+               '"status":"closed","note":"n"}\n')
+        # No .fleet-locks/queue/repo-nolane/a/ at all on disk.
+
+        result = discover(base, "demo3", validate_brain_runner=_fake_validate_brain_runner())
+        mq = result["lanes"]["repo-nolane"]["message_queue"]
+        check("missing queue dir: exists is explicitly False, not omitted", mq["exists"] is False)
+        check("missing queue dir: inbox_count is None, never a silent 0", mq["inbox_count"] is None)
+        check("missing queue dir: queue_dir path is still reported for debugging", mq["queue_dir"])
+
+
+def case_validate_brain_nonzero_exit_joined() -> None:
+    """(9) A non-zero validate-brain exit code is captured and joined ONCE, at the top level of
+    the result -- never per repo -- via the injectable `runner`. Proves the shim path a real
+    failing corpus would take without ever invoking the real binary, and pins the corpus-wide
+    collapse: a per-repo `exit_code` field would be a false green for every repo but one, since
+    `bastion validate-brain --help` documents [PATH] as merely "where to start walking up to
+    find brain.toml" -- the result is corpus-wide regardless of which path is passed."""
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        roadmap_dir = base / "planning" / "roadmaps" / "demo4"
+        roadmap_dir.mkdir(parents=True)
+        _write(roadmap_dir / "lane-log.jsonl",
+               '{"ts":"2026-08-12T00:00:00Z","lane":"a","repo":"repo-broken","block":"BT.ticket.x",'
+               '"status":"closed","note":"n"}\n')
+
+        calls: list = []
+        result = discover(base, "demo4",
+                           validate_brain_runner=_fake_validate_brain_runner(exit_code=1, calls=calls))
+        vb = result["validate_brain"]
+        check("validate-brain: non-zero exit code is captured, not swallowed", vb["exit_code"] == 1)
+        check("validate-brain: not a per-lane field", "validate_brain" not in result["lanes"]["repo-broken"])
+        check("validate-brain: exactly one invocation for the whole sweep, not one per repo touched", len(calls) == 1)
+        check("validate-brain: never combines --state with a second flag",
+              calls[0].count("--state") == 1
+              and not any(c.startswith("--") and c != "--state" for c in calls[0]))
+        check("validate-brain: invoked with the corpus root, not a vault-collapsed repo path",
+              calls[0] == ["bastion", "validate-brain", "--state", str(base)])
 
 
 def self_test() -> int:
@@ -898,6 +1335,9 @@ def self_test() -> int:
     case_no_writes()
     case_empty_roadmap_is_explicit()
     case_full_join_end_to_end()
+    case_stale_heartbeat_and_lease_kinds()
+    case_missing_queue_dir_is_distinct_from_zero()
+    case_validate_brain_nonzero_exit_joined()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")

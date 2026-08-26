@@ -7,14 +7,15 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [SDLC workflows, engines, orchestration, harness, pipeline reference]
-related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-commands, base-template-orchestration-guide]
+related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-commands, base-template-orchestration-guide, base-template-orchestration-runbook]
 ---
 
 # SDLC Workflows
 
-> **Start here.** Driving a lane? Read [orchestration.md](orchestration.md). Setting up or
-> troubleshooting the registry/leases/queue/commander underneath it? Read
-> [lane-coordination.md](lane-coordination.md).
+> **Start here.** Want the whole picture — quickstart, running several lanes, monitoring a run,
+> troubleshooting the whole system? Read [orchestration-runbook.md](orchestration-runbook.md).
+> Driving one lane? Read [orchestration.md](orchestration.md). Setting up or troubleshooting the
+> registry/leases/queue/commander underneath it? Read [lane-coordination.md](lane-coordination.md).
 
 This is the canonical reference for the **harness's automated pipelines** — the `.claude/workflows/*.js`
 engines that drive a spec from a `tasks.md` to merged, tested, documented code, and the manual
@@ -98,6 +99,9 @@ Terms used everywhere in these docs. Skim once; come back when a word stops maki
 | **Lease** | A claim that says "this lane is using this repo right now, keep out." ([schema](../../.claude/workflows/lease.schema.json), [guide](lane-coordination.md)) |
 | **Queue / drain** | Lanes leave each other messages in a queue. A *drain* is one pass that reads and routes them. ([schema](../../.claude/workflows/message.schema.json), [guide](lane-coordination.md)) |
 | **Commander** | The thing that performs a drain and reports the leftovers. Run it as [`/orchestration-commander`](../../.claude/commands/orchestration-commander.md). |
+| **Sweep** | The scripted check that decides *whether* a drain is worth running — snapshots a roadmap, diffs against the last snapshot, and wakes a commander only on real change. `agentic-portfolio/scripts/roadmap_sweep.py` (HQ repo); runbook: [`roadmap-sweep.md`](roadmap-sweep.md), setup: [lane-coordination.md §5](lane-coordination.md#5-running-the-commander). |
+| **Escalation record** | One JSON line a lane appends to `planning/roadmaps/<roadmap>/escalations.jsonl` for anything it must not decide alone — dual-written alongside the prose entry in `notes.md`. Six `kind` values, a declared `channel`, a `verified_at_sha`. Detail: [orchestration.md § Escalation records](orchestration.md#escalation-records). |
+| **Channel** | How an escalation reaches the operator, declared by the lane when it writes the record and never changed downstream: `notification` (a reducible decision that fits buttons) or `session:<slug>` (anything irreducible). See [orchestration.md § Escalation records](orchestration.md#escalation-records). |
 | **Operator gate** | A point where the work stops because only a human can decide or do the next thing. That human is you. |
 | **Carryover** | A recorded loose end — a bug found in passing, a deferred fix — kept in `state.json` so it is not lost. See the `edit-state-json` skill. |
 | **`state.json`** | Per repo. The real record of what work exists and what state it is in. If it is not here, it does not exist. Editing it: the `edit-state-json` skill. |
@@ -303,15 +307,23 @@ each engine's committed state file — check the state JSON for real figures fro
 
 ## Pages
 
+- **[orchestration-runbook.md](orchestration-runbook.md)** — the umbrella guide to the whole
+  orchestration system: what it is, starting one lane or several, monitoring a run, when the
+  commander and the sweep get involved, attaching to a commander's tmux session, and
+  whole-system troubleshooting. Links down into the three pages below rather than restating them.
 - **[sdlc-flow.md](sdlc-flow.md)** — the default for non-trivial feature work (D30). Shared worktree,
   per-task test-fix loop, triage-gated bail (D32), committed state model (D31), PR wrap-up (D33).
 - **[sdlc-task.md](sdlc-task.md)** — lean single-unit engine (D38). In-place or `--worktree`, implement→test→fix→commit, pairs with `/chore`/`/ticket`.
 - **[commands.md](commands.md)** — the manual command lifecycle the engines automate (Phase 1 → 7).
 - **[orchestration.md](orchestration.md)** — the lane lifecycle: what a lane is, the phases from
-  `/begin-orchestration` through the terminal `review.md`, the mandatory artifacts, and the traps.
+  `/begin-orchestration` through the terminal `review.md`, the mandatory artifacts (including the
+  escalation record), and the traps.
 - **[lane-coordination.md](lane-coordination.md)** — the operator's guide to the layer underneath
-  a lane: the registry, leases, message queue, ping contract and commander — setup, a cold-start
-  walkthrough, and troubleshooting.
+  a lane: the registry, leases, message queue, ping contract, commander, and the sweep that decides
+  when a drain is worth running — setup, a cold-start walkthrough, and troubleshooting.
+- **[roadmap-sweep.md](roadmap-sweep.md)** — runbook for `agentic-portfolio/scripts/roadmap_sweep.py`,
+  the scripted liaison sweep: flags, the snapshot/diff/route pipeline, `--dry-run`, and escalation
+  routing.
 
 > A whole roadmap is driven **one repo (lane) at a time** by `/orchestrate` / `/begin-orchestration`
 > — an ordered block chain, sequential, one engine (`/sdlc-task` or `/sdlc-flow`, chosen per block)

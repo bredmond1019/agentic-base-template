@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentic-portfolio/base-template/escalation.schema.json",
+  "title": "Roadmap Escalation Record",
+  "description": "One line of an append-only `planning/roadmaps/<roadmap>/escalations.jsonl` (scripted-liaison-sweep-design section 3). Exists because the scripted sweep that replaces the full-time liaison must be able to diff a lane-authored escalation without parsing prose: the notes.md entry required by begin-orchestration.md Rule 5 carries the reasoning for a human or a fresh agent, this record carries the same fact in a shape a script can diff. Never rewritten, never rotated -- mirrors lane-log.jsonl and drain-log.jsonl. `kind` covers begin-orchestration.md Rule 6's four 'what you still must not decide alone' cases -- an operator gate, a bailed block's fate, two blocks that genuinely disagree, and anything that would edit another lane's repo -- one `kind` value each, plus two values NOT drawn from that list: `interrupt-request` (a timing question, not an ownership one) and `finding` (a discovered fact not yet triaged). This schema deliberately requires `verified_at_sha` (NOT in the design doc's own field table) -- `verified_by` records HOW a claim was checked but carries no date, so a stale escalation is indistinguishable from a fresh one without the git SHA the record was written against; this is the exact 'carried consequences after the world moved' defect the whole initiative exists to fix.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ts_utc",
+    "repo",
+    "lane",
+    "kind",
+    "severity",
+    "channel",
+    "gate_id",
+    "summary",
+    "verified_by",
+    "durable_home",
+    "verified_at_sha"
+  ],
+  "properties": {
+    "ts_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Full ISO-8601 with a `Z` or numeric offset -- a date-only value is rejected, the same trap OKF frontmatter's `timestamp` field documents (docs/okf-frontmatter.md trap #4).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "repo": {
+      "type": "string",
+      "description": "Repo slug the escalating lane is driving, e.g. `bastion`, `engine-rs`.",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "lane": {
+      "type": "string",
+      "description": "Lane name as registered in the BT.6.A lane-agent registry.",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "kind": {
+      "type": "string",
+      "description": "`operator-gate`, `bail`, `disagreement`, and `cross-repo-edit` each map to one of begin-orchestration.md Rule 6's four 'what you still must not decide alone' cases. `interrupt-request` and `finding` do not come from that list. `cross-repo-edit` is an ownership question ('I need a change in territory I don't own'), not a timing question -- never map it to `interrupt-request`. It is normally resolved by pinging the owning lane and writing to its durable home (begin-orchestration.md ~line 409), not by waking the operator: the sweep routes `cross-repo-edit` to the owning lane's queue, never to a human interrupt.",
+      "enum": ["operator-gate", "bail", "disagreement", "cross-repo-edit", "interrupt-request", "finding"]
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["blocking", "advisory"]
+    },
+    "block": {
+      "type": ["string", "null"],
+      "description": "The block id this escalation is scoped to, if any.",
+      "minLength": 1
+    },
+    "channel": {
+      "type": "string",
+      "description": "The lane declares this at gate-definition time -- never the sweep script. `session:<slug>` for any richer channel; `notification` only for a reducible yes/no already declared as such.",
+      "pattern": "^(notification|session:.+)$"
+    },
+    "gate_id": {
+      "type": "string",
+      "description": "`<roadmap>/<repo>/<block>`, matching notify-operator's `--gate-id` scoping so a stale tap can never resolve a different lane's question.",
+      "minLength": 1
+    },
+    "summary": {
+      "type": "string",
+      "description": "Mirrors the WhatsApp body-text limit (core/engine-rs/crates/engine-core/src/operator/limits.rs:20, the `WHATSAPP_MAX_BODY_CHARS` const at line 55) so a `notification`-channel escalation is composable without truncation.",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "verified_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Same contract as ping-agent's field: either a literal command and its real output (a command line, then its output on a following line), or `UNVERIFIED: <who claimed it>`. A bare adjective such as `measured` satisfies neither shape.",
+      "pattern": "^(UNVERIFIED: \\S[\\s\\S]*|[\\s\\S]*\\S[\\s\\S]*\\n[\\s\\S]*\\S[\\s\\S]*)$"
+    },
+    "verified_at_sha": {
+      "type": "string",
+      "description": "The short git SHA at write time -- dates the `verified_by` claim so a stale escalation is distinguishable from a fresh one. Not in the design doc's own field table; added because `verified_by` alone carries no date.",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "durable_home": {
+      "description": "Where the prose twin of this record lives, e.g. `{\"channel\":\"run-record\",\"ref\":\"<repo>/planning/orchestration-run/<roadmap>/notes.md#<anchor>\"}` -- this record supplements that write, it never replaces it."
+    },
+    "clears_when": {
+      "type": ["string", "null"],
+      "description": "A predicate describing when this escalation is resolved. Never author one already satisfied -- the same rule as state.json carryover[]."
+    },
+    "options": {
+      "type": "array",
+      "description": "The operator's response options for a `channel: notification` escalation, declared by the lane at gate-definition time -- never composed by the sweep script (scripted-liaison-sweep-design section 5: 'the script decides whether to wake an agent; it never decides the answer'). Required when `channel` is `notification`; forbidden otherwise, since a `session:<slug>` channel is never reduced to buttons (Invariant 2, core/engine-rs/crates/engine-core/src/operator/channel.rs:4: 'declared at gate-definition time, never degraded'). Enforces the real `bastion notify ask` CLI limits: 2 to 3 options (OPERATOR_MIN_RESPONSE_OPTIONS=2, WHATSAPP_MAX_REPLY_BUTTONS=3, core/engine-rs/crates/engine-core/src/operator/limits.rs:47,40 -- a single option is rejected the same as zero, since a 'decision, never a task' payload must offer a real choice), each label at most 20 chars (WHATSAPP_MAX_BUTTON_LABEL_CHARS, limits.rs:51).",
+      "minItems": 2,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "label"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The machine-readable value returned when the operator picks this option."
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "description": "The button text shown to the operator -- capped at 20 chars, the WhatsApp reply-button title limit (limits.rs:49)."
+          }
+        }
+      }
+    }
+  },
+  "if": {
+    "properties": { "channel": { "const": "notification" } },
+    "required": ["channel"]
+  },
+  "then": {
+    "required": ["options"]
+  },
+  "else": {
+    "not": { "required": ["options"] }
+  }
+}

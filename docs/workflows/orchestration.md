@@ -6,7 +6,7 @@ doc_id: base-template-orchestration-guide
 layer: [factory]
 project: base-template
 status: active
-keywords: [orchestration, lane, begin-orchestration, lane-log, run record, commander]
+keywords: [orchestration, lane, begin-orchestration, lane-log, run record, commander, escalation record]
 related: [base-template-workflows-index, sdlc-task, sdlc-flow, D57-orchestration-run-artifact-contract, plan-lane-coordination]
 ---
 
@@ -17,17 +17,11 @@ vocabulary table. This page assumes those words.
 
 ## What this page is for
 
-You have a roadmap: a chunk of work spread across several repos. You want the agents to build it.
-
-**A "lane" is how one repo's share of that work gets done.** One repo, one Claude Code session, one
-ordered list of blocks. You open a lane per repo, and they run at the same time in separate
-sessions.
-
-This page walks through opening a lane, what happens while it runs, and how it closes. It is a
-how-to, not a reference — for every flag and argument see
-[`.claude/commands/README.md`](../../.claude/commands/README.md).
-
-**If a command file and this page disagree, believe the command file.** It is what actually runs.
+You have a roadmap — work spread across several repos — and want agents to build it. **A "lane" is
+how one repo's share gets done:** one repo, one Claude Code session, one ordered list of blocks, one
+lane per repo, running at the same time. This is a how-to, not a reference — for every flag see
+[`.claude/commands/README.md`](../../.claude/commands/README.md). **If a command file and this page
+disagree, believe the command file** — it is what actually runs.
 
 ## Quickstart
 
@@ -158,7 +152,8 @@ In detail:
 4. **Verify the state write** — engine status bookkeeping is known-unreliable. Check `state.json`
    and `status.md` yourself; do not trust the engine's report.
 5. **Log** — one line to `<roadmap_dir>/lane-log.jsonl`, committed.
-6. **Notes** — append to `notes.md`.
+6. **Notes** — append to `notes.md`. **Dual-write to `escalations.jsonl`** for anything on the
+   must-not-decide-alone list below — see [Escalation records](#escalation-records).
 
 Repeat until the chain is done or stopped.
 
@@ -184,10 +179,63 @@ is how *other lanes* find out what happened, the second and third are for *you*.
 |---|---|---|
 | `<roadmap_dir>/lane-log.jsonl` | **Cross-lane.** One line per block, append-only. Sibling lanes read this. | Per block |
 | `planning/orchestration-run/<slug>/notes.md` | **Local.** Everything the log line can't carry: defects found in passing, decisions and why, traps re-confirmed. | Per block, append-only |
+| `planning/roadmaps/<roadmap>/escalations.jsonl` | **Cross-lane, machine-diffable.** One line per must-not-decide-alone item — see [Escalation records](#escalation-records). | Per occurrence, append-only |
 | `planning/orchestration-run/<slug>/review.md` | **Terminal.** Plain-English summary + hand-verification recipes. Every recipe must have been **run** before the file is written. | Once, at close |
 
 Frontmatter, the `doc_id` rule, `lifecycle`, and the ledger's `origin_roadmap` column are specified
 in [D57 — the orchestration-run artifact contract](../../planning/decisions/D57-orchestration-run-artifact-contract.md). Cited, not restated.
+
+---
+
+## Escalation records
+
+A lane cannot decide everything by itself. [`/begin-orchestration`](../../.claude/commands/begin-orchestration.md)
+(Rule 5, and the "what you still must not decide alone" list at ~line 400) lists what stops and gets
+reported instead: an **operator gate**, a bailed block's fate, two blocks that genuinely disagree,
+and anything that would edit another lane's repo.
+
+For each of those, **write both**, never one instead of the other:
+
+- the prose entry in `notes.md` — the reasoning, for a human or a fresh agent to read, and
+- one JSON line appended to `planning/roadmaps/<roadmap>/escalations.jsonl` — the same fact in a
+  shape a script can diff without parsing prose.
+
+Schema: [`escalation.schema.json`](../../scripts/escalation.schema.json). Validator:
+[`check_escalations.py`](../../scripts/check_escalations.py) (gating check `escalations-schema`),
+tested by [`test_check_escalations.py`](../../scripts/test_check_escalations.py).
+
+**The six `kind` values.** Four map directly to the must-not-decide-alone list above:
+
+| `kind` | What it means |
+|---|---|
+| `operator-gate` | The lane hit a point only a human can decide or do. |
+| `bail` | A block failed past its retry budget; its fate needs a call. |
+| `disagreement` | Two blocks genuinely disagree about the same behaviour. |
+| `cross-repo-edit` | **An ownership question** — "I need a change in a repo I don't own." |
+| `interrupt-request` | Not on the list above. **A timing question** — "may I derail a block in flight?" |
+| `finding` | Not on the list above. A discovered fact, not yet triaged. |
+
+**`cross-repo-edit` is deliberately not `interrupt-request`.** One is about ownership, the other
+about timing, and they route differently: `cross-repo-edit` is resolved by pinging the owning lane
+and writing to its durable home — it never reaches the human. `interrupt-request` is the only kind
+the ping-agent interrupt discipline may derail a block in flight for.
+
+**The two operator channels, declared once, never changed downstream.** The lane picks at write
+time, per `EN.8.A`'s Invariant 2 ("two channels, declared at gate-definition time, never
+degraded" — `core/engine-rs/crates/engine-core/src/operator/channel.rs`):
+
+| `channel` | When | Carries |
+|---|---|---|
+| `notification` | A reducible decision that fits buttons — ≤3 options, ≤20-char labels, ≤1024-char summary. | `options` (required; the script never invents them) |
+| `session:<slug>` | Anything irreducible — judgement, a credential, drafting, open-ended. | No `options`; `options` is forbidden on this channel. |
+
+Nothing downstream may degrade a `session:<slug>` record into buttons, or a `notification` record
+into open-ended judgement — the channel is fixed at the moment the record is written.
+
+**`verified_at_sha`.** Every escalation records the short git SHA it was verified at. A record whose
+SHA is behind `HEAD` is surfaced as **needing re-measurement**, never relayed as current fact —
+two independent retros in this fleet failed the same way, carrying a verified claim past its shelf
+life.
 
 ---
 
@@ -244,7 +292,9 @@ committed. **If a drain reports an "authored orphan", that is it working correct
 
 **Nothing runs drains on a schedule yet.** Some messages trigger a drain on their own (a lane
 sending `RENDEZVOUS` or `LEASE_RELEASE`), but the every-20-minutes heartbeat has no invoker — cron
-on the Mac Mini is blocked behind `HQ.8.A`. Until that lands, a drain happens when you run one.
+on the Mac Mini is blocked behind `HQ.8.A`. Until that lands, a drain happens when you run one — or
+you run the **sweep** described in [lane-coordination.md §5](lane-coordination.md#5-running-the-commander),
+which decides *whether* a drain is worth running and only wakes one on real change.
 
 ---
 
@@ -253,7 +303,10 @@ on the Mac Mini is blocked behind `HQ.8.A`. Until that lands, a drain happens wh
 - [`.claude/commands/README.md`](../../.claude/commands/README.md) — flag reference for every command named here.
 - [`/generate-roadmap`](../../.claude/commands/generate-roadmap.md) — creates the roadmap and lane records this page consumes.
 - [`/begin-orchestration`](../../.claude/commands/begin-orchestration.md) · [`/orchestrate`](../../.claude/commands/orchestrate.md) — the two commands that drive a lane.
-- [`lane-coordination.md`](lane-coordination.md) — registry, leases, messages, commander setup.
+- [`lane-coordination.md`](lane-coordination.md) — registry, leases, messages, commander setup, and
+  the [scripted sweep](lane-coordination.md#5-running-the-commander) that wakes a drain on change.
+- [`roadmap-sweep.md`](roadmap-sweep.md) — the sweep's own runbook.
+- [`escalation.schema.json`](../../scripts/escalation.schema.json) · [`check_escalations.py`](../../scripts/check_escalations.py) — the escalation record's schema and validator.
 - [`index.md`](index.md) — the two SDLC engines this drives per block.
 - [D57 — orchestration-run artifact contract](../../planning/decisions/D57-orchestration-run-artifact-contract.md) — the run-record contract.
 - `agentic-portfolio/docs/decisions/D43-cross-domain-priority-graph.md` — priority ordering at lane close. **Note:** this is *HQ's* D43. base-template has its own, unrelated [D43 — close-out integration](../../planning/decisions/D43-close-out-integration.md); always say which repo when citing a decision number.

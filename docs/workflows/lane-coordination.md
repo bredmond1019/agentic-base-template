@@ -6,20 +6,9 @@ doc_id: base-template-lane-coordination-guide
 layer: [factory]
 project: base-template
 status: active
-keywords: [lane coordination, registry, lease, message queue, commander, FLEET_LOCK_DIR]
+keywords: [lane coordination, registry, lease, message queue, commander, FLEET_LOCK_DIR, roadmap sweep]
 related: [base-template-workflows-index, base-template-orchestration-guide, plan-lane-coordination, base-template-docs-index]
 ---
-
-- [Lane coordination — the operator's guide to the layer under orchestration](#lane-coordination--the-operators-guide-to-the-layer-under-orchestration)
-  - [Quickstart](#quickstart)
-  - [1. The five pieces](#1-the-five-pieces)
-  - [2. Setup](#2-setup)
-  - [3. Verify it works (cold start)](#3-verify-it-works-cold-start)
-  - [4. Sending and receiving](#4-sending-and-receiving)
-  - [5. Running the commander](#5-running-the-commander)
-  - [6. Troubleshooting](#6-troubleshooting)
-  - [See also](#see-also)
-
 
 # Lane coordination — the operator's guide to the layer under orchestration
 
@@ -28,19 +17,12 @@ related: [base-template-workflows-index, base-template-orchestration-guide, plan
 
 ## What this page is for
 
-Several lanes run at the same time, in different repos, in different Claude Code sessions. None of
-them can see the others. That creates four problems, and this layer is the four answers:
-
-1. **"Who is that?"** — sessions have throwaway names, so a lane could not be addressed by role.
-   → a **registry** where a lane writes down who it is.
-2. **"Is anyone else editing this repo?"** — two lanes in one folder is the single most damaging
-   thing that has happened in this system. → **leases**, a keep-out sign on a repo.
-3. **"How do I tell another lane something?"** — → a **message queue**: files in a folder.
-4. **"Who reads the queue?"** — → the **commander**, which sweeps it and reports what needs you.
-
-All of it is just JSON files in a shared folder. There is no server.
-
-> Paths are relative to the brain root (`agentic-portfolio/`) unless marked as this repo's.
+Several lanes run at once, in different repos, in different Claude Code sessions — none can see the
+others. This layer answers four questions: who is that (**registry**), is anyone editing this repo
+(**leases**), how do I tell another lane something (**message queue**), and who reads the queue
+(**commander**) — detail on each in [§1](#1-the-five-pieces). All of it is JSON files in a shared
+folder; there is no server. Paths below are relative to the brain root (`agentic-portfolio/`) unless
+marked as this repo's.
 
 ## Quickstart
 
@@ -211,6 +193,37 @@ refuses to guess whether that belongs in its commit.
 `RENDEZVOUS` or `LEASE_RELEASE` and the receiver drains at its next block boundary. The 20–30
 minute heartbeat has no invoker: cron on the Mac Mini is blocked behind `HQ.8.A`.
 
+### The sweep — replacing the full-time liaison
+
+A human liaison used to run this same "has anything changed?" check by re-reading the roadmap by
+hand, pass after pass — mostly finding nothing. **The sweep does that mechanically:**
+`agentic-portfolio/scripts/roadmap_sweep.py` (HQ repo — this script is not in `base-template`).
+
+```bash
+python3 agentic-portfolio/scripts/roadmap_sweep.py --roadmap <slug> --dry-run
+```
+
+> **This is a live-side-effects command, not a read-only one.** A bare run (no `--dry-run`) can
+> really wake a commander and spawn a tmux session. **`--dry-run` is the safe path** — use it to
+> look without acting.
+
+It snapshots one roadmap's live state (lane-log, run records, `state.json`, leases, message-queue
+depth, `escalations.jsonl`), diffs against the immediately preceding stored snapshot, and **wakes
+an agent only when something actually changed** — no diff and no escalation past its re-fire
+threshold means it exits 0 silently. It never invents what a woken agent should do; it only decides
+*whether* to wake one, then routes through the same `commander_drain.sh` this section already
+covers (never `bastion notify` for a `cross-repo-edit` — that always goes to the owning lane's
+queue, never to the operator).
+
+**Timing, measured:** a quiet sweep (nothing changed) takes **~3.3s**. A sweep that routes —
+because it invokes the real `commander_drain.sh` — can take up to **930s (15.5 min)**, the same
+timeout `commander_drain.sh` itself uses.
+
+**Nothing schedules a sweep either.** No cron entry, no hook, no wrapper exists yet — run it by
+hand, the same as a drain.
+
+Full runbook, flags, and the escalation-routing table: [`roadmap-sweep.md`](roadmap-sweep.md).
+
 ---
 
 ## 6. Troubleshooting
@@ -234,4 +247,6 @@ Start from the symptom you can see.
 - [`index.md`](index.md) — the system diagram and the vocabulary these terms come from.
 - [`fleet_concurrency_check.py`](../../scripts/fleet_concurrency_check.py) — the heavy-lane slot mechanism `orchestration.md` §3 uses.
 - [`orchestration-commander.md`](../../.claude/commands/orchestration-commander.md) — the six-step drain.
+- [`roadmap-sweep.md`](roadmap-sweep.md) — the sweep's runbook: flags, snapshot shape, routing table.
+- `agentic-portfolio/scripts/roadmap_sweep.py` — the sweep script itself (HQ repo).
 - [`planning/lane-coordination/plan.md`](../../planning/lane-coordination/plan.md) — design, `BT.6.A`–`BT.6.E`.
