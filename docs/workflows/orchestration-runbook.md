@@ -89,14 +89,20 @@ Two shapes of work, and the command that produces each:
 
 Both are **slash commands** — typed into a Claude Code session's prompt, not into a shell.
 
-**The `/plan` gap — read before you assume the single-repo path is symmetrical with the roadmap
-path.** `/generate-roadmap` emits both the roadmap *and* the per-repo `lane-<name>.json` files that
-[`/begin-orchestration`](../../.claude/commands/begin-orchestration.md) consumes directly. `/plan`
-does **not** emit a lane file today — verified against `.claude/commands/plan.md`, whose own scope
-ladder says only "Multi-repo program → `/generate-roadmap`. One repo, multiple blocks → here,"
-with no lane-file step. So driving a `/plan` initiative through `/begin-orchestration` today means
-passing `--blocks <id> <id> …` by hand, reading the block IDs off `/plan`'s block records. A
-`/plan`-emits-lane-files path is **planned, not built** — do not tell a reader it works.
+**`/plan` emits a lane file only when you ask for it.** `/generate-roadmap` always writes the
+per-repo `lane-<name>.json` files that
+[`/begin-orchestration`](../../.claude/commands/begin-orchestration.md) consumes. `/plan` writes one
+**only with `--lane`**, because most single-repo initiatives are worked block-by-block by hand and
+an extra artifact every run would surprise that caller.
+
+| You ran | To orchestrate it |
+|---|---|
+| `/plan <slug> --lane` | `/begin-orchestration --roadmap <slug> --lane <slug>` — the lane file is at `planning/<slug>/lane-<slug>.json` |
+| `/plan <slug>` (no flag) | `--blocks <id> <id> …` by hand, reading the IDs off `planning/blocks/<BlockID>.json` |
+
+A bare slug resolves because `/begin-orchestration` checks `planning/roadmaps/<slug>/` first and
+then falls back to legacy `planning/<slug>/` — the directory `/plan` already writes to. A slug
+present in **both** is an error, not a silent preference.
 
 ## How to start one lane
 
