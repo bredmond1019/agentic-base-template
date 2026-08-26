@@ -1,4 +1,4 @@
-# CLAUDE.md — working on `base-template`
+# AGENT.md — working on `base-template`
 
 This repo is the **software-factory source**: the curated harness + tokenized document
 scaffold that `/new-project` clones. You are not building a product here — you are curating the
@@ -23,7 +23,7 @@ generation flow.
 |---|---|---|---|
 | **Harness** | `.claude/` + `.agents/` | The SDLC pipeline (commands, engines, and skills) — ships *mechanism* only | Yes — copied as-is |
 | **Scaffold** | `scaffold/` | Tokenized project docs (CLAUDE, GEMINI, AGENT, README, log, planning/ incl. `harness.json` stub) | Yes — copied + token-substituted |
-| **Template meta** | `CLAUDE.md`, `GEMINI.md`, `AGENT.md`, `README.md`, `log.md`, `planning/`, `docs/` | The template's *own* docs, change history, and pipeline config | **No** — never copied into a project |
+| **Template meta** | `GEMINI.md`, `CLAUDE.md`, `AGENT.md`, `README.md`, `log.md`, `planning/`, `docs/` | The template's *own* docs, change history, and pipeline config | **No** — never copied into a project |
 
 A new project must start with a **clean** log and a `D1-initial-okf` decision — so the template's
 own `log.md` / `planning/` (this repo's harness history, decisions, and `harness.json`) stay at
@@ -38,6 +38,7 @@ When a discovery in a downstream project improves the harness:
    explaining *why*.
 3. Append a dated `log.md` entry describing *what* changed.
 4. Commit. The new commit hash becomes the provenance stamp for the next generated project.
+   **Before committing in this fleet, consult the `commit-in-this-fleet` skill.**
 5. **Run `/sync-downstream-harness`** (dry-run first, then `--apply`) to pull the change into every
    already-scaffolded repo — see `planning/decisions/D48-downstream-harness-sync-script.md`. This
    is not optional busywork: a fix that lives only here isn't fixed anywhere real work happens.
@@ -81,7 +82,8 @@ When a discovery in a downstream project improves the harness:
    prose is true, only that the thing it describes moved. After re-verifying (and correcting the
    page, if needed), re-stamp with `python3 scripts/check_engine_docs_sync.py --update` and commit
    the manifest alongside the doc change — **never run `--update` without having actually re-read
-   the affected section first, or this tripwire becomes decorative too.**
+   the affected section first, or this tripwire becomes decorative too.** When writing or rewriting
+   internal documentation under `docs/`, follow the **`write-repo-doc`** skill.
 
 Downstream projects **do not auto-sync** — pulling is still a deliberate, reviewed step (the
 script never commits for you) — but it is no longer a fully manual copy-paste; `/sync-downstream-
@@ -90,7 +92,7 @@ customizations are never touched) — keep changes here additive and well-docume
 
 ## Fleet & Core Skills
 
-The harness carries specialized skills in `.claude/skills/` (and `.agents/skills/`). Always consult
+The harness carries specialized skills in `.agents/skills/` (and `.claude/skills/`). Always consult
 the corresponding skill before executing high-stakes fleet operations:
 
 | Skill | Primary Focus | When to consult |
@@ -108,7 +110,7 @@ the corresponding skill before executing high-stakes fleet operations:
 
 ## Standing rules
 
-1. **Keep the harness project-agnostic — `.claude/` ships mechanism, never project facts.** No
+1. **Keep the harness project-agnostic — `.claude/` and `.agents/` ship mechanism, never project facts.** No
    project-specific skills, paths, or stack assumptions in the engines. Stack *policy* (validation
    commands, ports/routes, whether a UI-test stage exists) lives in each project's
    `planning/harness.json`; the engines read it and ship **no stack defaults** (config absent →
@@ -125,6 +127,7 @@ the corresponding skill before executing high-stakes fleet operations:
    keeps its name by design.)
 4. **Never edit a settled decision** — supersede it with a new atomic ADR and link back.
 5. **Every new `.md` under `docs/` or `planning/` must open with OKF YAML frontmatter.**
+   Consult the **`write-okf-markdown`** skill before authoring or editing markdown files.
    Required fields: `type` (e.g. Decision, Index, Reference, Plan, Log, ProjectStatus, LocalContext,
    Guide, Handoff); `title` (human-readable); `description` (one-line summary for embedding).
    Optional but strongly encouraged: `doc_id` (kebab-case stable id, defaults to filename stem);
@@ -159,7 +162,8 @@ the corresponding skill before executing high-stakes fleet operations:
    rule ships from here because it must reach every repo scaffolded from this template. **A
    scaffolded repo with no `planning/state.json`** cannot file the edge — in that case say so
    explicitly in the handoff and name who is expected to file it once a `state.json` exists;
-   never error, and never silently drop the item.
+   never error, and never silently drop the item. For notification rules, consult the
+   **`notify-operator`** skill.
 
    **The failure mode is filing it as a `carryover[]` entry instead**, which looks equivalent at
    write time and behaves nothing alike: a carryover entry gates no block, so the work is never
@@ -181,13 +185,14 @@ the corresponding skill before executing high-stakes fleet operations:
    into one of the graph's containers — a block in `tracks[].blocks[]`, an `operator`/`approval`/
    `block`/`external` edge in a block's `depends_on`, a `carryover[]` entry, a `reference[]` fact,
    a `backlog[]` row, an `epics[]` entry — and the routing table is at the top of
-   `.claude/workflows/block-registration.md`. A markdown file is where work is *described*; the
-   graph is where it is *held*. Prose gates nothing, sorts nowhere and appears on no board, so an
-   item living only in a plan, a review, a handoff or an `## Open questions` bullet is **lost, not
-   deferred** — six drift tickets filed on disk where the drift detector could not see them, and 30
-   of 202 `carryover[]` entries holding operator work that gates nothing, are the measured version
-   of this. Rules 7 and 8 are two instances of it. Where a document and the graph disagree, the
-   graph wins.
+   `.claude/workflows/block-registration.md`. Consult the **`edit-state-json`** and
+   **`derive-state-safely`** skills before modifying state. A markdown file is where work is
+   *described*; the graph is where it is *held*. Prose gates nothing, sorts nowhere and appears on
+   no board, so an item living only in a plan, a review, a handoff or an `## Open questions` bullet
+   is **lost, not deferred** — six drift tickets filed on disk where the drift detector could not see
+   them, and 30 of 202 `carryover[]` entries holding operator work that gates nothing, are the
+   measured version of this. Rules 7 and 8 are two instances of it. Where a document and the graph
+   disagree, the graph wins.
 
 10. **The running engine is a snapshot — editing `.claude/` mid-session does not change the session.**
     The Workflow harness copies the engine `.js` into
@@ -195,7 +200,8 @@ the corresponding skill before executing high-stakes fleet operations:
     that copy. Committing an engine fix to `main` — even rebasing the running worktree onto it —
     does **not** change what the next run executes. The same holds for
     `.claude/commands/*.md`. **Only restarting the session picks the change up, and a long
-    `/orchestrate` chain cannot restart itself.**
+    `/orchestrate` chain cannot restart itself.** Consult the **`stop-or-continue`** skill for
+    the exact trigger rules.
 
     **The snapshot is per-SESSION, not per-launch — the `-wf_<runid>` filename invites the wrong
     inference and is the single most misleading thing about this rule.** A second Workflow call in
@@ -223,7 +229,7 @@ the corresponding skill before executing high-stakes fleet operations:
     2. **If it must be the engine, verify the snapshot before re-running**, and read an unchanged
        snapshot as "this re-run proves nothing" rather than as evidence about the fix. Prefer md5
        over grep — a count can match by coincidence, and an identical hash is unarguable:
-       ```
+       ```bash
        md5 -q .claude/workflows/sdlc-task.js
        md5 -q ~/.claude/projects/<proj>/<session>/workflows/scripts/sdlc-*-wf_<runid>.js
        ```
@@ -250,7 +256,8 @@ the corresponding skill before executing high-stakes fleet operations:
     line 1 fails all four `validate-brain` flags at once, red-gating every concurrent lane on a
     file it never touched. `hooks/check_frontmatter.py` (brain repo) and
     `scripts/check_frontmatter_presence.py` (this repo, `harness.json`'s `frontmatter-presence`
-    check) both gate this at commit time and at gate time.
+    check) both gate this at commit time and at gate time. Consult the **`write-okf-markdown`**
+    and **`run-the-gates`** skills.
 
 <!-- BEGIN:response-style -->
 ## Response Style
@@ -284,14 +291,15 @@ context genuinely runs out, the harness summarizes and you keep going — that i
 
 There is exactly **one** reason to end a session early, and it is about correctness, not cost:
 **something the running session depends on changed underneath it** — an engine, command file,
-installed binary (`mev`, `bastion`), hook or `settings.json` edited this session, or a `CLAUDE.md`
-you already read. The running session is a launch-time snapshot (base-template standing rule 10), so
-it keeps producing pre-change results, which read as an unreliable agent rather than a stale
-snapshot. **Name the trigger, finish the unit of work in flight, and say plainly that a fresh
-session is needed.** Do not present it as a context-budget decision, and do not go looking for the
-trigger as an excuse to stop.
+installed binary (`mev`, `bastion`), hook or `settings.json` edited this session, or a `CLAUDE.md` /
+`GEMINI.md` / `AGENT.md` you already read. The running session is a launch-time snapshot
+(base-template standing rule 10), so it keeps producing pre-change results, which read as an
+unreliable agent rather than a stale snapshot. **Name the trigger, finish the unit of work in flight,
+and say plainly that a fresh session is needed.** Do not present it as a context-budget decision,
+and do not go looking for the trigger as an excuse to stop. Consult the **`stop-or-continue`** skill.
 
 Whenever you do hand off, write the entry point first — `status.md`, `handoff.md`, a spec's
 `tasks.json`, or an orchestration-run `notes.md` — so the next agent starts from an artifact instead
 of from your memory.
 <!-- END:session-continuity -->
+
