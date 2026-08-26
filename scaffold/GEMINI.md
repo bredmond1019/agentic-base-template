@@ -244,7 +244,7 @@ context genuinely runs out, the harness summarizes and you keep going — that i
 
 There is exactly **one** reason to end a session early, and it is about correctness, not cost:
 **something the running session depends on changed underneath it** — an engine, command file,
-installed binary (`mev`, `bastion`), hook or `settings.json` edited this session, or a `CLAUDE.md`
+installed binary (`mev`, `bastion`), hook or `settings.json` edited this session, or a `GEMINI.md` / `CLAUDE.md`
 you already read. The running session is a launch-time snapshot (base-template standing rule 10), so
 it keeps producing pre-change results, which read as an unreliable agent rather than a stale
 snapshot. **Name the trigger, finish the unit of work in flight, and say plainly that a fresh
