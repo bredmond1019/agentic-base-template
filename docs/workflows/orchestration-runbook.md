@@ -244,7 +244,7 @@ bastion attach commander-brain-main       # then attach, if you need to interact
 | The sweep or a drain seems to hang | It routed to a session or peer queue and is waiting on `commander_drain.sh`'s own timeout (up to 930s) | Not hung — bounded; `bastion capture` the session to see progress |
 | All four `validate-brain` flags are red, naming a file you didn't touch | Concurrent lane wrote frontmatter with a displaced `---` fence | [lane-coordination.md §6](lane-coordination.md#6-troubleshooting) — the repo named is often just the first the sweep reached |
 | A fix you made mid-run doesn't seem to take effect | The running session's engine/command snapshot predates your edit | `base-template/CLAUDE.md` standing rule 10 — a running session is a launch-time snapshot; only a restart picks up the change |
-| Nothing schedules a drain or a sweep | Neither is on a cron/hook yet — both are manual today (`HQ.8.A` blocks the heartbeat) | Run [`/orchestration-commander`](../../.claude/commands/orchestration-commander.md) or the sweep by hand |
+| Nothing schedules a drain or a sweep | The commander drain is still manual. The sweep now has a lock-guarded cron wrapper (`agentic-portfolio/scripts/roadmap_sweep_cron.sh`) but it is **not installed** — a deliberate operator decision, not a gap; see [roadmap-sweep.md § Scheduling](roadmap-sweep.md#scheduling--the-lock-and-why-it-exists) | Run [`/orchestration-commander`](../../.claude/commands/orchestration-commander.md) or the sweep by hand |
 
 ## See also
 
