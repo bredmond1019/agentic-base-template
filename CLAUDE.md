@@ -98,6 +98,7 @@ the corresponding skill before executing high-stakes fleet operations:
 | **`commit-in-this-fleet`** | Safe git operations across multi-repo & vault symlinks | BEFORE any `git add`, `commit`, `stash`, `reset`, or `mv` |
 | **`derive-state-safely`** | Authored vs derived state and writer execution | BEFORE running `mev emit-state --write`, `set-block-status`, or other state writers |
 | **`edit-state-json`** | Canonical `planning/state.json` schema & graph edges | BEFORE hand-editing `state.json` or authoring `depends_on`/`carryover` |
+| **`fleet-push-discipline`** | Cross-repo push ordering, CI-blocked gates, disabled pre-push hooks | BEFORE running `scripts/git_push.sh`, pushing any `core/*` repo directly, or debugging a push/CI failure unrelated to your change |
 | **`notify-operator`** | Operator alerting discipline via `bastion notify` | BEFORE sending notifications or deciding a lane is blocked |
 | **`ping-agent`** | Cross-lane messaging envelopes & registry protocol | BEFORE sending or triaging cross-lane messages |
 | **`report-to-the-operator`** | Concise operator reporting ceiling & format | When drafting chat replies, turn outputs, and run reports |

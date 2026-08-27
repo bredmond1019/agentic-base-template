@@ -359,6 +359,7 @@ CLAUDE_SKILL_SLUGS: list[str] = [
     "ping-agent",
     "write-repo-doc",
     "notify-operator",
+    "fleet-push-discipline",
 ]
 
 

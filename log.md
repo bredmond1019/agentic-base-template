@@ -3,7 +3,21 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-25
+**Last updated:** 2026-08-27
+
+---
+## 2026-08-27 — `fleet-push-discipline` promoted from HQ-only to a synced skill
+
+`fleet-push-discipline` existed only in HQ's `.claude/skills/` — the Fleet & Core Skills table here
+referenced it (push-gate section of this repo's own `CLAUDE.md`) but never carried it, so no
+sub-repo actually received it via `/sync-downstream-harness`. Copied the file into
+`base-template/.claude/skills/fleet-push-discipline/SKILL.md`, added its slug to
+`CLAUDE_SKILL_SLUGS` in `scripts/sync_downstream_harness.py` (not gated on `engines_only`, same as
+the other fleet skills — HQ needs it as much as any leaf repo, and it's where it was authored), and
+added its row to this file's Fleet & Core Skills table. Reworded the skill's own path banner (both
+copies) from "lives in HQ's `.claude/skills/`, not synced" to the standard portable-path banner the
+other synced skills use, since that claim is now false. `/sync-downstream-harness --apply` still
+needs to be run to actually deliver it into already-scaffolded repos.
 
 ---
 
