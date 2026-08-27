@@ -60,7 +60,7 @@ while d != "/":
     d = os.path.dirname(d)
 PY
 )"
-if [ -z "$BRAIN_ROOT_REAL" ] || [ ! -f "$BRAIN_ROOT_REAL/scripts/commit_routine_updates.sh" ]; then
+if [ -z "$BRAIN_ROOT_REAL" ] || [ ! -f "$BRAIN_ROOT_REAL/scripts/sync/commit_routine_updates.sh" ]; then
   echo "FATAL: could not locate the real brain scripts (commit_routine_updates.sh) by walking up from $REPO_ROOT" >&2
   exit 1
 fi
@@ -71,10 +71,14 @@ fi
 
 setup_commit_case() { # setup_commit_case <case-dir> -> prints "<brain>" (the scratch brain root)
   local case_dir="$1"
-  mkdir -p "$case_dir/brain/scripts" "$case_dir/brain/logs" "$case_dir/bin"
-  cp "$BRAIN_ROOT_REAL/scripts/lib.sh" "$case_dir/brain/scripts/lib.sh"
-  cp "$BRAIN_ROOT_REAL/scripts/commit_routine_updates.sh" "$case_dir/brain/scripts/commit_routine_updates.sh"
-  chmod +x "$case_dir/brain/scripts/commit_routine_updates.sh"
+  # lib.sh resolves HQ_ROOT by climbing two levels from its own location (it lives in
+  # scripts/sync/ in the real repo, not scripts/) — this fake tree must mirror that exact
+  # depth, or HQ_ROOT/LOG_DIR resolve outside "$case_dir/brain" entirely and every assertion
+  # below silently sees the wrong (or a nonexistent) .emit_wrote/logs path.
+  mkdir -p "$case_dir/brain/scripts/sync" "$case_dir/brain/logs" "$case_dir/bin"
+  cp "$BRAIN_ROOT_REAL/scripts/sync/lib.sh" "$case_dir/brain/scripts/sync/lib.sh"
+  cp "$BRAIN_ROOT_REAL/scripts/sync/commit_routine_updates.sh" "$case_dir/brain/scripts/sync/commit_routine_updates.sh"
+  chmod +x "$case_dir/brain/scripts/sync/commit_routine_updates.sh"
   echo "primary" > "$case_dir/brain/.brain-role"
 
   # git shim: records every invocation's argv verbatim to $GIT_ARGV_LOG, one line per call, and
@@ -113,7 +117,7 @@ DERIVED_FILE_REAL="$(realpath "$DERIVED_FILE")"
 GIT_ARGV_LOG="$CASE1/git_argv.log"
 : > "$GIT_ARGV_LOG"
 ( cd "$BRAIN1" && PATH="$CASE1/bin:$PATH" GIT_ARGV_LOG="$GIT_ARGV_LOG" GIT_DIFF_EXIT=1 \
-    bash scripts/commit_routine_updates.sh >/dev/null 2>&1 )
+    bash scripts/sync/commit_routine_updates.sh >/dev/null 2>&1 )
 CASE1_EXIT=$?
 
 if [ "$CASE1_EXIT" -eq 0 ] \
@@ -141,7 +145,7 @@ echo "$DERIVED_FILE2" > "$BRAIN2/logs/.emit_wrote"   # AUTHORED_FILE deliberatel
 GIT_ARGV_LOG="$CASE2/git_argv.log"
 : > "$GIT_ARGV_LOG"
 ( cd "$BRAIN2" && PATH="$CASE2/bin:$PATH" GIT_ARGV_LOG="$GIT_ARGV_LOG" GIT_DIFF_EXIT=1 \
-    bash scripts/commit_routine_updates.sh >/dev/null 2>&1 )
+    bash scripts/sync/commit_routine_updates.sh >/dev/null 2>&1 )
 
 if ! grep -qF "$AUTHORED_FILE" "$GIT_ARGV_LOG"; then
   r=0
@@ -167,7 +171,7 @@ echo "$DERIVED_FILE3" > "$BRAIN3/logs/.emit_wrote"
 GIT_ARGV_LOG="$CASE3/git_argv.log"
 : > "$GIT_ARGV_LOG"
 ( cd "$BRAIN3" && PATH="$CASE3/bin:$PATH" GIT_ARGV_LOG="$GIT_ARGV_LOG" GIT_DIFF_EXIT=1 \
-    bash scripts/commit_routine_updates.sh >/dev/null 2>&1 )
+    bash scripts/sync/commit_routine_updates.sh >/dev/null 2>&1 )
 
 COMMIT_LINE="$(grep '^git commit ' "$GIT_ARGV_LOG" || true)"
 if [ -n "$COMMIT_LINE" ] && ! printf '%s' "$COMMIT_LINE" | grep -qF "$UNRELATED_FILE"; then
@@ -226,9 +230,9 @@ check "no lease at all -> alert" "$r"
 # ==============================================================================================
 
 CASE5="$WORK/case5"
-mkdir -p "$CASE5/brain/repo/scripts" "$CASE5/brain/repo/.claude/commands" "$CASE5/brain/scripts" "$CASE5/bin"
+mkdir -p "$CASE5/brain/repo/scripts" "$CASE5/brain/repo/.claude/commands" "$CASE5/brain/scripts/sync" "$CASE5/bin"
 touch "$CASE5/brain/brain.toml"
-cp "$BRAIN_ROOT_REAL/scripts/lib.sh" "$CASE5/brain/scripts/lib.sh"
+cp "$BRAIN_ROOT_REAL/scripts/sync/lib.sh" "$CASE5/brain/scripts/sync/lib.sh"
 cp "$REPO_ROOT/scripts/commander_drain.sh" "$CASE5/brain/repo/scripts/commander_drain.sh"
 cp "$REPO_ROOT/.claude/commands/orchestration-commander.md" \
    "$CASE5/brain/repo/.claude/commands/orchestration-commander.md"

@@ -28,7 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # --- resolve <brain_root> by walking up for brain.toml --------------------------------------
-# scripts/emit_state_write.sh, scripts/lib.sh and scripts/commit_routine_updates.sh (which the
+# scripts/sync/emit_state_write.sh, scripts/sync/lib.sh and scripts/sync/commit_routine_updates.sh (which the
 # commander's step 3 calls) live in the BRAIN repo, not here — never assume a repo-relative
 # path to them. This mirrors scripts/check_lane_agents.py's find_brain_root() /
 # scripts/check_messages.py's identical precedence, so every mechanism in the fleet that needs
@@ -54,7 +54,7 @@ BRAIN_ROOT="$(find_brain_root "$REPO_ROOT")" || {
 }
 
 # shellcheck source=/dev/null
-source "$BRAIN_ROOT/scripts/lib.sh"   # gives us send_alert(), LOG_DIR, colors.
+source "$BRAIN_ROOT/scripts/sync/lib.sh"   # gives us send_alert(), LOG_DIR, colors.
 
 # --- args -------------------------------------------------------------------------------------
 
