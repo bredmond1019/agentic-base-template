@@ -449,6 +449,58 @@ def check_boundary_filename_uuid_mismatch() -> None:
               proc.stdout + proc.stderr)
 
 
+# --- BT.ticket.ping-agent-never-specifies-the-message-timestamp-format: rejection literal -------
+#
+# Task 3: pin the concrete expected literal (`YYYYMMDDThhmmssZ-<uuid>.json`) added to the
+# FILENAME_RE rejection message in task 2, and replay the motivating incident's two forms: an
+# extended-form stamp with colons stripped (dashes still intact) must be REJECTED, while a stamp
+# produced by `date -u +%Y%m%dT%H%M%SZ` (basic form) must be ACCEPTED.
+
+def check_filename_rejection_message_carries_expected_literal() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        queue_dir = lock_dir / "queue" / "base-template" / "lane-coordination"
+        inbox_dir = queue_dir / "inbox"
+        inbox_dir.mkdir(parents=True)
+        record = _valid_message("EDGE_RELEASED")
+        # bastion-61's exact mistake: derive the stamp as iso_utc.replace(':', ''), which strips
+        # colons but leaves the dashes -- extended form, still rejected by FILENAME_RE (basic
+        # form only).
+        extended_stamp = _iso(_now()).replace(":", "")
+        assert "-" in extended_stamp.split("T")[0], "fixture must retain dashes to be a fair test"
+        bad_path = inbox_dir / f"{extended_stamp}-{record['message_id']}.json"
+        _write_json(bad_path, record)
+
+        proc = _run_cli(lock_dir)
+        output = proc.stdout + proc.stderr
+        check("rejection message carries the concrete expected literal "
+              "`YYYYMMDDThhmmssZ-<uuid>.json`, not only the prose description",
+              "YYYYMMDDThhmmssZ-<uuid>.json" in output, output)
+        check("a colons-stripped-but-dashes-intact (extended-form) stamp is REJECTED",
+              proc.returncode != 0, output)
+
+
+def check_basic_form_stamp_from_incantation_is_accepted() -> None:
+    """The `date -u +%Y%m%dT%H%M%SZ` incantation's output form must be ACCEPTED -- the positive
+    half of the same incident, so the fixture can't pass merely by rejecting everything."""
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        queue_dir = lock_dir / "queue" / "base-template" / "lane-coordination"
+        inbox_dir = queue_dir / "inbox"
+        inbox_dir.mkdir(parents=True)
+        record = _valid_message("EDGE_RELEASED")
+        # Basic form, exactly what `date -u +%Y%m%dT%H%M%SZ` produces: no dashes, no colons.
+        basic_stamp = _ts_basic(_now())
+        good_path = inbox_dir / f"{basic_stamp}-{record['message_id']}.json"
+        _write_json(good_path, record)
+
+        proc = _run_cli(lock_dir)
+        output = proc.stdout + proc.stderr
+        check("a basic-form stamp (as produced by `date -u +%Y%m%dT%H%M%SZ`) is ACCEPTED "
+              "(no filename-format problem reported)",
+              "does not match" not in output, output)
+
+
 # --- BT.ticket.fleet-wide-gates-red-on-another-lanes-data: foreign vs. own verdict scope -----
 #
 # Task 1 of that block: replay the block record's measured instance (1) as a FAILING fixture
@@ -612,6 +664,8 @@ def main() -> int:
     check_negative_direct_write_to_processing()
     check_negative_done_missing_second_receipt()
     check_boundary_filename_uuid_mismatch()
+    check_filename_rejection_message_carries_expected_literal()
+    check_basic_form_stamp_from_incantation_is_accepted()
     check_foreign_malformed_filename_reports_but_is_not_fatal()
     check_own_malformed_filename_is_still_fatal()
     check_concurrent_drain_exactly_once()
