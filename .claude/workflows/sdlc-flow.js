@@ -571,6 +571,8 @@ const WRAPUP_SCHEMA = {
     stateWriteValidated: { type: 'boolean', description: 'true if mev validate-brain --state gated the state.json mutation (before/after diff, net-new only); false when mev was not on PATH and the write landed with only json.load-level parsing (a degrade, not a pass)' },
     stateWriteRejected: { type: 'boolean', description: 'true if the state.json mutation introduced net-new schema errors and was rolled back byte-exact; the block was NOT flipped to closed this run' },
     emitStateRan:  { type: 'boolean', description: 'true if `mev emit-state --write` regenerated derived surfaces on the branch itself during this in-place (non-worktree) wrap-up; false when skipped (worktree mode, or mev/brain.toml absent)' },
+    postEmitHookRan:    { type: 'boolean', description: 'true if planning/harness.json\'s postEmitCommitCommand was configured AND invoked this run (in-place only, and only when emitStateRan is true); false when absent, or skipped (worktree mode / emit-state did not run)' },
+    postEmitHookFailed: { type: 'boolean', description: 'true if the configured postEmitCommitCommand was invoked and exited non-zero; false otherwise' },
     stateWritten:  { type: 'boolean', description: 'true if the agent ALSO persisted sdlc-flow-state.json + worklog.md this same turn (the wrap-up-phase state-write fold); false/omitted when it did not (write not attempted/completed)' },
     notes:         { type: 'string' }
   }
@@ -743,6 +745,7 @@ const HARNESS_CONFIG_SCHEMA = {
       description: 'The parsed harness.json (omit when present is false)',
       properties: {
         stack: { type: 'string' },
+        postEmitCommitCommand: { type: 'string', description: 'OPTIONAL. Shell command the wrap-up stage runs after `mev emit-state --write` succeeds, in-place only. Absent means no post-emit command runs.' },
         validation: {
           type: 'object',
           properties: {
@@ -809,7 +812,8 @@ STEP 2 — Decide:
   - "__HARNESS_ABSENT__" (file missing) → present=false, omit config.
   - File printed but NOT valid JSON → present=false, notes="harness.json present but invalid JSON: <reason>".
   - File printed and valid JSON → present=true, and copy the parsed object into "config", keeping ONLY
-    these fields when present: stack; validation.checks[] (each: {kind, name, command, purpose, gates,
+    these fields when present: stack; postEmitCommitCommand (string, verbatim, do not interpret it);
+    validation.checks[] (each: {kind, name, command, purpose, gates,
     perTask, fastCommand} plus any kind-specific fields present — baselineCommand, reasonCommand,
     compareKeys[], countPattern, failOn, warningPatterns[], rules[] ({id, pattern, paths,
     allowlistPattern})); flow ({autoMerge, testDepth, prBase, bailReasons[]}). Preserve kind-specific
@@ -1641,6 +1645,13 @@ const harnessCfg = await loadHarnessConfig(worktreePath)
 log(harnessCfg
   ? `Harness config: ${(harnessCfg.validation?.checks || []).length} check(s); flow.${JSON.stringify(harnessCfg.flow || {})}`
   : 'No planning/harness.json — validation falls back to the spec.')
+
+// BT.ticket.bookkeep-leaves-derived-output-uncommitted (task 4): OPTIONAL post-emit commit hook,
+// project policy only (mechanism: run it if configured; never a default, never a fact about where
+// any project's scripts live). String, not boolean — a missing/blank key means "no hook".
+const postEmitCommitCommand = typeof harnessCfg?.postEmitCommitCommand === 'string' && harnessCfg.postEmitCommitCommand.trim()
+  ? harnessCfg.postEmitCommitCommand
+  : ''
 
 // Resolve flow policy: CLI flag overrides harness.json overrides built-in default.
 const flowCfg = harnessCfg?.flow || {}
@@ -2756,6 +2767,20 @@ print('FLIPPED:' + bid)
       ? `- Do NOT run \`mev emit-state --write\` here: this is a linked git worktree, where emit-state refuses to run. The authored edits are committed on the branch below (step 5); the derived surfaces regenerate on the base branch when this branch merges (/clean-worktree or /close-out --merge-branch run emit-state after integration). Set emitStateRan=false.`
       : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \`git commit\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \`mev\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}
 
+2d. OPTIONAL post-emit commit hook. ${postEmitCommitCommand
+      ? `planning/harness.json declares postEmitCommitCommand — run it ONLY when step 2c set emitStateRan=true
+    (i.e. never in worktree mode, and never when emit-state itself was skipped). This mechanism does not
+    know or care what the command does — it is project policy, not engine fact:
+      cd ${worktreePath} && ${postEmitCommitCommand}
+    Check the real exit code (not a piped one — see the pipe-exit-code trap). Exit 0 → postEmitHookRan=true,
+    postEmitHookFailed=false. Non-zero → postEmitHookRan=true, postEmitHookFailed=true, and copy the
+    command's stderr/stdout tail verbatim into notes — this MUST be reported, never swallowed. Do not
+    retry it and do not attempt to "fix" or roll anything back yourself; the command owns its own
+    transaction, so a failure here means step 5 below (this stage's own commit) still runs as normal —
+    this hook is independent of it.`
+      : `planning/harness.json defines no postEmitCommitCommand — skip this step entirely. Set
+    postEmitHookRan=false and postEmitHookFailed=false. This is the default, unchanged behaviour.`}
+
 3. Prepend a new log.md entry (newest first):
    ## [run: date +%Y-%m-%d]
    [One paragraph: what was implemented across tasks ${taskList.join(', ')}, the ${finalVerdict} verdict${bailed ? ` and why it bailed (${bailReason})` : ''}, notable decisions. End with "Next: ...".]
@@ -2809,6 +2834,7 @@ ${renderWrapupStateWriteRecipe(wrapupStatePayload)}
 Return via StructuredOutput: statusUpdated, devlogUpdated, nextFocus, amendments[], commitHash,
 blockStatusFlipped (the state.json block id closed in step 2b, or "" — including when the write was
 rejected by validation), stateWriteValidated, stateWriteRejected (step 2b), emitStateRan (step 2c),
+postEmitHookRan, postEmitHookFailed (step 2d),
 stateWritten (true only if you performed the additional state write above), notes.
 `, withModel({ label: 'wrap-up', schema: WRAPUP_SCHEMA, phase: 'Wrap-up' }, MODEL.wrapup))
 
@@ -2819,6 +2845,11 @@ if (wrapupResult?.stateWriteRejected) {
 }
 if (wrapupResult?.amendments?.length) log(`Spec amendments (D18): ${wrapupResult.amendments.length} line(s) appended.`)
 log(`Derived surfaces (in-place, this wrap-up): ${wrapupResult?.emitStateRan ? 'regenerated (mev emit-state --write).' : useWorktree ? 'skipped — worktree mode; focus.next stays stale until regenerated on merge.' : 'skipped (mev/brain.toml absent).'}`)
+if (wrapupResult?.postEmitHookRan) {
+  log(wrapupResult?.postEmitHookFailed
+    ? `postEmitCommitCommand FAILED (planning/harness.json) — reported, not swallowed. ${wrapupResult?.notes || ''}`
+    : `postEmitCommitCommand ran (planning/harness.json).`)
+}
 
 // Final state write (status reflects the terminal state; PR fields filled after creation).
 // state.status was already set by buildWrapupStatePayload() above, before the agent call, so the

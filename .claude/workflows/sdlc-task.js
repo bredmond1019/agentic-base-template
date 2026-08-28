@@ -571,6 +571,8 @@ const BOOKKEEP_SCHEMA = {
     stateWriteValidated: { type: 'boolean', description: 'true if mev validate-brain --state gated the state.json mutation (before/after diff, net-new only); false when mev was not on PATH and the write landed with only json.load-level parsing (a degrade, not a pass)' },
     stateWriteRejected: { type: 'boolean', description: 'true if the state.json mutation introduced net-new schema errors and was rolled back byte-exact; the block was NOT flipped to closed this run' },
     emitStateRan:       { type: 'boolean', description: 'true if mev emit-state --write ran successfully (false when skipped: worktree mode or mev/brain.toml absent)' },
+    postEmitHookRan:    { type: 'boolean', description: 'true if planning/harness.json\'s postEmitCommitCommand was configured AND invoked this run (in-place only, and only when emitStateRan is true); false when absent, or skipped (worktree mode / emit-state did not run)' },
+    postEmitHookFailed: { type: 'boolean', description: 'true if the configured postEmitCommitCommand was invoked and exited non-zero; false otherwise' },
     commitHash:         { type: 'string' },
     notes:              { type: 'string' }
   }
@@ -683,6 +685,7 @@ const HARNESS_CONFIG_SCHEMA = {
       description: 'The parsed harness.json (omit when present is false)',
       properties: {
         stack: { type: 'string' },
+        postEmitCommitCommand: { type: 'string', description: 'OPTIONAL. Shell command the bookkeep stage runs after `mev emit-state --write` succeeds, in-place only. Absent means no post-emit command runs.' },
         validation: {
           type: 'object',
           properties: {
@@ -739,7 +742,8 @@ STEP 2 — Decide:
   - "__HARNESS_ABSENT__" (file missing) → present=false, omit config.
   - File printed but NOT valid JSON → present=false, notes="harness.json present but invalid JSON: <reason>".
   - File printed and valid JSON → present=true, and copy the parsed object into "config", keeping ONLY
-    these fields when present: stack; validation.checks[] (each: {kind, name, command, purpose, gates,
+    these fields when present: stack; postEmitCommitCommand (string, verbatim, do not interpret it);
+    validation.checks[] (each: {kind, name, command, purpose, gates,
     perTask, fastCommand} plus any kind-specific fields present — baselineCommand, reasonCommand,
     compareKeys[], countPattern, failOn, warningPatterns[], rules[] ({id, pattern, paths,
     allowlistPattern})). Preserve kind-specific fields verbatim; ignore any other fields.
@@ -2256,6 +2260,12 @@ if (reconcileFailed) {
 // selection (can't close the block).
 // ----------------------------------------------------------------
 const blockDone = !bailed && !reconcileFailed && passedAll.length === allTasks.length
+// BT.ticket.bookkeep-leaves-derived-output-uncommitted (task 4): OPTIONAL post-emit commit hook,
+// project policy only (mechanism: run it if configured; never a default, never a fact about where
+// any project's scripts live). String, not boolean — a missing/blank key means "no hook".
+const postEmitCommitCommand = typeof harnessCfg?.postEmitCommitCommand === 'string' && harnessCfg.postEmitCommitCommand.trim()
+  ? harnessCfg.postEmitCommitCommand
+  : ''
 let bookkeepResult = null
 if (!bailed && !reconcileFailed) {
   // D46: when planning/ is a vaulted symlink, ${specFile}, planning/status.md, and planning/state.json
@@ -2415,7 +2425,21 @@ print('FLIPPED:' + bid)
      ? `- Do NOT run \`mev emit-state --write\`: this is a linked git worktree, where emit-state refuses to run. The derived surfaces regenerate on MAIN when the branch merges (/clean-worktree). Set emitStateRan=false.`
      : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \`mev\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}
 
-6. Commit your edits (stage explicitly — never git add -A). NEVER run git checkout, git switch, or git
+6. OPTIONAL post-emit commit hook. ${postEmitCommitCommand
+     ? `planning/harness.json declares postEmitCommitCommand — run it ONLY when step 5 set emitStateRan=true
+   (i.e. never in worktree mode, and never when emit-state itself was skipped). This mechanism does not
+   know or care what the command does — it is project policy, not engine fact:
+     cd ${runDir} && ${postEmitCommitCommand}
+   Check the real exit code (not a piped one — see the pipe-exit-code trap). Exit 0 → postEmitHookRan=true,
+   postEmitHookFailed=false. Non-zero → postEmitHookRan=true, postEmitHookFailed=true, and copy the
+   command's stderr/stdout tail verbatim into notes — this MUST be reported, never swallowed. Do not
+   retry it and do not attempt to "fix" or roll anything back yourself; the command owns its own
+   transaction, so a failure here means step 7 below still runs as normal (this hook is independent of
+   this stage's own commit).`
+     : `planning/harness.json defines no postEmitCommitCommand — skip this step entirely. Set
+   postEmitHookRan=false and postEmitHookFailed=false. This is the default, unchanged behaviour.`}
+
+7. Commit your edits (stage explicitly — never git add -A). NEVER run git checkout, git switch, or git
    branch outside this repo's own root (${runDir})${vault.vaulted ? ` or the vault's own root (${vault.planningPath})` : ''} —
    if a git add fails, report the failure in notes; do not relocate the commit to make it succeed.
 ${vault.vaulted ? `
@@ -2443,7 +2467,7 @@ EOF
 )" || echo "NOTHING_TO_COMMIT"
    cd ${runDir} && ${GIT} log --oneline -1`}
 
-Return via StructuredOutput: statusUpdated, tasksMarked, blockStatusFlipped, emitStateRan, commitHash, notes.
+Return via StructuredOutput: statusUpdated, tasksMarked, blockStatusFlipped, emitStateRan, postEmitHookRan, postEmitHookFailed, commitHash, notes.
 `, withModel({ label: 'bookkeep', schema: BOOKKEEP_SCHEMA }, MODEL.bookkeep))
   if (bookkeepResult?.stateWriteRejected) {
     log(`state.json: write REJECTED — net-new schema error(s) from mev validate-brain --state; rolled back byte-exact, block NOT closed this run. ${bookkeepResult?.notes || ''}`)
@@ -2451,6 +2475,11 @@ Return via StructuredOutput: statusUpdated, tasksMarked, blockStatusFlipped, emi
     log(`state.json: block "${bookkeepResult.blockStatusFlipped}" → closed (${bookkeepResult.stateWriteValidated ? 'validated: mev validate-brain --state, net-new only' : 'UNVALIDATED: mev not available, json.load-level parse only'})${bookkeepResult.emitStateRan ? '; derived surfaces (incl. focus.next) regenerated (mev emit-state --write).' : useWorktree ? '; focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree runs `mev emit-state --write` on merge.' : '.'}`)
   } else if (blockDone) {
     log(`Bookkeep: no state.json block flipped (${bookkeepResult?.notes || 'no state.json, or block not found'}).`)
+  }
+  if (bookkeepResult?.postEmitHookRan) {
+    log(bookkeepResult?.postEmitHookFailed
+      ? `postEmitCommitCommand FAILED (planning/harness.json) — reported, not swallowed. ${bookkeepResult?.notes || ''}`
+      : `postEmitCommitCommand ran (planning/harness.json).`)
   }
 }
 
