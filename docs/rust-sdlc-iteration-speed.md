@@ -20,7 +20,8 @@ a real source edit is **6.4s** — down from ~3m10s.
 
 This is the generalized playbook from a 2026-07-29 investigation in `core/engine-rs`, where
 `/sdlc-flow` runs on a 10-task spec had grown to nearly two hours. Governed by
-[D57](docs/decisions/D57-rust-sdlc-iteration-speed.md).
+HQ's D57 (`agentic-portfolio/docs/decisions/D57-rust-sdlc-iteration-speed.md`) — note that
+base-template's own D57 is a different decision, the orchestration-run artifact contract.
 
 ---
 
@@ -269,7 +270,7 @@ matters more.
   blocks shipped green over real lint violations (`mev`, `okf-core`, 2026-08-03) — is a separate,
   more expensive form: measured on `engine-rs` at ~9.61s warm vs. the narrow form's ~2.89s, a ~3.3x
   multiplier (~6.72s / ~26% of the 26s tripwire if it replaced the narrow form outright). Per
-  [D55](planning/decisions/D55-all-targets-clippy-placement.md),
+  [D55](../planning/decisions/D55-all-targets-clippy-placement.md),
   the wide form goes in the authoritative `command` only (end-of-flow review); the narrow form
   keeps its `fastCommand` seat in the per-task tripwire, so this bullet's original number and
   conclusion still hold for the tripwire specifically — revisit only if the narrow form itself
