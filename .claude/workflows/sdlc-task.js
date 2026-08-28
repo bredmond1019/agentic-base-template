@@ -212,6 +212,45 @@ resolved absolute path from the second line).
   return result
 }
 
+// BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root — resolve repoRoot ONCE, here in
+// the engine, and hand it to every later prompt as a GIVEN literal instead of asking the setup agent
+// to derive-and-substitute a repoRoot placeholder token itself. That hand-substitution was the measured
+// mechanism of a real misbinding: an agent read the correct root on command 1, then voluntarily cd'd
+// to the brain root and re-derived REPO_ROOT there — nothing instructed it to, but nothing forbade it
+// either. Removing the agent's discretion (one fixed command, no substitution to perform) removes the
+// class, not just the one observed instance. IN-PLACE MODE is not exempt: this engine's in-place branch
+// sets runDir = repoRoot from the same value, so a mis-derived root sends in-place reads/commits into
+// the wrong repo just as effectively as a worktree misbinding — and per D81, in-place is the ONLY mode
+// anything runs in today.
+// Same shape as detectPlanningVault() immediately above, for the same reason: the Workflow runtime
+// has no fs/process/require and `import` declarations don't even parse, so this shells out via a
+// cheap Haiku agent turn instead of resolving the path in-process. Returns null on failure (unlike
+// detectPlanningVault's safe fallback) — a wrong repoRoot silently accepted here is exactly the
+// defect this ticket exists to remove, so the caller must abort rather than guess.
+const RESOLVE_REPO_ROOT_SCHEMA = {
+  type: 'object',
+  required: ['repoRoot', 'gitCommonDir', 'tierPrefix', 'brainTomlAtRoot'],
+  properties: {
+    repoRoot:        { type: 'string', description: 'Absolute repo root from the REPO_ROOT: line' },
+    gitCommonDir:    { type: 'string', description: 'Absolute --git-common-dir from the GIT_COMMON_DIR: line' },
+    tierPrefix:      { type: 'string', description: 'The invoking directory\'s path relative to repoRoot, with a trailing slash (e.g. "business/"), or "" at the repo root, from the TIER_PREFIX: line' },
+    brainTomlAtRoot: { type: 'boolean', description: 'true iff the BRAIN_TOML: line reads "yes" — a brain.toml exists at repoRoot' }
+  }
+}
+async function resolveRepoRoot() {
+  const result = await agent(`
+Resolve this repo's root and related mechanical facts ONCE, before anything else runs.
+Run exactly this ONE Bash call, from the invoking directory — do not cd anywhere first, do not
+substitute or re-derive any value, and do not run any other command:
+  REPO_ROOT=$(${GIT} rev-parse --show-toplevel) && echo "REPO_ROOT:$REPO_ROOT" && echo "GIT_COMMON_DIR:$(${GIT} rev-parse --path-format=absolute --git-common-dir)" && echo "TIER_PREFIX:$(python3 -c "import os; r=os.path.relpath(os.getcwd(), '$REPO_ROOT'); print('' if r=='.' else r+'/')")" && { [ -f "$REPO_ROOT/brain.toml" ] && echo "BRAIN_TOML:yes" || echo "BRAIN_TOML:no"; }
+Four labelled lines come back — REPO_ROOT:, GIT_COMMON_DIR:, TIER_PREFIX:, BRAIN_TOML: (yes/no).
+Return via StructuredOutput: repoRoot (the REPO_ROOT: value), gitCommonDir (the GIT_COMMON_DIR:
+value), tierPrefix (the TIER_PREFIX: value, "" when invoking at the repo root), brainTomlAtRoot
+(true iff BRAIN_TOML: is yes).
+`, { label: 'resolve-repo-root', schema: RESOLVE_REPO_ROOT_SCHEMA, model: 'haiku' })
+  return result || null
+}
+
 // Vault-aware task commits (extends D46): the per-task implement/fix stage below is instructed to
 // stage + commit any planning/ paths it wrote THROUGH the vault repo (git -C <vault.planningPath>),
 // reusing detectPlanningVault's real path exactly like the bookkeep/wrap-up recipe already does —
@@ -984,6 +1023,19 @@ to the updated_at value you used.
 phase('Setup')
 log(`Setting up (${useWorktree ? 'isolated worktree' : 'in place'})${resumeMode ? ', resume' : ''}...`)
 
+// Resolve repoRoot ONCE, in the engine, before the setup agent ever runs — see resolveRepoRoot()
+// above for why this exists. Everything downstream gets repoRoot (and candidateTierPrefix) as a
+// literal; only [branchName] and currentBranch remain agent-derived (branchName is genuinely
+// chosen inside STEP 2 for worktree mode, and currentBranch reflects live repo state at the
+// moment setup runs — neither can be pre-computed here).
+const repoRootResult = await resolveRepoRoot()
+if (!repoRootResult) {
+  log('resolveRepoRoot agent returned null — aborting pipeline before any branch/worktree work')
+  return { error: 'resolveRepoRoot failed', blockId }
+}
+const { repoRoot, gitCommonDir, tierPrefix: invocationTierPrefix, brainTomlAtRoot } = repoRootResult
+log(`Resolved repoRoot: ${repoRoot} (git-common-dir: ${gitCommonDir})`)
+
 const setupResult = await tracedAgent(`
 You are the setup agent for the lean /sdlc-task pipeline. ${useWorktree
   ? 'Create (or locate) ONE isolated git worktree for this run.'
@@ -996,14 +1048,16 @@ Target:
   Legacy spec file:  ${specFile} (fallback — only used when the block record is absent)
 ${useWorktree ? `  Base name:  ${baseBranchName}` : ''}
 
-STEP 1 — Get the absolute repo root and the current branch:
-  Run: ${GIT} rev-parse --show-toplevel        (store trimmed output as repoRoot)
-  Run: ${GIT} rev-parse --abbrev-ref HEAD       (store as currentBranch)
-  Run this BEFORE any other \`cd\` — it must reflect where /sdlc-task was actually invoked from
-  (e.g. a sub-brain tier like business/), not runDir, which may differ:
-    REPO_ROOT=$(${GIT} rev-parse --show-toplevel) && python3 -c "import os; r=os.path.relpath(os.getcwd(), '$REPO_ROOT'); print('' if r=='.' else r+'/')"
-       (store trimmed stdout as candidateTierPrefix — "" when invoking at the git root, otherwise
-       the invoking directory's path relative to repoRoot with a trailing slash, e.g. "business/")
+STEP 1 — repoRoot and candidateTierPrefix are GIVEN, not derived. The engine already resolved them
+  before you were invoked:
+    repoRoot = ${repoRoot}
+    candidateTierPrefix = "${invocationTierPrefix}" (the invoking directory's path relative to
+      repoRoot, with a trailing slash, e.g. "business/", or "" when /sdlc-task was invoked at the
+      repo root — it reflects where /sdlc-task was actually invoked from, not runDir, which may differ)
+  Use both values VERBATIM everywhere below. Do NOT re-derive repoRoot with \`${GIT} rev-parse
+  --show-toplevel\` or any other command, and do NOT cd outside repoRoot at any point in this
+  recipe — re-deriving it is exactly the failure this step exists to prevent.
+  Also run: ${GIT} rev-parse --abbrev-ref HEAD       (store as currentBranch)
 ${useWorktree ? `
 WORKTREE MODE (--worktree) — create or reuse an isolated worktree:
 ${resumeMode ? `  RESUME — reuse the existing worktree for this spec if present:
@@ -1033,7 +1087,7 @@ ${resumeMode ? `  RESUME — reuse the existing worktree for this spec if presen
        ${GIT} -C trees/[branchName] sparse-checkout set $(${GIT} ls-tree HEAD --name-only -d | tr '\\n' ' ')
     e. ${GIT} -C trees/[branchName] checkout
     f. Discover and copy EVERY gitignored env-shaped file (.env, .env.local, .env.* in any
-       directory) from repoRoot into trees/[branchName], preserving each file's path relative to
+       directory) from ${repoRoot} into trees/[branchName], preserving each file's path relative to
        the repo root (creating parent directories as needed — so app/.env lands at
        trees/[branchName]/app/.env). Only files git actually ignores; exclude node_modules/,
        .venv/, venv/, trees/, and vendor/; never overwrite a file that already exists in the
@@ -1063,10 +1117,11 @@ ${resumeMode ? `  RESUME — reuse the existing worktree for this spec if presen
     If \`planning\` is a real tracked directory (non-vaulted repo), the sparse-checkout already
     populated it — do nothing.
 ` : `
-IN-PLACE MODE — no worktree. branchName=currentBranch, wasCreated=false. runDir=repoRoot.
+IN-PLACE MODE — no worktree. branchName=currentBranch, wasCreated=false. runDir=${repoRoot}
+  (repoRoot is GIVEN from STEP 1 — do not recompute it).
 `}
-STEP 3 — Compute runDir:
-  ${useWorktree ? 'runDir = repoRoot + "/trees/" + branchName' : 'runDir = repoRoot'}
+STEP 3 — Compute runDir (repoRoot is GIVEN as ${repoRoot} — use it verbatim, never recompute it):
+  ${useWorktree ? `runDir = "${repoRoot}" + "/trees/" + branchName` : `runDir = "${repoRoot}"`}
 
 STEP 4 — Report pipeline-start inputs (run these from runDir):
   a. Spec source AND location (D65 stage 2 + tier resolution) — the block record is checked FIRST
