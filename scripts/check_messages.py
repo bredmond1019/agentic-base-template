@@ -531,7 +531,10 @@ def _check_one_queue(queue_dir: Path, quiet: bool, own_repo: Optional[str]) -> t
             if not m:
                 problems.append(
                     f"filename `{path.name}` does not match `<ts>-<uuid>.json` "
-                    f"(ISO-8601 basic-form UTC timestamp, then a dash, then the uuid)"
+                    f"(ISO-8601 basic-form UTC timestamp, then a dash, then the uuid); "
+                    f"expected literal shape `YYYYMMDDThhmmssZ-<uuid>.json`, e.g. "
+                    f"`20260827T142530Z-<uuid>.json` (generate the timestamp with "
+                    f"`date -u +%Y%m%dT%H%M%SZ`)"
                 )
             elif not _gating(problems) and message_id is not None and m.group(2) != message_id:
                 problems.append(
