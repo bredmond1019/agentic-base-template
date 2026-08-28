@@ -806,7 +806,9 @@ Skip this entire step if the run bailed OR Step 3.5 set `reconcileFailed = true`
    command owns its own transaction, so a failure here does not block step 6's own commit below.
    If `planning/harness.json` defines no `postEmitCommitCommand`, skip this step entirely — report
    `postEmitHookRan=false`, `postEmitHookFailed=false`. This is the default, unchanged behaviour;
-   no scaffolded repo carries this key unless it opts in.
+   no scaffolded repo carries this key unless it opts in. `/sdlc-flow`'s wrap-up stage runs the
+   identical hook, gated the identical way (in-place only, only after its own `emit-state --write`
+   succeeds) — see [`docs/workflows/sdlc-flow.md`'s Wrap-up row](../../../docs/workflows/sdlc-flow.md#pipeline).
 6. **Commit** (stage explicitly — never `git add -A`). Never run `git checkout`/`git switch`/`git
    branch` outside this repo's own root, or (when vaulted) outside the vault's own root — if a `git
    add` fails, report it; do not relocate the commit to force it through.
