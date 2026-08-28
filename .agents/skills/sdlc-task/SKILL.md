@@ -790,7 +790,24 @@ Skip this entire step if the run bailed OR Step 3.5 set `reconcileFailed = true`
      that just closed until `/clean-worktree` or `/merge-train` runs `mev emit-state --write` on
      merge. Report this explicitly (do not report the run as leaving `focus` fresh); do not attempt
      to hand-edit `focus.next` here.
-5. **Commit** (stage explicitly — never `git add -A`). Never run `git checkout`/`git switch`/`git
+5. **OPTIONAL post-emit commit hook** (`postEmitCommitCommand`, `planning/harness.json`) —
+   BT.ticket.bookkeep-leaves-derived-output-uncommitted: run it ONLY when step 4 actually ran `mev
+   emit-state --write` (i.e. never in worktree mode, and never when emit-state itself was skipped
+   because `mev`/`brain.toml` was absent). This mechanism does not know or care what the command
+   does — it is project policy, never an engine default and never a fact about where any project
+   keeps its scripts:
+   ```
+   cd <runDir> && <postEmitCommitCommand>
+   ```
+   Check the REAL exit code, not a piped one. Exit 0 → report `postEmitHookRan=true`,
+   `postEmitHookFailed=false`. Non-zero → report `postEmitHookRan=true`, `postEmitHookFailed=true`,
+   and copy the command's stderr/stdout tail verbatim into notes — this must be surfaced, never
+   swallowed. Do not retry it and do not attempt to "fix" or roll anything back yourself; the
+   command owns its own transaction, so a failure here does not block step 6's own commit below.
+   If `planning/harness.json` defines no `postEmitCommitCommand`, skip this step entirely — report
+   `postEmitHookRan=false`, `postEmitHookFailed=false`. This is the default, unchanged behaviour;
+   no scaffolded repo carries this key unless it opts in.
+6. **Commit** (stage explicitly — never `git add -A`). Never run `git checkout`/`git switch`/`git
    branch` outside this repo's own root, or (when vaulted) outside the vault's own root — if a `git
    add` fails, report it; do not relocate the commit to force it through.
    - **Vaulted repo (`planning/` is a symlink — D46, e.g. this very `agentic-portfolio` HQ)**: the

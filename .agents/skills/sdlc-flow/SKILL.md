@@ -215,7 +215,11 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
    - If PASS, run `/update-docs --patch` to update documentation, running the COMMIT-SAFETY GUARD
      `&&`-joined before the docs commit (and its vault counterpart, if any patched/created doc lives
      under `planning/`).
-   - Update the status and log.
+   - Update the status and log. In-place (non-worktree) only, after `mev emit-state --write`
+     succeeds: if `planning/harness.json` declares an OPTIONAL `postEmitCommitCommand`
+     (BT.ticket.bookkeep-leaves-derived-output-uncommitted), run it — this is project policy, never
+     an engine default, so an absent key is a silent no-op. A hook failure must be reported, never
+     swallowed, and never blocks the wrap-up commit below (the hook owns its own transaction).
    - Run the COMMIT-SAFETY GUARD `&&`-joined before the wrap-up commit — both the repo-local one and,
      in a vaulted repo, the vault one (`git -C <vault path>`) — then commit.
    - Create a pull request (PR) using git CLI or GitHub CLI (unless `--no-pr` is specified).

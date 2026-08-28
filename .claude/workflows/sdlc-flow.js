@@ -1648,7 +1648,8 @@ log(harnessCfg
 
 // BT.ticket.bookkeep-leaves-derived-output-uncommitted (task 4): OPTIONAL post-emit commit hook,
 // project policy only (mechanism: run it if configured; never a default, never a fact about where
-// any project's scripts live). String, not boolean — a missing/blank key means "no hook".
+// any project's scripts live). String, not boolean — a missing/blank key means "no hook". Manual-
+// replication guide for this hook: .agents/skills/sdlc-flow/SKILL.md, Docs & Wrap-up step.
 const postEmitCommitCommand = typeof harnessCfg?.postEmitCommitCommand === 'string' && harnessCfg.postEmitCommitCommand.trim()
   ? harnessCfg.postEmitCommitCommand
   : ''

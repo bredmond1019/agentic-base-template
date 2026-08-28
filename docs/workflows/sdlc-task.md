@@ -76,7 +76,7 @@ flowchart TD
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **Commit + state** | haiku | Writes `sdlc-task-state.json` (per-task status + token usage) and commits all work + state, in-place: one final `chore:` commit. (The per-phase-write, throwaway-branch commit shape under `--worktree` is unreachable while D81 refuses the flag.) |
 | **Terminal reconcile** ([D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md)) | haiku | Runs once, after every task has passed on a full spec run, before bookkeep. See [Terminal authoritative reconcile](#terminal-authoritative-reconcile-d56) below. |
-| **Bookkeep close-out** | haiku | Runs only on a full, fully-passing spec run **whose terminal reconcile also passed** (never on a partial task range, a bail, or a `reconcile_failed` run). Marks `tasks.md` tasks done using the spec's **cumulative** completed-task count (this run's passes reconciled with every prior run's, never this run's slice alone), appends (never rewrites) a "Current focus" line in `status.md` — see [Bookkeep's `status.md` and `focus.next` rules](#bookkeeps-statusmd-and-focusnext-rules) below — and flips `planning/state.json`'s block status to `"closed"`. In-place: also runs `mev emit-state --write`, which re-derives `focus.next`. `--worktree`: skips `emit-state` (unsafe in a linked worktree) — `focus.next` stays **deferred**, still pointing at the pre-close state, until `/clean-worktree` (or an equivalent merge step) lands the branch and runs `mev emit-state --write`; the engine's own log line says so explicitly rather than leaving it silently stale. Writes no prose `log.md` entry — run `/log-work` for the narrative. ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)) |
+| **Bookkeep close-out** | haiku | Runs only on a full, fully-passing spec run **whose terminal reconcile also passed** (never on a partial task range, a bail, or a `reconcile_failed` run). Marks `tasks.md` tasks done using the spec's **cumulative** completed-task count (this run's passes reconciled with every prior run's, never this run's slice alone), appends (never rewrites) a "Current focus" line in `status.md` — see [Bookkeep's `status.md` and `focus.next` rules](#bookkeeps-statusmd-and-focusnext-rules) below — and flips `planning/state.json`'s block status to `"closed"`. In-place: also runs `mev emit-state --write`, which re-derives `focus.next`, then — if `planning/harness.json` names an optional `postEmitCommitCommand` — runs that hook (see [below](#bookkeeps-statusmd-and-focusnext-rules); absent key is a no-op). `--worktree`: skips `emit-state` (unsafe in a linked worktree), and therefore the hook too — `focus.next` stays **deferred**, still pointing at the pre-close state, until `/clean-worktree` (or an equivalent merge step) lands the branch and runs `mev emit-state --write`; the engine's own log line says so explicitly rather than leaving it silently stale. Writes no prose `log.md` entry — run `/log-work` for the narrative. ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)) |
 
 ### The retry loop
 
@@ -224,6 +224,19 @@ this is a deliberate deferral, not a bug, and the engine's own log line states i
 `--worktree` is the default mode for isolated `/sdlc-task` runs, treat a freshly-merged worktree
 branch's `focus.next` as stale until the merge step (`/clean-worktree`) has run
 `mev emit-state --write` on the base.
+
+**Optional post-emit commit hook** (`postEmitCommitCommand`,
+[BT.ticket.bookkeep-leaves-derived-output-uncommitted](../../planning/blocks/BT.ticket.bookkeep-leaves-derived-output-uncommitted.json)):
+after an in-place `mev emit-state --write` succeeds, bookkeep runs the shell command named by
+`planning/harness.json`'s optional `postEmitCommitCommand` key, if present — this is how a repo
+that wants the derived fallout (focus caches, wave tables, status boards) committed on close can
+opt in, without the engine knowing or caring what the command does or where it lives. No default
+ships and the scaffold stub never carries the key, so an absent key leaves every repo's behaviour
+exactly as before this hook existed. It never runs in `--worktree` mode, and never when
+`emitStateRan` is false for any other reason (`mev`/`brain.toml` absent) — it follows that same
+flag rather than a second gate of its own. A non-zero exit is reported (`postEmitHookRan=true`,
+`postEmitHookFailed=true`, with the command's output tail in the run notes) and never swallowed,
+but it does not block or roll back this stage's own commit — the hook owns its own transaction.
 
 ---
 

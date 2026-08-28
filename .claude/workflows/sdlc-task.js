@@ -2262,7 +2262,8 @@ if (reconcileFailed) {
 const blockDone = !bailed && !reconcileFailed && passedAll.length === allTasks.length
 // BT.ticket.bookkeep-leaves-derived-output-uncommitted (task 4): OPTIONAL post-emit commit hook,
 // project policy only (mechanism: run it if configured; never a default, never a fact about where
-// any project's scripts live). String, not boolean — a missing/blank key means "no hook".
+// any project's scripts live). String, not boolean — a missing/blank key means "no hook". Manual-
+// replication guide for this hook: .agents/skills/sdlc-task/SKILL.md, Step 4 item 5.
 const postEmitCommitCommand = typeof harnessCfg?.postEmitCommitCommand === 'string' && harnessCfg.postEmitCommitCommand.trim()
   ? harnessCfg.postEmitCommitCommand
   : ''
