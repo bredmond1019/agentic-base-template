@@ -138,6 +138,64 @@ worktree never protected a running chain from its own mid-chain engine edits —
 
 ---
 
+## Orchestrating across lanes
+
+Everything above runs **one spec, in one repo.** Real work is usually bigger than that: several
+specs, sometimes several repos, that need to land in order without two agents editing the same file
+at once. **Orchestration is the layer that drives many blocks — across one or many repos — without
+you babysitting each engine run by hand.** This is the load-bearing part of this template today; the
+two engines above are what it drives.
+
+**Start here for the whole system:** [`docs/workflows/orchestration-runbook.md`](docs/workflows/orchestration-runbook.md)
+— quickstart, running several lanes at once, monitoring a run, and troubleshooting. This section is
+the two-minute version; the runbook is the real reference.
+
+```mermaid
+flowchart TD
+    OP["You<br/><i>plan, decide, approve</i>"] -->|writes| RM["Roadmap or plan<br/>/generate-roadmap · /plan"]
+    RM --> LR["Lane records<br/>one per repo"]
+    LR --> L["Lane<br/>one repo, one Claude session,<br/>ordered blocks — /begin-orchestration"]
+    L --> EN["Engines<br/>/sdlc-task · /sdlc-flow<br/>(the two engines above)"]
+    L -.->|"claims + messages"| CO["Coordination layer<br/>registry · leases · message queue"]
+    CO -.->|"swept by"| CM["Commander<br/>/orchestration-commander"]
+    SW["Sweep<br/>roadmap_sweep.py --dry-run"] -.->|"watches, wakes on real change"| CM
+    CM -.->|"reports what needs you"| OP
+
+    style OP fill:#2d4a63,stroke:#5b8fb9,color:#fff
+    style CM fill:#4a3d5c,stroke:#8b7bab,color:#fff
+    style EN fill:#3d5c4a,stroke:#7bab8b,color:#fff
+```
+
+1. **You author the work** as a roadmap ([`/generate-roadmap`](.claude/commands/generate-roadmap.md),
+   many repos) or a single-repo plan ([`/plan`](.claude/commands/plan.md)).
+2. **Each repo gets a lane record** — an ordered list of blocks for that repo.
+3. **You open one Claude Code session per repo** and type
+   [`/begin-orchestration`](.claude/commands/begin-orchestration.md) (single repo:
+   [`/orchestrate`](.claude/commands/orchestrate.md)) — that session becomes a **lane**, running its
+   blocks one at a time, each through `/sdlc-task` or `/sdlc-flow`.
+4. **Lanes never edit each other's repos.** They coordinate through a shared **coordination
+   layer** — a registry of who's running, per-repo leases, and a message queue lanes leave each
+   other notes in — never by talking directly.
+5. **The commander drains that layer** and tells you what's piled up:
+   [`/orchestration-commander`](.claude/commands/orchestration-commander.md) interactively, or
+   [`scripts/commander_drain.sh`](scripts/commander_drain.sh) unattended (no dry-run — always
+   writes).
+6. **The sweep decides *when* a drain is worth running** — `agentic-portfolio/scripts/roadmap_sweep.py
+   --dry-run`, watching for real change and waking a commander only then. Lives in the HQ repo, not
+   here; runbook: [`docs/workflows/roadmap-sweep.md`](docs/workflows/roadmap-sweep.md).
+
+**What you personally do:** write the roadmap or plan (1), open one session per lane and start it
+(3), and answer whatever the commander or a lane's operator gate surfaces (5). The rest — block
+sequencing, coordination, and deciding whether anything needs you — runs unattended.
+
+One repo (lane) always runs its blocks **strictly sequentially, one engine at a time** — never a
+second engine in the same repo before the first has integrated. Full lane lifecycle (the six
+phases, artifacts, escalation records): [`docs/workflows/orchestration.md`](docs/workflows/orchestration.md).
+The registry/lease/queue layer, cold-start setup, and troubleshooting:
+[`docs/workflows/lane-coordination.md`](docs/workflows/lane-coordination.md).
+
+---
+
 ## Repo layout
 
 ```
@@ -255,7 +313,8 @@ per-repo deviations: [`docs/ci.md`](docs/ci.md).
 - [`docs/using-the-template.md`](docs/using-the-template.md) — full generate → configure → first-run guide
 - [`docs/architecture.md`](docs/architecture.md) — the harness/scaffold split and OKF naming conventions
 - [`docs/workflows/index.md`](docs/workflows/index.md) — engine reference hub: vocabulary, diagrams, token-usage figures
-- [`docs/workflows/orchestration.md`](docs/workflows/orchestration.md) · [`docs/workflows/lane-coordination.md`](docs/workflows/lane-coordination.md) — driving/coordinating multiple lanes
+- [`docs/workflows/orchestration-runbook.md`](docs/workflows/orchestration-runbook.md) — **start here for the whole orchestration system**: quickstart, running several lanes, monitoring, troubleshooting
+- [`docs/workflows/orchestration.md`](docs/workflows/orchestration.md) · [`docs/workflows/lane-coordination.md`](docs/workflows/lane-coordination.md) · [`docs/workflows/roadmap-sweep.md`](docs/workflows/roadmap-sweep.md) — one lane's lifecycle, the coordination layer underneath several, and the mid-run monitoring sweep
 - [`.claude/commands/README.md`](.claude/commands/README.md) — every command, every flag
 - `planning/decisions/index.md` — this template's ADR log (see the `planning/` note above)
 - [`.claude/skills/write-repo-doc/SKILL.md`](.claude/skills/write-repo-doc/SKILL.md) — the standard this file follows
