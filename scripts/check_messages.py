@@ -158,7 +158,13 @@ def resolve_own_repo(explicit: Optional[str] = None, start: Optional[Path] = Non
 
     Returns None when it cannot be determined -- callers must then treat every message as OWN
     (fail closed): narrowing the verdict without knowing which repo "this one" is would silently
-    waive every foreign-looking queue instead of gating on all of them."""
+    waive every foreign-looking queue instead of gating on all of them.
+
+    Matches `here` against a `repo_path` if `here` IS that path, or is nested under it -- a
+    `--worktree` run's cwd sits under `<repo>/trees/<branch>/`, not at `<repo>` itself, so an
+    exact-equality match resolved `own_repo` to None for every worktree run and made both
+    scripts fail closed on every record, foreign or not. Picks the most specific (longest) match
+    in case a repo path is itself nested under another's."""
     if explicit:
         return explicit
     brain_root = find_brain_root(start)
@@ -166,10 +172,14 @@ def resolve_own_repo(explicit: Optional[str] = None, start: Optional[Path] = Non
         return None
     repo_paths = load_repo_paths(brain_root)
     here = (start or Path.cwd()).resolve()
+    best_slug, best_depth = None, -1
     for slug, path in repo_paths.items():
-        if path == here:
-            return slug
-    return None
+        if here != path and path not in here.parents:
+            continue
+        depth = len(path.parts)
+        if depth > best_depth:
+            best_slug, best_depth = slug, depth
+    return best_slug
 
 
 def queue_repo(queue_dir: Path) -> Optional[str]:
