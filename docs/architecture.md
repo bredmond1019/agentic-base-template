@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [architecture, harness, scaffold, mechanism policy split, OKF conventions]
-related: [base-template-readme, base-template-docs-index, D5-okf-phase-2-adopted]
+related: [base-template-docs-index, D5-okf-phase-2-adopted]
 ---
 
 # base-template architecture
