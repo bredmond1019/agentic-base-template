@@ -125,6 +125,7 @@ This is acceptable for a quick start but is less reliable than a `harness.json`.
 | `breakdown` | object | No | Task-decomposition policy (absent → `mode: recommend`, `complexityThreshold: 3`) |
 | `planning` | object | No | Planning-phase policy for the authoring commands (absent → `clarify: false`) |
 | `flow` | object | No | `/sdlc-flow` engine policy (absent → CLI flag defaults apply) |
+| `postEmitCommitCommand` | string | No | Shell command the bookkeep stage runs after `mev emit-state --write` succeeds (absent → no post-emit command runs — today's behavior) |
 
 ### `validation.checks[]`
 
@@ -252,6 +253,36 @@ See [D30](../planning/decisions/D30-sdlc-flow-engine.md) (engine design),
 [D32](../planning/decisions/D32-triage-gated-bail.md) (bail set), and
 [D33](../planning/decisions/D33-pr-based-wrap-up.md) (PR wrap-up) for the rationale behind each
 key.
+
+### `postEmitCommitCommand`
+
+Optional. `mev emit-state --write` (run by the bookkeep stage after a block/task closes) can
+derive fallout across the corpus — focus caches, wave tables, status boards — beyond the files the
+engine itself explicitly staged and committed. Left uncommitted, that derived output sits dirty in
+the working tree. This key names a shell command the bookkeep stage runs immediately after a
+successful `mev emit-state --write`, so a project that wants that fallout committed can say so.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `postEmitCommitCommand` | string | No | Shell command run once, after `emit-state --write` succeeds. No default ships. |
+
+Constraints, all mechanism the engine enforces regardless of what the command does:
+
+- **Absent means no-op.** No default value ships anywhere in this repo's harness config, and the
+  scaffold stub (`scaffold/planning/harness.json`) does not carry this key — a project that omits
+  it behaves exactly as if this key never existed.
+- **Never runs in worktree mode.** `mev emit-state --write` itself does not run there (the
+  derivation step this key follows never fires), so the command is never invoked either.
+- **A non-zero exit is surfaced, not swallowed**, and never leaves a partial commit — the engine
+  reports the failure plainly rather than treating it as an ordinary step result.
+- **This file carries the command, never a hardcoded path or script name.** What (if anything) the
+  command does — stage which files, commit under what message, gated by what project-local
+  role — is entirely up to the project's own script; the engine only knows to run it.
+
+```jsonc
+// example — a project with its own post-emit commit script
+"postEmitCommitCommand": "scripts/commit-derived-fallout.sh"
+```
 
 ---
 
