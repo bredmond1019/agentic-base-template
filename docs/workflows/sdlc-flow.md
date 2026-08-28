@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: /sdlc-flow — single-branch, PR-terminating SDLC engine
-description: The default engine for non-trivial feature work. Runs one spec sequentially on a single branch in the main tree (--worktree is refused, suspended fleet-wide by D81) with a per-task test-fix loop, one consolidated end-review, a docs patch, and a PR as the terminal step.
+description: The default engine for non-trivial feature work. Runs one spec sequentially on a single branch in the main tree by default, or in an isolated --worktree, with a per-task test-fix loop, one consolidated end-review, a docs patch, and a PR as the terminal step.
 doc_id: sdlc-flow
 layer: [factory]
 project: base-template
@@ -21,36 +21,28 @@ Compared with `/sdlc-task`, `/sdlc-flow` trades per-task independence for a sing
 review over the integrated tree, a docs patch, and a PR as the terminal step rather than a bare
 commit.
 
-## Isolation mode — branch only; `--worktree` is refused
+## Isolation mode — branch by default, `--worktree` for true isolation
 
 By **default**, `/sdlc-flow` creates the `<spec>-flow` branch and checks it out **in the main working
 tree** — no `trees/` worktree, no sparse-checkout. This keeps a relative `planning/` symlink
-(brain-vaulted repos) intact, which a sparse-checkout worktree breaks. `main` stays on the branch
-until the PR merges; a fresh run refuses to start on a **dirty** working tree (commit or stash first).
+(brain-vaulted repos) intact and is cheaper. `main` stays on the branch until the PR merges; a
+fresh run refuses to start on a **dirty** working tree (commit or stash first). Pass `--worktree`
+for a genuine isolated checkout under `trees/<spec>-flow/` instead.
 
-**`--worktree` is refused by default**, suspended fleet-wide by brain decision D81 (doc_id
-`D81-worktree-moratorium`, 2026-08-23), after three separate whole-repo-deletion incidents behind a
-GREEN run. Immediately after parsing the flag (`useWorktree = hasFlag('--worktree')`), the engine
-logs a message naming D81 and the plain-branch instruction and returns an error — before any setup,
-so no worktree, branch, or commit is ever created on the refused path.
+`--worktree` was suspended fleet-wide from 2026-08-23 to 2026-08-28 (brain decision
+`D81-worktree-moratorium`) after three separate whole-repo-deletion incidents behind a GREEN run.
+The moratorium was lifted after `BT.ticket.worktree-smoke-fixture` verified a real `--worktree`
+run end to end and confirmed the guards added during the suspension hold: the binding/brain-root/
+population guards below, `renderCommitSafetyGuard()` (refuses to commit an empty tree against a
+non-empty HEAD), and the post-commit work assertion (D81 lift condition 2 —
+[BT.ticket.a-run-must-prove-its-commits-contain-the-work](../../planning/blocks/BT.ticket.a-run-must-prove-its-commits-contain-the-work.json)).
+Full incident record: `agentic-portfolio/docs/decisions/D81-worktree-moratorium.md` (a sibling
+repo's decision log, not part of this repo). `/orchestrate` lanes still default to plain branches
+(cheaper, and a worktree never protected a running chain from its own mid-chain engine edits — see
+`docs/workflows/orchestration.md`), but `--worktree` is available again where a lane genuinely
+needs quarantine.
 
-**Exactly one override is sanctioned**, and only for the verification D81's own lift conditions
-require: passing `--accept-d81-risk` alongside `--worktree` opts that single invocation out and logs
-a warning naming the incident record. It exists because two of D81's three incidents originated
-*inside* the engines' worktree setup (a sparse checkout that never populated; `core.bare` flipped on
-the shared config), so a test that bypasses the engines cannot produce the evidence the lift needs.
-It is a flag, not an env var — this runtime has no `process.env`, and a flag is visible in the
-invocation rather than inherited invisibly from a shell. Use it on throwaway work only. See
-[D82](../../planning/decisions/D82-d81-lift-verification-escape-hatch.md); it is deleted when D81 is
-lifted or re-affirmed. `python3 scripts/check_worktree_moratorium.py` gates that the default refusal
-stays present **and** that this is the only shape of override in the tree. This includes `/orchestrate`, which previously fanned out concurrent `/sdlc-flow`
-children with `--worktree` for isolation — every such invocation now fails fast instead; concurrent
-`/orchestrate` lanes run on plain branches, not worktrees, until D81 lifts.
-
-The sparse-checkout worktree machinery (`trees/<spec>-flow/`, `/init-worktree`, `/clean-worktree`) is
-left intact in the codebase for when D81 lifts — D81 is a suspension with named lift conditions, not
-a removal — but it is unreachable through `/sdlc-flow` while the moratorium stands. In branch mode
-the "worktree path" the engine reports is simply the repo root.
+In branch mode the "worktree path" the engine reports is simply the repo root.
 
 ### Binding / brain-root / population guards (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root)
 
@@ -67,8 +59,7 @@ by any later stage:
   invocation root, the engine aborts with `Setup binding guard failed`, naming both roots. The
   signal is exactly this — brain.toml presence at two mechanical paths — never a harness-check
   count and never a hardcoded path.
-- **POPULATION GUARD** (worktree mode only — dead code under the D81 moratorium, kept for when it
-  lifts) — every path in the worktree's `git ls-files` index must be present on disk; a missing
+- **POPULATION GUARD** (worktree mode only) — every path in the worktree's `git ls-files` index must be present on disk; a missing
   path aborts with `Setup binding guard failed`, naming the missing count and up to five example
   paths. This is the guard against a worktree that bound to the correct repo but never actually
   populated (the sparse-checkout-produced-zero-files symptom).
@@ -94,8 +85,9 @@ Engine: [`.claude/workflows/sdlc-flow.js`](../../.claude/workflows/sdlc-flow.js)
 /sdlc-flow <spec-slug> --test-depth full       run the full gating suite per task (default: fast)
 ```
 
-`--worktree` is **refused** — see [Isolation mode — branch only; `--worktree` is refused](#isolation-mode--branch-only---worktree-is-refused)
-above. Do not pass it.
+Default is branch mode (cheaper); pass `--worktree` for true isolation — see
+[Isolation mode — branch by default, `--worktree` for true isolation](#isolation-mode--branch-by-default---worktree-for-true-isolation)
+above.
 
 | Argument | Meaning | Default |
 |---|---|---|
@@ -104,9 +96,8 @@ above. Do not pass it.
 | `--tasks <range>` | Equivalent to the positional range. | — |
 | `--auto-merge` | After a clean PASS, merge the PR, delete the branch (tear down the worktree too under `--worktree`), and run `mev emit-state --write` on the base. Only fires on a non-draft PR with a PASS verdict and an independently-verified `prOutcome === 'created'` — never on bail. See [PR-stage outcome vocabulary](#pr-stage-outcome-vocabulary). | off |
 | `--no-pr` | Stop after wrap-up; leave the branch for a manual PR (or `/close-out --merge-branch`). | off (create PR) |
-| `--worktree` | **Refused by default (D81).** The engine exits before any setup — no worktree, branch, or commit is created. | refused |
-| `--accept-d81-risk` | **Only meaningful alongside `--worktree`.** Opts this one invocation out of the D81 refusal for the lift verification, with a warning on the overridden path. base-template [D82](../../planning/decisions/D82-d81-lift-verification-escape-hatch.md) sanctions this exact flag and nothing else; deleted when D81 is lifted or re-affirmed. **Throwaway work only.** | off |
-| `--resume` | Re-attach the existing branch and skip tasks whose `state.json` status is `passed`. | off |
+| `--worktree` | Isolated `trees/<spec>-flow/` checkout instead of the main working tree. | branch mode |
+| `--resume` | Re-attach the existing branch (or worktree) and skip tasks whose `state.json` status is `passed`. | off |
 | `--test-depth fast\|full` | Per-task validation depth. `fast` runs only `gates:true` checks (the tripwire); `full` runs the whole suite per task. | `fast` |
 
 > All CLI flags override the corresponding `flow.*` config key in `planning/harness.json`. The config
@@ -118,7 +109,7 @@ above. Do not pass it.
 
 ```mermaid
 flowchart TD
-    Setup["Setup — plain branch only<br/><i>haiku — --worktree refused (D81)</i>"] --> Enumerate["Enumerate tasks — D16 lint<br/><i>haiku — resume load if --resume</i>"]
+    Setup["Setup — branch or worktree<br/><i>haiku — creates the trees/&lt;spec&gt;-flow/ worktree if --worktree</i>"] --> Enumerate["Enumerate tasks — D16 lint<br/><i>haiku — resume load if --resume</i>"]
     Enumerate --> UpdateTask["update-task (in-progress)<br/><i>haiku</i>"]
     UpdateTask --> Implement["Implement<br/><i>sonnet</i>"]
     Implement --> FastTest["Fast test<br/><i>haiku — gating checks only</i>"]
@@ -141,7 +132,7 @@ flowchart TD
 
 | Stage | Model | What it does |
 |---|---|---|
-| **Setup** | haiku | Creates (or re-attaches on `--resume`) the `<spec>-flow` branch for the whole spec: `git checkout -b` in the main tree (aborts on a dirty tree) — the only reachable path, since `--worktree` is refused before this stage runs (D81; the isolated-worktree D5/P5 cone-all-tracked-dirs recipe survives in the codebase, unreachable, for when D81 lifts). Resolves the spec source (D65 stage 2): checks `planning/blocks/<BlockID>.json` (the authored block record) first and prefers it when present; falls back to the legacy `planning/<spec>/tasks.md` only when no block record exists. `specSource` (`'block-record'` / `'tasks-md'` / `'missing'`) is reported and drives which file downstream stages treat as the spec. The D19 thin-spec token check runs only when `specSource == 'tasks-md'` — a block record is structured JSON, not prose, so it has no `{{TOKEN}}` placeholders to check. |
+| **Setup** | haiku | Creates (or re-attaches on `--resume`) the `<spec>-flow` branch for the whole spec: `git checkout -b` in the main tree by default (aborts on a dirty tree), or the isolated-worktree D5/P5 cone-all-tracked-dirs recipe under `trees/<spec>-flow/` when `--worktree` is passed. Resolves the spec source (D65 stage 2): checks `planning/blocks/<BlockID>.json` (the authored block record) first and prefers it when present; falls back to the legacy `planning/<spec>/tasks.md` only when no block record exists. `specSource` (`'block-record'` / `'tasks-md'` / `'missing'`) is reported and drives which file downstream stages treat as the spec. The D19 thin-spec token check runs only when `specSource == 'tasks-md'` — a block record is structured JSON, not prose, so it has no `{{TOKEN}}` placeholders to check. |
 | **Enumerate** | haiku | Reads `tasks.json` for its task entries (D16 preflight lint) — independent of `specSource` above, since `tasks.json` is always the task array regardless of which file supplied the spec's narrative. If `tasks.json` is missing/invalid/empty but `tasks.md` has a derivable step list, derives a fresh D45-shaped `tasks.json` and commits it before re-enumerating; refuses to run only when nothing is derivable either — see [D16 preflight — derive, then abort](#d16-preflight--derive-then-abort) below. `/sdlc-flow`'s D16 derive path only derives from `tasks.md`; it does not derive from a block record — see [`sdlc-task.md`](./sdlc-task.md#d16-preflight--derive-then-abort) for the engine that does. On `--resume`, reads the on-disk (uncommitted) `sdlc-flow-state.json` to identify already-passed tasks and skip them. |
 | **update-task** | haiku | Marks the current task in-progress in `tasks.md` (surgical checkbox edit). Disk-only, like the state-writer — neither commits. |
 | **Implement** | sonnet | Executes task N against the spec (and `breakdown.md` if present). Runs the D8 completeness self-check before committing `feat:`. |

@@ -63,25 +63,25 @@ MANIFEST_PATH = ROOT / "scripts" / "engine_docs_sync_manifest.json"
 # line ranges already stamped in scripts/skill_sync_manifest.json for the same engine + anchor
 # name — do not re-derive different ranges for the same region.
 ANCHORS = [
-    (".claude/workflows/sdlc-task.js", "flags-and-defaults", 111, 148,
+    (".claude/workflows/sdlc-task.js", "flags-and-defaults", 111, 155,
      "docs/workflows/sdlc-task.md", "## Usage"),
     (".claude/workflows/sdlc-task.js", "stage-list", 87, 96,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 919, 1025,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 902, 1008,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
-    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1267, 1547,
+    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1250, 1530,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1785, 1910,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1768, 1893,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 305, 318,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 992, 1163,
-     "docs/workflows/sdlc-flow.md", "## Isolation mode — branch (default) vs `--worktree`"),
-    (".claude/workflows/sdlc-flow.js", "triage-bail-taxonomy", 1410, 1649,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 976, 1147,
+     "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
+    (".claude/workflows/sdlc-flow.js", "triage-bail-taxonomy", 1394, 1633,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 2171, 2326,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 2155, 2310,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

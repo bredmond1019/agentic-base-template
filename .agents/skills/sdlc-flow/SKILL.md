@@ -17,16 +17,14 @@ description: >
    Default: a plain branch (<spec>-flow) checked out IN THE MAIN WORKING TREE. No
    sparse-checkout worktree, so a relative planning/ symlink (brain-vaulted repos)
    stays intact. main is left on the branch until the PR merges.
-   --worktree: SUSPENDED FLEET-WIDE (D81, 2026-08-23). The engine refuses the flag BY
-   DEFAULT and exits before any setup. Run on a plain branch instead. The sparse-checkout
-   worktree machinery survives intact for when D81 lifts.
-   ONE override is sanctioned, for the D81 lift verification and nothing else: pass
-   --accept-d81-risk ALONGSIDE --worktree to opt a single invocation out; the engine logs
-   a warning naming the incident record. It is a flag, not an env var (this runtime has no
-   process.env). Throwaway work only — the failure being tested for is silent whole-repo
-   deletion behind a green PASS. See base-template D82; it is deleted when D81 is lifted or
-   re-affirmed. Replicating this pipeline by hand: do NOT create a worktree unless that
-   flag was explicitly passed.
+   --worktree: creates an isolated sparse-checkout worktree under trees/<spec>-flow/ for
+   true isolation. Was suspended fleet-wide 2026-08-23 to 2026-08-28 (D81,
+   worktree-moratorium) after three whole-repo-deletion incidents behind a green PASS;
+   lifted after BT.ticket.worktree-smoke-fixture verified a real --worktree run end to
+   end and confirmed the guards added during the suspension hold (binding/brain-root/
+   population guards, the commit-safety guard, the post-commit work assertion).
+   Replicating this pipeline by hand: create the worktree only when --worktree was
+   explicitly passed.
 
  A compact, COMMITTED, AUTHORITATIVE state.json + one worklog.md replace the 5×N
  per-stage report files: resume + review + wrap-up read a structured index instead
@@ -38,9 +36,8 @@ description: >
    /sdlc-flow <spec-slug> 1-3              scope to a task range (1-3, 1,3,5, 5)
    /sdlc-flow <spec-slug> --auto-merge     merge the PR + clean up on success
    /sdlc-flow <spec-slug> --no-pr          stop after wrap-up; do not create a PR
-   /sdlc-flow <spec-slug> --resume         re-attach the branch, resume from state.json
-   (--worktree is refused BY DEFAULT per D81 -- do not pass it. The sole exception is the
-    D81 lift verification: --worktree --accept-d81-risk, on throwaway work only. See D82.)
+   /sdlc-flow <spec-slug> --resume         re-attach the branch (or worktree), resume from state.json
+   /sdlc-flow <spec-slug> --worktree       run in an isolated trees/<spec>-flow/ checkout
    /sdlc-flow <spec-slug> --test-depth full  run the FULL gating suite per task (default: fast)
 
  PIPELINE
@@ -126,17 +123,31 @@ print(chr(10).join(t[0].get('files', []) if t else []))
 
 When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc-flow.js`. Instead, perform the flow execution yourself:
 
-1. **Setup — plain branch only**:
-   - **`--worktree` is REFUSED (D81 worktree moratorium, suspended fleet-wide as of 2026-08-23).** If
-     the invocation includes `--worktree`, stop immediately: report that --worktree is suspended per
-     D81 and the run must use a plain branch (drop the flag and re-invoke). Do NOT create a worktree,
-     a branch, or any commit. This mirrors the real engine, which refuses unconditionally right after
-     parsing the flag, before any setup — see `.claude/workflows/sdlc-flow.js` around the
-     `useWorktree = hasFlag('--worktree')` line. No override flag, no environment escape hatch.
-   - Otherwise (the normal path today): check out branch `sdlc-flow/<spec-slug>` IN THE MAIN WORKING
+1. **Setup — plain branch, or isolated worktree with `--worktree`**:
+   - **Without `--worktree` (default):** check out branch `<spec-slug>-flow` IN THE MAIN WORKING
      TREE — no sparse-checkout worktree, so a relative `planning/` symlink (brain-vaulted repos) stays
-     intact. (The sparse-checkout worktree recipe under `trees/<spec-slug>-flow/` is left intact in
-     the machinery for when D81 lifts; it is not the normal path today.)
+     intact. `main` stays on the branch until the PR merges; refuse to start on a dirty working tree.
+   - **With `--worktree`:** create (or, with `--resume`, reuse/re-attach) an isolated sparse-checkout
+     worktree, mirroring `/sdlc-task`'s Steps 1b/1c (see `.agents/skills/sdlc-task/SKILL.md`) with the
+     branch name `<spec-slug>-flow` instead of `<blockId>-task`:
+     - `--resume`: try to reuse first — `git worktree list | grep "trees/<spec-slug>-flow"` and
+       `git branch --list "<spec-slug>-flow"`. Worktree exists → reuse verbatim. Branch exists but
+       worktree missing (orphaned) → re-attach with `git worktree add --no-checkout` (no `-b`). Neither
+       exists → fall through to a fresh create.
+     - Fresh create:
+       ```
+       mkdir -p trees
+       git worktree add --no-checkout trees/<spec-slug>-flow -b <spec-slug>-flow
+       git -C trees/<spec-slug>-flow sparse-checkout init --cone
+       git -C trees/<spec-slug>-flow sparse-checkout set $(git ls-tree HEAD --name-only -d | tr '\n' ' ')
+       git -C trees/<spec-slug>-flow checkout
+       ```
+       Then seed gitignored `.env`/`.env.*` files (same recipe as `/sdlc-task` Step 1b(f)) and commit
+       `chore: init worktree <spec-slug>-flow --allow-empty`.
+     - Repair the `planning/` symlink inside the worktree if the repo is brain-vaulted (same recipe as
+       `/sdlc-task` Step 1c — absolute symlink to the same vault target, never relative, never a real
+       directory).
+     - `runDir = repoRoot/trees/<spec-slug>-flow`.
    - **Spec location.** Paths are `planning/<spec-slug>/...` at the git root by default. If no spec
      exists there, ALSO check `<invoking-dir-relative-to-root>/planning/<spec-slug>/...` — a
      sub-brain tier (e.g. `business/`) has its own `planning/` without being its own git repo. The
@@ -153,8 +164,7 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
        invocation root, abort — `Setup binding guard failed`, naming both paths. Never identify a
        brain root by counting harness checks or by a hardcoded path — brain.toml presence at the two
        roots is the only signal.
-     - **POPULATION GUARD (worktree mode only — dead under the D81 moratorium, kept for when it
-       lifts).** Every path in `git -C <runDir> ls-files` must exist on disk at `<runDir>/<path>`; if
+     - **POPULATION GUARD (worktree mode only).** Every path in `git -C <runDir> ls-files` must exist on disk at `<runDir>/<path>`; if
        any are missing, abort — `Setup binding guard failed`, naming the missing count and up to
        five example paths.
      Log each guard's verdict, pass or fail — the transcript must show the check ran, not merely

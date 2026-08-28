@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: /sdlc-task — lean single-unit SDLC engine
-description: The fast path for small units of behavior-changing work. Runs implement → fast-test → triage → fix loop → commit, in place on the current branch (--worktree is refused by default, suspended fleet-wide by D81; one sanctioned override exists for the D81 lift verification, per base-template D82). Pairs with /chore and /ticket (D38).
+description: The fast path for small units of behavior-changing work. Runs implement → fast-test → triage → fix loop → commit, in place on the current branch by default or in an isolated --worktree. Pairs with /chore and /ticket (D38).
 doc_id: sdlc-task
 layer: [factory]
 project: base-template
@@ -15,10 +15,8 @@ related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch
 The fast path for **one small unit of behavior-changing work**. Runs
 `implement → fast-test → triage → fix (≤3 attempts, Opus on the final) → commit → terminal
 authoritative reconcile ([D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md))`,
-in-place on the current branch. **`--worktree` is refused by default** — suspended fleet-wide by
-brain decision D81 (doc_id `D81-worktree-moratorium`, 2026-08-23); passing it exits the engine
-before any setup, naming D81 and instructing a plain-branch re-invoke. One sanctioned override
-exists for the D81 lift verification only — see [In-place vs. `--worktree`](#in-place-vs-worktree).
+in-place on the current branch by default, or in an isolated `--worktree` — see
+[In-place vs. `--worktree`](#in-place-vs-worktree).
 
 Think of it as the middle rung of the pipeline ladder — more ceremony than `/patch` (real test
 loop), less than `/sdlc-flow` (no review/document/wrap-up agents). Pairs with `/chore` and
@@ -37,16 +35,14 @@ Engine: [`.claude/workflows/sdlc-task.js`](../../.claude/workflows/sdlc-task.js)
 /sdlc-task <spec-slug> --test-depth full   full gating suite per task (default: fast)
 ```
 
-`--worktree` is **refused by default** — see [In-place vs. `--worktree`](#in-place-vs-worktree)
-below. Do not pass it. The one exception is the D81 lift verification, which must pass
-`--accept-d81-risk` alongside it (base-template D82) and should only ever run on throwaway work.
+Default is in-place on a plain branch (cheaper); pass `--worktree` for true isolation — see
+[In-place vs. `--worktree`](#in-place-vs-worktree) below.
 
 | Argument | Meaning | Default |
 |---|---|---|
 | `<spec-slug>` | **Required.** The spec directory name — drives every `planning/<spec-slug>/…` path. | — |
 | `[range]` | Optional task selection (positional or `--tasks`). Forms: `1-3`, `1,3,5`, `5`. | all tasks |
-| `--worktree` | **Refused by default (D81).** The engine exits before any setup — no worktree, branch, or commit is created. | refused |
-| `--accept-d81-risk` | **Only meaningful alongside `--worktree`.** Opts this one invocation out of the D81 refusal so the lift verification can run inside the engine, and logs a warning naming the incident record. Not a general escape hatch: base-template D82 sanctions this exact flag and nothing else, and it is deleted when D81 is lifted or re-affirmed. **Throwaway work only** — the failure mode being tested for is silent whole-repo deletion behind a green PASS. | off |
+| `--worktree` | Isolated `trees/<branch>/` checkout — see [In-place vs. `--worktree`](#in-place-vs-worktree). | in-place |
 | `--resume` | Re-attach and continue from the last committed state. | off |
 | `--test-depth fast\|full` | Per-task validation depth. `fast` runs only `gates:true` checks (the tripwire) via each check's `fastCommand`; `full` runs the whole suite (authoritative `command`) per task, which also skips the terminal reconcile stage — see [Terminal authoritative reconcile (D56)](#terminal-authoritative-reconcile-d56) below. Unlike `/sdlc-flow`, there is no `harness.json` config key for this — CLI-flag-only, default `fast`. | `fast` |
 
@@ -56,7 +52,7 @@ below. Do not pass it. The one exception is the D81 lift verification, which mus
 
 ```mermaid
 flowchart TD
-    Scout["Scout / setup<br/><i>haiku — reads spec; --worktree refused before this stage (D81)</i>"] --> Implement["Implement<br/><i>sonnet — executes tasks + D8 completeness self-check</i>"]
+    Scout["Scout / setup<br/><i>haiku — reads spec; creates the trees/&lt;branch&gt;/ worktree if --worktree</i>"] --> Implement["Implement<br/><i>sonnet — executes tasks + D8 completeness self-check</i>"]
     Implement --> Test["Fast test<br/><i>haiku — gating checks + emoji gate</i>"]
     Test -- "PASS" --> Commit(["Commit + state write<br/><i>haiku — sdlc-task-state.json</i>"])
     Test -- "FAIL" --> Triage{"Triage<br/><i>sonnet</i>"}
@@ -72,12 +68,12 @@ flowchart TD
 
 | Stage | Model | What it does |
 |---|---|---|
-| **Scout / setup** | haiku | Reads the spec and existing report state (for `--resume`). Runs in-place only — `--worktree` is refused before this stage is ever reached (see [In-place vs. `--worktree`](#in-place-vs-worktree) above); the `trees/<branch>/` cone-mode sparse-checkout recipe survives in the codebase, unreachable, for when D81 lifts. Resolves the spec source (D65 stage 2): checks `planning/blocks/<BlockID>.json` first and prefers it when present; falls back to the legacy `planning/<spec>/tasks.md` only when no block record exists. `specSource` (`'block-record'` / `'tasks-md'` / `'missing'`) drives which file the run treats as the spec and, downstream, which D16 derive branch fires (see below). The D19 thin-spec check runs only when `specSource == 'tasks-md'`. |
+| **Scout / setup** | haiku | Reads the spec and existing report state (for `--resume`). In-place by default; with `--worktree`, creates (or re-attaches on `--resume`) a `trees/<branch>/` cone-mode sparse-checkout worktree — see [In-place vs. `--worktree`](#in-place-vs-worktree) above. Resolves the spec source (D65 stage 2): checks `planning/blocks/<BlockID>.json` first and prefers it when present; falls back to the legacy `planning/<spec>/tasks.md` only when no block record exists. `specSource` (`'block-record'` / `'tasks-md'` / `'missing'`) drives which file the run treats as the spec and, downstream, which D16 derive branch fires (see below). The D19 thin-spec check runs only when `specSource == 'tasks-md'`. |
 | **Implement** | sonnet | Executes every task (or the selected range) against `tasks.md` (and `breakdown.md` if present). Runs the [D8](../../planning/decisions/D8-implement-completeness-self-check.md) completeness self-check before committing `feat:`/`fix:`. |
 | **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` plus the universal emoji gate on changed markdown. Falls back to the spec's `## Validation Commands` if no config. |
 | **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. Stuck → commit the current state as `FAIL` and exit, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution: null`) rather than only overwriting `bail_reason` — see [BT.ticket.bails-must-be-append-only](../../planning/blocks/BT.ticket.bails-must-be-append-only.json). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail that is later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
-| **Commit + state** | haiku | Writes `sdlc-task-state.json` (per-task status + token usage) and commits all work + state, in-place: one final `chore:` commit. (The per-phase-write, throwaway-branch commit shape under `--worktree` is unreachable while D81 refuses the flag.) |
+| **Commit + state** | haiku | Writes `sdlc-task-state.json` (per-task status + token usage) and commits all work + state: in-place, one final `chore:` commit; under `--worktree`, a per-phase-write commit shape on the throwaway branch. |
 | **Terminal reconcile** ([D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md)) | haiku | Runs once, after every task has passed on a full spec run, before bookkeep. See [Terminal authoritative reconcile](#terminal-authoritative-reconcile-d56) below. |
 | **Bookkeep close-out** | haiku | Runs only on a full, fully-passing spec run **whose terminal reconcile also passed** (never on a partial task range, a bail, or a `reconcile_failed` run). Marks `tasks.md` tasks done using the spec's **cumulative** completed-task count (this run's passes reconciled with every prior run's, never this run's slice alone), appends (never rewrites) a "Current focus" line in `status.md` — see [Bookkeep's `status.md` and `focus.next` rules](#bookkeeps-statusmd-and-focusnext-rules) below — and flips `planning/state.json`'s block status to `"closed"`. In-place: also runs `mev emit-state --write`, which re-derives `focus.next`, then — if `planning/harness.json` names an optional `postEmitCommitCommand` — runs that hook (see [below](#bookkeeps-statusmd-and-focusnext-rules); absent key is a no-op). `--worktree`: skips `emit-state` (unsafe in a linked worktree), and therefore the hook too — `focus.next` stays **deferred**, still pointing at the pre-close state, until `/clean-worktree` (or an equivalent merge step) lands the branch and runs `mev emit-state --write`; the engine's own log line says so explicitly rather than leaving it silently stale. Writes no prose `log.md` entry — run `/log-work` for the narrative. ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)) |
 
@@ -425,33 +421,26 @@ of the above fires, and everything commits together in the repo's own index exac
 
 ## In-place vs. `--worktree`
 
-**`--worktree` is refused by default**, suspended fleet-wide by brain decision D81 (doc_id
-`D81-worktree-moratorium`, 2026-08-23), after three separate whole-repo-deletion incidents behind a
-GREEN run. Immediately after parsing the flag (`useWorktree = hasFlag('--worktree')`), the engine
-logs a message naming D81 and the plain-branch instruction and returns an error — before any setup,
-so no worktree, branch, or commit is ever created on the refused path.
+Default is **in-place**, on the current branch in the main working tree — cheaper, and keeps a
+relative `planning/` symlink intact. Pass `--worktree` for true isolation: a second checkout under
+`trees/<branch>/`, so an in-flight run cannot collide with other work on the main tree.
 
-**Exactly one override is sanctioned**, and only for the verification D81's own lift conditions
-require: passing `--accept-d81-risk` alongside `--worktree` opts that single invocation out and logs
-a warning naming the incident record. It exists because two of D81's three incidents originated
-*inside* the engines' worktree setup (a sparse checkout that never populated; `core.bare` flipped on
-the shared config), so a test that bypasses the engines cannot produce the evidence the lift needs.
-It is a flag, not an env var — this runtime has no `process.env`, and a flag is visible in the
-invocation rather than inherited invisibly from a shell. Use it on throwaway work only. See
-[D82](../../planning/decisions/D82-d81-lift-verification-escape-hatch.md); it is deleted when D81 is
-lifted or re-affirmed. `python3 scripts/check_worktree_moratorium.py` gates that the default refusal
-stays present **and** that this is the only shape of override in the tree. Only in-place mode runs today:
+`--worktree` was suspended fleet-wide from 2026-08-23 to 2026-08-28 (brain decision
+`D81-worktree-moratorium`) after three separate whole-repo-deletion incidents behind a GREEN run.
+The moratorium was lifted after `BT.ticket.worktree-smoke-fixture` verified a real `--worktree`
+run end to end and confirmed the guards added during the suspension hold: the binding/brain-root/
+population guards below, `renderCommitSafetyGuard()` (refuses to commit an empty tree against a
+non-empty HEAD), and the post-commit work assertion (D81 lift condition 2 —
+[BT.ticket.a-run-must-prove-its-commits-contain-the-work](../../planning/blocks/BT.ticket.a-run-must-prove-its-commits-contain-the-work.json)).
+Full incident record: `agentic-portfolio/docs/decisions/D81-worktree-moratorium.md` (a sibling
+repo's decision log, not part of this repo).
 
-| | In-place (default, the only mode) | `--worktree` |
+| | In-place (default) | `--worktree` |
 |---|---|---|
-| Branch | current branch (usually `main`) | REFUSED — engine exits before setup |
-| Status/log | updated on the current branch | n/a |
-| State commit | one final `chore:` sweep | n/a |
-| When to use | every run, until D81 lifts | never — refused |
-
-The sparse-checkout worktree machinery (`trees/<spec>-task/`, `/init-worktree`, `/clean-worktree`)
-is left intact in the codebase for when D81 lifts — D81 is a suspension with named lift conditions,
-not a removal — but it is unreachable through `/sdlc-task` while the moratorium stands.
+| Branch | current branch (usually `main`) | `trees/<spec>-task/` sparse-checkout worktree |
+| Status/log | updated on the current branch | updated on the worktree branch; merges in via `/clean-worktree` |
+| State commit | one final `chore:` sweep | per-phase-write commit shape on the throwaway branch |
+| When to use | every run by default | a change that genuinely needs quarantine from concurrent main-tree work |
 
 ### Binding / brain-root / population guards (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root)
 
@@ -468,8 +457,7 @@ by any later stage:
   invocation root, the engine aborts with `Setup binding guard failed`, naming both roots. The
   signal is exactly this — brain.toml presence at two mechanical paths — never a harness-check
   count and never a hardcoded path.
-- **POPULATION GUARD** (worktree mode only — dead code under the D81 moratorium, kept for when it
-  lifts) — every path in the worktree's `git ls-files` index must be present on disk; a missing
+- **POPULATION GUARD** (worktree mode only) — every path in the worktree's `git ls-files` index must be present on disk; a missing
   path aborts with `Setup binding guard failed`, naming the missing count and up to five example
   paths. This is the guard against a worktree that bound to the correct repo but never actually
   populated (the sparse-checkout-produced-zero-files symptom).

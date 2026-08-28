@@ -316,12 +316,14 @@ def check_negative_per_block_note() -> None:
               len(named) == 1, f"problems: {problems}")
 
 
-def check_negative_leading_worktree_isolation() -> None:
-    """D81: a lane record whose isolation LEADING TOKEN is --worktree fails, naming D81."""
+def check_positive_leading_worktree_isolation() -> None:
+    """Post-D81-lift: a lane record whose isolation LEADING TOKEN is --worktree validates cleanly
+    -- the moratorium that once rejected this was lifted 2026-08-28 (BT.ticket.worktree-smoke-
+    fixture verified a real --worktree run end to end)."""
     with tempfile.TemporaryDirectory() as td:
-        path = Path(td) / "lane-bad-worktree.json"
+        path = Path(td) / "lane-worktree.json"
         _write_json(path, {
-            "lane": "bad-worktree",
+            "lane": "worktree-lane",
             "roadmap": "my-roadmap",
             "blocks": [
                 {"id": "BT.1.A", "origin_roadmap": "my-roadmap", "repo": "consumer-repo"},
@@ -329,18 +331,17 @@ def check_negative_leading_worktree_isolation() -> None:
             "isolation": "--worktree",
         })
         problems, _ = check_lane_records.check(path, {})
-        named = [p for p in problems if "D81" in p and "--worktree" in p]
-        check("a leading --worktree isolation directive is rejected, naming D81",
-              len(named) == 1, f"problems: {problems}")
+        check("a leading --worktree isolation directive validates cleanly post-D81-lift",
+              problems == [], f"problems: {problems}")
 
 
 def check_positive_d81_preserved_isolation() -> None:
-    """The load-bearing case: a D81-rewritten record leads with --no-worktree but PRESERVES the
-    prior --worktree directive verbatim later in the string, for restoration when the moratorium
-    lifts. Copied verbatim from a real lane record
+    """A record still carrying the pre-lift D81-rewritten free text (leading --no-worktree,
+    preserving the prior --worktree directive verbatim later in the string) still validates
+    cleanly -- the field is free text and the old leading-token rejection is gone, so this
+    historical shape is not penalized either. Copied verbatim from a real lane record
     (planning/roadmaps/cli-surface-to-skills/lane-factory.json in the brain root), not
-    paraphrased. A substring check would fail this; the rule must only look at the leading token.
-    """
+    paraphrased."""
     with tempfile.TemporaryDirectory() as td:
         path = Path(td) / "lane-preserved.json"
         _write_json(path, {
@@ -526,7 +527,7 @@ def main() -> int:
     check_positive_two_repos()
     check_positive_no_top_level_repo()
     check_positive_notes_field()
-    check_negative_leading_worktree_isolation()
+    check_positive_leading_worktree_isolation()
     check_positive_d81_preserved_isolation()
     check_positive_plain_no_worktree_isolation()
     check_positive_absent_isolation()

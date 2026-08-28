@@ -138,22 +138,6 @@ function parseRange(spec) {
 }
 
 const useWorktree = hasFlag('--worktree')
-// D81 moratorium escape hatch, for the end-to-end verification D81's lift needs and nothing else.
-// The refusal below is still the DEFAULT: --worktree alone is refused exactly as before. Passing
-// --accept-d81-risk ALONGSIDE it opts one invocation out, so a tester can exercise a real worktree
-// run without re-opening the whole-repo-deletion path for every lane in every synced repo.
-// A second explicit flag, not an env var: this runtime has no process.env (no Node APIs), and a
-// flag is visible in the invocation rather than inherited invisibly from a shell.
-// REMOVE BOTH THIS FLAG AND THE GUARD when D81 is formally lifted -- an escape hatch left behind
-// after the moratorium ends is just a confusing second way to say --worktree.
-const acceptD81Risk = hasFlag('--accept-d81-risk')
-if (useWorktree && !acceptD81Risk) {
-  log(`ERROR: --worktree is suspended fleet-wide (D81). Run on a plain branch instead -- drop the --worktree flag and re-invoke. See docs/decisions/D81-worktree-moratorium.md. To run the D81 lift verification deliberately, pass --accept-d81-risk alongside --worktree; do this only on throwaway work.`)
-  return { error: 'worktree moratorium (D81)', blockId }
-}
-if (useWorktree && acceptD81Risk) {
-  log(`WARNING: D81 moratorium overridden by --accept-d81-risk. This run creates a REAL worktree. Three whole-repo-deletion incidents behind green runs are the reason the default refuses. Verify the commits contain the work before trusting this run.`)
-}
 const resumeMode  = hasFlag('--resume')
 
 const VALID_TEST_DEPTHS = ['fast', 'full']
@@ -232,8 +216,7 @@ resolved absolute path from the second line).
 // either. Removing the agent's discretion (one fixed command, no substitution to perform) removes the
 // class, not just the one observed instance. IN-PLACE MODE is not exempt: this engine's in-place branch
 // sets runDir = repoRoot from the same value, so a mis-derived root sends in-place reads/commits into
-// the wrong repo just as effectively as a worktree misbinding — and per D81, in-place is the ONLY mode
-// anything runs in today.
+// the wrong repo just as effectively as a worktree misbinding — the guard below runs in both modes.
 // Same shape as detectPlanningVault() immediately above, for the same reason: the Workflow runtime
 // has no fs/process/require and `import` declarations don't even parse, so this shells out via a
 // cheap Haiku agent turn instead of resolving the path in-process. Returns null on failure (unlike

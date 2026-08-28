@@ -39,16 +39,13 @@ description: >
 
  ISOLATION
    Default: IN PLACE on the current branch (no worktree) — cheapest, like /sdlc-run.
-   --worktree: SUSPENDED FLEET-WIDE (D81, 2026-08-23). The engine refuses the flag BY
-   DEFAULT and exits before any setup. Run on a plain branch instead. The worktree
-   machinery survives intact for when D81 lifts.
-   ONE override is sanctioned, for the D81 lift verification and nothing else: pass
-   --accept-d81-risk ALONGSIDE --worktree to opt a single invocation out; the engine logs
-   a warning naming the incident record. It is a flag, not an env var (this runtime has no
-   process.env). Throwaway work only — the failure being tested for is silent whole-repo
-   deletion behind a green PASS. See base-template D82; it is deleted when D81 is lifted or
-   re-affirmed. Replicating this pipeline by hand: do NOT create a worktree unless that
-   flag was explicitly passed.
+   --worktree: creates an isolated trees/<branch>/ checkout for true isolation. Was
+   suspended fleet-wide 2026-08-23 to 2026-08-28 (D81, worktree-moratorium) after three
+   whole-repo-deletion incidents behind a green PASS; lifted after
+   BT.ticket.worktree-smoke-fixture verified a real --worktree run end to end and
+   confirmed the guards added during the suspension hold (binding/brain-root/population
+   guards, the commit-safety guard, the post-commit work assertion). Replicating this
+   pipeline by hand: create the worktree only when --worktree was explicitly passed.
 
  USAGE
    /sdlc-task <spec-slug>                 run every task in the spec, in place
@@ -56,8 +53,7 @@ description: >
    /sdlc-task <spec-slug> 1-3             run a task range (1-3, 1,3,5, 5)
    /sdlc-task <spec-slug> --resume        resume from the committed state file
    /sdlc-task <spec-slug> --test-depth full  full gating suite per task (default: fast)
-   (--worktree is refused BY DEFAULT per D81 -- do not pass it. The sole exception is the
-    D81 lift verification: --worktree --accept-d81-risk, on throwaway work only. See D82.)
+   /sdlc-task <spec-slug> --worktree      run in an isolated trees/<branch>/ checkout
 
  PIPELINE
    setup (locate repo / create worktree) → enumerate (D16 lint) → [resume load]
@@ -172,15 +168,10 @@ only this section — not the `.js` — should end up doing exactly what the rea
   range (`1-3`), a comma list (`1,3,5`), or a mix (`1-3,7`). Parse into the sorted set of integers it
   names; if it doesn't match `\d+(-\d+)?` per comma-part, or names nothing, stop and report an error —
   do not guess.
-- `--worktree` — **REFUSED (D81 worktree moratorium, suspended fleet-wide as of 2026-08-23).** If
-  `--worktree` is present, stop immediately: report that --worktree is suspended per D81 and the run
-  must use a plain branch (drop the flag and re-invoke). Do NOT proceed to Step 1, do NOT create a
-  worktree, a branch, or any commit. This mirrors the real engine, which refuses unconditionally
-  right after parsing the flag, before any setup — see `.claude/workflows/sdlc-task.js` around the
-  `useWorktree = hasFlag('--worktree')` line. No override flag, no environment escape hatch: an
-  escape hatch would make the moratorium documentation again, which is the exact failure D81 names.
-  The worktree machinery below (Steps 1b/1c) is left intact for when D81 lifts — it is not the
-  normal path today.
+- `--worktree` — creates an isolated `trees/<branch>/` checkout instead of running in place — see
+  Steps 1b/1c below. Was suspended fleet-wide 2026-08-23 to 2026-08-28 (D81, worktree-moratorium)
+  after three whole-repo-deletion incidents behind a green PASS; lifted after
+  `BT.ticket.worktree-smoke-fixture` verified a real `--worktree` run end to end.
 - `--resume` — resume from the on-disk `sdlc-task-state.json`, reusing the existing worktree/branch by
   name and skipping the D19 thin-spec gate (see Step 1).
 - `--test-depth fast|full` — default `fast` (only `gates:true`-and-not-`perTask:false` checks run per
@@ -188,12 +179,9 @@ only this section — not the `.js` — should end up doing exactly what the rea
 
 ### Step 1 — Setup: locate the repo, or create the isolated worktree
 
-**Reached only when `--worktree` was NOT passed** — Step 0 already refused and stopped if it was.
-Every worktree-mode branch below (`--worktree` fresh create, reuse, re-attach, Steps 1b/1c) is
-therefore dead code under the moratorium, kept only so the machinery is intact for when D81 lifts;
-go straight to "In-place mode" below.
-
-Run everything below from the **main repo root** unless noted.
+Run everything below from the **main repo root** unless noted. Without `--worktree`, skip straight
+to "In-place mode" below; with it, work through the worktree-mode branch (fresh create, reuse,
+re-attach, Steps 1b/1c).
 
 1. `repoRoot` = `git rev-parse --show-toplevel`. `currentBranch` = `git rev-parse --abbrev-ref HEAD`.
    **Before any other `cd`**, also compute `candidateTierPrefix` — the CURRENT working directory's
@@ -331,7 +319,7 @@ Run everything below from the **main repo root** unless noted.
      reason naming that a brain.toml is present at the run root but was absent at the invocation root.
      Never identify a brain root by counting harness checks or by a hardcoded path — this is the only
      signal to use.
-   - **POPULATION GUARD (worktree mode only — dead under the D81 moratorium, kept for when it lifts).**
+   - **POPULATION GUARD (worktree mode only).**
      For every path in `git -C <runDir> ls-files`, verify it exists on disk at `<runDir>/<path>`. If any
      are missing, **abort** — `Setup binding guard failed`, naming the missing count and up to five
      example paths. This catches a worktree that bound to the correct repo but never actually populated

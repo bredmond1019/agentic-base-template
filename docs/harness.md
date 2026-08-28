@@ -127,7 +127,6 @@ under the `FAIL <path>` prefix; a mechanical rewrite of the print statement is s
 | `skill-guide-sync` | `scripts/check_skill_sync.py` | `- {engine_file} [{anchor}] -> review {skill_file}: {reason}` |
 | `engine-docs-sync` | `scripts/check_engine_docs_sync.py` | `- {engine_file} [{anchor}] -> review {docs_md} {section}: {reason}` |
 | `prompt-template-parse` | `scripts/check_prompt_templates.py` | `ERROR: {rel} not found` / failure list keyed by path |
-| `worktree-moratorium` | `scripts/check_worktree_moratorium.py` | `- {f}` (engine file list) |
 | `worked-example-lane-gate` | `scripts/check_worked_example_lane.py` | `FAIL: {text}` — has the `FAIL` token but the path (when present, e.g. `args.command`) is not reliably the second token |
 
 **Genuinely cannot name a single artifact path, by design** — the check's failure is about a
@@ -148,7 +147,7 @@ directory, an engine string, or a shell exit code, not a file it read; these emi
 `fleet-concurrency-check-tests`, `extraction-port-gate-rule-tests`, `check-lane-records-tests`,
 `resume-task-state-merge-tests`, `block-close-decision-tests`, `commit-safety-guard-tests`,
 `check-lane-agents-tests`, `git-env-strip-tests`, `check-messages-tests`,
-`commander-drain-tests`, `worktree-moratorium-tests`, `command-docs-no-write-path-tests`,
+`commander-drain-tests`, `command-docs-no-write-path-tests`,
 `work-assertion-tests`, `bails-record-tests`, `bail-path-runtime`) are unit-test suites over the
 checker scripts themselves, run against synthetic fixtures rather than fleet artifacts. A failure
 is a Python `AssertionError`/traceback, which already names the failing test file and line — the

@@ -65,7 +65,7 @@ A few words get used constantly below. One line each; the full table lives in
 | **Engine** | The automation that actually writes code for one spec — [`/sdlc-task`](#the-two-sdlc-engines) or [`/sdlc-flow`](#the-two-sdlc-engines) |
 | **Gate** | A check that must pass (lint, tests, build) before a stage can report success |
 | **Lane** | One repo, one Claude session, one ordered chain of blocks, driven by [`/orchestrate`](.claude/commands/orchestrate.md) |
-| **Worktree** | A second checkout of a repo in its own folder, for isolation — **currently unavailable**; see [below](#worktree-isolation-is-currently-suspended) |
+| **Worktree** | A second checkout of a repo in its own folder, for isolation — pass `--worktree`; see [below](#worktree-isolation) |
 
 ---
 
@@ -123,15 +123,18 @@ Above these:
 Both engines write a **committed** JSON state file under `planning/<spec>/sdlc/` after every stage,
 so a run is resumable (`--resume`) and auditable from disk rather than chat history.
 
-### Worktree isolation is currently suspended
+### Worktree isolation
 
-Both engines accept a `--worktree` flag in their help text, but **it is refused unconditionally
-right now**: passing it exits the engine immediately with an error naming the moratorium, before
-any branch or worktree is created. This follows three separate whole-repo-deletion incidents where
-a green pipeline run silently committed an empty tree. Every spec today runs **in place, on a plain
-branch, in the main working tree**. Details, the incidents, and the two conditions for lifting it:
-`agentic-portfolio/docs/decisions/D81-worktree-moratorium.md` (a sibling repo's decision log, not
-part of this repo).
+Both engines accept a `--worktree` flag for true isolation — a second checkout of the repo under
+`trees/<branch>/`, so an in-flight run cannot collide with other work on the main tree. This was
+suspended fleet-wide (brain decision `D81-worktree-moratorium`, 2026-08-23) after three separate
+whole-repo-deletion incidents where a green pipeline run silently committed an empty tree; the
+moratorium was lifted 2026-08-28 after an end-to-end verification run
+(`BT.ticket.worktree-smoke-fixture`) confirmed the guards added during the suspension — the
+worktree-setup binding guard, the commit-safety guard, and the post-commit work assertion — hold
+under a real worktree run. Default is still the plain-branch, in-main-tree mode (cheaper, and a
+worktree never protected a running chain from its own mid-chain engine edits — see
+`docs/workflows/orchestration.md`); pass `--worktree` when a change genuinely needs quarantine.
 
 ---
 
@@ -240,7 +243,6 @@ per-repo deviations: [`docs/ci.md`](docs/ci.md).
 
 | Symptom | Likely cause | Check |
 |---|---|---|
-| `/sdlc-task` or `/sdlc-flow` immediately errors naming "D81" | You passed `--worktree` | Drop the flag — isolation is fleet-suspended; see [above](#worktree-isolation-is-currently-suspended) |
 | `/test` / `/review-task` silently uses a different command than you expected | `planning/harness.json` is missing or a check's `command` field doesn't match what you run locally | [`docs/harness-json.md`](docs/harness-json.md) § Full schema |
 | A generated project's `harness.json` `$schema` reference doesn't resolve in your editor | `planning/` in a generated project is a symlink into an external vault, and the schema path resolves differently depending on whether the reader follows the symlink | [`docs/harness-json.md`](docs/harness-json.md) § Why the `$schema` path resolves from two different physical parents |
 | A pipeline run stops mid-spec and you're not sure where it left off | Every engine stage writes committed state | Re-run with `--resume`; inspect `planning/<spec>/sdlc/state.json` and `worklog.md` directly |

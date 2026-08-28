@@ -345,22 +345,6 @@ const resumeMode    = hasFlag('--resume')
 // planning/ symlink intact — worktrees break it). --worktree opts back into the isolated sparse-checkout
 // worktree (needed for true isolation).
 const useWorktree   = hasFlag('--worktree')
-// D81 moratorium escape hatch, for the end-to-end verification D81's lift needs and nothing else.
-// The refusal below is still the DEFAULT: --worktree alone is refused exactly as before. Passing
-// --accept-d81-risk ALONGSIDE it opts one invocation out, so a tester can exercise a real worktree
-// run without re-opening the whole-repo-deletion path for every lane in every synced repo.
-// A second explicit flag, not an env var: this runtime has no process.env (no Node APIs), and a
-// flag is visible in the invocation rather than inherited invisibly from a shell.
-// REMOVE BOTH THIS FLAG AND THE GUARD when D81 is formally lifted -- an escape hatch left behind
-// after the moratorium ends is just a confusing second way to say --worktree.
-const acceptD81Risk = hasFlag('--accept-d81-risk')
-if (useWorktree && !acceptD81Risk) {
-  log(`ERROR: --worktree is suspended fleet-wide (D81). Run on a plain branch instead -- drop the --worktree flag and re-invoke. See docs/decisions/D81-worktree-moratorium.md. To run the D81 lift verification deliberately, pass --accept-d81-risk alongside --worktree; do this only on throwaway work.`)
-  return { error: 'worktree moratorium (D81)', blockId }
-}
-if (useWorktree && acceptD81Risk) {
-  log(`WARNING: D81 moratorium overridden by --accept-d81-risk. This run creates a REAL worktree. Three whole-repo-deletion incidents behind green runs are the reason the default refuses. Verify the commits contain the work before trusting this run.`)
-}
 
 const VALID_TEST_DEPTHS = ['fast', 'full']
 const testDepthFlag = flagStr('--test-depth')
