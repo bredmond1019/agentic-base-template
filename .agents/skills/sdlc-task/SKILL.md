@@ -39,9 +39,16 @@ description: >
 
  ISOLATION
    Default: IN PLACE on the current branch (no worktree) — cheapest, like /sdlc-run.
-   --worktree: SUSPENDED FLEET-WIDE (D81, 2026-08-23). The engine refuses the flag
-   unconditionally and exits before any setup — no override, no environment escape hatch.
-   Run on a plain branch instead. The worktree machinery survives intact for when D81 lifts.
+   --worktree: SUSPENDED FLEET-WIDE (D81, 2026-08-23). The engine refuses the flag BY
+   DEFAULT and exits before any setup. Run on a plain branch instead. The worktree
+   machinery survives intact for when D81 lifts.
+   ONE override is sanctioned, for the D81 lift verification and nothing else: pass
+   --accept-d81-risk ALONGSIDE --worktree to opt a single invocation out; the engine logs
+   a warning naming the incident record. It is a flag, not an env var (this runtime has no
+   process.env). Throwaway work only — the failure being tested for is silent whole-repo
+   deletion behind a green PASS. See base-template D82; it is deleted when D81 is lifted or
+   re-affirmed. Replicating this pipeline by hand: do NOT create a worktree unless that
+   flag was explicitly passed.
 
  USAGE
    /sdlc-task <spec-slug>                 run every task in the spec, in place
@@ -49,7 +56,8 @@ description: >
    /sdlc-task <spec-slug> 1-3             run a task range (1-3, 1,3,5, 5)
    /sdlc-task <spec-slug> --resume        resume from the committed state file
    /sdlc-task <spec-slug> --test-depth full  full gating suite per task (default: fast)
-   (--worktree is refused per D81 -- do not pass it)
+   (--worktree is refused BY DEFAULT per D81 -- do not pass it. The sole exception is the
+    D81 lift verification: --worktree --accept-d81-risk, on throwaway work only. See D82.)
 
  PIPELINE
    setup (locate repo / create worktree) → enumerate (D16 lint) → [resume load]

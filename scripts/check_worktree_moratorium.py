@@ -15,13 +15,36 @@ WHAT IT CHECKS
 --------------
 For each engine file: the file exists, it still parses `--worktree` into
 `useWorktree` via `hasFlag('--worktree')`, and within a few lines of that
-parse there is an `if (useWorktree) { ... }` guard whose body both (a) logs
-a message naming "D81" and (b) returns an object carrying an `error` key --
-i.e. the guard shape already used by the neighbouring `--test-depth`
-validation in each file. The guard must appear close to the parse (not
-merely exist anywhere in the file) so this does not accidentally match an
-unrelated, legitimate `if (useWorktree)` branch deep in worktree setup code
-elsewhere in the same file.
+parse there is a refusal guard whose body both (a) logs a message naming
+"D81" and (b) returns an object carrying an `error` key -- i.e. the guard
+shape already used by the neighbouring `--test-depth` validation in each
+file. The guard must appear close to the parse (not merely exist anywhere in
+the file) so this does not accidentally match an unrelated, legitimate
+`if (useWorktree)` branch deep in worktree setup code elsewhere in the same
+file.
+
+THE ONE SANCTIONED OVERRIDE (base-template D82)
+-----------------------------------------------
+This check originally demanded refusal "unconditionally -- no override, no
+environment escape hatch." D81's lift needs an end-to-end worktree run to
+happen SOMEWHERE, and two of its three incidents originated inside the
+engines' own worktree setup, so a test that bypasses the engines cannot
+answer the question that gates the lift. D82 therefore sanctions exactly one
+opt-out and this check now pins its precise shape:
+
+    if (useWorktree)                     <- original absolute refusal, still valid
+    if (useWorktree && !acceptD81Risk)   <- refusal by DEFAULT, one-invocation opt-out
+
+and, when the second form is used, requires the file to also contain
+`acceptD81Risk = hasFlag('--accept-d81-risk')`, so the override can only ever
+come from an explicit flag visible in the invocation. An env var, a
+harness.json key, a differently-named flag, or an `acceptD81Risk` sourced from
+anywhere but that flag all FAIL. This is a NARROWING of what counts as a legal
+override, not a loosening of the refusal: every lane that does not type the
+flag is refused exactly as before.
+
+Delete the override branch here when D81 is formally lifted or re-affirmed --
+it is scaffolding for one verification, not a permanent feature.
 
 A MISSING engine file is a FAILURE, not a silent pass -- several gates in
 this repo have been green because they found nothing.
@@ -55,7 +78,21 @@ SEARCH_WINDOW = 25
 GUARD_MAX_LINES = 15
 
 ASSIGNMENT_RE = re.compile(r"\buseWorktree\b[^=]*=\s*hasFlag\(\s*['\"]--worktree['\"]\s*\)")
-GUARD_OPEN_RE = re.compile(r"if\s*\(\s*useWorktree\s*\)\s*\{")
+# The guard must refuse BY DEFAULT and may be opted out of only by the one sanctioned token,
+# `acceptD81Risk` (parsed from an explicit `--accept-d81-risk` flag). Both shapes are accepted:
+#   if (useWorktree)                     -- the original absolute refusal
+#   if (useWorktree && !acceptD81Risk)   -- refusal by default, one-invocation opt-out
+# Anything else -- an env var, a harness.json key, a differently-named flag, an inverted
+# condition -- does NOT match, and the check fails. That is the point: this is a NARROWING of
+# what counts as a legal override, not a loosening of the refusal.
+GUARD_OPEN_RE = re.compile(
+    r"if\s*\(\s*useWorktree\s*(?:&&\s*!\s*acceptD81Risk\s*)?\)\s*\{"
+)
+# When the opt-out form is used, the flag must actually be parsed from the sanctioned CLI flag --
+# otherwise `acceptD81Risk` could be set from anywhere (an env read, a config field, a constant).
+OVERRIDE_PARSE_RE = re.compile(
+    r"\bacceptD81Risk\b[^=]*=\s*hasFlag\(\s*['\"]--accept-d81-risk['\"]\s*\)"
+)
 RETURN_ERROR_RE = re.compile(r"return\s*\{[^}]*\berror\b")
 
 
@@ -112,6 +149,16 @@ def check_worktree_guard(path: Path, rel: str) -> str | None:
         has_d81 = "D81" in block
         has_return_error = bool(RETURN_ERROR_RE.search(block))
         if has_d81 and has_return_error:
+            # If the guard uses the opt-out form, the override must be parsed from the one
+            # sanctioned CLI flag. A bare `acceptD81Risk` sourced from anywhere else would
+            # let the refusal be bypassed invisibly, which is the thing this check exists
+            # to prevent.
+            if "acceptD81Risk" in lines[i] and not OVERRIDE_PARSE_RE.search(text):
+                return (
+                    f"{rel}: the refusal guard opts out on `acceptD81Risk`, but no "
+                    f"`acceptD81Risk = hasFlag('--accept-d81-risk')` parse was found in the file -- "
+                    "the override must come from that explicit flag and nothing else"
+                )
             return None
         # A guard shape exists but is incomplete -- keep scanning the window in case a
         # later, more complete guard also matches (unlikely, but don't bail early on a
@@ -147,8 +194,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {f}")
         print(
             "\nD81 suspends --worktree fleet-wide. Both /sdlc-task and /sdlc-flow must "
-            "refuse the flag unconditionally -- no override, no environment escape hatch. "
-            "See docs/decisions/D81-worktree-moratorium.md."
+            "refuse the flag BY DEFAULT. Exactly one override is sanctioned -- an explicit "
+            "`--accept-d81-risk` flag parsed into `acceptD81Risk`, for the D81 lift "
+            "verification only (base-template D82). No env var, no harness.json key, no "
+            "other flag name. See docs/decisions/D81-worktree-moratorium.md and "
+            "planning/decisions/D82-d81-lift-verification-escape-hatch.md."
         )
         return 1
 

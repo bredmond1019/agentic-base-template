@@ -28,13 +28,22 @@ tree** — no `trees/` worktree, no sparse-checkout. This keeps a relative `plan
 (brain-vaulted repos) intact, which a sparse-checkout worktree breaks. `main` stays on the branch
 until the PR merges; a fresh run refuses to start on a **dirty** working tree (commit or stash first).
 
-**`--worktree` is refused unconditionally**, suspended fleet-wide by brain decision D81 (doc_id
+**`--worktree` is refused by default**, suspended fleet-wide by brain decision D81 (doc_id
 `D81-worktree-moratorium`, 2026-08-23), after three separate whole-repo-deletion incidents behind a
 GREEN run. Immediately after parsing the flag (`useWorktree = hasFlag('--worktree')`), the engine
 logs a message naming D81 and the plain-branch instruction and returns an error — before any setup,
-so no worktree, branch, or commit is ever created on the refused path. No override flag, no
-environment escape hatch. `python3 scripts/check_worktree_moratorium.py` gates that this refusal
-stays present. This includes `/orchestrate`, which previously fanned out concurrent `/sdlc-flow`
+so no worktree, branch, or commit is ever created on the refused path.
+
+**Exactly one override is sanctioned**, and only for the verification D81's own lift conditions
+require: passing `--accept-d81-risk` alongside `--worktree` opts that single invocation out and logs
+a warning naming the incident record. It exists because two of D81's three incidents originated
+*inside* the engines' worktree setup (a sparse checkout that never populated; `core.bare` flipped on
+the shared config), so a test that bypasses the engines cannot produce the evidence the lift needs.
+It is a flag, not an env var — this runtime has no `process.env`, and a flag is visible in the
+invocation rather than inherited invisibly from a shell. Use it on throwaway work only. See
+[D82](../../planning/decisions/D82-d81-lift-verification-escape-hatch.md); it is deleted when D81 is
+lifted or re-affirmed. `python3 scripts/check_worktree_moratorium.py` gates that the default refusal
+stays present **and** that this is the only shape of override in the tree. This includes `/orchestrate`, which previously fanned out concurrent `/sdlc-flow`
 children with `--worktree` for isolation — every such invocation now fails fast instead; concurrent
 `/orchestrate` lanes run on plain branches, not worktrees, until D81 lifts.
 
@@ -95,7 +104,8 @@ above. Do not pass it.
 | `--tasks <range>` | Equivalent to the positional range. | — |
 | `--auto-merge` | After a clean PASS, merge the PR, delete the branch (tear down the worktree too under `--worktree`), and run `mev emit-state --write` on the base. Only fires on a non-draft PR with a PASS verdict and an independently-verified `prOutcome === 'created'` — never on bail. See [PR-stage outcome vocabulary](#pr-stage-outcome-vocabulary). | off |
 | `--no-pr` | Stop after wrap-up; leave the branch for a manual PR (or `/close-out --merge-branch`). | off (create PR) |
-| `--worktree` | **Refused unconditionally (D81).** The engine exits before any setup — no worktree, branch, or commit is created. | refused |
+| `--worktree` | **Refused by default (D81).** The engine exits before any setup — no worktree, branch, or commit is created. | refused |
+| `--accept-d81-risk` | **Only meaningful alongside `--worktree`.** Opts this one invocation out of the D81 refusal for the lift verification, with a warning on the overridden path. base-template [D82](../../planning/decisions/D82-d81-lift-verification-escape-hatch.md) sanctions this exact flag and nothing else; deleted when D81 is lifted or re-affirmed. **Throwaway work only.** | off |
 | `--resume` | Re-attach the existing branch and skip tasks whose `state.json` status is `passed`. | off |
 | `--test-depth fast\|full` | Per-task validation depth. `fast` runs only `gates:true` checks (the tripwire); `full` runs the whole suite per task. | `fast` |
 

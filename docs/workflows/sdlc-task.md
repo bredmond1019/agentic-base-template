@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: /sdlc-task — lean single-unit SDLC engine
-description: The fast path for small units of behavior-changing work. Runs implement → fast-test → triage → fix loop → commit, in place on the current branch (--worktree is refused, suspended fleet-wide by D81). Pairs with /chore and /ticket (D38).
+description: The fast path for small units of behavior-changing work. Runs implement → fast-test → triage → fix loop → commit, in place on the current branch (--worktree is refused by default, suspended fleet-wide by D81; one sanctioned override exists for the D81 lift verification, per base-template D82). Pairs with /chore and /ticket (D38).
 doc_id: sdlc-task
 layer: [factory]
 project: base-template
@@ -15,9 +15,10 @@ related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch
 The fast path for **one small unit of behavior-changing work**. Runs
 `implement → fast-test → triage → fix (≤3 attempts, Opus on the final) → commit → terminal
 authoritative reconcile ([D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md))`,
-in-place on the current branch. **`--worktree` is refused unconditionally** — suspended fleet-wide
-by brain decision D81 (doc_id `D81-worktree-moratorium`, 2026-08-23); passing it exits the engine
-before any setup, naming D81 and instructing a plain-branch re-invoke, no override.
+in-place on the current branch. **`--worktree` is refused by default** — suspended fleet-wide by
+brain decision D81 (doc_id `D81-worktree-moratorium`, 2026-08-23); passing it exits the engine
+before any setup, naming D81 and instructing a plain-branch re-invoke. One sanctioned override
+exists for the D81 lift verification only — see [In-place vs. `--worktree`](#in-place-vs-worktree).
 
 Think of it as the middle rung of the pipeline ladder — more ceremony than `/patch` (real test
 loop), less than `/sdlc-flow` (no review/document/wrap-up agents). Pairs with `/chore` and
@@ -36,14 +37,16 @@ Engine: [`.claude/workflows/sdlc-task.js`](../../.claude/workflows/sdlc-task.js)
 /sdlc-task <spec-slug> --test-depth full   full gating suite per task (default: fast)
 ```
 
-`--worktree` is **refused** — see [In-place vs. `--worktree`](#in-place-vs-worktree) below. Do not
-pass it.
+`--worktree` is **refused by default** — see [In-place vs. `--worktree`](#in-place-vs-worktree)
+below. Do not pass it. The one exception is the D81 lift verification, which must pass
+`--accept-d81-risk` alongside it (base-template D82) and should only ever run on throwaway work.
 
 | Argument | Meaning | Default |
 |---|---|---|
 | `<spec-slug>` | **Required.** The spec directory name — drives every `planning/<spec-slug>/…` path. | — |
 | `[range]` | Optional task selection (positional or `--tasks`). Forms: `1-3`, `1,3,5`, `5`. | all tasks |
-| `--worktree` | **Refused unconditionally (D81).** The engine exits before any setup — no worktree, branch, or commit is created. | refused |
+| `--worktree` | **Refused by default (D81).** The engine exits before any setup — no worktree, branch, or commit is created. | refused |
+| `--accept-d81-risk` | **Only meaningful alongside `--worktree`.** Opts this one invocation out of the D81 refusal so the lift verification can run inside the engine, and logs a warning naming the incident record. Not a general escape hatch: base-template D82 sanctions this exact flag and nothing else, and it is deleted when D81 is lifted or re-affirmed. **Throwaway work only** — the failure mode being tested for is silent whole-repo deletion behind a green PASS. | off |
 | `--resume` | Re-attach and continue from the last committed state. | off |
 | `--test-depth fast\|full` | Per-task validation depth. `fast` runs only `gates:true` checks (the tripwire) via each check's `fastCommand`; `full` runs the whole suite (authoritative `command`) per task, which also skips the terminal reconcile stage — see [Terminal authoritative reconcile (D56)](#terminal-authoritative-reconcile-d56) below. Unlike `/sdlc-flow`, there is no `harness.json` config key for this — CLI-flag-only, default `fast`. | `fast` |
 
@@ -422,14 +425,22 @@ of the above fires, and everything commits together in the repo's own index exac
 
 ## In-place vs. `--worktree`
 
-**`--worktree` is refused unconditionally**, suspended fleet-wide by brain decision D81 (doc_id
+**`--worktree` is refused by default**, suspended fleet-wide by brain decision D81 (doc_id
 `D81-worktree-moratorium`, 2026-08-23), after three separate whole-repo-deletion incidents behind a
 GREEN run. Immediately after parsing the flag (`useWorktree = hasFlag('--worktree')`), the engine
 logs a message naming D81 and the plain-branch instruction and returns an error — before any setup,
-so no worktree, branch, or commit is ever created on the refused path. There is no override flag and
-no environment escape hatch: an escape hatch would make the moratorium documentation again, which is
-the exact failure D81 names. `python3 scripts/check_worktree_moratorium.py` gates that this refusal
-stays present. Only in-place mode runs today:
+so no worktree, branch, or commit is ever created on the refused path.
+
+**Exactly one override is sanctioned**, and only for the verification D81's own lift conditions
+require: passing `--accept-d81-risk` alongside `--worktree` opts that single invocation out and logs
+a warning naming the incident record. It exists because two of D81's three incidents originated
+*inside* the engines' worktree setup (a sparse checkout that never populated; `core.bare` flipped on
+the shared config), so a test that bypasses the engines cannot produce the evidence the lift needs.
+It is a flag, not an env var — this runtime has no `process.env`, and a flag is visible in the
+invocation rather than inherited invisibly from a shell. Use it on throwaway work only. See
+[D82](../../planning/decisions/D82-d81-lift-verification-escape-hatch.md); it is deleted when D81 is
+lifted or re-affirmed. `python3 scripts/check_worktree_moratorium.py` gates that the default refusal
+stays present **and** that this is the only shape of override in the tree. Only in-place mode runs today:
 
 | | In-place (default, the only mode) | `--worktree` |
 |---|---|---|

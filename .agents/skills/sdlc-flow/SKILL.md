@@ -17,10 +17,16 @@ description: >
    Default: a plain branch (<spec>-flow) checked out IN THE MAIN WORKING TREE. No
    sparse-checkout worktree, so a relative planning/ symlink (brain-vaulted repos)
    stays intact. main is left on the branch until the PR merges.
-   --worktree: SUSPENDED FLEET-WIDE (D81, 2026-08-23). The engine refuses the flag
-   unconditionally and exits before any setup — no override, no environment escape hatch.
-   Run on a plain branch instead. The sparse-checkout worktree machinery survives
-   intact for when D81 lifts.
+   --worktree: SUSPENDED FLEET-WIDE (D81, 2026-08-23). The engine refuses the flag BY
+   DEFAULT and exits before any setup. Run on a plain branch instead. The sparse-checkout
+   worktree machinery survives intact for when D81 lifts.
+   ONE override is sanctioned, for the D81 lift verification and nothing else: pass
+   --accept-d81-risk ALONGSIDE --worktree to opt a single invocation out; the engine logs
+   a warning naming the incident record. It is a flag, not an env var (this runtime has no
+   process.env). Throwaway work only — the failure being tested for is silent whole-repo
+   deletion behind a green PASS. See base-template D82; it is deleted when D81 is lifted or
+   re-affirmed. Replicating this pipeline by hand: do NOT create a worktree unless that
+   flag was explicitly passed.
 
  A compact, COMMITTED, AUTHORITATIVE state.json + one worklog.md replace the 5×N
  per-stage report files: resume + review + wrap-up read a structured index instead
@@ -33,7 +39,8 @@ description: >
    /sdlc-flow <spec-slug> --auto-merge     merge the PR + clean up on success
    /sdlc-flow <spec-slug> --no-pr          stop after wrap-up; do not create a PR
    /sdlc-flow <spec-slug> --resume         re-attach the branch, resume from state.json
-   (--worktree is refused per D81 -- do not pass it)
+   (--worktree is refused BY DEFAULT per D81 -- do not pass it. The sole exception is the
+    D81 lift verification: --worktree --accept-d81-risk, on throwaway work only. See D82.)
    /sdlc-flow <spec-slug> --test-depth full  run the FULL gating suite per task (default: fast)
 
  PIPELINE
