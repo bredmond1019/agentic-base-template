@@ -3,7 +3,47 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-27
+**Last updated:** 2026-08-28
+
+---
+## 2026-08-28 — autonomous-foundation lane: 6 blocks closed in one chain
+
+One `/begin-orchestration` run against `planning/roadmaps/autonomous-foundation/roadmap.md`, driven
+in-place (`--no-worktree`, which is what D81 mandates fleet-wide, not an override the lane chose).
+All six blocks closed; 52 gated checks green individually at the end.
+
+- **`worktree-setup-can-adopt-the-brain-root-as-repo-root`** — both engines now resolve `repoRoot`
+  once in JS and interpolate it, instead of handing a haiku sub-agent a `[repoRoot]` placeholder to
+  substitute. Adds binding, brain-root and population guards that abort before any task runs, plus a
+  new gating check `worktree-setup-binding-guard` (12 assertions across both engines). **This is
+  D81's lift condition 1.**
+- **`BT.2.A`** — `sdlc_workflow` is required at registration, stated identically in
+  `block-registration.md` Step 5 and all four SKILL.md producers. New gate
+  `sdlc-workflow-required-tests`.
+- **`generate-tasks-does-not-reverify-acceptance-criteria`** — step 5a re-verifies the block record's
+  acceptance criteria and any cited design doc against the tree, not just the source behind `files[]`.
+- **`ping-agent-never-specifies-the-message-timestamp-format`** — `<ts>` is defined where senders
+  read it (`YYYYMMDDThhmmssZ`, with `date -u +%Y%m%dT%H%M%SZ`), and `check_messages.py`'s rejection
+  names the expected literal beside the rejected filename. Also gained a validate-before-send
+  instruction, added mid-run after this lane shipped a malformed envelope of its own.
+- **`bookkeep-leaves-derived-output-uncommitted`** — HQ's `emit_state_write.sh` refuses a
+  silently-empty or surface-emptying derivation rather than committing it (fixtured in the brain repo
+  as `emit-state-write-content-guards-tests`); both engines gained an **optional** post-emit commit
+  hook that ships no default, keeping the engines free of any HQ path.
+- **`op-slug-in-authoring-commands`** — `/sequence`, `/generate-roadmap` and `/begin-session` cite
+  operator work as `OP.<slug>` per D76 instead of inviting invented document-local refs.
+
+**Two bails, both spec/tooling rather than code, both diagnosed the same way** — re-run against a
+provably unchanged engine snapshot (standing rule 10) and see whether the outcome moves. Block 1's
+spec deferred the SKILL.md/docs re-stamp to a late task while `skill-guide-sync` and
+`engine-docs-sync` gate *every* task, so it could not satisfy its own gates; fixed in `tasks.json`,
+the layer rule 10 says to prefer. Block 5 bailed on the emoji gate's `if not RUN_COMMITS` fallback,
+which refuses on any non-empty `BASE_SHA..HEAD` — here containing only a sibling session's concurrent
+README commits, exactly the case the gate's own prompt promises to tolerate. Filed P1 as
+`emoji-gate-no-commits-fallback-fails-on-a-siblings-commit`; a fresh run closed the block 7/7.
+
+Run record and verification recipes: `planning/orchestration-run/autonomous-foundation/{notes.md,review.md}`.
+Open items and their next steps: `planning/handoff.md`.
 
 ---
 ## 2026-08-27 — `fleet-push-discipline` promoted from HQ-only to a synced skill
