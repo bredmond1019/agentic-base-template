@@ -45,6 +45,37 @@ README commits, exactly the case the gate's own prompt promises to tolerate. Fil
 Run record and verification recipes: `planning/orchestration-run/autonomous-foundation/{notes.md,review.md}`.
 Open items and their next steps: `planning/handoff.md`.
 
+### D81 worktree moratorium lifted (base-template side) — `BT.ticket.worktree-smoke-fixture`
+
+- **What:** Verified `--worktree` end to end via `/sdlc-task BT.ticket.worktree-smoke-fixture
+  --worktree --accept-d81-risk` (plus one `--resume` after a self-inflicted binding-guard bail — a
+  stray `cd` into the worktree, not an engine defect). All 5 checklist rows from `handoff.md` passed:
+  worktree populated, no empty-tree commit, `core.bare` untouched, correct repo binding, `--resume`
+  reattached to the same `trees/` dir rather than forking a second one. Found and fixed a real defect
+  along the way: `resolve_own_repo()` in `check_lane_agents.py`/`check_messages.py` matched cwd
+  against `brain.toml` by exact equality, so it never resolved inside `trees/<branch>/` and both
+  checkers fell back to fail-closed (gating on foreign-repo records too) for every worktree run —
+  fixed to match cwd equal-to-or-nested-under a registered `repo_path`. Executed the base-template
+  side of the D81 lift: both engines accept `--worktree` unconditionally again; deleted
+  `check_worktree_moratorium.py` and its test (52 → 50 gating checks); removed the D81-era
+  leading-`--worktree` rejection from `check_lane_records.py`; rewrote `README.md`,
+  `docs/workflows/sdlc-task.md`/`sdlc-flow.md`, `docs/harness.md`, the
+  begin-orchestration/orchestrate/generate-roadmap commands, and their `.agents/skills/` mirrors to
+  describe `--worktree` as available again; re-verified and re-stamped the `check_skill_sync.py` and
+  `check_engine_docs_sync.py` manifests (anchor line ranges shifted from the refusal-block deletion —
+  content confirmed byte-identical at the corrected ranges before re-stamping). Retired the fixture
+  block (worktree/branch removed unmerged, block record + spec dir deleted) and cleared the
+  `sdlc-resume-creates-a-fresh-worktree` carryover. Also added an "Orchestrating across lanes" section
+  to `README.md` (mermaid diagram + links to `docs/workflows/orchestration-runbook.md`), since README
+  never mentioned the orchestration/lane/commander/sweep system despite it being where this template's
+  real leverage now is.
+- **Why:** `handoff.md`'s "START HERE" — D81's two lift conditions both read as met on paper, and only
+  a real `--worktree` run could answer whether the guards installed during the moratorium actually
+  hold. The failure mode under test was silent whole-repo deletion behind a green PASS.
+- **Refs:** `planning/handoff.md` (full checklist + what remains for HQ) ·
+  [D82](planning/decisions/D82-d81-lift-verification-escape-hatch.md) · commits `692e0b5` (the
+  `resolve_own_repo()` fix), `fc78bdb` (the lift), `682e3bf` (README).
+
 ---
 ## 2026-08-27 — `fleet-push-discipline` promoted from HQ-only to a synced skill
 
