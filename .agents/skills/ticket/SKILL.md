@@ -123,7 +123,10 @@ downstream block waiting on its code, so there is nothing to defer (D65).
 7. **Write the block record and register it.** Read and follow
    `.claude/workflows/block-registration.md` — the canonical procedure for the block ID, the
    operator and cross-repo edge questions, the carryover read, the block record itself, and
-   `state.json` registration. Do not restate it here or invent a variant.
+   `state.json` registration. Do not restate it here or invent a variant. **`sdlc_workflow` is
+   required at registration** — a block with no value cannot be resolved to an engine and
+   silently drops out of any chain that names it; a pre-existing gap elsewhere in the corpus is
+   reported, not blocking.
 
 8. **Write `planning/<BlockID>/tasks.json`** — a **bare array** matching the `SDLCTask` shape plus
    the two additive fields this template's tooling uses:

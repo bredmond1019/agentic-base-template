@@ -146,7 +146,9 @@ re-derived anyway (D65).
    `.claude/workflows/block-registration.md` — the canonical procedure for the block ID, the
    operator and cross-repo edge questions, the carryover read, the block record, and `state.json`
    registration. Do not restate it here or invent a variant. Set `kind` to `block` and
-   `initiative` to `<slug>`.
+   `initiative` to `<slug>`. **`sdlc_workflow` is required at registration** — a block with no
+   value cannot be resolved to an engine and silently drops out of any chain that names it; a
+   pre-existing gap elsewhere in the corpus is reported, not blocking.
 
 8. **Write the narrative** to `planning/<slug>/plan.md` using the Output Format below. The
    narrative holds only what is true of the set — it must not duplicate a block's what/why/files,
