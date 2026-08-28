@@ -59,6 +59,15 @@ ERROR_SHAPE_RE = re.compile(r"\{[^{}]*\berror\s*:", re.DOTALL)
 # How many characters after a guard sentinel to search for its error-shape return. Wide enough
 # to span a multi-line guard body, narrow enough not to accidentally match an unrelated abort
 # belonging to a completely different stage further down the file.
+#
+# Task 5 note: BINDING_GUARD_RE/POPULATION_GUARD_RE use .search(), which finds the FIRST literal
+# occurrence in the file. An earlier, unrelated comment that happens to contain the same two-word
+# sentinel (e.g. a docstring heading like "... POPULATION GUARDS" -- "GUARD" is a prefix of
+# "GUARDS", so the substring match fires) shifts the search window away from the real abort and
+# fails assertion F for a reason that has nothing to do with the abort shape itself. When this
+# fires, the fix is to make the engine's guard sentinels unique to the actual guard/abort site
+# (reword the earlier mentions), not to widen this window or change the regex -- a wider window
+# just as easily starts matching the WRONG unrelated abort further down the file instead.
 GUARD_ABORT_WINDOW = 4000
 
 

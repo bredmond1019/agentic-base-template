@@ -183,7 +183,7 @@ value), tierPrefix (the TIER_PREFIX: value, "" when invoking at the repo root), 
   return result || null
 }
 
-// BINDING / BRAIN-ROOT / POPULATION GUARDS (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root,
+// BINDING / BRAIN-ROOT / POPULATION checks (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root,
 // task 4) — run immediately after the setup agent returns (after its setupError handling) and BEFORE the
 // enumerate/per-task stages, so a misbound or unpopulated checkout is caught before any task's implement
 // stage touches it. Same shape as verifyVaultCommit() above: the agent runs ONE fixed script and transcribes
@@ -205,7 +205,7 @@ const SETUP_GUARD_SCHEMA = {
   }
 }
 async function verifySetupBinding(worktreePath, useWorktreeMode) {
-  // POPULATION GUARD only runs in worktree mode — a branch-mode run has no separate checkout to
+  // Population check only runs in worktree mode — a branch-mode run has no separate checkout to
   // under-populate (worktreePath === repoRoot, already fully checked out).
   const populationCmd = useWorktreeMode
     ? ` && MISSING=$(${GIT} -C ${worktreePath} ls-files | while read -r p; do [ -e "${worktreePath}/$p" ] || echo "$p"; done); echo "MISSING_COUNT:$(printf '%s\\n' "$MISSING" | grep -c . || true)" && echo "MISSING_SAMPLE:$(printf '%s\\n' "$MISSING" | head -5 | tr '\\n' '|')"`
