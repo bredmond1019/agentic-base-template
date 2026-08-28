@@ -6,6 +6,25 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-08-28
 
 ---
+## 2026-08-28 — task-gate-boundaries-are-unenforced closed; two fleet-gate fixes along the way
+
+- **What:** Closed `BT.ticket.task-gate-boundaries-are-unenforced` via `/sdlc-task --resume`
+  (4 of 4 tasks). Adds `scripts/check_task_gate_boundaries.py` + its dedicated test suite, catching
+  a hand-authored `tasks.json` whose task N validation depends on a file only task N+1 creates —
+  the exact mistake that bailed `BT.ticket.worktree-smoke-fixture` earlier the same day, by an
+  agent that had read the stated-but-unenforced rule that same session. Registered as
+  `task-gate-boundaries` + `task-gate-boundaries-tests` (gates:true) in `planning/harness.json`.
+  `/close-out` ran clean after: 52/52 harness gates, diff-scoped emoji gate, coverage adequate,
+  no missing docs. Also fixed, in the brain repo, 4 `core/_planning/synapse/orchestration-run/`
+  records still carrying the pre-D52 `orchestrator-` doc_id prefix that was failing
+  `test_orchestration_run_contract.py` (CHECK13) — unrelated to this ticket's own diff, but
+  blocking the same gate sweep; committed separately as `ee6f87d1d`.
+- **Why:** The task-boundary-is-a-gate rule was stated in four commands (`/generate-tasks`,
+  `/ticket`, `/chore`, `/breakdown`) and enforced by nothing — checked only by an author following
+  prose, so a hand-written `tasks.json` skips all four rule statements at once.
+- **Refs:** `planning/BT.ticket.task-gate-boundaries-are-unenforced/`, `planning/handoff.md`.
+
+---
 ## 2026-08-28 — autonomous-foundation lane: 6 blocks closed in one chain
 
 One `/begin-orchestration` run against `planning/roadmaps/autonomous-foundation/roadmap.md`, driven
