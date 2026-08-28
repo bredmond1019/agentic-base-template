@@ -15,8 +15,9 @@ THE CONTRACT THIS PINS:
       1..N) MINUS (anything already on disk under repo_root).
 
       RULE 2: task N's files[] includes "planning/harness.json" while some later task
-      creates a new scripts/*.py file not already created by task N or earlier, and not
-      already on disk.
+      creates a new scripts/*.py file not already created by task N or earlier, not
+      already on disk, and never previously git-tracked (a deletion of a pre-existing
+      script is not a first-time creation, even once it is gone from the working tree).
 
   find_tasks_json(planning_root) -> generator of paths
       Walks planning_root (following symlinks) yielding every .../tasks.json, skipping
@@ -189,6 +190,35 @@ def main():
         findings = ctgb.check_spec(harness_clean_tasks, repo_root=str(root))
         check("Rule 2 does not fire when the script already exists at the harness edit",
               by_rule(findings, "R2") == [], f"got {findings}")
+
+        # -- (7b) Rule 2 must NOT fire when the "later" file is a DELETION of a script that
+        #    already existed and was git-tracked -- not a first-time creation. Regression
+        #    fixture for the false positive found running the checker against this repo's
+        #    real corpus (BT.5.B task 2 registering harness.json while task 5, unrelated,
+        #    both removed scripts/test_lane_directive_emission.py and its own harness.json
+        #    entry): the path is absent from disk by the time the checker runs, but it has
+        #    git history, so it is a deletion, not a not-yet-created script.
+        git_root = root / "git_repo"
+        git_root.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=git_root, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=git_root, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=git_root, check=True)
+        deleted_script = git_root / "scripts"
+        deleted_script.mkdir()
+        (deleted_script / "old_gate.py").write_text("# stub\n")
+        subprocess.run(["git", "add", "scripts/old_gate.py"], cwd=git_root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "add old_gate.py"], cwd=git_root, check=True)
+        (deleted_script / "old_gate.py").unlink()
+        subprocess.run(["git", "add", "-A"], cwd=git_root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "remove old_gate.py"], cwd=git_root, check=True)
+        deletion_tasks = [
+            {"task_id": 1, "files": ["planning/harness.json"], "validation_commands": []},
+            {"task_id": 2, "files": ["scripts/old_gate.py", "planning/harness.json"],
+             "validation_commands": []},
+        ]
+        findings = ctgb.check_spec(deletion_tasks, repo_root=str(git_root))
+        check("Rule 2 does not fire when the later path is a git-tracked deletion, not a "
+              "first-time creation", by_rule(findings, "R2") == [], f"got {findings}")
 
         # -- (8) tasks.json discovery walks planning/ (symlink-following) and skips noise ---
         planning = root / "discovery_planning"

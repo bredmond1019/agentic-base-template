@@ -36,9 +36,25 @@ task creates the script that gate would need. The actual command text being adde
 `harness.json` is not visible from `tasks.json` alone, so this is deliberately the coarse,
 conservative signal named in the block record: flag task N when `planning/harness.json` is in
 its `files[]` and some task M with task_id > N creates a NEW `scripts/*.py` file (not already
-on disk, not created by task N or earlier). A false positive here trains readers to ignore the
-gate, which is worse than the miss -- so this rule fires only on that narrow shape, never on
-a task merely reading or generically mentioning harness.json.
+on disk, not created by task N or earlier, and never previously tracked in git -- see below).
+A false positive here trains readers to ignore the gate, which is worse than the miss -- so
+this rule fires only on that narrow shape, never on a task merely reading or generically
+mentioning harness.json.
+
+A path that a later task's `files[]` names is not necessarily a CREATION -- it can just as
+well be a deletion or edit of a script that already existed. `files[]` alone cannot tell the
+two apart, and the on-disk check above only catches the case where the path is still present;
+a task that DELETES a script (as opposed to creating one) leaves nothing on disk to find, so
+without a further check the same on-disk subtraction that correctly clears "already exists"
+would wrongly treat "already existed and was removed" as "does not exist yet". MEASURED
+2026-08-28 against this repo's real corpus: `BT.5.B` task 2 registers `check_worked_example_
+lane.py` into `harness.json`, and task 5 -- unrelated to that registration -- both deletes
+`scripts/test_lane_directive_emission.py` and removes its own `harness.json` entry. The path
+was never on disk when the checker ran (task 5 already landed and the file is gone), but
+`git log --oneline --all -- scripts/test_lane_directive_emission.py` shows three prior
+commits, so it plainly existed before this scan -- a deletion, not a future creation. Rule 2
+therefore also excludes any path that has ever been git-tracked, via `_ever_tracked()`, before
+concluding a later task "creates" it.
 
 A spec with no tasks.json, an empty array, or a task with no validation_commands is not a
 failure -- say nothing about it. Every subprocess call (none here) would check its own return
@@ -59,10 +75,38 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 
 SKIP_DIRS = {"node_modules", ".git", "archive", "target", ".fleet-locks", "sdlc", "trees", "blocks"}
 
 HARNESS_PATH = "planning/harness.json"
+
+_TRACKED_CACHE = {}
+
+
+def _ever_tracked(path, repo_root="."):
+    """True if `path` has ever appeared in this repo's git history (any branch).
+
+    Used by RULE 2 to tell "does not exist yet" from "existed and was deleted" -- a path
+    with a git history is not a script a later task is about to create for the first time,
+    even when it is absent from the working tree right now. Cached per path since the same
+    later-task path can be checked from several earlier tasks' boundaries. A missing/failing
+    git call (no repo, no git binary) is treated as "not tracked" -- it falls back to the
+    on-disk-only signal rather than crashing the checker.
+    """
+    key = (repo_root, path)
+    if key in _TRACKED_CACHE:
+        return _TRACKED_CACHE[key]
+    try:
+        result = subprocess.run(
+            ["git", "log", "--oneline", "--all", "-1", "--", path],
+            cwd=repo_root, capture_output=True, text=True, timeout=10,
+        )
+        tracked = result.returncode == 0 and bool(result.stdout.strip())
+    except Exception:  # noqa: BLE001 - no git available is not this checker's failure
+        tracked = False
+    _TRACKED_CACHE[key] = tracked
+    return tracked
 
 
 def _load_tasks(path):
@@ -148,6 +192,8 @@ def check_spec(tasks, repo_root="."):
                 if not (p.startswith("scripts/") and p.endswith(".py")):
                     continue
                 if os.path.exists(os.path.join(repo_root, p)):
+                    continue
+                if _ever_tracked(p, repo_root):
                     continue
                 seen_scripts.add(p)
                 findings.append({
