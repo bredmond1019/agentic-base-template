@@ -134,7 +134,7 @@ MIN_EXPECTED_FILES = 18
 #
 # This is a closed-corpus census, the same failure mode test_d16_tasks_json_fallback.py's
 # MeasuredBaseline class already documents: it goes stale the moment a legitimate new project is
-# scaffolded (bumped 17 -> 18 on 2026-08-14 when client/jardins-fitness landed; 18 -> 19 on
+# scaffolded (bumped 17 -> 18 on 2026-08-14 when a client frontend landed; 18 -> 19 on
 # 2026-08-23 when core/jynx landed, registered in brain.toml and resolving on both faces), and it
 # will need
 # bumping again the next time the fleet grows. That is expected maintenance, not a sign the check

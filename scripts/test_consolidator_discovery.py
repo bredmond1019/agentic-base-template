@@ -53,7 +53,7 @@ TWO MODES
 
 MEASURED SNAPSHOT (dated, not a magic constant)
 ------------------------------------------------
-Measured 2026-08-12 from the brain root (`/Users/brandon/Dev/agentic-portfolio`) with:
+Measured 2026-08-12 from the brain root (the brain root) with:
 
     rg -L -uu --files -g '**/orchestration-run/**/*.md'
 

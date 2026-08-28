@@ -157,22 +157,22 @@ cache_doc = "docs/projects/base-template.md"
 heading = "base-template"
 
 [[repos]]
-slug = "brazilianportugui"
+slug = "client-alpha"
 prefix = "BP"
 tier = "client"
-repo_path = "client/brazilianportugui"
-status_file = "client/brazilianportugui/planning/status.md"
-cache_doc = "client/docs/projects/brazilianportugui.md"
-heading = "brazilianportugui"
+repo_path = "client/client-alpha"
+status_file = "client/client-alpha/planning/status.md"
+cache_doc = "client/docs/projects/client-alpha.md"
+heading = "client-alpha"
 
 [[repos]]
-slug = "wild-trail-photo"
+slug = "client-beta"
 prefix = "WT"
 tier = "client"
-repo_path = "client/wild-trail-photo"
-status_file = "client/wild-trail-photo/planning/status.md"
-cache_doc = "client/docs/projects/wild-trail-photo.md"
-heading = "wild-trail-photo"
+repo_path = "client/client-beta"
+status_file = "client/client-beta/planning/status.md"
+cache_doc = "client/docs/projects/client-beta.md"
+heading = "client-beta"
 
 # --- Tier-root self-entries (one per tier container, mirroring `core` above). ---
 # These make each tier's index.md a cache doc `mev emit-state` can drive, and close the

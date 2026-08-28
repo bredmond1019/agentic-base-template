@@ -211,7 +211,7 @@ installing a crontab entry is the operator's call, never an agent's.
 The intended line, added by hand with `crontab -e`:
 
 ```
-*/30 * * * * cd /Users/brandon/Dev/agentic-portfolio && ./scripts/roadmap_sweep_cron.sh >> logs/roadmap_sweep_cron.out 2>&1
+*/30 * * * * cd <brain-root> && ./scripts/roadmap_sweep_cron.sh >> logs/roadmap_sweep_cron.out 2>&1
 ```
 
 Turning it off is removing that line.

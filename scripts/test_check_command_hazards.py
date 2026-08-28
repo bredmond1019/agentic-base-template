@@ -102,7 +102,7 @@ def main():
     # -- (1) H1: flagged on negated non-POSIX tools, clean on the prescribed fixed form ----
     h1_positive_cases = [
         "! rg -q hello /tmp/probe_hazard.txt",
-        "! rg -L 'plan\": \"planning/x/roadmap.md' /Users/brandon/Dev/agentic-portfolio --glob '*state.json'",
+        "! rg -L 'plan\": \"planning/x/roadmap.md' <brain-root> --glob '*state.json'",
         '! rg -n "\\"cost_usd\\":" crates/engine-core/src/nodes/terminal/',
         "! fd -e md dangling",
         "! jq -e '.ok' out.json",

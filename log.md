@@ -745,7 +745,7 @@ was missing the entire D16-derive-from-tasks.md-fallback + validation_commands-s
 (confirmed pre-existing — reverting just that file to the pre-session commit reproduces the
 failure identically), so added it with the D63 pure-substitute framing specific to this engine;
 and `test_harness_schema_realpath.py` hardcoded `LIVE_EXPECTED_FILES = 17`, stale the moment
-`client/jardins-fitness` (a concurrent session's scaffold) became the fleet's 18th live config —
+a client frontend (a concurrent session's scaffold) became the fleet's 18th live config —
 bumped, with a comment noting this is a closed-corpus census gate that will need bumping again.
 Steps 2-3 (coverage, docs) found nothing to patch. Handoff updated: wave 207 remains untouched and
 still the priority queue; this session's own work (the command audit, the retire/restore of
@@ -1185,7 +1185,7 @@ fleet-wide.
   `.claude/workflows/*.js` file a task's diff touches, in `renderCheckList()` across all three
   engines that render checks directly (plus a confirmed, documented delegation finding for
   `sdlc-block.js`) — closes the exact gap that let two real parse-time breaks land undetected in a
-  downstream repo (wild-trail-photo commits `0d82648`, `59d217a`), since that project's own
+  downstream repo (a client repo's commits `0d82648`, `59d217a`), since that project's own
   `harness.json` had no reason to check the harness's own JS; (4) ported a `qm`-style content-hash
   manifest into `scripts/sync_downstream_harness.py` (`stale-safe` unmodified-since-last-sync →
   delete, `stale-conflict` locally-modified → never delete, report instead), closing the "removed
