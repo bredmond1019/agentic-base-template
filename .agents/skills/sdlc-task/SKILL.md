@@ -310,6 +310,27 @@ Run everything below from the **main repo root** unless noted.
   "the engine looked in the wrong place". Tell the user to run `/generate-tasks <blockId>` (and
   `/breakdown`), commit, then re-run.
 
+8. **Step 1d — Binding / brain-root / population guards** (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root).
+   Run these BEFORE Step 2 (Plan) and before any task work — a misbound or unpopulated checkout must
+   never reach the per-task loop. Compare against `repoRoot` as computed in Step 1.1, never re-derive it:
+   - **BINDING GUARD.** Compute `runGitCommonDir = git -C <runDir> rev-parse --path-format=absolute
+     --git-common-dir`. If `runGitCommonDir` does NOT resolve under `repoRoot`, **abort** —
+     `Setup binding guard failed`, naming BOTH `runGitCommonDir` and `repoRoot` in the reason. This
+     catches a run whose checkout is actually bound to a different repo than the one you resolved in
+     Step 1 (e.g. it silently adopted the brain root).
+   - **BRAIN-ROOT GUARD.** Check whether `<runDir>/brain.toml` exists. If it exists AND `brainTomlAtRoot`
+     (captured in Step 1.1 at the invocation root) was false, **abort** — `Setup binding guard failed`,
+     reason naming that a brain.toml is present at the run root but was absent at the invocation root.
+     Never identify a brain root by counting harness checks or by a hardcoded path — this is the only
+     signal to use.
+   - **POPULATION GUARD (worktree mode only — dead under the D81 moratorium, kept for when it lifts).**
+     For every path in `git -C <runDir> ls-files`, verify it exists on disk at `<runDir>/<path>`. If any
+     are missing, **abort** — `Setup binding guard failed`, naming the missing count and up to five
+     example paths. This catches a worktree that bound to the correct repo but never actually populated
+     (e.g. a sparse-checkout that silently produced zero files).
+   All three guards log their verdict (pass or fail) even when they pass, so the transcript shows the
+   check ran rather than merely that nothing exploded.
+
 From here on, every Bash call in every later step is prefixed with `cd <runDir> &&` — shell state does
 not persist between calls.
 

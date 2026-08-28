@@ -183,6 +183,46 @@ value), tierPrefix (the TIER_PREFIX: value, "" when invoking at the repo root), 
   return result || null
 }
 
+// BINDING / BRAIN-ROOT / POPULATION GUARDS (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root,
+// task 4) — run immediately after the setup agent returns (after its setupError handling) and BEFORE the
+// enumerate/per-task stages, so a misbound or unpopulated checkout is caught before any task's implement
+// stage touches it. Same shape as verifyVaultCommit() above: the agent runs ONE fixed script and transcribes
+// its already-labelled output; the abort DECISION is made HERE IN JS, never left to the model's own
+// reasoning over labelled lines — verifyVaultCommit's comment above documents a cheap model reliably
+// skipping the else branch of multi-branch conditional prose, measured live. Neither this function nor its
+// callers know what a "brain root" IS in any project-specific sense: the BRAIN-ROOT GUARD below compares two
+// mechanical facts (brain.toml presence at two paths, both ordinary filesystem facts), never a
+// harness-check count and never a hardcoded path (see out_of_scope on the ticket).
+const SETUP_GUARD_SCHEMA = {
+  type: 'object',
+  required: ['gitCommonDir', 'brainTomlAtRun'],
+  properties: {
+    gitCommonDir:   { type: 'string', description: 'Absolute --git-common-dir from the GIT_COMMON_DIR: line' },
+    brainTomlAtRun: { type: 'boolean', description: 'true iff the BRAIN_TOML_AT_RUN: line reads "yes"' },
+    missingCount:   { type: 'integer', description: 'Worktree mode only: the MISSING_COUNT: integer (0 when the script was not asked to check population)' },
+    missingSample:  { type: 'array', items: { type: 'string' }, description: 'Worktree mode only: up to 5 example missing paths, split from the MISSING_SAMPLE: line on "|" with empty entries dropped' },
+    notes:          { type: 'string' }
+  }
+}
+async function verifySetupBinding(worktreePath, useWorktreeMode) {
+  // POPULATION GUARD only runs in worktree mode — a branch-mode run has no separate checkout to
+  // under-populate (worktreePath === repoRoot, already fully checked out).
+  const populationCmd = useWorktreeMode
+    ? ` && MISSING=$(${GIT} -C ${worktreePath} ls-files | while read -r p; do [ -e "${worktreePath}/$p" ] || echo "$p"; done); echo "MISSING_COUNT:$(printf '%s\\n' "$MISSING" | grep -c . || true)" && echo "MISSING_SAMPLE:$(printf '%s\\n' "$MISSING" | head -5 | tr '\\n' '|')"`
+    : ''
+  const script = `${GIT} -C ${worktreePath} rev-parse --path-format=absolute --git-common-dir | sed 's/^/GIT_COMMON_DIR:/' && { [ -f "${worktreePath}/brain.toml" ] && echo "BRAIN_TOML_AT_RUN:yes" || echo "BRAIN_TOML_AT_RUN:no"; }${populationCmd}`
+  const result = await agent(`
+Run this exact script from ${worktreePath} with Bash, verbatim, and transcribe its labelled output —
+do not reason about binding, brain roots, or population yourself, the script already produced the facts:
+\`\`\`
+${script}
+\`\`\`
+Return via StructuredOutput: gitCommonDir (the GIT_COMMON_DIR: value), brainTomlAtRun (true iff
+BRAIN_TOML_AT_RUN: is yes)${useWorktreeMode ? ', missingCount (the MISSING_COUNT: integer), missingSample (the MISSING_SAMPLE: value split on "|", empty entries dropped)' : ', missingCount (0), missingSample ([])'}.
+`, { label: 'verify-setup-binding', schema: SETUP_GUARD_SCHEMA, model: 'haiku' })
+  return result || null
+}
+
 // Vault-aware task commits (extends D46): the per-task implement/fix stage and the docs stage below
 // are instructed to stage + commit any planning/ paths they wrote THROUGH the vault repo (git -C
 // <vault.planningPath>), reusing detectPlanningVault's real path exactly like the wrap-up recipe
@@ -1323,6 +1363,33 @@ const { branchName, worktreePath } = setupResult
 state.branch = branchName
 state.worktree_path = worktreePath
 log(`${useWorktree ? 'Worktree' : 'Branch'} ready: ${worktreePath} (branch: ${branchName})`)
+
+// BINDING / BRAIN-ROOT / POPULATION GUARDS — run before any task work, before even the
+// enumerate stage. See verifySetupBinding() above for why the decision is made here in JS.
+const bindingCheck = await verifySetupBinding(worktreePath, useWorktree)
+if (!bindingCheck) {
+  log('verifySetupBinding agent returned null — aborting pipeline before any task runs')
+  return { error: 'Setup binding guard failed', reason: 'verification agent returned null', blockId }
+}
+if (!bindingCheck.gitCommonDir.startsWith(repoRoot)) {
+  log(`BINDING GUARD FAILED: run directory's git-common-dir (${bindingCheck.gitCommonDir}) does not resolve under the engine-resolved repoRoot (${repoRoot}) — aborting before any task runs`)
+  return { error: 'Setup binding guard failed', reason: `git-common-dir ${bindingCheck.gitCommonDir} does not resolve under repoRoot ${repoRoot}`, blockId }
+}
+log(`BINDING GUARD passed: git-common-dir (${bindingCheck.gitCommonDir}) resolves under repoRoot (${repoRoot})`)
+if (bindingCheck.brainTomlAtRun && !brainTomlAtRoot) {
+  log(`BRAIN-ROOT GUARD FAILED: run root (${worktreePath}) holds a brain.toml but the engine-resolved invocation root (${repoRoot}) did not — this run has adopted the brain root as its repo root — aborting before any task runs`)
+  return { error: 'Setup binding guard failed', reason: `brain.toml present at run root ${worktreePath} but absent at invocation root ${repoRoot}`, blockId }
+}
+log('BRAIN-ROOT GUARD passed: run root brain.toml presence matches the invocation root')
+if (useWorktree) {
+  const missingCount = bindingCheck.missingCount || 0
+  if (missingCount > 0) {
+    log(`POPULATION GUARD FAILED: ${missingCount} tracked path(s) missing on disk in worktree ${worktreePath} — examples: ${(bindingCheck.missingSample || []).join(', ') || '(none reported)'} — aborting before any task runs`)
+    return { error: 'Setup binding guard failed', reason: `${missingCount} tracked paths missing from worktree ${worktreePath}`, blockId }
+  }
+  log('POPULATION GUARD passed: every tracked path in the worktree index is present on disk')
+}
+
 if (useWorktree) {
   const envFilesCopied = setupResult.envFilesCopied || []
   log(envFilesCopied.length

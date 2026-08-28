@@ -428,6 +428,32 @@ The sparse-checkout worktree machinery (`trees/<spec>-task/`, `/init-worktree`, 
 is left intact in the codebase for when D81 lifts — D81 is a suspension with named lift conditions,
 not a removal — but it is unreachable through `/sdlc-task` while the moratorium stands.
 
+### Binding / brain-root / population guards (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root)
+
+Run immediately after the setup agent returns and before the enumerate/per-task stages — a
+misbound or unpopulated checkout must never reach a task's implement stage. All three compare
+against `repoRoot`, resolved once by `resolveRepoRoot()` before setup ever ran, never re-derived
+by any later stage:
+
+- **BINDING GUARD** — the run directory's `--git-common-dir` (absolute form) must resolve under
+  `repoRoot`. On mismatch the engine aborts with `Setup binding guard failed`, naming both the
+  run's git-common-dir and `repoRoot` — the check that catches a run silently adopting a different
+  repo (e.g. the brain root) than the one the engine resolved.
+- **BRAIN-ROOT GUARD** — if a `brain.toml` exists at the resolved run root but did not exist at the
+  invocation root, the engine aborts with `Setup binding guard failed`, naming both roots. The
+  signal is exactly this — brain.toml presence at two mechanical paths — never a harness-check
+  count and never a hardcoded path.
+- **POPULATION GUARD** (worktree mode only — dead code under the D81 moratorium, kept for when it
+  lifts) — every path in the worktree's `git ls-files` index must be present on disk; a missing
+  path aborts with `Setup binding guard failed`, naming the missing count and up to five example
+  paths. This is the guard against a worktree that bound to the correct repo but never actually
+  populated (the sparse-checkout-produced-zero-files symptom).
+
+All three guards run in-place too (in-place sets `runDir = repoRoot` from the same engine-resolved
+value, so it is subject to the same binding and brain-root checks; population is worktree-only by
+definition). Each guard logs its verdict, pass or fail, so the transcript shows the check ran
+rather than merely that nothing exploded.
+
 ---
 
 ## When to use it

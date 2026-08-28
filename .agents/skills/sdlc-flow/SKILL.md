@@ -135,6 +135,23 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
      sub-brain tier (e.g. `business/`) has its own `planning/` without being its own git repo. The
      ROOT always wins when a spec exists at both locations. If found at neither, abort and name BOTH
      paths you searched, not just one.
+   - **Binding / brain-root / population guards** (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root)
+     — run these BEFORE the D16 preflight lint below and before any task work, comparing against the
+     `repoRoot` you resolved at the top of this step (never re-derive it):
+     - **BINDING GUARD.** `runGitCommonDir = git -C <runDir> rev-parse --path-format=absolute
+       --git-common-dir`. If it does not resolve under `repoRoot`, abort — `Setup binding guard
+       failed`, naming both `runGitCommonDir` and `repoRoot`. This is the check that catches the
+       run silently adopting a different repo (e.g. the brain root) than the one it resolved.
+     - **BRAIN-ROOT GUARD.** If `<runDir>/brain.toml` exists but a `brain.toml` did NOT exist at the
+       invocation root, abort — `Setup binding guard failed`, naming both paths. Never identify a
+       brain root by counting harness checks or by a hardcoded path — brain.toml presence at the two
+       roots is the only signal.
+     - **POPULATION GUARD (worktree mode only — dead under the D81 moratorium, kept for when it
+       lifts).** Every path in `git -C <runDir> ls-files` must exist on disk at `<runDir>/<path>`; if
+       any are missing, abort — `Setup binding guard failed`, naming the missing count and up to
+       five example paths.
+     Log each guard's verdict, pass or fail — the transcript must show the check ran, not merely
+     that nothing exploded.
 2. **D16 preflight lint — do not guess the task structure.**
    - If the spec's `tasks.json` already exists, skip to task execution.
    - If it is missing but `tasks.md` has derivable step content, derive a FRESH `tasks.json` from
