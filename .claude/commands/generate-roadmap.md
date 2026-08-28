@@ -15,7 +15,9 @@ container that actually owns it — a per-block briefing goes in that block's ow
 `why` — the field the SDLC engines actually read; neither engine has ever opened a lane file), a
 hold goes in the lane record's own `held_until`, an intra-lane dependency goes in `state.json`'s
 `depends_on` on the block it gates, and an operator gate goes in an `operator` edge in
-`depends_on`, named in the roadmap's operator table. The lane record's own top-level `notes` field
+`depends_on`, named in the roadmap's operator table and cited as `OP.<slug>` — the flat
+identifier derived from the edge's own `slug`, never a second stored field (see
+`docs/state/state-schema.md`'s `OP.<slug>` section, the authority for the form). The lane record's own top-level `notes` field
 is the one deliberate exception — lane-level constraints and context, never a per-block briefing.
 See "`planning/roadmaps/<slug>/lane-<name>.json`" below for the full routing table.
 
@@ -299,7 +301,8 @@ operator speed.
 **Operator gates are edges too.** A block waiting on a DNS record or a human read-through is
 blocked exactly as hard as one waiting on a sibling repo, and the graph already models it — an
 `operator` edge in that block's own `depends_on`. Name every one in the operator table, with the
-block it gates; the lane record itself carries no gate prose, only the block ID, so `/orchestrate`
+block it gates, cited as `OP.<slug>` (`docs/state/state-schema.md`'s OP section is the authority
+for the form); the lane record itself carries no gate prose, only the block ID, so `/orchestrate`
 reads the hold from `state.json` where it actually lives. The two gates that will actually bite are
 worth calling out by name; in practice they are the ones that must happen mid-run and get deferred
 to deploy time instead.
@@ -663,7 +666,8 @@ Then check by hand:
 - [ ] Every cross-lane edge in the ASCII appears on the *waiting* lane's record (its `held_until` or
       the held block's own `depends_on` edge, per the routing table above).
 - [ ] Every operator gate names the block it gates, in the operator table and as an `operator` edge
-      on that block's own `state.json` record — never as lane-record prose.
+      on that block's own `state.json` record — never as lane-record prose. It is cited as
+      `OP.<slug>`, derived from the edge's own `slug` (`docs/state/state-schema.md`'s OP section).
 - [ ] **The crosswalk check above runs clean** — every ref in every `--from` source appears in the
       roadmap, or has a cut-list row.
 - [ ] **The reverse crosswalk check also runs clean** — every block ID named in a lane record
