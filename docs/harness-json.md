@@ -269,7 +269,7 @@ successful `mev emit-state --write`, so a project that wants that fallout commit
 Constraints, all mechanism the engine enforces regardless of what the command does:
 
 - **Absent means no-op.** No default value ships anywhere in this repo's harness config, and the
-  scaffold stub (`scaffold/planning/harness.json`) does not carry this key — a project that omits
+  scaffold stub ([`scaffold/planning/harness.json`](../scaffold/planning/harness.json)) does not carry this key — a project that omits
   it behaves exactly as if this key never existed.
 - **Never runs in worktree mode.** `mev emit-state --write` itself does not run there (the
   derivation step this key follows never fires), so the command is never invoked either.

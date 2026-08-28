@@ -226,7 +226,8 @@ branch's `focus.next` as stale until the merge step (`/clean-worktree`) has run
 `mev emit-state --write` on the base.
 
 **Optional post-emit commit hook** (`postEmitCommitCommand`,
-[BT.ticket.bookkeep-leaves-derived-output-uncommitted](../../planning/blocks/BT.ticket.bookkeep-leaves-derived-output-uncommitted.json)):
+`planning/blocks/BT.ticket.bookkeep-leaves-derived-output-uncommitted.json`, internal — `planning/`
+is a gitignored symlink and does not resolve for a public reader):
 after an in-place `mev emit-state --write` succeeds, bookkeep runs the shell command named by
 `planning/harness.json`'s optional `postEmitCommitCommand` key, if present — this is how a repo
 that wants the derived fallout (focus caches, wave tables, status boards) committed on close can
