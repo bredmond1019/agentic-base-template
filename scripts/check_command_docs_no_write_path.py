@@ -4,6 +4,14 @@ write-and-push wrappers -- `scripts/validate_brain.sh`, `scripts/emit_state_writ
 `scripts/routine.sh` -- rather than merely NAMING them in discussion
 (BT.ticket.validate-brain-is-a-write-and-push-path).
 
+SECOND RULE (BT.ticket.emit-state-write-needs-require-fresh): fail when a command or skill
+file INSTRUCTS `mev emit-state --write` without `--require-fresh`. A stale installed `mev`
+silently rewrites every derived surface in an OLDER format, and `--write` alone only WARNS
+on a toolchain-freshness Drift verdict -- `--require-fresh` promotes Drift to a hard failure
+with no write performed. This rule reuses the SAME instruct-vs-discuss shape test as the
+wrapper-script rule above (see `_full_line_invocation_re`) rather than inventing a second
+notion of what counts as an instruction.
+
 Dependency-free on purpose: `jsonschema` is not installed anywhere in this fleet.
 
 WHY THIS CHECK EXISTS: on a `primary` host, `validate_brain.sh` runs `emit-state --write`
@@ -73,24 +81,38 @@ _SCRIPT_ALT = "|".join(re.escape(s) for s in WRAPPER_SCRIPTS)
 
 # The WHOLE (trimmed) line must be nothing but the invocation: an optional list marker or
 # shell prompt, an optional wrapping backtick, an optional `./`/interpreter prefix, the
-# script name, zero or more flag-shaped args (`--foo`, `-x`), an optional closing
-# backtick, and then either end-of-line or a trailing shell comment. Free-form prose words
-# after the script name (as in a sentence discussing it) do not match this shape, so the
-# match fails and the line is correctly read as discussion, not instruction.
-_FULL_LINE_INVOCATION_RE = re.compile(
-    r"^(?:[-*>]\s*|\$\s*)?"                       # optional list marker or shell prompt
-    r"`?"                                          # optional opening backtick
-    r"(?:\./|bash\s+|sh\s+|python3?\s+)?"
+# verb, zero or more flag-shaped args (`--foo`, `-x`), an optional closing backtick, and
+# then either end-of-line or a trailing shell comment. Free-form prose words after the verb
+# (as in a sentence discussing it) do not match this shape, so the match fails and the line
+# is correctly read as discussion, not instruction. Shared by every rule in this checker --
+# see BT.ticket.emit-state-write-needs-require-fresh -- so no rule grows a second, drifting
+# notion of what counts as an instruction.
+def _full_line_invocation_re(verb_pattern: str) -> re.Pattern:
+    return re.compile(
+        r"^(?:[-*>]\s*|\$\s*)?"                    # optional list marker or shell prompt
+        r"`?"                                       # optional opening backtick
+        r"(?:\./|bash\s+|sh\s+|python3?\s+)?"
+        + verb_pattern +
+        r"(?:\s+--?[A-Za-z][\w-]*)*"                # optional flag-shaped args only
+        r"`?"                                        # optional closing backtick
+        r"\s*(?:#.*)?$"
+    )
+
+
+_FULL_LINE_INVOCATION_RE = _full_line_invocation_re(
     r"scripts/(?:" + _SCRIPT_ALT + r")\b"
-    r"(?:\s+--?[A-Za-z][\w-]*)*"                   # optional flag-shaped args only
-    r"`?"                                           # optional closing backtick
-    r"\s*(?:#.*)?$"
 )
 
 # A line is DISCUSSION, not instruction, whenever the script name is only PART of a
 # sentence -- prose before/after it on the same line, a markdown table cell, or an inline
 # code span mid-paragraph. Those simply fail to match the shape above (no explicit
 # allow-list needed): any word that isn't a flag or a trailing comment breaks the match.
+
+# Second rule's verb: `mev emit-state --write` without `--require-fresh`. Same shape test,
+# different verb pattern and a flag-presence check layered on top (rather than a fixed set
+# of allowed/forbidden flags) since any other flag may legitimately appear alongside it.
+_EMIT_STATE_FULL_LINE_RE = _full_line_invocation_re(r"mev\s+emit-state")
+_REQUIRE_FRESH_RE = re.compile(r"--require-fresh\b")
 
 
 def _table_row(line: str) -> bool:
@@ -116,6 +138,30 @@ def find_instructions(text: str, filename: str):
         # invocation there is even more clearly "presented as what to run".
         if _FULL_LINE_INVOCATION_RE.match(stripped):
             findings.append((i, raw_line))
+    return findings
+
+
+def find_missing_require_fresh(text: str, filename: str):
+    """Return a list of (line_no, line_text) where `text` INSTRUCTS `mev emit-state --write`
+    without also carrying `--require-fresh` (BT.ticket.emit-state-write-needs-require-fresh).
+    Uses the same instruct-vs-discuss shape test as `find_instructions` above -- a line only
+    counts if the WHOLE (trimmed) line is the invocation, not merely a sentence naming it."""
+    findings = []
+    in_fence = False
+    for i, raw_line in enumerate(text.splitlines(), start=1):
+        stripped = raw_line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if "emit-state" not in raw_line or "--write" not in raw_line:
+            continue
+        if _table_row(raw_line):
+            continue
+        if not _EMIT_STATE_FULL_LINE_RE.match(stripped):
+            continue
+        if _REQUIRE_FRESH_RE.search(stripped):
+            continue
+        findings.append((i, raw_line))
     return findings
 
 
@@ -155,6 +201,10 @@ def main(argv=None):
             findings_total += 1
             print(f"FAIL {path} line {line_no}: instructs execution of a write-and-push "
                   f"wrapper: {line_text.strip()!r}")
+        for line_no, line_text in find_missing_require_fresh(text, str(path)):
+            findings_total += 1
+            print(f"FAIL {path} line {line_no}: instructs `mev emit-state --write` without "
+                  f"--require-fresh: {line_text.strip()!r}")
 
     if not args.quiet and findings_total == 0:
         print(f"ok   {files_checked} file(s) checked, 0 write-path instructions found")
