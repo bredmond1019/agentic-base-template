@@ -343,6 +343,9 @@ each engine's committed state file — check the state JSON for real figures fro
 - **[roadmap-sweep.md](roadmap-sweep.md)** — runbook for `agentic-portfolio/scripts/roadmap_sweep.py`,
   the scripted liaison sweep: flags, the snapshot/diff/route pipeline, `--dry-run`, and escalation
   routing.
+- **[worktrees-in-rust-repos.md](worktrees-in-rust-repos.md)** — why a `path = "../<crate>"` Cargo
+  dependency cannot resolve from inside a worktree, and the `trees/` sibling-symlink convention
+  that fixes it.
 
 > A whole roadmap is driven **one repo (lane) at a time** by `/orchestrate` / `/begin-orchestration`
 > — an ordered block chain, sequential, one engine (`/sdlc-task` or `/sdlc-flow`, chosen per block)
