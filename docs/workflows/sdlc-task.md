@@ -476,6 +476,10 @@ repo's decision log, not part of this repo).
 | State commit | one final `chore:` sweep | per-phase-write commit shape on the throwaway branch |
 | When to use | every run by default | a change that genuinely needs quarantine from concurrent main-tree work |
 
+A Rust repo whose manifest uses `path = "../<crate>"` needs its `trees/` sibling symlinks present
+before a `--worktree` checkout is usable — see
+[`worktrees-in-rust-repos.md`](worktrees-in-rust-repos.md) for why and how to check.
+
 ### Binding / brain-root / population guards (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root)
 
 Run immediately after the setup agent returns and before the enumerate/per-task stages — a

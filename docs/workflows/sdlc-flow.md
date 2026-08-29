@@ -63,6 +63,10 @@ needs quarantine.
 
 In branch mode the "worktree path" the engine reports is simply the repo root.
 
+A Rust repo whose manifest uses `path = "../<crate>"` needs its `trees/` sibling symlinks present
+before a `--worktree` checkout is usable — see
+[`worktrees-in-rust-repos.md`](worktrees-in-rust-repos.md) for why and how to check.
+
 ### Binding / brain-root / population guards (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root)
 
 Run immediately after the setup agent returns and before the enumerate/per-task stages — a
