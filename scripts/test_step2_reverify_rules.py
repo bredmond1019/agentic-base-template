@@ -58,11 +58,16 @@ CONTROL_PHRASES = [
     "workflows/scripts",
 ]
 
-# --- Assertion B: same-code-path requirement, cited (not restated) via /generate-master-plan ---
+# --- Assertion B: same-code-path requirement, cited (not restated) at its REAL home ------------
+# The rule lives in HQ CLAUDE.md standing rule 11, amended by
+# BT.ticket.positive-control-must-take-the-same-code-path, with its enforceable form in
+# scripts/check_command_hazards.py's H1_FIX. It is NOT in /generate-master-plan -- that file
+# contains the phrase "same code path" in an unrelated sentence about `/plan --founding`, which is
+# precisely the false-positive grep hit that put the wrong citation here in the first place.
 SAME_CODE_PATH_PHRASES = [
     "same code path",
 ]
-GENERATE_MASTER_PLAN_CITATION = "/generate-master-plan"
+GENERATE_MASTER_PLAN_CITATION = "check_command_hazards"
 
 # --- Assertion C: lane-record isolation override rule, both branches ---------------------------
 LANE_RECORD_PHRASES = [

@@ -159,9 +159,12 @@ one caveat that had since changed and planned a block on it — this is the same
 this step is its equivalent for isolation decisions and carryovers.
 
 **A re-verification control must exercise the same code path the system actually takes**, not an
-equivalent-looking one — see `/generate-master-plan` for the rule's full statement and the
-measured failure (five lanes ran a positive control on 2026-08-23 down a path the engine never
-takes) that earned it; it is cited here, not restated.
+equivalent-looking one — the rule is HQ `CLAUDE.md` standing rule 11 as amended by
+`BT.ticket.positive-control-must-take-the-same-code-path`, and its enforceable form is
+`scripts/check_command_hazards.py`'s `H1_FIX` ("a control must run the SAME tool as the claim it
+licenses, not a substitute that happens to sound related"). It is cited here, not restated. The
+measured failure that earned it: five lanes ran a positive control on 2026-08-23 and all five ran
+it down a path the engine never takes.
 
 **A lane record's own `isolation` field is not exempt from re-verification.** When a lane record
 carries an `isolation` value that differs from the table's row for this repo, the lane must do one
