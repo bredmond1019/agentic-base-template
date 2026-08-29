@@ -102,6 +102,22 @@ flowchart TD
 stuck triage verdict, the engine commits the current state and exits cleanly with a `FAIL`
 status.
 
+### `expect_red` — a task whose deliverable is a deliberately-failing test (D68)
+
+A task in `tasks.json` may carry `"expect_red": ["<command>", ...]` — one or more commands
+that MUST also appear in that same task's own `validation_commands`. This exists for the D68
+shape: a task whose declared deliverable is a test *observed failing* (e.g. writing a fixture
+against the unmodified code, per D68's own discipline) can never close under the ordinary rule,
+where any non-zero exit fails the task. Each named command has its verdict **inverted** —
+it **passes on a non-zero exit** and **fails on exit 0** — while every other check on that
+task's list (including every project-wide `gates:true` harness check) is judged normally.
+
+The boundary is enforced in the engine, not only documented: `expect_red` is scoped strictly to
+a task's own `validation_commands`. An entry naming a command absent from that list is rejected
+at enumerate time as a hard spec error (`ABORTED (spec error)`), never silently ignored — this is
+what stops `expect_red` from ever becoming a way to invert or skip a harness gating check. A
+task with no `expect_red` is unaffected; the field is optional and additive.
+
 ---
 
 ## D16 preflight — derive, then abort
