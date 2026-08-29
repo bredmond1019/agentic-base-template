@@ -149,6 +149,12 @@ In detail:
 2. **Engine** — [`/sdlc-task`](sdlc-task.md) (small change) or [`/sdlc-flow`](sdlc-flow.md) (a whole spec), as a background workflow. Spec prep for later blocks
    may overlap; **engine runs are strictly serial** — one repo, one engine at a time.
 3. **Integrate** — merge/clean the worktree; resolve conflicts toward the incoming block's intent.
+   Under `--auto-merge`, the `sdlc-flow` merge stage now waits for required checks to finish and
+   readies a draft PR before it attempts the merge, so the flag no longer reports a merge that
+   never happened. A non-merge names which of the two preconditions failed — a check came back
+   failing, versus the attempt was made before checks finished — because the remedies differ. This
+   exists because `--auto-merge` failed to merge on six consecutive mev blocks over 2026-08-27/28,
+   all six merged by hand afterward.
 4. **Verify the state write** — engine status bookkeeping is known-unreliable. Check `state.json`
    and `status.md` yourself; do not trust the engine's report.
 5. **Log** — one line to `<roadmap_dir>/lane-log.jsonl`, committed.
