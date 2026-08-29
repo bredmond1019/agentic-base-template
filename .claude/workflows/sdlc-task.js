@@ -1510,6 +1510,14 @@ if (taskCheckMap.size) {
 // warning. BOUNDARY (D68): expect_red can never touch a project-wide gates:true harness check — it
 // is scoped strictly to that task's own validation_commands, so it can never invert or suppress a
 // harness check; gatingChecks() below computes the harness gating set and never consults this map.
+//
+// NOTE: this block sits ABOVE the manifest-pinned isolation-and-branch-naming /
+// triage-bail-taxonomy / bookkeep-vault-commit anchor line ranges scripts/skill_sync_manifest.json
+// and scripts/engine_docs_sync_manifest.json pin — inserting it here shifts every one of those
+// ranges even though none of their described behavior changed. That is expected (see this ticket's
+// task 4 description) and is fixed by re-reading the anchor content against the guide/docs, then
+// `python3 scripts/check_skill_sync.py --update` and `python3 scripts/check_engine_docs_sync.py
+// --update` — never by moving this block to dodge the shift.
 const taskExpectRedMap = new Map()
 for (const er of (enumResult.taskExpectRed || [])) {
   if (!er || !Number.isInteger(er.taskId) || !Array.isArray(er.commands) || !er.commands.length) continue
