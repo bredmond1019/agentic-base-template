@@ -12,6 +12,54 @@ related: [base-template-docs-index, D5-okf-phase-2-adopted]
 
 # base-template architecture
 
+Why the template is shaped the way it is — and which half of it your change belongs in.
+
+## What this page is for
+
+Every design rule in this repo comes from one idea: **the harness ships mechanism, the project
+supplies the facts.** If you understand where that line runs, you know where any new file goes,
+why a stack default in an engine is a bug, and why renaming `status.md` is a lockstep change
+rather than a tidy-up.
+
+Read this before changing anything in `.claude/` or `scaffold/`. To *use* the template instead of
+modify it, go to [using-the-template.md](using-the-template.md).
+
+## Quickstart
+
+See the split for yourself, in a **terminal** at the repo root:
+
+```
+ls .claude/ .agents/        # the harness  — copied verbatim into every project
+ls scaffold/                # the scaffold — copied and token-substituted
+ls docs/ planning/ log.md   # template meta — never copied anywhere
+```
+
+The rule that follows from those three lines: **a project fact in `.claude/` is a bug**, and a
+hardcoded project name in `scaffold/` is a bug. Everything below explains why.
+
+## The shape
+
+```mermaid
+flowchart LR
+    H[".claude/ + .agents/<br/>the harness"] -->|copied verbatim| P["a new project"]
+    S["scaffold/<br/>tokenized docs"] -->|copied + tokens substituted| P
+    M["docs/ planning/ log.md<br/>template meta"] -.->|never copied| X["(stays here)"]
+    P --> C["planning/harness.json<br/>the project's own facts"]
+    C -->|read at run time| H
+```
+
+In sentences:
+
+1. `.claude/` and `.agents/` are copied into the new project **byte for byte** — same pipeline
+   everywhere, which is why documenting the engines anywhere but here would drift.
+2. `scaffold/`'s contents are copied to the project root with every `{{TOKEN}}` substituted.
+3. The template's own `docs/`, `planning/`, `log.md`, `CLAUDE.md` and `README.md` are **never**
+   copied — they are the factory's records, not a new project's.
+4. The project writes its own facts into `planning/harness.json`, and the harness reads them at
+   run time. That file is the entire seam between mechanism and policy.
+
+**The step you personally do is 4.** The other three happen inside `/new-project`.
+
 ## The two halves
 
 Every new project gets exactly two things from this template, copied verbatim:

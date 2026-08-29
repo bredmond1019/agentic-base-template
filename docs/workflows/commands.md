@@ -27,6 +27,28 @@ number = scope to task N; omit for the full spec — use the **same N** througho
 
 ---
 
+## Quickstart
+
+One spec, driven by hand, with a checkpoint between every stage. All **Claude Code slash
+commands**:
+
+```
+/generate-tasks my-feature                     # write planning/my-feature/tasks.md
+/implement      planning/my-feature/tasks.md
+/test           planning/my-feature/tasks.md
+/review-task    planning/my-feature/tasks.md
+/fix            planning/my-feature/tasks.md   # only if FAIL or PARTIAL — then re-test, re-review
+/document       planning/my-feature/tasks.md   # gated on a PASS verdict
+/log-work
+```
+
+Add a trailing number to scope any Phase-2-onward step to one task: `/implement
+planning/my-feature/tasks.md 3`. **Use the same number throughout** — it scopes the
+`sdlc/state.json` entry and the worklog section too.
+
+The equivalent automated run is one line: `/sdlc-flow my-feature`. Use the manual path when you
+want to inspect `sdlc/worklog.md` between stages or cherry-pick which ones run.
+
 ## Lifecycle
 
 ```mermaid
@@ -145,7 +167,7 @@ that [`/sdlc-task`](sdlc-task.md) and `/orchestrate` automate.
 - **`/clean-worktree <branch>`** — **merge before delete**: fast-forward the branch into `main`, apply the
   deferred `status.md`/`log.md` updates from the task log, run `mev emit-state --write` to regenerate
   derived surfaces from any `planning/state.json` block-status flip the branch carried
-  ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)), then remove the
+  (D50 (`planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md`)), then remove the
   worktree and branch.
 
 ---

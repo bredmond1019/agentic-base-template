@@ -30,6 +30,33 @@ JSON schema or enum file consumers can literally `import`) is ever needed instea
 it would need its own sync path added to `sync_downstream_harness.py` first; none exists today, so
 none is claimed here.
 
+## What this page is for
+
+You are writing something that **reads** an SDLC run-state file — a dashboard, `mev emit-state`,
+a `bastion` status surface — and you need to know exactly which `status` values can appear and
+what each one obliges you to do. Three values, and the third is the one people get wrong.
+
+## Quickstart
+
+In a **terminal**, look at a real run-state file:
+
+```
+cat planning/<spec-slug>/sdlc/sdlc-task-state.json | python3 -m json.tool | head -20
+```
+
+Then pin the vocabulary at your point of consumption:
+
+| Value | Means | A consumer must not |
+|---|---|---|
+| `done` | Every task passed and the run closed cleanly. | — |
+| `blocked` | The run bailed; work is incomplete. | Treat as failure-free. |
+| `reconcile_failed` | Every task passed, but the terminal authoritative check did not. `sdlc-task` only. | **Fold into `done`.** The work is not verified. |
+
+The full table with the reasoning is [Terminal vocabulary](#terminal-vocabulary) below. There is
+no automatic sync path for this file, so a consumer in another repo hard-codes the three values
+and cites this page in a comment — see the note under
+[Practical guidance for a consumer](#practical-guidance-for-a-consumer).
+
 ## Run-state files and their `status` field
 
 Two engines write a committed top-level `status` field to a run-state file.
@@ -72,5 +99,5 @@ sentence" surface D56's follow-up was missing).
 
 - [`docs/workflows/sdlc-task.md`](workflows/sdlc-task.md) — the reconcile mechanism itself (why it
   exists, its cost, the recovery path); points here for the vocabulary rather than restating it.
-- [D56](../planning/decisions/D56-sdlc-task-authoritative-reconcile.md) — the design rationale for
+- D56 (`planning/decisions/D56-sdlc-task-authoritative-reconcile.md`) — the design rationale for
   the terminal reconcile and the original (prose-only) statement of this follow-up.

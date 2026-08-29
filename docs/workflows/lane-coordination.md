@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [lane coordination, registry, lease, message queue, commander, FLEET_LOCK_DIR, roadmap sweep]
-related: [base-template-workflows-index, base-template-orchestration-guide, plan-lane-coordination, base-template-docs-index]
+related: [base-template-workflows-index, base-template-orchestration-guide, base-template-docs-index]
 ---
 
 # Lane coordination — the operator's guide to the layer under orchestration
@@ -66,7 +66,7 @@ defines it — this page explains, it does not restate.
 | **Ping contract** | Keeps a fast informal channel from replacing the durable one: every claim is written to disk *and* sent, and every received claim is verified before being acted on. | [`ping-agent/SKILL.md`](../../.claude/skills/ping-agent/SKILL.md) |
 | **Commander** | Nothing swept the queue or re-derived generated surfaces without a human doing it by hand. | [`orchestration-commander.md`](../../.claude/commands/orchestration-commander.md) |
 
-Design rationale and deliberate cuts: [`planning/lane-coordination/plan.md`](../../planning/lane-coordination/plan.md).
+Design rationale and deliberate cuts: `planning/archive/lane-coordination/plan.md`.
 
 ---
 
@@ -249,4 +249,4 @@ Start from the symptom you can see.
 - [`orchestration-commander.md`](../../.claude/commands/orchestration-commander.md) — the six-step drain.
 - [`roadmap-sweep.md`](roadmap-sweep.md) — the sweep's runbook: flags, snapshot shape, routing table.
 - `agentic-portfolio/scripts/roadmap_sweep.py` — the sweep script itself (HQ repo).
-- [`planning/lane-coordination/plan.md`](../../planning/lane-coordination/plan.md) — design, `BT.6.A`–`BT.6.E`.
+- `planning/archive/lane-coordination/plan.md` — design, `BT.6.A`–`BT.6.E`.

@@ -25,6 +25,32 @@ base-template's own D57 is a different decision, the orchestration-run artifact 
 
 ---
 
+## What this page is for
+
+An SDLC run in a Rust repo has grown from minutes to tens of minutes and you want it back. Or you
+are setting up a new Rust project and would rather not earn that problem. The whole playbook is
+four fixes, and picking the right one depends entirely on the four numbers in section 1 — so
+measure before you touch anything.
+
+## Quickstart
+
+In a **terminal**, at the Rust repo root. These four numbers are the diagnosis:
+
+```
+du -sh target target/debug/incremental   # a rotten target/ is often the whole answer (see 4b)
+cargo check --workspace --all-targets     # warm the tree so you measure steady state
+time cargo nextest run --workspace        # the end-gate cost
+ls */tests/*.rs | wc -l                   # one integration-test binary per crate is the goal
+```
+
+Then compare the **build** line cargo prints against the **run** line nextest prints. The full
+measurement recipe — including the two clippy forms and the per-task tripwire — is
+[section 1](#1-measure-first--the-ratio-is-the-whole-diagnosis).
+
+**Link time dominating test time is the normal finding**, and it points at fix 1 (one
+integration-test binary per crate) before anything else. Jump to
+[section 8](#8-checklist-for-a-new-rust-repo) for the new-repo checklist.
+
 ## 1. Measure first — the ratio is the whole diagnosis
 
 Before changing anything, get these four numbers. They take ten minutes and they decide everything
@@ -270,7 +296,7 @@ matters more.
   blocks shipped green over real lint violations (`mev`, `okf-core`, 2026-08-03) — is a separate,
   more expensive form: measured on `engine-rs` at ~9.61s warm vs. the narrow form's ~2.89s, a ~3.3x
   multiplier (~6.72s / ~26% of the 26s tripwire if it replaced the narrow form outright). Per
-  [D55](../planning/decisions/D55-all-targets-clippy-placement.md),
+  D55 (`planning/decisions/D55-all-targets-clippy-placement.md`),
   the wide form goes in the authoritative `command` only (end-of-flow review); the narrow form
   keeps its `fastCommand` seat in the per-task tripwire, so this bullet's original number and
   conclusion still hold for the tripwire specifically — revisit only if the narrow form itself

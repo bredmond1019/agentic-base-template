@@ -207,9 +207,11 @@ base-template/
 │   ├── CLAUDE.md  README.md  log.md
 │   └── planning/          ← context.md, status.md, master-plan.md, harness.json stub, decisions/
 ├── docs/
+│   ├── capabilities.md         ← everything you can run, one line each, and how to invoke it
 │   ├── using-the-template.md   ← full generate → configure → run walkthrough
 │   ├── architecture.md         ← the harness/scaffold split, OKF naming conventions
 │   ├── harness-json.md         ← planning/harness.json config reference + stack profiles
+│   ├── gates.md                ← the 52 checks this repo runs on itself
 │   ├── ci.md                   ← hosted CI for public repos scaffolded from this template
 │   └── workflows/              ← engine + orchestration reference (start at index.md)
 ├── planning/               ← this repo's own planning (see note below — not in the public clone)
@@ -223,6 +225,7 @@ base-template/
 | [`.claude/commands/README.md`](.claude/commands/README.md) | The full command catalog — every phase, every flag |
 | [`.claude/workflows/`](.claude/workflows/) | `sdlc-task.js`, `sdlc-flow.js`, and the JSON schemas they/other tooling validate against |
 | [`scaffold/`](scaffold/) | What a new project actually gets (see [below](#what-a-new-project-gets)) |
+| [`docs/capabilities.md`](docs/capabilities.md) | The capability catalogue — every command, engine, skill, script and gate, with how to run it |
 | [`docs/index.md`](docs/index.md) | Navigation for everything under `docs/` |
 | [`docs/workflows/index.md`](docs/workflows/index.md) | The engine/orchestration reference hub — vocabulary table, diagrams, token usage |
 | `planning/harness.json` | This repo's own pipeline config (dogfooded — parses its own two engines) |

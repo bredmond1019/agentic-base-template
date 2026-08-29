@@ -28,6 +28,25 @@ slash-command lifecycle they automate.
 
 ---
 
+## Quickstart
+
+Pick the smallest rung that fits the work. All **Claude Code slash commands**:
+
+| The work | Type this |
+|---|---|
+| A hotfix or docs-only change | `/patch <description>` |
+| One small unit of behaviour change | `/sdlc-task <spec-slug>` |
+| A real feature, many moving parts | `/sdlc-flow <spec-slug>` |
+| An ordered chain of blocks | `/orchestrate <block-id ...>` |
+| One lane of a multi-repo roadmap | `/begin-orchestration --roadmap <path> --lane <name>` |
+
+Each needs a spec on disk first — `/ticket`, `/chore` or `/plan`, then `/generate-tasks`. The
+ladder and its rationale is [The pipeline ladder](#the-pipeline-ladder); every command in the
+repo is catalogued in [`../capabilities.md`](../capabilities.md).
+
+Unfamiliar with **spec**, **block**, **lane** or **engine**? [Vocabulary](#vocabulary) defines
+each one, and every page here links back to it.
+
 ## The system in one picture
 
 If you have never run any of this, read this section and nothing else. It is the whole model.
@@ -93,7 +112,7 @@ Terms used everywhere in these docs. Skim once; come back when a word stops maki
 | **Lane record** | The JSON file naming a lane's blocks: `<roadmap-dir>/lane-<name>.json` ([schema](../../.claude/workflows/lane.schema.json)). |
 | **Chain** | The ordered blocks a lane will work through. |
 | **Engine** | The automation that writes code for one block — [`/sdlc-task`](sdlc-task.md) (small) or [`/sdlc-flow`](sdlc-flow.md) (a whole spec). |
-| **Spec** | The instructions for one block: `planning/blocks/<ID>.json` + `planning/<ID>/tasks.json`. Written by [`/generate-tasks`](../../.claude/commands/generate-tasks.md); see [D65](../../planning/decisions/D65-block-record-is-the-planning-unit.md). |
+| **Spec** | The instructions for one block: `planning/blocks/<ID>.json` + `planning/<ID>/tasks.json`. Written by [`/generate-tasks`](../../.claude/commands/generate-tasks.md); see D65 (`planning/decisions/D65-block-record-is-the-planning-unit.md`). |
 | **Gate** | A check that must pass — tests, lint, build, `validate-brain`. A "red gate" is a failing one. |
 | **Worktree** | A second checkout of the same repo in a separate folder, so two pieces of work don't collide. |
 | **Lease** | A claim that says "this lane is using this repo right now, keep out." ([schema](../../.claude/workflows/lease.schema.json), [guide](lane-coordination.md)) |
@@ -222,8 +241,8 @@ disk rather than git history.
 |---|---|---|
 | `sdlc/state.json` (`tasks["<N>"]` entries) | implement, test, fix, review-task, document — each command only touches the fields/tasks it owns | every later stage on the same spec; `/fix` gates on `review.verdict` |
 | `sdlc/worklog.md` (`## Task <N> — <STAGE>` sections; `/fix` appends a `FIX PASS <k>` section per pass rather than overwriting) | implement, test, fix, review-task, document | human-readable run trail for the next stage or a resuming operator |
-| `sdlc-flow-state.json` | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | `--resume`, end-review localization, PR body — **committed** |
-| `worklog.md` (flow-scoped) | `/sdlc-flow` state-writer ([D31](../../planning/decisions/D31-committed-authoritative-state.md)) | human-readable run trail — **committed** |
+| `sdlc-flow-state.json` | `/sdlc-flow` state-writer (D31 (`planning/decisions/D31-committed-authoritative-state.md`)) | `--resume`, end-review localization, PR body — **committed** |
+| `worklog.md` (flow-scoped) | `/sdlc-flow` state-writer (D31 (`planning/decisions/D31-committed-authoritative-state.md`)) | human-readable run trail — **committed** |
 
 ### The two hard gates
 1. **Review gates Document** — `/document` refuses to run unless the review verdict is `PASS`.
@@ -301,7 +320,7 @@ each engine's committed state file — check the state JSON for real figures fro
 
 > **Token roll-up note:** all engines record **substantive-stages-only** totals — cheap Haiku helper
 > agents (state writers, enumerate, update-task) are excluded. See
-> [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md).
+> D37 (`planning/decisions/D37-unified-committed-state-and-telemetry.md`).
 
 ---
 
@@ -335,4 +354,4 @@ each engine's committed state file — check the state JSON for real figures fro
 
 - [harness-json.md](../harness-json.md) — the `planning/harness.json` config the engines read.
 - [`.claude/commands/README.md`](../../.claude/commands/README.md) — the command catalog.
-- [`planning/decisions/`](../../planning/decisions/index.md) — the ADRs behind each behavior (D6–D43).
+- `planning/decisions/` (`planning/decisions/index.md`) — the ADRs behind each behavior (D6–D43).

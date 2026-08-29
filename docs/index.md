@@ -1,54 +1,61 @@
 ---
 type: Index
 title: docs/ — base-template documentation
-description: Navigation guide for the base-template documentation folder.
+description: Navigation guide for the base-template documentation folder, grouped by what you are trying to do.
 doc_id: base-template-docs-index
 layer: [factory]
 project: base-template
 status: active
 keywords: [docs, documentation, navigation, architecture, workflows, harness]
-related: [base-template-architecture, using-the-template, harness-json, base-template-workflows-index, base-template-ci]
+related: [base-template-capabilities, base-template-architecture, using-the-template, harness-json, base-template-workflows-index, base-template-gates, base-template-ci]
 ---
 
 # docs/ — base-template documentation
 
-User-facing documentation for the `base-template` software factory. Read these when you want
-to understand how to use the template, not when you want to know how it is structured (that's
-`README.md` + `CLAUDE.md`).
+How to use and extend the `base-template` software factory. For how the repo is *structured*,
+read `README.md` and `CLAUDE.md` instead.
 
-| File | What it covers | Read it when… |
-|---|---|---|
-| [architecture.md](architecture.md) | How the two halves work, the OKF conventions, the mechanism/policy split | You want to understand *why* the template is designed the way it is |
-| [using-the-template.md](using-the-template.md) | Generate → configure → first pipeline run, step by step | You are creating a new project or setting up an existing one |
-| [harness-json.md](harness-json.md) | `planning/harness.json` config reference + all three stack profiles | You are configuring validation commands or the UI-test stage |
-| [harness.md](harness.md) | Gated-check verdict scoping for fleet-shared data — a check's verdict scopes to this repo's own subtree while the scan and reporting stay fleet-wide (Test-stage counterpart of D64) | You are writing or reviewing a gated check that reads data another lane can also write |
-| [rust-sdlc-iteration-speed.md](rust-sdlc-iteration-speed.md) | Why agent-driven Rust pipelines get slow (linking, not testing) and the four measured fixes — one integration-test binary, nextest, no sccache, `[profile.dev]` — plus per-task `validation_commands` | An SDLC run in a Rust repo is taking tens of minutes, or you are setting up a new Rust project |
-| [ci.md](ci.md) | Hosted CI for public repos — the four reusable gate workflows, how a repo opts in, the `actionlint` → `act` → push loop, and the Deviations table | You are wiring up or debugging a public repo's `.github/workflows/ci.yml` |
-| [workflows/](workflows/index.md) | The SDLC engines (`/sdlc-task`, `/sdlc-flow`) + the manual command lifecycle — parameters, flags, mermaid flow diagrams, gates, token usage | You want to understand or run any SDLC pipeline |
-| [data-contract.md](data-contract.md) | The complete, enumerable vocabulary of terminal `status` values the SDLC engines write into their committed run-state files (`done`, `blocked`, `reconcile_failed`) — what each means and what a consumer must not fold it into | You are building or auditing a consumer (dashboard, `mev emit-state`, `bastion` status/serve surface) that reads an SDLC run-state file's `status` field |
+## Start here
 
-## SDLC workflow reference
+| Page | Read it when |
+|---|---|
+| [capabilities.md](capabilities.md) | You want the list of everything you can run, and how to invoke it |
+| [workflows/index.md](workflows/index.md) | You need the vocabulary and the pipeline ladder |
+| [using-the-template.md](using-the-template.md) | You are creating a new project, or pulling harness updates into one |
 
-The [`workflows/`](workflows/index.md) subfolder is the canonical reference for the automated pipelines
-— authored and evolved here, copied verbatim into every generated project:
+## Running work
 
 | Page | Covers |
 |---|---|
-| [workflows/index.md](workflows/index.md) | Hub: the two engines compared, shared concepts (reports, gates, model tiering), token overview |
-| [workflows/sdlc-task.md](workflows/sdlc-task.md) | Lean single-unit engine (D38) — implement→test→fix→commit, in-place or `--worktree`, pairs with `/chore`/`/ticket` |
-| [workflows/sdlc-flow.md](workflows/sdlc-flow.md) | Shared-worktree feature engine (D30–D33) — sequential tasks, per-task test→fix, one end review, PR wrap-up |
-| [workflows/commands.md](workflows/commands.md) | The manual Phase 1–7 command lifecycle the engines automate |
-| [workflows/orchestration-runbook.md](workflows/orchestration-runbook.md) | **Start here for the whole system** — what an orchestration is, roadmap vs single-repo scope, starting one lane and several, the system diagram, what-triggers-what, attaching to a woken tmux session, whole-system troubleshooting |
-| [workflows/orchestration.md](workflows/orchestration.md) | The lane lifecycle — what a lane is, the phases from `/begin-orchestration` through the terminal `review.md`, the mandatory artifacts, and the traps |
-| [workflows/lane-coordination.md](workflows/lane-coordination.md) | The operator's guide to the layer underneath a lane — registry, leases, message queue, ping contract, commander: setup, cold-start walkthrough, troubleshooting |
-| [workflows/roadmap-sweep.md](workflows/roadmap-sweep.md) | Runbook for the scripted mid-run check that replaced the full-time liaison — snapshot, diff, and wake an agent only on real change; `--dry-run` first, live side effects otherwise |
-| **Authoring docs like this one** | The `write-repo-doc` skill (`.claude/skills/write-repo-doc/SKILL.md`) — quickstart-first structure, plain-English section openers, vocabulary rules, inline linking, and when to draw a diagram | You are writing or rewriting any doc in this folder, or a doc reads as dense/reference-only |
+| [workflows/orchestration-runbook.md](workflows/orchestration-runbook.md) | The whole orchestration system — one lane, several lanes, monitoring, troubleshooting |
+| [workflows/orchestration.md](workflows/orchestration.md) | The lane lifecycle, its mandatory artifacts, and the traps |
+| [workflows/sdlc-task.md](workflows/sdlc-task.md) | The lean engine: implement → test → fix → commit |
+| [workflows/sdlc-flow.md](workflows/sdlc-flow.md) | The feature engine: sequential tasks, one review, a PR |
+| [workflows/commands.md](workflows/commands.md) | Driving the same pipeline by hand, stage by stage |
+| [workflows/lane-coordination.md](workflows/lane-coordination.md) | The layer under a lane: registry, leases, message queue, commander |
+| [workflows/roadmap-sweep.md](workflows/roadmap-sweep.md) | The scripted mid-run check that wakes an agent only on real change |
+
+## Configuring a project
+
+| Page | Covers |
+|---|---|
+| [harness-json.md](harness-json.md) | `planning/harness.json` — validation commands, the UI-test stage, all three stack profiles |
+| [gates.md](gates.md) | The 52 checks base-template runs on itself, and what each protects |
+| [harness.md](harness.md) | Writing a check over fleet-shared data: scan wide, report wide, fail narrow |
+| [ci.md](ci.md) | Hosted CI for public repos — the four reusable workflows and the `actionlint` → `act` → push loop |
+| [rust-sdlc-iteration-speed.md](rust-sdlc-iteration-speed.md) | A Rust pipeline gone slow: measure the link/test ratio, then four fixes |
+
+## Extending the factory
+
+| Page | Covers |
+|---|---|
+| [architecture.md](architecture.md) | The harness/scaffold split, the OKF conventions, mechanism vs policy |
+| [data-contract.md](data-contract.md) | The three terminal `status` values a run-state consumer must handle |
+| `.claude/skills/write-repo-doc/SKILL.md` | The standard every page in this folder is written to |
 
 ## Quick pointers
 
-- **Commands reference:** `.claude/commands/README.md` — all commands, the pipeline
-  flow, `/orchestrate`.
-- **Architectural decisions:** `planning/decisions/` — the append-only ADR log (D1–D70).
-- **Change history:** `log.md` — dated entries for every factory change.
-- **Why OKF Phase 2 happened:** `planning/decisions/D5-okf-phase-2-adopted.md` — the
-  mechanism/policy split, schema, and MVP scope calls.
+- **Every command's full parameters:** [`.claude/commands/README.md`](../.claude/commands/README.md)
+- **Architectural decisions:** `planning/decisions/` — the append-only ADR log
+- **Change history:** `log.md`
+- **Why the mechanism/policy split exists:** D5 (`planning/decisions/D5-okf-phase-2-adopted.md`)

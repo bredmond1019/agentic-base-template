@@ -21,6 +21,25 @@ Compared with `/sdlc-task`, `/sdlc-flow` trades per-task independence for a sing
 review over the integrated tree, a docs patch, and a PR as the terminal step rather than a bare
 commit.
 
+## Quickstart
+
+A **Claude Code slash command** — type it into a Claude Code session, not a terminal.
+
+```
+/sdlc-flow my-feature                 # every task in planning/my-feature/, ending in a PR
+/sdlc-flow my-feature 1-3             # just tasks 1 through 3
+/sdlc-flow my-feature --resume        # re-attach the branch, skip tasks already passed
+```
+
+| Must exist first | If it doesn't |
+|---|---|
+| `planning/my-feature/tasks.md` (and ideally `tasks.json`) | Run `/generate-tasks`. The engine derives `tasks.json` from `tasks.md` rather than bailing. |
+| A configured `planning/harness.json` | See `docs/harness-json.md` — with no config the engine falls back to the spec's `## Validation Commands`. |
+| A clean working tree | Commit or stash. A fresh run refuses to start dirty. |
+
+Every flag is in [Usage](#usage). The two decisions worth making before you start are **isolation**
+(next section) and **`--test-depth`** (default `fast`, which runs only `gates: true` checks per task).
+
 ## Isolation mode — branch by default, `--worktree` for true isolation
 
 By **default**, `/sdlc-flow` creates the `<spec>-flow` branch and checks it out **in the main working
@@ -35,7 +54,7 @@ The moratorium was lifted after `BT.ticket.worktree-smoke-fixture` verified a re
 run end to end and confirmed the guards added during the suspension hold: the binding/brain-root/
 population guards below, `renderCommitSafetyGuard()` (refuses to commit an empty tree against a
 non-empty HEAD), and the post-commit work assertion (D81 lift condition 2 —
-[BT.ticket.a-run-must-prove-its-commits-contain-the-work](../../planning/blocks/BT.ticket.a-run-must-prove-its-commits-contain-the-work.json)).
+BT.ticket.a-run-must-prove-its-commits-contain-the-work (`planning/blocks/BT.ticket.a-run-must-prove-its-commits-contain-the-work.json`)).
 Full incident record: `agentic-portfolio/docs/decisions/D81-worktree-moratorium.md` (a sibling
 repo's decision log, not part of this repo). `/orchestrate` lanes still default to plain branches
 (cheaper, and a worktree never protected a running chain from its own mid-chain engine edits — see
@@ -137,12 +156,12 @@ flowchart TD
 | **update-task** | haiku | Marks the current task in-progress in `tasks.md` (surgical checkbox edit). Disk-only, like the state-writer — neither commits. |
 | **Implement** | sonnet | Executes task N against the spec (and `breakdown.md` if present). Runs the D8 completeness self-check before committing `feat:`. |
 | **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` (the per-task tripwire). Falls back to the spec's `## Validation Commands` if no config. Also runs the universal emoji gate on changed markdown. |
-| **Triage** | sonnet | Classifies a test failure as `RETRYABLE` (transient, or the failure changed — progress is possible) or `MAJOR` (an immediate-bail reason fires, or no progress). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. See [D32](../../planning/decisions/D32-triage-gated-bail.md). Bail means: break to end-review with `draft` flag, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution: null`) rather than only overwriting `bail_reason` — see [BT.ticket.bails-must-be-append-only](../../planning/blocks/BT.ticket.bails-must-be-append-only.json). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
+| **Triage** | sonnet | Classifies a test failure as `RETRYABLE` (transient, or the failure changed — progress is possible) or `MAJOR` (an immediate-bail reason fires, or no progress). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. See D32 (`planning/decisions/D32-triage-gated-bail.md`). Bail means: break to end-review with `draft` flag, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution: null`) rather than only overwriting `bail_reason` — see BT.ticket.bails-must-be-append-only (`planning/blocks/BT.ticket.bails-must-be-append-only.json`). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **End-review** | sonnet | ONE consolidated review over the integrated tree. Re-runs the **full** gating suite (authoritative). Reads `git diff <prBase>..HEAD` + `tasks.md` acceptance criteria + the on-disk (uncommitted) `state.json` as the localization index. Verdict: `PASS` / `PARTIAL` / `FAIL`. |
 | **Review fix** | sonnet | Bounded fix for localized end-review findings. Escalates to `opus` on the final pass. A broad or structural finding bails instead (triage decision). |
 | **Docs patch** | sonnet | Surgical `--patch` of affected doc files, then a `write-repo-doc` standard pass over exactly those files (quickstart, inline links, defined vocabulary, plain-English openers). A doc needing a genuine rewrite is flagged `NEEDS_REVIEW` rather than rewritten here — [`/close-out`](../../.claude/commands/close-out.md) routes it to a ticket or a carryover. **Hard-gated on a PASS verdict.** Skipped entirely on bail. |
-| **Wrap-up** | sonnet | Updates `status.md` (an **append-only** edit — adds one new line under "Current focus" recording this run's outcome; a prior block's narrative survives verbatim, with the one exception that this spec's own leftover line from an earlier partial run may be replaced in place) + appends the `log.md` entry + writes D18 Amendment-Log entries — all **on the flow branch** (so they ride in the PR and merge atomically with the code). On a fully-done block, also flips `planning/state.json`'s block status to `"closed"` on the branch. **In-place** (a plain feature branch in the main repo tree, not an isolated worktree): also runs `mev emit-state --write` right on the branch — the same way `git commit` already lands right there — which re-derives `focus.next`; then, if `planning/harness.json` names an optional `postEmitCommitCommand` (BT.ticket.bookkeep-leaves-derived-output-uncommitted), runs that hook (absent key is a no-op; a hook failure is reported, never swallowed, and never blocks this stage's own commit below). **`--worktree`**: skips `emit-state` (it refuses to run inside a linked worktree) and therefore the hook too — `focus.next` stays **deferred**, still pointing at the pre-close state, until the branch merges via `/clean-worktree` or `/close-out --merge-branch` and runs `mev emit-state --write` on the base; the engine's own log line says so explicitly rather than leaving it silently stale ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md), [D51](../../planning/decisions/D51-sdlc-flow-branch-default.md)). |
+| **Wrap-up** | sonnet | Updates `status.md` (an **append-only** edit — adds one new line under "Current focus" recording this run's outcome; a prior block's narrative survives verbatim, with the one exception that this spec's own leftover line from an earlier partial run may be replaced in place) + appends the `log.md` entry + writes D18 Amendment-Log entries — all **on the flow branch** (so they ride in the PR and merge atomically with the code). On a fully-done block, also flips `planning/state.json`'s block status to `"closed"` on the branch. **In-place** (a plain feature branch in the main repo tree, not an isolated worktree): also runs `mev emit-state --write` right on the branch — the same way `git commit` already lands right there — which re-derives `focus.next`; then, if `planning/harness.json` names an optional `postEmitCommitCommand` (BT.ticket.bookkeep-leaves-derived-output-uncommitted), runs that hook (absent key is a no-op; a hook failure is reported, never swallowed, and never blocks this stage's own commit below). **`--worktree`**: skips `emit-state` (it refuses to run inside a linked worktree) and therefore the hook too — `focus.next` stays **deferred**, still pointing at the pre-close state, until the branch merges via `/clean-worktree` or `/close-out --merge-branch` and runs `mev emit-state --write` on the base; the engine's own log line says so explicitly rather than leaving it silently stale (D50 (`planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md`), D51 (`planning/decisions/D51-sdlc-flow-branch-default.md`)). |
 | **PR** | sonnet | Pushes the branch and runs `gh pr create --base <prBase>`. Builds the PR body from the on-disk (uncommitted) `state.json` (per-task summary, verdict, open items). Opens a **draft** PR on bail. Degrades gracefully when `gh` is absent — prints the branch name and the exact commands. Reports one of three `prOutcome` values (`'created'`/`'impossible'`/`'failed'`), which the engine then independently re-verifies via its own `gh pr view` rather than trusting on faith — see [PR-stage outcome vocabulary](#pr-stage-outcome-vocabulary). |
 
 ### Per-task retry loop
@@ -231,14 +250,14 @@ and is never merged, regardless of `prOutcome`.
 
 ## D16 preflight — derive, then abort
 
-The Enumerate stage's [D16](../../planning/decisions/D16-preflight-task-structure-lint.md) lint
+The Enumerate stage's D16 (`planning/decisions/D16-preflight-task-structure-lint.md`) lint
 walks `tasks.json`, not raw `tasks.md` prose — every downstream stage (implement, fast test,
 triage, fix, review) enumerates from that array. The preflight is derive-then-abort:
 
 1. **Enumerate.** Parse `planning/<spec>/tasks.json`. If it's a non-empty bare array, proceed.
 2. **Derive.** If `tasks.json` is missing, invalid, or empty but `tasks.md` carries a usable step
    decomposition, an `opus` recovery generator authors a fresh
-   [D45](../../planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md)-shaped
+   D45 (`planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md`)-shaped
    `tasks.json` from it (bare array, integer `task_id`, single-string `description`, no `status`/
    `attempt_count` — never a verbatim copy of the prose), writes and commits it, then re-enumerates.
 3. **Abort.** Only when nothing is derivable either does the engine log
@@ -274,12 +293,12 @@ committed.
 (`verdict/findings/attempts`), `docs` (`changed/created`), `bail_reason`, `bails` (append-only array,
 one entry per bail — `occurred_at, task_id, check_id, failing_artifact, ownership, bail_class,
 reason, resolution`; `bail_reason` mirrors the newest entry's `reason` and is null when `bails` is
-empty — see [BT.ticket.bails-must-be-append-only](../../planning/blocks/BT.ticket.bails-must-be-append-only.json)),
+empty — see BT.ticket.bails-must-be-append-only (`planning/blocks/BT.ticket.bails-must-be-append-only.json`)),
 `pr` (`url/number`), `tokens` (per-task and per-stage token usage + cumulative `total`).
 
 > **Token roll-up note:** `tokens.total` covers substantive stages (implement, test, fix, review,
 > docs, wrap-up). Cheap Haiku helper agents (state writers, enumerate, update-task) are excluded.
-> See [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md).
+> See D37 (`planning/decisions/D37-unified-committed-state-and-telemetry.md`).
 
 A **Haiku state-writer agent** stamps `started_at`/`updated_at` and writes both files to disk with
 the Write tool. It runs **no git command at all** — no `git add`, `git commit`, `git checkout`,
@@ -316,7 +335,7 @@ the `flow` block. Every key has a CLI flag that overrides it for a single run.
 
 Projects append project-specific reasons via `flow.bailReasons[]`. The triage agent's bias is
 **when unsure, bail** — a wasted retry loop costs more than one human glance at a draft PR. See
-[D32](../../planning/decisions/D32-triage-gated-bail.md).
+D32 (`planning/decisions/D32-triage-gated-bail.md`).
 
 ---
 

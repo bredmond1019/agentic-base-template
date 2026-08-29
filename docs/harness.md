@@ -16,6 +16,32 @@ A rule for anyone writing or reviewing a gated check whose input is data shared 
 fleet — a lane registry, a repo lease, a message queue, a live-config census — rather than data
 scoped to this repo alone.
 
+## What this page is for
+
+Some checks read data the **whole fleet** writes — a lane registry, a repo lease, a message queue.
+Run naively, such a check fails your repo because a *different* repo left a bad record, so a lane
+goes red for something it cannot fix. This page is the rule that prevents that, and the FAIL-line
+format every check must use.
+
+Read it before writing or reviewing a gated check whose input is not scoped to this repo. For the
+list of checks that already exist, see [gates.md](gates.md).
+
+## Quickstart
+
+Writing a check that reads fleet-shared data? It must do all three, in a **terminal**-runnable
+script:
+
+```
+python3 scripts/check_lane_agents.py --quiet   # a worked example of all three
+```
+
+1. **Scan fleet-wide** — read every record, from every repo.
+2. **Report everything** — print another repo's bad record; that is how it gets fixed.
+3. **Fail only on your own** — attribute by the record's own `repo` field, never by path.
+
+Every failure line reads `FAIL <path> <text>` — the path names the **artifact**, not the test.
+The [`failure-output-shape`](gates.md) gate enforces this.
+
 ## The rule
 
 **A gated check that reads fleet-shared state attributes its gating VERDICT to this repo's own
@@ -33,9 +59,9 @@ subtree, while still REPORTING everything the scan finds.**
   scanning fleet-wide is so a foreign break is still caught and reported by *someone's* run, even
   though it does not block that run.
 
-## Why: this is the Test-stage counterpart of D64
+## Why: this is the Test-stage counterpart of HQ D64
 
-[D64](../../docs/decisions/D64-push-gate-delta-attribution.md) (`brain:D64-push-gate-delta-attribution`)
+HQ D64 (`agentic-portfolio/docs/decisions/D64-push-gate-delta-attribution.md`)
 already settled this question for the push gate: `hooks/pre-push` validates the whole corpus, but
 blocks only on errors new since this clone's last successful push — "attribution is by delta, never
 by path," because deleting a doc can surface the resulting error on a file the push never touched, and

@@ -17,6 +17,38 @@ engine code (`.claude/workflows/*.js`) carries the *mechanism* (pipeline orderin
 report formats) and ships **no stack defaults**. This file is where a project names its real
 validation commands and decides whether a UI-test stage exists.
 
+## What this page is for
+
+You are telling the harness how *your* project is tested — which commands run, in what order, and
+what counts as a failure. Nothing in the engines knows your stack; everything they know about it
+comes from this one file.
+
+Want the list of checks `base-template` itself runs? That's [gates.md](gates.md). Want to know
+where a new file belongs? [architecture.md](architecture.md).
+
+## Quickstart
+
+In a **terminal**, at your project root:
+
+```
+cat planning/harness.json                  # ships as a "fill-me-in" stub
+```
+
+Copy the block for your stack from [Stack profiles](#stack-profiles) below into
+`validation.checks`, then run one of its commands by hand to confirm it passes before the engines
+ever see it. A check that fails when you run it yourself will fail every pipeline run too, and it
+will look like an engine bug.
+
+| Field | What it decides |
+|---|---|
+| `stack` | A label for humans. The engines do not branch on it. |
+| `validation.checks[]` | The gates. Each has a `name`, a shell `command`, a `purpose`, and `gates: true\|false`. |
+| `uiTest` | Whether the UI-test stage exists at all. Absent → disabled. |
+
+**Config absent is a defined state, not an error**: the engines fall back to the spec's
+`## Validation Commands` section and disable the UI-test stage. See
+[Config-absent behavior](#config-absent-behavior).
+
 ## Scope: the gates are in-repo and in-language, by design
 
 Every check a `harness.json` can declare — `command`, `baseline-diff`, `count-delta`,
@@ -50,7 +82,7 @@ An acceptance criterion whose evidence lives in any of the four classes above is
 construction** — no `harness.json` check, however creatively written, can gate it directly. What
 *is* gateable is whether the spec **admits** the gap and pairs the criterion with fixture evidence
 instead of a bare command; `/ticket` and `/generate-tasks` enforce that declaration (see
-[D64](../planning/decisions/D64-ungateable-criteria-must-be-declared.md) for the full diagnostic,
+D64 (`planning/decisions/D64-ungateable-criteria-must-be-declared.md`) for the full diagnostic,
 the observed instances, and why the trigger is a mechanical evidence-location test rather than a
 judgment call). A green `harness.json` suite is evidence of **gate agreement**, not correctness —
 it proves the checks that exist all passed, not that the criteria resting outside their reach are
@@ -89,7 +121,7 @@ depending on how the reader gets there:
   `open()`/`stat()` on the joined path — including a naive lexical resolver, once the OS walks
   the symlink — hits this and fails, not just realpath-canonicalizing tools.
 
-The fix (see [D62](../planning/decisions/D62-harness-schema-realpath-resolution.md)) is a
+The fix (see D62 (`planning/decisions/D62-harness-schema-realpath-resolution.md`)) is a
 `.claude/workflows/harness.schema.json` **symlink** placed at each vault root, pointing at
 base-template's canonical schema. That makes a real file exist at the join point on both faces,
 so the existing `"../.claude/workflows/harness.schema.json"` string resolves everywhere with
@@ -162,7 +194,7 @@ file (the engine only carries the interpretation). ¹`command` is required for e
 > no longer fires under either engine — only the command's exit code is evaluated.
 
 See `planning/harness.examples.md` (the Python "rich checks" profile) for a worked example of all
-five, and [D6](../planning/decisions/D6-harness-richer-checks.md) for the rationale.
+five, and D6 (`planning/decisions/D6-harness-richer-checks.md`) for the rationale.
 
 ### `uiTest` object
 
@@ -202,7 +234,7 @@ but cohesive.
 
 The per-task engine (`/sdlc-flow` or `/sdlc-task`) assesses coarseness when it starts and
 logs/applies per `mode`. `/generate-tasks` previews the same recommendation at authoring time.
-See [D10](../planning/decisions/D10-breakdown-assessment.md).
+See D10 (`planning/decisions/D10-breakdown-assessment.md`).
 
 ### `planning` object
 
@@ -217,7 +249,7 @@ When `clarify: true`, the authoring commands surface **2–4 targeted clarifying
 ambiguous prompt *before* writing the spec — the deliberate counter to the "model guesses intent →
 median results" anti-pattern. Default `false` preserves the zero-touch flow (write immediately). A
 user can always force the behavior for a single invocation by appending **`--clarify`**, regardless
-of this setting. See [D20](../planning/decisions/D20-clarify-before-generate.md).
+of this setting. See D20 (`planning/decisions/D20-clarify-before-generate.md`).
 
 ### `flow` object
 
@@ -249,9 +281,9 @@ them.
 }
 ```
 
-See [D30](../planning/decisions/D30-sdlc-flow-engine.md) (engine design),
-[D32](../planning/decisions/D32-triage-gated-bail.md) (bail set), and
-[D33](../planning/decisions/D33-pr-based-wrap-up.md) (PR wrap-up) for the rationale behind each
+See D30 (`planning/decisions/D30-sdlc-flow-engine.md`) (engine design),
+D32 (`planning/decisions/D32-triage-gated-bail.md`) (bail set), and
+D33 (`planning/decisions/D33-pr-based-wrap-up.md`) (PR wrap-up) for the rationale behind each
 key.
 
 ### `postEmitCommitCommand`
@@ -354,7 +386,7 @@ runs the engine uses `port + taskNumber` automatically.
 
 ### Optional stub / not-implemented scan
 
-A gating companion to the implement/fix completeness self-check ([D8](../planning/decisions/D8-implement-completeness-self-check.md)):
+A gating companion to the implement/fix completeness self-check (D8 (`planning/decisions/D8-implement-completeness-self-check.md`)):
 a `forbidden-pattern-scan` check that hard-fails if unimplemented placeholders
 (`todo!()`/`unimplemented!()`, `raise NotImplementedError`, `throw new Error('not implemented')`)
 remain on shipped paths. Ready-to-paste Rust / Python / TypeScript blocks — with the false-positive
@@ -380,7 +412,7 @@ checks are the always-run gate. Conflating them is the common first mistake.
 
 - **More of an existing shape → `harness.json` (config, per-project, no ADR).** Append as many
   `checks[]` as you like; mix plain `command` checks with the four richer kinds freely (`kind` defaults
-  to `command`). The engine runs whatever's there — no engine edit. This is the [D5](../planning/decisions/D5-okf-phase-2-adopted.md)
+  to `command`). The engine runs whatever's there — no engine edit. This is the D5 (`planning/decisions/D5-okf-phase-2-adopted.md`)
   mechanism/policy split working as intended.
 - **A new *shape* of check → `base-template` engine + ADR (mechanism, propagates to all projects).**
   The schema is **strict** (`additionalProperties: false`, and `kind` is a fixed enum of the five

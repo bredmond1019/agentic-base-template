@@ -12,6 +12,47 @@ related: [base-template-architecture, base-template-docs-index, harness-json]
 
 # Using the template — generate, configure, run
 
+Take a new project from nothing to a spec running through the SDLC pipeline.
+
+## What this page is for
+
+`base-template` is a **factory**, not a library: you do not import it, you generate a copy of it.
+This page walks the whole path once — generate the project, tell the harness how to test your
+stack, then run a spec end to end. Read it the first time you create a project, and again when
+you need to pull later harness improvements (section 6).
+
+New to the vocabulary (spec, block, engine, harness)? Read
+[workflows/index.md](workflows/index.md) first. Looking for a specific command?
+[capabilities.md](capabilities.md).
+
+## Quickstart
+
+All of these are **Claude Code slash commands** — type them into a Claude Code session, not a
+terminal. Run the first one from the `agentic-portfolio/` brain root; the rest from the new
+project's directory.
+
+```
+/new-project                      # prompts for tier, name, slug, description, project type
+```
+
+Then, in the new project:
+
+```
+/prime                            # orient — reads README, CLAUDE.md, context.md, status.md
+/ticket add a --verbose flag      # write a small spec into planning/
+/sdlc-task add-a-verbose-flag     # implement -> test -> fix -> commit
+```
+
+Before `/sdlc-task` will do anything useful you must fill in `planning/harness.json` with your
+stack's real validation commands — that is section 2, and it is the one step that cannot be
+skipped.
+
+| Must exist first | If it doesn't |
+|---|---|
+| The `agentic-portfolio/` brain root, with `base-template/` inside it | Clone the brain repo; `/new-project` reads `brain.toml` from its root |
+| Harness commands installed globally | Run `/sync-global-commands` from `base-template` |
+| A configured `planning/harness.json` | Section 2 below — the scaffold ships a `"fill-me-in"` stub |
+
 ## 1. Generate a new project
 
 Run `/new-project` from the `agentic-portfolio/` brain root. It will prompt for:
@@ -40,8 +81,8 @@ but **no application code and no configured validation commands yet**.
 ### What a new project inherits
 
 - **Global commands** — all harness slash commands from `~/.claude/commands/` are available
-  immediately (installed via `/session:sync-global-commands` from base-template). Invoke them using
-  the subdirectory namespace: `/session:prime`, `/planning:plan`, `/sdlc:implement`, etc.
+  immediately (installed via `/sync-global-commands` from base-template). **All commands are
+  flat** — invoke them as `/prime`, `/plan`, `/implement`. There is no `namespace:` prefix.
 - **Workflow engines** — `.claude/workflows/*.js` ship per-project so they can read the local
   `planning/harness.json` for stack-specific config.
 - **Project-specific commands** — if your project needs custom commands, place them in
@@ -52,7 +93,7 @@ but **no application code and no configured validation commands yet**.
   does, but because the project's tier vault root (`core/_planning/`, `_planning/`,
   `side/_planning/`, `business/_planning/`, `client/_planning/`) already carries a
   `.claude/workflows/harness.schema.json` **symlink** to base-template's canonical schema (per
-  [D62](../planning/decisions/D62-harness-schema-realpath-resolution.md)). That symlink is a
+  D62 (`planning/decisions/D62-harness-schema-realpath-resolution.md`)). That symlink is a
   one-time, per-vault-root artifact — five today, a sixth (`portfolio/_planning/`) once it gains
   its first `harness.json` — not a per-project step; nothing in `/new-project` needs to create
   or touch it. See `docs/harness-json.md`'s "Why the `$schema` path resolves from two different
@@ -104,9 +145,9 @@ The scaffold ships tokenized stubs. Replace the tokens with real project content
 ## 4. Start your first session
 
 ```
-/session:prime                 # orient the agent: reads README, CLAUDE.md, context.md, status.md
-/session:status                # confirm current focus
-/sdlc:process-tasks            # check which specs are eligible
+/prime            # orient the agent: reads README, CLAUDE.md, context.md, status.md
+/session-recap    # confirm current focus
+/process-tasks    # check which specs are eligible
 ```
 
 ## 5. Run a spec through the pipeline
@@ -114,20 +155,20 @@ The scaffold ships tokenized stubs. Replace the tokens with real project content
 The typical flow for one spec (here `my-feature`):
 
 ```
-/planning:generate-tasks my-feature     # write planning/my-feature/tasks.md
+/generate-tasks my-feature     # write planning/my-feature/tasks.md
 
-/sdlc:implement planning/my-feature/tasks.md
-/sdlc:test      planning/my-feature/tasks.md
-/sdlc:review-task planning/my-feature/tasks.md
+/implement planning/my-feature/tasks.md
+/test      planning/my-feature/tasks.md
+/review-task planning/my-feature/tasks.md
 
 # if FAIL or PARTIAL:
-/sdlc:fix       planning/my-feature/tasks.md
-/sdlc:test      planning/my-feature/tasks.md
-/sdlc:review-task planning/my-feature/tasks.md
+/fix       planning/my-feature/tasks.md
+/test      planning/my-feature/tasks.md
+/review-task planning/my-feature/tasks.md
 
 # once PASS:
-/sdlc:document  planning/my-feature/tasks.md
-/session:log-work
+/document  planning/my-feature/tasks.md
+/log-work
 ```
 
 Or run it all unattended:
@@ -141,8 +182,8 @@ Or run it all unattended:
 For a small feature you want to try on a branch *before* committing it to `master-plan.md`:
 
 ```
-/planning:plan add-rate-limiter                              # writes planning/plan-add-rate-limiter/plan.md
-/planning:generate-tasks --from planning/plan-add-rate-limiter/plan.md   # → planning/plan-add-rate-limiter/tasks.md
+/plan add-rate-limiter                              # writes planning/plan-add-rate-limiter/plan.md
+/generate-tasks --from planning/plan-add-rate-limiter/plan.md   # → planning/plan-add-rate-limiter/tasks.md
 /sdlc-flow plan-add-rate-limiter                    # run it on a feature branch, terminates in a PR
 ```
 

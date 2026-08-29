@@ -14,8 +14,31 @@ related: [base-template-docs-index, harness-json, brain:D65-fleet-ci-split-by-vi
 
 Every eligible public repo runs its own `planning/harness.json` gated checks on GitHub-hosted
 runners, on push and pull_request, via a thin caller workflow that invokes a reusable workflow
-owned by `base-template`. See [D65](../../docs/decisions/D65-fleet-ci-split-by-visibility.md) for
+owned by `base-template`. See HQ D65 (`agentic-portfolio/docs/decisions/D65-fleet-ci-split-by-visibility.md`) for
 why public repos get hosted CI (private repos are out of scope for this block).
+
+## What this page is for
+
+You are wiring up hosted CI for a public repo, or a hosted run is red and you need to know
+whether the wiring or the code is at fault. The design in one sentence: **a repo's CI runs the
+same `planning/harness.json` gates it already runs locally**, through a thin caller workflow that
+delegates to one of four reusable workflows owned by `base-template`.
+
+## Quickstart
+
+Never debug a workflow file on hosted minutes. These are **terminal** commands, in this order:
+
+```
+brew install actionlint act                 # one-time
+actionlint .github/workflows/ci.yml         # schema, contexts, shell — no network
+act --dryrun                                # run it in Docker against this repo
+git push                                    # only once both are clean
+gh run view --log-failed                    # if hosted still fails, pull just the failed job
+```
+
+`act` is **not** a perfect replica of a hosted runner — anything OS-specific (notably Flutter and
+macOS-only tooling) may still first go green only on a real run. When a check could not be
+verified locally, record it in the [Deviations](#deviations) table rather than assuming.
 
 ## The four reusable workflows
 

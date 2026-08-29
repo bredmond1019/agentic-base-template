@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [orchestration, lane, begin-orchestration, lane-log, run record, commander, escalation record]
-related: [base-template-workflows-index, sdlc-task, sdlc-flow, D57-orchestration-run-artifact-contract, plan-lane-coordination]
+related: [base-template-workflows-index, sdlc-task, sdlc-flow, D57-orchestration-run-artifact-contract]
 ---
 
 # Orchestration lifecycle — driving a lane end to end
@@ -144,7 +144,7 @@ Now it builds. Each block goes through the same five moves before the next one s
 In detail:
 
 1. **Spec** — resolve the block ID to a slug; run [`/generate-tasks`](../../.claude/commands/generate-tasks.md) (or `--from <plan>`) if
-   `tasks.json` is missing. Since [D65](../../planning/decisions/D65-block-record-is-the-planning-unit.md) the spec is `planning/blocks/<BlockID>.json` +
+   `tasks.json` is missing. Since D65 (`planning/decisions/D65-block-record-is-the-planning-unit.md`) the spec is `planning/blocks/<BlockID>.json` +
    `planning/<BlockID>/tasks.json`; `tasks.md` is a legacy fallback.
 2. **Engine** — [`/sdlc-task`](sdlc-task.md) (small change) or [`/sdlc-flow`](sdlc-flow.md) (a whole spec), as a background workflow. Spec prep for later blocks
    may overlap; **engine runs are strictly serial** — one repo, one engine at a time.
@@ -164,7 +164,7 @@ unreleased lock blocks the next lane, and an unrecorded loose end is simply lost
 
 - Write the final `review.md` — a plain-English summary plus the checks you could run by hand.
 - Promote every `OPEN` item in `notes.md` to a durable home. **Never copy it into a successor
-  file** — [D57](../../planning/decisions/D57-orchestration-run-artifact-contract.md) keeps one record per `(repo, roadmap)`, addressed rather than rotated.
+  file** — D57 (`planning/decisions/D57-orchestration-run-artifact-contract.md`) keeps one record per `(repo, roadmap)`, addressed rather than rotated.
 - Release the repo lease and registry claim.
 - Run [`/close-out`](../../.claude/commands/close-out.md) — the tidy-close command.
 
@@ -183,7 +183,7 @@ is how *other lanes* find out what happened, the second and third are for *you*.
 | `planning/orchestration-run/<slug>/review.md` | **Terminal.** Plain-English summary + hand-verification recipes. Every recipe must have been **run** before the file is written. | Once, at close |
 
 Frontmatter, the `doc_id` rule, `lifecycle`, and the ledger's `origin_roadmap` column are specified
-in [D57 — the orchestration-run artifact contract](../../planning/decisions/D57-orchestration-run-artifact-contract.md). Cited, not restated.
+in D57 — the orchestration-run artifact contract (`planning/decisions/D57-orchestration-run-artifact-contract.md`). Cited, not restated.
 
 ---
 
@@ -308,5 +308,5 @@ which decides *whether* a drain is worth running and only wakes one on real chan
 - [`roadmap-sweep.md`](roadmap-sweep.md) — the sweep's own runbook.
 - [`escalation.schema.json`](../../scripts/escalation.schema.json) · [`check_escalations.py`](../../scripts/check_escalations.py) — the escalation record's schema and validator.
 - [`index.md`](index.md) — the two SDLC engines this drives per block.
-- [D57 — orchestration-run artifact contract](../../planning/decisions/D57-orchestration-run-artifact-contract.md) — the run-record contract.
-- `agentic-portfolio/docs/decisions/D43-cross-domain-priority-graph.md` — priority ordering at lane close. **Note:** this is *HQ's* D43. base-template has its own, unrelated [D43 — close-out integration](../../planning/decisions/D43-close-out-integration.md); always say which repo when citing a decision number.
+- D57 — orchestration-run artifact contract (`planning/decisions/D57-orchestration-run-artifact-contract.md`) — the run-record contract.
+- `agentic-portfolio/docs/decisions/D43-cross-domain-priority-graph.md` — priority ordering at lane close. **Note:** this is *HQ's* D43. base-template has its own, unrelated D43 — close-out integration (`planning/decisions/D43-close-out-integration.md`); always say which repo when citing a decision number.

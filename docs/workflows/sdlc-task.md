@@ -14,7 +14,7 @@ related: [base-template-workflows-index, sdlc-flow, D38-lean-sdlc-task-and-patch
 
 The fast path for **one small unit of behavior-changing work**. Runs
 `implement → fast-test → triage → fix (≤3 attempts, Opus on the final) → commit → terminal
-authoritative reconcile ([D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md))`,
+authoritative reconcile (D56 (`planning/decisions/D56-sdlc-task-authoritative-reconcile.md`))`,
 in-place on the current branch by default, or in an isolated `--worktree` — see
 [In-place vs. `--worktree`](#in-place-vs-worktree).
 
@@ -25,6 +25,24 @@ loop), less than `/sdlc-flow` (no review/document/wrap-up agents). Pairs with `/
 Engine: [`.claude/workflows/sdlc-task.js`](../../.claude/workflows/sdlc-task.js)
 
 ---
+
+## Quickstart
+
+A **Claude Code slash command** — type it into a Claude Code session, not a terminal.
+
+```
+/sdlc-task fix-verbose-flag              # run the whole spec, in place on the current branch
+/sdlc-task fix-verbose-flag 2            # just task 2
+/sdlc-task fix-verbose-flag --worktree   # isolated checkout under trees/
+```
+
+| Must exist first | If it doesn't |
+|---|---|
+| `planning/fix-verbose-flag/tasks.md` | Run `/ticket` or `/chore`, then `/generate-tasks`. |
+| A configured `planning/harness.json` | See `docs/harness-json.md` — with no config the engine falls back to the spec's `## Validation Commands`. |
+
+There is **no review, docs or PR stage** here by design. If you want those, use
+[`/sdlc-flow`](sdlc-flow.md). Full flag reference below.
 
 ## Usage
 
@@ -69,13 +87,13 @@ flowchart TD
 | Stage | Model | What it does |
 |---|---|---|
 | **Scout / setup** | haiku | Reads the spec and existing report state (for `--resume`). In-place by default; with `--worktree`, creates (or re-attaches on `--resume`) a `trees/<branch>/` cone-mode sparse-checkout worktree — see [In-place vs. `--worktree`](#in-place-vs-worktree) above. Resolves the spec source (D65 stage 2): checks `planning/blocks/<BlockID>.json` first and prefers it when present; falls back to the legacy `planning/<spec>/tasks.md` only when no block record exists. `specSource` (`'block-record'` / `'tasks-md'` / `'missing'`) drives which file the run treats as the spec and, downstream, which D16 derive branch fires (see below). The D19 thin-spec check runs only when `specSource == 'tasks-md'`. |
-| **Implement** | sonnet | Executes every task (or the selected range) against `tasks.md` (and `breakdown.md` if present). Runs the [D8](../../planning/decisions/D8-implement-completeness-self-check.md) completeness self-check before committing `feat:`/`fix:`. |
+| **Implement** | sonnet | Executes every task (or the selected range) against `tasks.md` (and `breakdown.md` if present). Runs the D8 (`planning/decisions/D8-implement-completeness-self-check.md`) completeness self-check before committing `feat:`/`fix:`. |
 | **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` plus the universal emoji gate on changed markdown. Falls back to the spec's `## Validation Commands` if no config. |
-| **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. Stuck → commit the current state as `FAIL` and exit, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution: null`) rather than only overwriting `bail_reason` — see [BT.ticket.bails-must-be-append-only](../../planning/blocks/BT.ticket.bails-must-be-append-only.json). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail that is later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
+| **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. Stuck → commit the current state as `FAIL` and exit, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution: null`) rather than only overwriting `bail_reason` — see BT.ticket.bails-must-be-append-only (`planning/blocks/BT.ticket.bails-must-be-append-only.json`). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail that is later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **Commit + state** | haiku | Writes `sdlc-task-state.json` (per-task status + token usage) and commits all work + state: in-place, one final `chore:` commit; under `--worktree`, a per-phase-write commit shape on the throwaway branch. |
-| **Terminal reconcile** ([D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md)) | haiku | Runs once, after every task has passed on a full spec run, before bookkeep. See [Terminal authoritative reconcile](#terminal-authoritative-reconcile-d56) below. |
-| **Bookkeep close-out** | haiku | Runs only on a full, fully-passing spec run **whose terminal reconcile also passed** (never on a partial task range, a bail, or a `reconcile_failed` run). Marks `tasks.md` tasks done using the spec's **cumulative** completed-task count (this run's passes reconciled with every prior run's, never this run's slice alone), appends (never rewrites) a "Current focus" line in `status.md` — see [Bookkeep's `status.md` and `focus.next` rules](#bookkeeps-statusmd-and-focusnext-rules) below — and flips `planning/state.json`'s block status to `"closed"`. In-place: also runs `mev emit-state --write`, which re-derives `focus.next`, then — if `planning/harness.json` names an optional `postEmitCommitCommand` — runs that hook (see [below](#bookkeeps-statusmd-and-focusnext-rules); absent key is a no-op). `--worktree`: skips `emit-state` (unsafe in a linked worktree), and therefore the hook too — `focus.next` stays **deferred**, still pointing at the pre-close state, until `/clean-worktree` (or an equivalent merge step) lands the branch and runs `mev emit-state --write`; the engine's own log line says so explicitly rather than leaving it silently stale. Writes no prose `log.md` entry — run `/log-work` for the narrative. ([D50](../../planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md)) |
+| **Terminal reconcile** (D56 (`planning/decisions/D56-sdlc-task-authoritative-reconcile.md`)) | haiku | Runs once, after every task has passed on a full spec run, before bookkeep. See [Terminal authoritative reconcile](#terminal-authoritative-reconcile-d56) below. |
+| **Bookkeep close-out** | haiku | Runs only on a full, fully-passing spec run **whose terminal reconcile also passed** (never on a partial task range, a bail, or a `reconcile_failed` run). Marks `tasks.md` tasks done using the spec's **cumulative** completed-task count (this run's passes reconciled with every prior run's, never this run's slice alone), appends (never rewrites) a "Current focus" line in `status.md` — see [Bookkeep's `status.md` and `focus.next` rules](#bookkeeps-statusmd-and-focusnext-rules) below — and flips `planning/state.json`'s block status to `"closed"`. In-place: also runs `mev emit-state --write`, which re-derives `focus.next`, then — if `planning/harness.json` names an optional `postEmitCommitCommand` — runs that hook (see [below](#bookkeeps-statusmd-and-focusnext-rules); absent key is a no-op). `--worktree`: skips `emit-state` (unsafe in a linked worktree), and therefore the hook too — `focus.next` stays **deferred**, still pointing at the pre-close state, until `/clean-worktree` (or an equivalent merge step) lands the branch and runs `mev emit-state --write`; the engine's own log line says so explicitly rather than leaving it silently stale. Writes no prose `log.md` entry — run `/log-work` for the narrative. (D50 (`planning/decisions/D50-sdlc-engines-flip-block-status-on-close.md`)) |
 
 ### The retry loop
 
@@ -88,7 +106,7 @@ status.
 
 ## D16 preflight — derive, then abort
 
-The Plan stage's [D16](../../planning/decisions/D16-preflight-task-structure-lint.md) lint
+The Plan stage's D16 (`planning/decisions/D16-preflight-task-structure-lint.md`) lint
 enumerates tasks from `tasks.json`, not `tasks.md` — every downstream stage (fast test, triage,
 fix, commit) walks that array. The preflight is **derive-then-abort**, not a bare abort:
 
@@ -97,7 +115,7 @@ fix, commit) walks that array. The preflight is **derive-then-abort**, not a bar
 2. **Derive.** If `tasks.json` is missing, invalid, or empty, the derive branch taken depends on
    the `specSource` resolved during Scout / worktree-setup (D65 stage 2):
    - `specSource == 'block-record'` — an `opus` recovery generator derives a fresh
-     [D45](../../planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md)-shaped
+     D45 (`planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md`)-shaped
      `tasks.json` (bare array, integer `task_id`, single-string `description`, no `status`/
      `attempt_count`) directly from `planning/blocks/<BlockID>.json`, writes it, and commits it
      (`chore: derive tasks.json from block record (D16 fallback)`).
@@ -123,10 +141,10 @@ it does not derive from a block record — see [its Enumerate stage](./sdlc-flow
 `/sdlc-task`'s per-task fast tripwire always runs with `gatingOnly: true` — it runs a check's
 `fastCommand` instead of its authoritative `command` when the two differ, and it drops
 `perTask: false` gating checks from the per-task loop entirely (they're meant to run once per
-spec, not once per task). Before [D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md),
+spec, not once per task). Before D56 (`planning/decisions/D56-sdlc-task-authoritative-reconcile.md`),
 nothing in the engine ever ran those authoritative forms — not at the end, not on the last task,
 not in bookkeep. `/sdlc-task` is `/ticket` and `/chore`'s default lane, so any `harness.json`
-check that leans on a narrow `fastCommand` (e.g. [D55](../../planning/decisions/D55-all-targets-clippy-placement.md)'s
+check that leans on a narrow `fastCommand` (e.g. D55 (`planning/decisions/D55-all-targets-clippy-placement.md`)'s
 `cargo clippy --all-targets` placement) or a `perTask: false` build/integration check shipped with
 that coverage silently invisible in this lane.
 
@@ -149,8 +167,8 @@ project whose `harness.json` has no `fastCommand`/`perTask: false` checks pays z
 the reconcile's filtered check list is empty and the step is skipped with a log line.
 
 **What it costs.** Measured on real repos (see
-[`measurement.md`](../../planning/archive/ticket-sdlc-task-has-no-authoritative-gate/measurement.md) and
-[D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md)'s cost table): well under
+`measurement.md` (`planning/archive/ticket-sdlc-task-has-no-authoritative-gate/measurement.md`) and
+D56 (`planning/decisions/D56-sdlc-task-authoritative-reconcile.md`)'s cost table): well under
 2% of a typical spec's total wall-clock on both repos where a full number could be obtained
 (≈0.4% on `bella`, ≤1.8% even on `engine-rs`'s incomplete worst-known measurement). There is no
 flag or `harness.json` knob to disable it — D56 made it default-on and unconditional, on the
@@ -178,7 +196,7 @@ what a consumer must not fold it into, see
 [`docs/data-contract.md`](../data-contract.md) — that page, not this paragraph, is the surface a
 Rust or Python consumer should pin against.
 
-See [D56](../../planning/decisions/D56-sdlc-task-authoritative-reconcile.md) for the full design
+See D56 (`planning/decisions/D56-sdlc-task-authoritative-reconcile.md`) for the full design
 rationale, the rejected alternatives, and the measured cost tables.
 
 ---
@@ -206,7 +224,7 @@ does not. The old condition asked "was a selection passed?", which left every co
 `open` — measured four for four. `fullRun` survives, but only to gate the terminal reconcile stage
 (above); it no longer gates the close. Two things make this safe: `state.tasks` now survives a
 `--resume` (it used to be overwritten, not merged), so the condition does not lean on the
-git-derived scout that [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md)
+git-derived scout that D37 (`planning/decisions/D37-unified-committed-state-and-telemetry.md`)
 says must never be load-bearing alone; and the comparison is scoped to `allTasks`, not to the
 selected `taskList` — against `taskList` it would be trivially true on every subset run. Both
 properties are pinned by `scripts/test_block_close_decision.py` and
@@ -324,10 +342,10 @@ ownership, bail_class, reason, resolution`), never truncated or overwritten; `ba
 a plain mirror of the newest entry's `reason`, null when `bails` is empty. `resolution` starts
 `null` and is set to `"resumed-clean"` when a later `--resume` carries an open entry forward and
 that task then passes. See
-[BT.ticket.bails-must-be-append-only](../../planning/blocks/BT.ticket.bails-must-be-append-only.json).
+BT.ticket.bails-must-be-append-only (`planning/blocks/BT.ticket.bails-must-be-append-only.json`).
 
 > **Token roll-up note:** `tokens.total` covers substantive stages (implement, test, fix).
-> Cheap Haiku helper agents are excluded. See [D37](../../planning/decisions/D37-unified-committed-state-and-telemetry.md).
+> Cheap Haiku helper agents are excluded. See D37 (`planning/decisions/D37-unified-committed-state-and-telemetry.md`).
 
 ---
 
@@ -431,7 +449,7 @@ The moratorium was lifted after `BT.ticket.worktree-smoke-fixture` verified a re
 run end to end and confirmed the guards added during the suspension hold: the binding/brain-root/
 population guards below, `renderCommitSafetyGuard()` (refuses to commit an empty tree against a
 non-empty HEAD), and the post-commit work assertion (D81 lift condition 2 —
-[BT.ticket.a-run-must-prove-its-commits-contain-the-work](../../planning/blocks/BT.ticket.a-run-must-prove-its-commits-contain-the-work.json)).
+BT.ticket.a-run-must-prove-its-commits-contain-the-work (`planning/blocks/BT.ticket.a-run-must-prove-its-commits-contain-the-work.json`)).
 Full incident record: `agentic-portfolio/docs/decisions/D81-worktree-moratorium.md` (a sibling
 repo's decision log, not part of this repo).
 
