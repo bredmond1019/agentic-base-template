@@ -279,32 +279,27 @@ def test_wrapper_rule_clean_against_live_root():
 
 
 def test_emit_state_rule_live_root_snapshot_task1():
-    """BT.ticket.emit-state-write-needs-require-fresh, task 1 snapshot: the new rule is now
-    live but the corpus sweep is task 2's job, not this task's -- so this pins the EXPECTED-RED
-    count as the positive control task 2's own notes must cite (HQ standing rule 11: 'no
-    findings' is only evidence once the identical command reported findings before). Task 2
-    must update this assertion to `== 0` once the sweep lands; leaving it at 5 after the sweep
-    would itself be a stale/incorrect test, not evidence the sweep didn't happen."""
+    """BT.ticket.emit-state-write-needs-require-fresh: the sweep has landed (positive control
+    was 5 pre-sweep findings across .claude/commands/ and .agents/skills/, recorded in this
+    task's completion notes per HQ standing rule 11 -- 'no findings' is only evidence once the
+    identical command reported findings before). This now pins the post-sweep CLEAN state."""
     findings_total = 0
     for path in checker.collect_files(REPO_ROOT):
         text = path.read_text(encoding="utf-8")
         findings_total += len(checker.find_missing_require_fresh(text, str(path)))
-    check("emit-state rule task-1-time snapshot: 5 pre-sweep findings over the live corpus",
-          findings_total == 5,
-          f"expected 5 (pre-task-2-sweep) findings, got {findings_total} -- if this is 0, "
-          f"task 2's sweep has landed and this assertion must be updated to `== 0`")
+    check("emit-state rule: 0 findings over the live corpus (post-sweep)",
+          findings_total == 0,
+          f"expected 0 (post-sweep) findings, got {findings_total} -- an instructing "
+          f"`mev emit-state --write` line without --require-fresh has regressed into the corpus")
 
 
 def test_main_reflects_both_rules_against_live_root():
-    """main() combines both rules, so at task-1 time it is expected NON-zero (the new rule's 5
-    pre-sweep findings) even though the wrapper rule alone is clean. Task 2's own validation
-    command (`check_command_docs_no_write_path.py --quiet`) is what must reach exit 0 -- this
-    assertion only pins that main()'s count matches the sum of the two rules' live counts, so
-    it stays honest as either rule's corpus state changes."""
+    """main() combines both rules; with the sweep landed, both are clean over the live corpus,
+    so main() must reach exit 0 -- the same command this task's own validation runs."""
     exit_code = checker.main(["--root", str(REPO_ROOT), "--quiet"])
-    check("main() exit code reflects the emit-state rule's pre-sweep findings (non-zero)",
-          exit_code != 0,
-          f"expected non-zero (task 2 has not swept yet), got {exit_code}")
+    check("main() exit code is 0 (both rules clean over the live corpus)",
+          exit_code == 0,
+          f"expected 0, got {exit_code}")
 
 
 def main():
