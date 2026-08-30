@@ -3,7 +3,28 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-29
+**Last updated:** 2026-08-30
+
+---
+## 2026-08-30 — `/update-docs` gains a five-defect-class gap analysis
+
+- **What:** `.claude/commands/update-docs.md` Phase 4 now runs five checks, in priority order,
+  before the STALE/MISSING/NO-DOC/CURRENT classification: (1) no capability catalogue, (2)
+  capabilities with no doc at all — diffed from source, not doc titles, (3) detail-first docs
+  (measured via `grep -Lm1 "^## Quickstart"` / mermaid-fence presence, not eyeballed), (4) index
+  cells that restate whole docs instead of pointing at them, (5) links dead on GitHub because they
+  climb into a `.gitignore`-excluded path. Added a "Non-negotiables" block (verify claims against
+  source not a standing rule, don't hardcode an unconfirmed fact, the project's own validator beats
+  a manual link scan after a file move, validator flags don't compose) and a `docs/<domain>/`
+  README+index shape for when check 1 fires structurally. Command header now points at
+  `write-repo-doc` (or a project's own `write-operating-doc`, if it has one) and `write-okf-markdown`
+  instead of restating frontmatter/link rules inline.
+- **Why:** Distilled from a real docs-cleanup pass elsewhere in the fleet — the same five defect
+  classes recurred, and the ones that mattered most (no catalogue, undocumented capabilities) were
+  invisible until the check was sourced from code rather than from doc titles.
+- **Not changed:** `write-okf-markdown`'s `created`/`updated` frontmatter fields and the opt-in
+  `hooks/check_frontmatter.py` date gate were already fully documented (added 2026-08-29,
+  `OK.ticket.add-created-updated-frontmatter`) — checked and left as-is, nothing to add.
 
 ---
 ## 2026-08-29 — six-block autonomous-foundation lane; two spec bails, three defects found off-gate
