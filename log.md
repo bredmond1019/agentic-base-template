@@ -3,7 +3,49 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-28
+**Last updated:** 2026-08-29
+
+---
+## 2026-08-29 — six-block autonomous-foundation lane; two spec bails, three defects found off-gate
+
+- **What:** Closed six blocks in one `/begin-orchestration` chain, all via `/sdlc-task`, in place.
+  `/begin-orchestration` Step 2 now names a runnable control for the `base-template` isolation row
+  and refuses a lane record's bare `isolation` override (`step2-reverify-rules`). `sdlc-task` gained
+  **`expect_red`** — a task may name a subset of its own `validation_commands` whose verdict is
+  inverted, so a task whose deliverable is a deliberately-failing test can close; the subset is
+  enforced at enumerate time as a hard spec error and `gatingChecks()` was left byte-untouched, so
+  it can never invert a project gate (`expect-red-contract`). Every command/skill line that
+  *instructs* `mev emit-state --write` now carries `--require-fresh`, with a second rule in
+  `check_command_docs_no_write_path.py` so a bare instruction cannot return. `sdlc-flow`'s
+  `pr-verify` now reads `isDraft` from GitHub and `auto-merge` waits for checks and readies a draft
+  before merging, reporting which of two reasons a non-merge had (`pr-stages-remote-state-tests`).
+  New `docs/workflows/worktrees-in-rust-repos.md` documents the `trees/` sibling-symlink convention.
+  `/orchestration-commander` may now emit `no change since <ts>`, with three cases that must never
+  collapse (`commander-no-change-report`). Five new gating checks; 56 gating total, all green.
+- **Why:** Five of the six existed only as a `note` in `state.json` with no block record — filed
+  2026-08-23/26 from this lane's own prior run and never specced. Authoring them required
+  re-verifying every premise, and two had gone stale: `--require-fresh` is at `main.rs:325`, not
+  `:220-225`, and one of the two candidate shapes in the `expect_red` note is foreclosed by D63,
+  which leaves `expect_red` as the only survivor rather than a preference.
+- **Two spec bails, both mine, both mechanically preventable.** `emit-state-write-needs-require-fresh`
+  split a new rule from the sweep that makes it pass, but the checker already gates — so task 1 was
+  red by construction. `commander-report-has-no-no-change-shape` named `scripts/drain_log.py`, which
+  lives in the brain repo, not here; I had read it with a shell whose cwd was the brain root. Both
+  engines diagnosed the cause exactly and bailed after one attempt instead of thrashing, and the
+  second positively controlled its own diagnosis against HEAD. `/generate-tasks` step 8 could catch
+  both classes and catches neither — filed P1.
+- **Three defects found by reading the engines' per-task `decisions[]` logs, with every gate green.**
+  Block 1 shipped a citation naming `/generate-master-plan` as the home of the same-code-path rule;
+  it is not there — my authoring grep hit an unrelated sentence about `/plan --founding`. The real
+  home is HQ standing rule 11 / `check_command_hazards.py`'s `H1_FIX`. Block 2 surfaced that the
+  `isolation-and-branch-naming` anchor in **both** sync-tripwire scripts is pinned to
+  `snapshotBaselines()` for **both** engines — two gated tripwires that have never watched the
+  region they name, verified pre-existing at `4e9030a^`. And a correct fix sat unstaged because its
+  path was not in the owning task's `files[]`. Reading those logs at integration is now this lane's
+  standing practice.
+- **Refs:** `planning/orchestration-run/autonomous-foundation/review.md` (verification recipes, all
+  executed before writing) - `planning/orchestration-run/autonomous-foundation/notes.md` (full
+  narrative) - `planning/handoff.md` (six promoted carryover items, ordered)
 
 ---
 ## 2026-08-28 — task-gate-boundaries-are-unenforced closed; two fleet-gate fixes along the way
