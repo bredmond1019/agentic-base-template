@@ -195,15 +195,74 @@ Forcing these into the library would require either a conditional in every secon
 one engine's schema description lie. **They stay engine-local**, and that is the library working as
 designed rather than a gap in it.
 
-**What is actually left.** The remaining duplication is smaller than it looks and is mostly prose
-inside prompts rather than whole blocks:
+### How much is actually shareable — measured per stage
 
-1. The D46 vault-commit recipe (~20 lines) inside both implement prompts — differs only by run root.
-2. `renderCheckList` — identical apart from the `/tmp` scratch prefix (I1) and two comments.
-3. `ENUMERATE_PROMPT` and the derive prompts, now that D1/D2 have made them agree in substance.
+Pairing each stage prompt across the two engines and normalising the run-root and engine names,
+**75% of paired prompt lines are already common** (333 of 445). Per stage:
 
-None is urgent. The two cuts already landed cover every block where a silent divergence would be a
-behavioural bug rather than a documentation one.
+| Stage | task | flow | common |
+|---|---:|---:|---:|
+| implement / test | 90 | 91 | **96%** |
+| triage | 38 | 38 | **100%** |
+| state-load, detect-vault, resolve-repo-root, verify-setup-binding, baseline-snapshot | — | — | **100%** |
+| derive-tasks-json (both variants) | 39–42 | 40–43 | **95%** |
+| verify-vault-commit | 12 | 12 | 92% |
+| harness-config | 20 | 20 | 85% |
+| state-writer | 23 | 29 | 74% |
+| setup | 133 | 65 | 29% — but see below |
+
+### Why `setup` scores lowest, and why the number misleads
+
+Three causes, and only the second is a real engine difference.
+
+1. **Step renumbering, which dominates.** The same content sits at different step numbers — task's
+   STEP 2b "Create the worktree" is flow's STEP 3, task's STEP 2c "Fix the planning/ symlink" is
+   flow's STEP 3.5, task's STEP 4 "Report pipeline-start inputs" is flow's STEP 6. A line-order diff
+   scores that as different. Measured **order-insensitively, setup is 61% shared, not 29%**. The
+   sharpest case: the worktree-creation recipe (`a.`–`g.` — mkdir, `worktree add`, sparse-checkout
+   cone, checkout, the `.env` copy loop, the guard-exempt init commit) is **18 lines in each engine
+   and 94% identical**, and its *only* difference is the cross-reference "report them in STEP 4" vs
+   "STEP 6".
+2. **One genuinely different mode.** Task's non-worktree mode is three lines: use whatever branch you
+   are on. Flow's branch mode is 41 lines that *create and check out* a new branch in the main tree,
+   with a dirty-tree guard, a free-name search and a verify step — because flow terminates in a PR
+   and needs a branch to open it from. This is real and stays engine-local.
+3. **Different code organisation for identical information.** Flow factors its two modes into
+   `worktreeRecipe` / `branchRecipe` consts; task inlines both in the prompt. Folding flow's consts
+   back in moves the score only 29% → 30%.
+
+**Step numbers are a coupling mechanism.** A shared block saying "report them in STEP 4" can only
+live in one engine's numbering. Shared text should cross-reference steps by *name* — "the
+pipeline-start-inputs step" — leaving numbering a per-engine concern.
+
+### Cut 3 — the engine profile (planned)
+
+The differing lines in the high-overlap stages fall into four classes, and only the last resists
+sharing:
+
+| Class | Example | Absorbable |
+|---|---|---|
+| Accidental wording | "the run root" vs "the worktree root"; "lean /sdlc-task pipeline" vs "/sdlc-flow pipeline"; a line-wrap difference | Yes — and several are simply wrong |
+| Value substitution | `${baseSha}..HEAD` vs `${prBase}..HEAD` | Yes |
+| A fact expressible as a noun | "Write ONE JSON file" vs "Write two files"; "state.json" vs "state.json + worklog.md"; "draft-PR handoff" | Yes |
+| A whole structural step | flow's worklog append; the D63 augment-vs-substitute note | No — but as ONE named slot, not scattered |
+
+So: an **engine profile** object per engine holding nouns only (`runRootLabel`, `stateArtifacts`,
+`diffBase`, `name`), plus **named slots** where a whole step differs. The discipline that keeps this
+from becoming the thing D83 warns against:
+
+> A profile substitutes **nouns**. A slot inserts a **whole step**. Neither may contain
+> `kind === 'flow' ? … : …` inside shared text. The moment a master needs to know which engine it
+> serves in order to decide *logic*, the block belongs back in the engine.
+
+**A live defect this surfaced.** Flow runs on a plain branch **by default**, yet eight prompt sites
+tell the agent it runs "from the worktree root". In branch mode `worktreePath` *is* the repo root, so
+those sites contradict flow's own `W` preamble, which correctly says "MAIN WORKING TREE, on branch
+X". Nobody chose that; it is stale wording the profile's `runRootLabel` removes by construction.
+
+**Remaining after cut 3:** the D46 vault-commit recipe (~20 lines, differs only by run root),
+`renderCheckList` (identical but for the `/tmp` prefix, I1), and `ENUMERATE_PROMPT` plus the derive
+prompts now that D1/D2 made them agree in substance.
 
 **Then `engine-rs`.** `SDLC_FLOW` / `SDLC_TASK` consume the same masters — but by classification,
 not wholesale: environment and orientation text ports verbatim; an enforceable invariant becomes a
