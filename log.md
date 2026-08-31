@@ -6,6 +6,37 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-08-31
 
 ---
+## 2026-08-31 — cut 3: three stage prompts shared, and five sync anchors repaired
+
+- **What:** `renderTriagePrompt` (38 lines, zero residual difference between the engines),
+  `renderTestPrompt` (96% common) and `renderImplementPrompt` (94% common) are now single masters
+  behind named seams — `roleIntro`, `runRootLabel`, `diffBase`, `emojiScopeNote`,
+  `extraReturnFields`. Each seam is a noun or a whole sentence supplied by the caller; none is a
+  branch on engine identity inside shared text.
+- **Verified by execution, not by diffing source.** At a parameterised seam the source *must*
+  differ, so a textual compare cannot see through it — the earlier cuts' whole-file diff would have
+  reported false failures here. Rendering both templates and comparing output: `/sdlc-task`
+  byte-identical in all three; `/sdlc-flow` differs in exactly two deliberate places (one line-wrap
+  adopted from task, and the implement prompt's opening becoming mode-aware).
+- **A defect fixed first, on its own commit:** `/sdlc-flow` defaults to a plain branch, yet **nine**
+  stage prompts said "run from the worktree root" unconditionally, contradicting the engine's own
+  `W` preamble. Three more turned up during cut 3 ("in the shared worktree", `STATE_LOAD_SCHEMA`'s
+  "read from the worktree", a wrapped review-fix line). The docs and both SKILL guides were already
+  correct, so this was engine-side drift only.
+- **The part worth reading: the sync anchors had drifted and the re-stamps were blessing it.**
+  `skill-guide-sync`/`engine-docs-sync` anchor on hand-picked LINE RANGES, and `--update` re-hashes
+  whatever sits at those numbers. Every extraction shifted the file; every `--update` re-stamped the
+  new window. **Five real anchors ended up watching unrelated code** —
+  `isolation-and-branch-naming` on `postEmitHookRan` schema properties, `bookkeep-vault-commit` on
+  `const allTasks`, `flags-and-defaults` on `verifyVaultCommit`'s tail — and would have reported
+  green forever. I caused part of this by running `--update` where the script's own `--relocate`
+  was correct. All five re-picked from content, doc sections re-verified, and each anchor now
+  declares an `EXPECT` marker its range must contain, checked before any hash comparison. Both
+  fixture suites gained a test for it.
+- **Refs:** [`docs/workflows/prompt-parity.md`](docs/workflows/prompt-parity.md) §5 ·
+  [D83](planning/decisions/D83-shared-engine-library-inlined-at-build-time.md)
+
+---
 ## 2026-08-31 — shared library cut 2: the two embedded scripts
 
 - **What:** Extracted the two blocks of **executable code** that were duplicated in full, one copy

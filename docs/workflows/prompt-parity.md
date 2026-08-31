@@ -260,9 +260,64 @@ tell the agent it runs "from the worktree root". In branch mode `worktreePath` *
 those sites contradict flow's own `W` preamble, which correctly says "MAIN WORKING TREE, on branch
 X". Nobody chose that; it is stale wording the profile's `runRootLabel` removes by construction.
 
-**Remaining after cut 3:** the D46 vault-commit recipe (~20 lines, differs only by run root),
-`renderCheckList` (identical but for the `/tmp` prefix, I1), and `ENUMERATE_PROMPT` plus the derive
-prompts now that D1/D2 made them agree in substance.
+### Cut 3 — landed 2026-08-31
+
+Three stage prompts became masters, each behind named seams:
+
+| Master | Was | Seams |
+|---|---|---|
+| `renderTriagePrompt` | 38 lines × 2, **zero** residual difference | `engineName`, `bailReasons`, `bailRecipe` |
+| `renderTestPrompt` | 90 lines × 2, 96% common | `enginePhrase`, `runRootLabel`, `diffBase`, `emojiScopeNote` |
+| `renderImplementPrompt` | 88 lines × 2, 94% common | `roleIntro`, `runRootLabel`, `extraReturnFields` |
+
+Verified by **executing** both templates and comparing rendered output, not by diffing source — at a
+parameterised seam the source *must* differ, so a textual compare cannot see through it. `/sdlc-task`
+renders byte-identical in all three. `/sdlc-flow` differs in exactly two places, both deliberate: one
+line-wrap point adopted from the task engine, and the implement prompt's opening sentence becoming
+mode-aware.
+
+**Three more stale-worktree sites fixed**, beyond the eight in the defect fix above: the implement
+prompt's "you run IN PLACE in the shared worktree", `STATE_LOAD_SCHEMA`'s "read from the worktree",
+and the review-fix prompt's wrapped "All Bash from the / worktree root". The second had been
+classified in an earlier revision of this page as a legitimate engine difference. It was drift.
+
+### The sync anchors had drifted, and the re-stamps were blessing it
+
+Worth recording because it is a property of the tripwire design, not a one-off.
+
+`skill-guide-sync` and `engine-docs-sync` anchor on **hand-picked line ranges**, and `--update`
+re-hashes whatever currently sits at those numbers. Every extraction in cuts 1–3 shifted the file;
+every `--update` dutifully re-stamped the *new* window. By the end, **five of the real anchors were
+watching unrelated code**:
+
+| Anchor | Was pointing at |
+|---|---|
+| `sdlc-task.js::isolation-and-branch-naming` | `postEmitHookRan` schema properties |
+| `sdlc-task.js::bookkeep-vault-commit` | `const allTasks = enumResult.allTasks` |
+| `sdlc-flow.js::isolation-and-branch-naming` | the PR schema's `isDraft` |
+| `sdlc-flow.js::bookkeep-vault-commit` | the `BAIL_REASONS` array |
+| `sdlc-flow.js::flags-and-defaults` | `verifyVaultCommit`'s closing lines |
+
+Each would have reported green forever while the code it is named for changed freely. The script
+already ships `--relocate` for exactly this (it finds an anchor's recorded hash at its new offset),
+but it cannot recover once `--update` has stamped the wrong window — the recorded hash *is* the
+wrong region by then. All five were re-picked from content and the doc sections re-verified.
+
+**The guard added:** each anchor now declares an `EXPECT` marker — one distinctive line its range
+must still contain — checked before any hash comparison. Drift is caught mechanically instead of by
+someone thinking to look. Both fixture suites assert every real anchor declares a marker and still
+brackets it.
+
+> **If you move code near an anchor:** run `--relocate`, not `--update`. `--update` is only for
+> "I re-read the guide and it is still accurate." Using it as a way to make a red check go green is
+> how all five of these drifted.
+
+### Remaining
+
+The D46 vault-commit recipe (~20 lines, differs only by run root), `renderCheckList` (identical but
+for the `/tmp` prefix, I1), `ENUMERATE_PROMPT` and the derive prompts, `harness-config` (85%), and
+`setup`'s worktree-creation recipe (94%, needs its step cross-references de-numbered first). The
+state-writer stays split at 59% — that gap is flow's worklog, a genuine difference (I4).
 
 **Then `engine-rs`.** `SDLC_FLOW` / `SDLC_TASK` consume the same masters — but by classification,
 not wholesale: environment and orientation text ports verbatim; an enforceable invariant becomes a
