@@ -385,6 +385,7 @@ CLAUDE_SKILL_SLUGS: list[str] = [
     "fleet-push-discipline",
     "check-blast-radius",
     "pick-the-next-block",
+    "stamp-workflow-run-id",
 ]
 
 
