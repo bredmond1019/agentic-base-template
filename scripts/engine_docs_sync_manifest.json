@@ -12,19 +12,25 @@
     "section": "## Pipeline"
   },
   ".claude/workflows/sdlc-task.js::isolation-and-branch-naming": {
-    "hash": "3dfee7d266ef9c5d7dd2c9dd1d4a79849c6ca9d9af740e32cfba5bdc364ac23e",
+    "hash": "d9c6d8128adb7e3f8a8c794c5a2b781cfc49f45e2deedd58c44273cb530e51b7",
     "lines": "920-1026",
     "docs_md": "docs/workflows/sdlc-task.md",
     "section": "## In-place vs. `--worktree`"
   },
-  ".claude/workflows/sdlc-task.js::triage-bail-taxonomy": {
-    "hash": "173b469f383fb801a022f7bb1b11e010fae98ba48b8a1ecda4906a9b6e07494c",
-    "lines": "1268-1586",
+  ".claude/workflows/prompts/shared.js::triage-bail-taxonomy": {
+    "hash": "ce3dcf4a8897f01e3d045aa63485cf5e611da0b605d2afb875ebaa66aca35544",
+    "lines": "440-488",
     "docs_md": "docs/workflows/sdlc-task.md",
     "section": "## Pipeline"
   },
+  ".claude/workflows/prompts/shared.js::triage-bail-taxonomy-flow-doc": {
+    "hash": "ce3dcf4a8897f01e3d045aa63485cf5e611da0b605d2afb875ebaa66aca35544",
+    "lines": "440-488",
+    "docs_md": "docs/workflows/sdlc-flow.md",
+    "section": "## Pipeline"
+  },
   ".claude/workflows/sdlc-task.js::bookkeep-vault-commit": {
-    "hash": "16216d7bdd1b0de22c0824c8a23cf56a9683acaf88dbfdad3fc9bfb6a5766529",
+    "hash": "abd79b5e0f5a367b07beb40623df672f8e57d863581919afd19eb33a817125a1",
     "lines": "1839-1964",
     "docs_md": "docs/workflows/sdlc-task.md",
     "section": "## Vaulted `planning/` writes in the per-task loop"
@@ -42,19 +48,13 @@
     "section": "## Pipeline"
   },
   ".claude/workflows/sdlc-flow.js::isolation-and-branch-naming": {
-    "hash": "b7a661bff4a55bfedecceadd523fd2de7150c014123f51b1ae4a5aadcad1cc4d",
+    "hash": "f46748c85d294a21f5fa555f33987267ddf59c3cffd4c4d686cab0eb2223d8de",
     "lines": "976-1147",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Isolation mode \u2014 branch by default, `--worktree` for true isolation"
   },
-  ".claude/workflows/sdlc-flow.js::triage-bail-taxonomy": {
-    "hash": "d6de3e82a4d60af2158a30502a2cc5436797ca7e5b25f653764edbfd348a33c2",
-    "lines": "1394-1633",
-    "docs_md": "docs/workflows/sdlc-flow.md",
-    "section": "## Pipeline"
-  },
   ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
-    "hash": "be3ec18ff3f4a76b3adf9acdc5416d01e8072c1102c9b6a815eea4eba07e0d6f",
+    "hash": "42cee9f42609e6dd52d2a278eb3e6c99d818c1a09d43d1a22ea270026ffed122",
     "lines": "2155-2310",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Vaulted planning directories (D46)"

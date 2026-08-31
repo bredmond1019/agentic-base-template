@@ -465,6 +465,58 @@ print('FLIPPED:' + bid)
 }
 // <</shared:renderStateFlipScript>>
 
+// <<shared:renderTriagePrompt>>
+// The failure-triage prompt: classify a failure RETRYABLE vs MAJOR so the pipeline either makes a
+// bounded fix or bails to a human now. Shared because the two engines' copies were IDENTICAL apart
+// from the engine name -- 38 lines each, zero residual difference once that one noun is normalised.
+//
+// This is the prompt where the reasoning quality matters most and the text is most load-bearing:
+// the five immediate-bail reasons, the "when unsure, BAIL" bias, and the evidence clause that
+// forbids asserting a failure pre-dates the task without actually re-running the check against base
+// state. Two copies of that argument is two chances for one to be weakened.
+//
+// `bailReasons` is rendered by the CALLER, so a project's harness.json additions (flow.bailReasons)
+// flow through unchanged in both engines.
+function renderTriagePrompt({ engineName, context, attempt, maxAttempts, failBlob, bailReasons, onBail, sameContext, bailRecipe }) {
+  return `You are the failure-triage agent for an ${engineName} run. Classify a failure so the pipeline either makes
+a bounded fix or bails to a human NOW. Bailing is cheap; a wasted retry loop is not — when unsure, BAIL.
+
+Context: ${context} (attempt ${attempt} of ${maxAttempts}).
+Failure detail:
+${failBlob || '(no detail captured)'}
+
+IMMEDIATE-BAIL reasons — if the failure is ANY of these, class=MAJOR and put a short human-readable
+bailReason describing which one and where:
+${bailReasons}
+
+This does NOT widen the bail set above — it only constrains what you may ASSERT once you bail.
+Before writing any bailReason that claims a failure PRE-DATES this task / exists "at baseline" / is
+"unrelated to this task's scope": you MUST first re-run ONLY the failing check against the base state
+(the main working tree, or the task's base commit). If you do so, set baseStateChecked=true and put
+the actual result in evidence. If you cannot re-run it in this run's context, set baseStateChecked=false
+and phrase the claim explicitly as a HYPOTHESIS ("possibly pre-existing; NOT verified against base"),
+never as observed fact.
+Self-inflicted-environment caution: harness-created workspace state (git worktree, sparse-checkout,
+copied .env files, repaired planning/ symlinks) is a CANDIDATE CAUSE, not a fixed backdrop. Identical
+failure before and after the change is NOT evidence of pre-existence when both states share the same
+possibly-broken environment.
+This changes only the wording/evidence of bailReason — bailing on IMMEDIATE-BAIL reason #3
+(environment/credential/auth/network) stays correct and fast, "when unsure, BAIL" stays, and no
+additional retry attempts are introduced by this rule.
+
+Otherwise:
+  RETRYABLE — transient/infra (agent died, flaky), OR the failure CHANGED from the previous attempt
+              (it is making progress and a bounded fix can plausibly close it).
+  MAJOR     — the SAME failure again with no progress, OR structural (one of the bail reasons above).
+
+${bailRecipe}
+Return via StructuredOutput: class, reason, bailReason (empty when RETRYABLE), sameFailureAsBefore,
+evidence (what was actually OBSERVED, quoting output — no causal claims), baseStateChecked (true only
+if the failing check was actually re-run against the base state)${onBail ? ', stateWritten (true only if you performed the additional state write above)' : ''}.
+${sameContext ? `(Previous attempt context for the same-failure check: ${sameContext})` : ''}`
+}
+// <</shared:renderTriagePrompt>>
+
 // Given a stage's self-reported filesModified (repo-root-relative) and a resolved vault, return the
 // vault-relative subset (the part of the path after "planning/") that needs an independent
 // vault-commit check. Derived from what the stage ACTUALLY wrote — never a hard-coded filename list.
@@ -2207,42 +2259,7 @@ function buildBailPayload(taskNum, t, attempt, majorFallback, exhaustionFallback
 // ----------------------------------------------------------------
 async function triage(context, attempt, maxAttempts, failBlob, sameContext, onBail = null) {
   return tracedAgent(`
-You are the failure-triage agent for an /sdlc-flow run. Classify a failure so the pipeline either makes
-a bounded fix or bails to a human NOW. Bailing is cheap; a wasted retry loop is not — when unsure, BAIL.
-
-Context: ${context} (attempt ${attempt} of ${maxAttempts}).
-Failure detail:
-${failBlob || '(no detail captured)'}
-
-IMMEDIATE-BAIL reasons — if the failure is ANY of these, class=MAJOR and put a short human-readable
-bailReason describing which one and where:
-${BAIL_REASONS}
-
-This does NOT widen the bail set above — it only constrains what you may ASSERT once you bail.
-Before writing any bailReason that claims a failure PRE-DATES this task / exists "at baseline" / is
-"unrelated to this task's scope": you MUST first re-run ONLY the failing check against the base state
-(the main working tree, or the task's base commit). If you do so, set baseStateChecked=true and put
-the actual result in evidence. If you cannot re-run it in this run's context, set baseStateChecked=false
-and phrase the claim explicitly as a HYPOTHESIS ("possibly pre-existing; NOT verified against base"),
-never as observed fact.
-Self-inflicted-environment caution: harness-created workspace state (git worktree, sparse-checkout,
-copied .env files, repaired planning/ symlinks) is a CANDIDATE CAUSE, not a fixed backdrop. Identical
-failure before and after the change is NOT evidence of pre-existence when both states share the same
-possibly-broken environment.
-This changes only the wording/evidence of bailReason — bailing on IMMEDIATE-BAIL reason #3
-(environment/credential/auth/network) stays correct and fast, "when unsure, BAIL" stays, and no
-additional retry attempts are introduced by this rule.
-
-Otherwise:
-  RETRYABLE — transient/infra (agent died, flaky), OR the failure CHANGED from the previous attempt
-              (it is making progress and a bounded fix can plausibly close it).
-  MAJOR     — the SAME failure again with no progress, OR structural (one of the bail reasons above).
-
-${onBail ? renderBailStateWriteRecipe(onBail, attempt, maxAttempts) : ''}
-Return via StructuredOutput: class, reason, bailReason (empty when RETRYABLE), sameFailureAsBefore,
-evidence (what was actually OBSERVED, quoting output — no causal claims), baseStateChecked (true only
-if the failing check was actually re-run against the base state)${onBail ? ', stateWritten (true only if you performed the additional state write above)' : ''}.
-${sameContext ? `(Previous attempt context for the same-failure check: ${sameContext})` : ''}
+${renderTriagePrompt({ engineName: '/sdlc-flow', context, attempt, maxAttempts, failBlob, bailReasons: BAIL_REASONS, onBail, sameContext, bailRecipe: onBail ? renderBailStateWriteRecipe(onBail, attempt, maxAttempts) : '' })}
 `, withModel({ label: `triage:${context}:${attempt}`, schema: TRIAGE_SCHEMA, phase: 'Tasks' }, MODEL.triage))
 }
 

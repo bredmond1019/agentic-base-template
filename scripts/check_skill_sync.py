@@ -51,13 +51,19 @@ MANIFEST_PATH = ROOT / "scripts" / "skill_sync_manifest.json"
 ANCHORS = [
     (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 920, 1026,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "triage-bail-taxonomy", 1268, 1586,
+    # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
+    # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
+    # engines, so the anchor follows it there. Anchoring it at the engines after the extraction would
+    # have left this tripwire hashing a one-line function CALL: green forever, blind to every change
+    # in the text it exists to guard. Two entries because both replication guides describe the
+    # taxonomy and each must be re-verified when it moves.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 440, 488,
      ".agents/skills/sdlc-task/SKILL.md"),
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 440, 488,
+     ".agents/skills/sdlc-flow/SKILL.md"),
     (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1839, 1964,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 976, 1147,
-     ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "triage-bail-taxonomy", 1394, 1633,
      ".agents/skills/sdlc-flow/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 2155, 2310,
      ".agents/skills/sdlc-flow/SKILL.md"),
