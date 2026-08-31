@@ -6,6 +6,30 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-08-31
 
 ---
+## 2026-08-31 — harness synced to 16 repos; carryover swept
+
+- **What:** Pulled the 2026-08-31 harness (D83 shared prompt library, two newly-registered skills,
+  and the removal of the seven retired one-off commands) into 16 of 19 downstream repos, two commits
+  each. Deferred `jynx`, `price-scout` and `amistad` — each had a live lane or dirty tree, and a
+  sync leaves the sub-repo dirty where a concurrent agent can sweep harness files into its own
+  commit. Also swept `carryover[]`: 75 -> 71.
+- **Why:** a fix that lives only in base-template is not fixed anywhere real work happens
+  (CLAUDE.md, the update loop, step 5).
+- **Both documented commit traps fired, which is a decent argument for the skill.** `git commit -o`
+  with a pathspec matching no tracked file (`rag-engine-rs` gitignores `.claude/` and `/hooks`)
+  aborted the ENTIRE commit rather than committing the `.agents` half that did match. And on the
+  brain root an unquoted `$P` in zsh did not word-split, so `git add` failed while the following
+  `git commit -o` still succeeded — and because `-o` commits only ALREADY-TRACKED changes it
+  silently omitted three new paths, including the shared library itself. Caught by checking
+  `git status` afterwards rather than trusting `rc=0`.
+- **Carryover sweep:** deleted 5 (four verified by re-running their typed predicates — three had
+  been resolved by earlier sessions and carried forward unnoticed; one resolved by this session's
+  command deletions), updated 2 to record the done half of partially-resolved findings, added 1 for
+  the three deferred repos.
+- **Refs:** [`planning/handoff.md`](planning/handoff.md) ·
+  [D83](planning/decisions/D83-shared-engine-library-inlined-at-build-time.md)
+
+---
 ## 2026-08-31 — the seven one-off stage commands are retired
 
 - **What:** Deleted `/implement`, `/test`, `/fix`, `/review-task`, `/document`, `/process-tasks`
