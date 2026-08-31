@@ -309,7 +309,18 @@ def collect_script_files(root: Path) -> list[Path]:
 # over hooks/) so a new file dropped into the brain's hooks/ directory for HQ-only reasons is
 # never accidentally propagated - each addition here is a deliberate widening. Notably excludes
 # hooks/validate-baseline.json (see module docstring: the baseline is corpus-wide and HQ-only).
-HOOK_FILENAMES: list[str] = ["pre-push", "test_pre_push.sh", "README.md"]
+HOOK_FILENAMES: list[str] = [
+    "pre-push",
+    "test_pre_push.sh",
+    "README.md",
+    # The author-time OKF frontmatter gate (parse + presence + the created/updated date
+    # gate). Added 2026-08-31 when the date gate was turned on by default. Like pre-push,
+    # copying these downstream is INERT until that repo's core.hooksPath is set to `hooks`
+    # — the report below names every repo where it is not.
+    "pre-commit",
+    "check_frontmatter.py",
+    "test_pre-commit.sh",
+]
 
 
 def hook_files(brain_root: Path) -> list[Path]:
@@ -344,6 +355,8 @@ AGENT_SKILL_SLUGS: list[str] = [
     "ping-agent",
     "write-repo-doc",
     "notify-operator",
+    "check-blast-radius",
+    "pick-the-next-block",
 ]
 
 
@@ -370,6 +383,8 @@ CLAUDE_SKILL_SLUGS: list[str] = [
     "write-repo-doc",
     "notify-operator",
     "fleet-push-discipline",
+    "check-blast-radius",
+    "pick-the-next-block",
 ]
 
 
