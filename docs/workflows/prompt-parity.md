@@ -137,8 +137,14 @@ nothing — the next build overwrites it, and the gate fails until it does.
 
 | Check | What it does |
 |---|---|
-| `engines-inlined` | Rebuilds both engines in memory and fails if either differs from disk by a byte. |
-| `build-engines-tests` | 16 fixtures over the builder: marker parsing and its refusals, drift inside an inlined region being caught, engine-local code and region *position* preserved, and a marker with no master erroring rather than blanking the region. |
+| `engines-inlined` | Rebuilds both engines in memory and fails if either differs from disk by a byte. Also fails on an **orphan master** — a block in the library that no engine marks. |
+| `build-engines-tests` | 17 fixtures over the builder: marker parsing and its refusals, drift inside an inlined region being caught, engine-local code and region *position* preserved, a marker with no master erroring rather than blanking the region, and the orphan-master case. |
+
+> **Why the orphan check exists.** It was added because the failure happened. Landing cut 2, the two
+> new masters went into the library while neither engine got the matching markers — so both engines
+> called functions that were never inlined. `node --check` passes on that (the call is syntactically
+> fine) and it would have thrown at run time. An orphan master is the more dangerous direction of
+> the two: the block sits in the library looking authoritative while no engine contains it.
 
 **The extraction was proved behaviour-neutral rather than assumed to be.** The first cut took the 23
 blocks that were already byte-identical in both engines (~230 lines), and the engines after
@@ -152,14 +158,52 @@ worklog vs no worklog, review vs terminal reconcile — the block stays engine-l
 in §2 as intended. A shared library needing a per-engine flag every second line has not removed the
 duplication, only moved it somewhere harder to read.
 
-**Next cuts, in order of value:**
+### Cut 2 — the two embedded scripts (2026-08-31)
 
-1. The blocks that differ *only* by the run-root variable name — `renderOnPassStateWriteRecipe`,
-   `renderBailStateWriteRecipe`, `verifySetupBinding`, `vaultRelPathsFrom`, the triage prompt, the
-   emoji-gate script. Each becomes a master taking the run root as a parameter. This is the biggest
-   remaining block of true duplication.
+Two blocks of **executable code** were duplicated in full, one copy per engine, byte-identical once
+the run root is normalised:
+
+| Master | Size | Was duplicated in |
+|---|---|---|
+| `renderEmojiGate({ runRoot, baseSha, stateFile, recordedCommitsJson })` | 36 lines of Python | both test prompts |
+| `renderStateFlipScript({ runRoot, indent })` | 58 lines of Python | task's bookkeep, flow's wrap-up |
+
+These matter more than their line count. They are not prose describing behaviour — they *are* the
+behaviour: a gate that decides which diff to judge, and a validated read-modify-write of
+`state.json` with byte-exact rollback. A divergence between two copies of either is a defect, not a
+wording difference. `baseSha` is genuinely per-engine (setup-time HEAD for the lean engine, the PR
+base for flow) so the master takes it as a parameter; `indent` exists only because the two prompts
+nest the script at different depths.
+
+Verified the same way as cut 1: each of the four call sites renders text byte-identical to what that
+engine emitted before the change.
+
+**A correction to what this section previously claimed.** The first version of this page said the
+blocks differing "only by the run-root variable name" were the biggest remaining duplication. That
+was wrong, and measuring it is what showed why: normalising the run root and engine name across all
+27 differing blocks leaves only **two** that become identical, and both are statement-level, not
+real shared blocks. The rest have small residual diffs — 3 to 12 lines — that are **accurate
+engine-specific facts**, not drift:
+
+- `STATE_WRITE_SCHEMA`, `TEST_SCHEMA`, `TRIAGE_SCHEMA` say "+ worklog.md" in flow. True there,
+  false in task (I4).
+- `TRIAGE_SCHEMA` calls the bail a "draft-PR handoff" in flow. Task opens no PR.
+- `verifySetupBinding` says "in-place run" vs "branch-mode run" — each engine's own vocabulary.
+- `STAGE_SCHEMA` carries `reportFile` in flow only.
+
+Forcing these into the library would require either a conditional in every second line or making
+one engine's schema description lie. **They stay engine-local**, and that is the library working as
+designed rather than a gap in it.
+
+**What is actually left.** The remaining duplication is smaller than it looks and is mostly prose
+inside prompts rather than whole blocks:
+
+1. The D46 vault-commit recipe (~20 lines) inside both implement prompts — differs only by run root.
 2. `renderCheckList` — identical apart from the `/tmp` scratch prefix (I1) and two comments.
 3. `ENUMERATE_PROMPT` and the derive prompts, now that D1/D2 have made them agree in substance.
+
+None is urgent. The two cuts already landed cover every block where a silent divergence would be a
+behavioural bug rather than a documentation one.
 
 **Then `engine-rs`.** `SDLC_FLOW` / `SDLC_TASK` consume the same masters — but by classification,
 not wholesale: environment and orientation text ports verbatim; an enforceable invariant becomes a

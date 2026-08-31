@@ -113,6 +113,28 @@ def main() -> int:
     if not library:
         raise SystemExit(f"{LIBRARY.name}: no shared regions found -- refusing to blank the engines.")
 
+    # A master no engine marks is an ORPHAN, and it is a silent, dangerous state: the block sits in
+    # the library looking authoritative while neither engine contains it, so an engine that CALLS it
+    # throws at run time. `node --check` cannot see this -- the call is syntactically fine. That
+    # exact break was created and caught while landing the second extraction cut; it is checked here
+    # so it cannot be created again.
+    marked: set[str] = set()
+    for engine in ENGINES:
+        marked |= set(parse_regions(engine.read_text(), str(engine.relative_to(REPO_ROOT))))
+    orphans = sorted(set(library) - marked)
+    if orphans:
+        print("engines-inlined FAILED -- master block(s) that no engine inlines:")
+        for name in orphans:
+            print(f"  - {name}")
+        print(
+            f"\nEach block in {LIBRARY.relative_to(REPO_ROOT)} must have a matching\n"
+            "  // <<shared:NAME>>\n  // <</shared:NAME>>\n"
+            "region in EVERY engine that uses it. An engine calling an un-inlined master compiles\n"
+            "cleanly and then throws at run time, which is why this is an error and not a warning.\n"
+            "Add the markers and re-run with --write, or delete the unused master."
+        )
+        return 1
+
     stale: list[str] = []
     for engine in ENGINES:
         rel = engine.relative_to(REPO_ROOT)

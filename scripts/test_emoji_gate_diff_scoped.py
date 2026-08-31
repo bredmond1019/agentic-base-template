@@ -77,9 +77,20 @@ SOURCE_FILES = {
 # The template-literal placeholder each JS site substitutes for the diff base ref.
 # test.md has none -- it hardcodes `main..HEAD` directly. close-out.md has none either --
 # it takes its range as `sys.argv[1]` (see ARGV_SITES below) rather than a substituted literal.
+# Both engines now inline ONE shared master of this script (D83, `renderEmojiGate` in
+# .claude/workflows/prompts/shared.js), so the placeholder inside the script text is the shared
+# function's PARAMETER name in both. Which base ref actually reaches it moved to the call site,
+# and is asserted separately by CallSiteBaseRefTest below -- that is where the real per-engine
+# invariant now lives (flow must scope to the PR base, task to setup-time HEAD).
 BASE_REF_PLACEHOLDER = {
     "sdlc-task.js": "${baseSha}",
-    "sdlc-flow.js": "${prBase}",
+    "sdlc-flow.js": "${baseSha}",
+}
+
+# The call-site expression each engine must pass as the shared renderer's `baseSha` argument.
+CALL_SITE_BASE_REF = {
+    "sdlc-task.js": "renderEmojiGate({ runRoot: runDir, baseSha, stateFile, recordedCommitsJson })",
+    "sdlc-flow.js": "renderEmojiGate({ runRoot: worktreePath, baseSha: prBase, stateFile, recordedCommitsJson })",
 }
 
 # Sites whose script reads its diff range from argv instead of a literal embedded in the
@@ -628,6 +639,53 @@ class RunCommitPopulationTest(unittest.TestCase):
                 src, r"\[0-9a-f\]\{7,40\}",
                 f"{engine}: must validate that a recorded commit actually looks like a "
                 "short hash, not merely that it is truthy",
+            )
+
+
+class CallSiteBaseRefTest(unittest.TestCase):
+    """Each engine must pass ITS OWN base ref into the shared emoji-gate renderer.
+
+    Before D83 this was guaranteed by the placeholder baked into each engine's own copy of the
+    script, and `BASE_REF_PLACEHOLDER` above checked it. With one shared master the script text is
+    identical in both engines by construction, so that check can no longer see the difference --
+    it moved to the call site, and so did this assertion.
+
+    The invariant is not cosmetic. `/sdlc-flow` scoping to setup-time HEAD instead of the PR base
+    would judge only the last task's commits at the end review; `/sdlc-task` scoping to a PR base
+    it never computes would fail outright. The two engines genuinely need different values here,
+    which is exactly why the shared master takes it as a parameter rather than hardcoding either.
+    """
+
+    def test_each_engine_passes_its_own_base_ref_to_the_shared_renderer(self):
+        for engine, expected_call in CALL_SITE_BASE_REF.items():
+            text = SOURCE_FILES[engine].read_text(encoding="utf-8")
+            self.assertIn(
+                expected_call,
+                text,
+                f"{engine}: expected the emoji-gate call site to read exactly {expected_call!r}. "
+                "If the renderer's signature changed, update CALL_SITE_BASE_REF -- but confirm "
+                "first that this engine still passes the base ref it actually needs.",
+            )
+
+    def test_the_two_engines_pass_different_base_refs(self):
+        """Non-vacuity guard: if both call sites ever collapsed to the same expression, the test
+        above would still pass while the per-engine invariant had been destroyed."""
+        task_call = CALL_SITE_BASE_REF["sdlc-task.js"]
+        flow_call = CALL_SITE_BASE_REF["sdlc-flow.js"]
+        self.assertNotEqual(task_call, flow_call)
+        self.assertIn("baseSha: prBase", flow_call)
+        self.assertNotIn("prBase", task_call)
+
+    def test_neither_engine_still_carries_its_own_inline_copy(self):
+        """The point of the shared master is that there is exactly ONE copy. A second, engine-local
+        `EMOJI = re.compile` outside the shared region would mean the extraction above is testing
+        one copy while the engine runs another."""
+        for engine in RUN_STATE_SITES:
+            text = SOURCE_FILES[engine].read_text(encoding="utf-8")
+            self.assertEqual(
+                text.count("EMOJI = re.compile"),
+                1,
+                f"{engine}: expected exactly one emoji-gate script (the inlined shared master)",
             )
 
 

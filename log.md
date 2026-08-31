@@ -6,6 +6,40 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-08-31
 
 ---
+## 2026-08-31 — shared library cut 2: the two embedded scripts
+
+- **What:** Extracted the two blocks of **executable code** that were duplicated in full, one copy
+  per engine: the emoji gate (36 lines of Python, in both test prompts) and the D64 `state.json`
+  validate-then-rollback mutation (58 lines, in task's bookkeep and flow's wrap-up). Both are now
+  masters in `.claude/workflows/prompts/shared.js` — `renderEmojiGate(...)` and
+  `renderStateFlipScript(...)` — taking the genuinely per-engine values as parameters (`baseSha` is
+  setup-time HEAD for task, the PR base for flow; `indent` only because the two prompts nest at
+  different depths). All four call sites verified to render byte-identical text to what each engine
+  emitted before.
+- **Why:** These are not prose describing behaviour, they *are* the behaviour — a gate deciding
+  which diff to judge, and a validated read-modify-write with byte-exact rollback. A divergence
+  between two copies of either is a defect, not a wording difference.
+- **A latent break this created and caught:** the two masters went into the library while neither
+  engine got the matching `<<shared:...>>` markers, so both engines called functions that were never
+  inlined. `node --check` passes on that — the call is syntactically fine — and it would have thrown
+  at run time. `build_engines.py` now **fails on an orphan master** (a library block no engine
+  marks), with a fixture and a positive control; that is the more dangerous direction, since the
+  block sits in the library looking authoritative while no engine contains it.
+- **Two tests updated, intent preserved:** `state-write-validation-tests` (9 cases that actually RUN
+  the mutation against fixtures) needed no change — it finds the script in the inlined shared
+  region. `emoji-gate-diff-scoped-tests` asserted flow's script text contained `${prBase}`; with one
+  shared master that is no longer where the difference lives, so a new `CallSiteBaseRefTest` asserts
+  each engine passes its own base ref at the call site, plus a non-vacuity case proving the two
+  differ and one pinning that neither engine kept a second inline copy. 17 -> 20 cases.
+- **A correction recorded on disk:** `prompt-parity.md` §5 previously claimed the
+  run-root-only blocks were the biggest remaining duplication. Measured across all 27 differing
+  blocks, only two normalise to identical, and the rest differ by 3-12 lines of *accurate
+  engine-specific fact* ("+ worklog.md", "draft-PR handoff", `reportFile`) — unifying them would
+  make one engine's schema lie. They stay engine-local; the page now says so.
+- **Refs:** [`docs/workflows/prompt-parity.md`](docs/workflows/prompt-parity.md) §5 ·
+  [D83](planning/decisions/D83-shared-engine-library-inlined-at-build-time.md)
+
+---
 ## 2026-08-31 — engine parity: 8 drifts closed, then one master copy of every shared block (D83)
 
 - **What:** Audited every stage prompt in `sdlc-task.js` against `sdlc-flow.js` and found **eight**

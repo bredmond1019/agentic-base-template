@@ -416,6 +416,120 @@ print(chr(10).join(t[0].get('files', []) if t else []))
 }
 // <</shared:renderWorkAssertion>>
 
+// <<shared:renderEmojiGate>>
+// The universal emoji gate, DIFF-SCOPED to the commit SHAs this run itself recorded. Shared because
+// it is executable PYTHON, not prose: a divergence between the engines' copies is a behaviour bug
+// (a gate that judges the wrong diff), not a wording difference. `baseSha` is the range the
+// no-commits-recorded abort checks against -- the setup-time HEAD in the lean engine, the PR base
+// in the flow engine -- and is the ONLY thing that legitimately varies between them.
+function renderEmojiGate({ runRoot, baseSha, stateFile, recordedCommitsJson }) {
+  return `  cd ${runRoot} && python3 - <<'PYEOF'
+import subprocess, re, sys
+EMOJI = re.compile(r'[\\U0001F300-\\U0001FAFF\\U00002600-\\U000027BF]')
+FOOTER = 'Generated with Claude Code'
+BASE_SHA = '${baseSha}'
+STATE_FILE = '${stateFile}'
+RUN_COMMITS = ${recordedCommitsJson}
+if not RUN_COMMITS:
+    base_diff = subprocess.run(['git','diff','--name-only',f'{BASE_SHA}..HEAD'], capture_output=True, text=True).stdout.strip()
+    if base_diff:
+        print(f'EMOJI CHECK: cannot scope diff -- no commits recorded in the run-state ({STATE_FILE}) for this run, but {BASE_SHA}..HEAD is non-empty. Refusing to pass on an unscoped diff.')
+        sys.exit(1)
+    print('EMOJI CHECK: OK'); sys.exit(0)
+hits = []
+for commit in RUN_COMMITS:
+    diff = subprocess.run(['git','diff','-M','-U0',f'{commit}^..{commit}','--','*.md','*.mdx'], capture_output=True, text=True).stdout.splitlines()
+    cur_file = None
+    cur_line = None
+    for line in diff:
+        if line.startswith('diff --git '):
+            cur_file = None; cur_line = None
+        elif line.startswith('+++ '):
+            p = line[4:]
+            cur_file = None if p == '/dev/null' else (p[2:] if p.startswith('b/') else p)
+        elif line.startswith('@@'):
+            m = re.match(r'@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@', line)
+            cur_line = int(m.group(1)) if m else None
+        elif cur_file and cur_line is not None and line.startswith('+') and not line.startswith('+++'):
+            content = line[1:]
+            if EMOJI.search(content) and FOOTER not in content:
+                hits.append(f'{cur_file}:{cur_line}: {content.rstrip()[:100]}')
+            cur_line += 1
+if hits:
+    print('EMOJI CHECK FAIL:'); [print(h) for h in hits[:25]]; sys.exit(1)
+print('EMOJI CHECK: OK'); sys.exit(0)
+PYEOF`
+}
+// <</shared:renderEmojiGate>>
+
+// <<shared:renderStateFlipScript>>
+// The D64 validate-then-commit mutation for planning/state.json's authored block status: capture
+// the pre-write bytes, mutate in memory, run `mev validate-brain --state` BEFORE and AFTER, and
+// roll back byte-exactly on any NET-NEW diagnostic. Shared for the same reason as the emoji gate --
+// it is executable Python performing a validated write, and the two engines had a full 57-line copy
+// each. `indent` exists only because the two prompts nest it at different depths.
+function renderStateFlipScript({ runRoot, indent }) {
+  return `${indent}cd ${runRoot} && python3 -c "
+import json, subprocess, sys, shutil
+
+path = 'planning/state.json'
+bid = sys.argv[1]
+
+with open(path, 'rb') as fh:
+    pre_bytes = fh.read()
+
+data = json.loads(pre_bytes)
+found = False
+for track in data.get('tracks', []):
+    for block in track.get('blocks', []):
+        if block.get('id') == bid:
+            block['status'] = 'closed'
+            found = True
+            break
+    if found:
+        break
+
+if not found:
+    print('NOT_FOUND')
+    sys.exit(0)
+
+mev_available = shutil.which('mev') is not None
+
+def diagnostics():
+    r = subprocess.run(['mev', 'validate-brain', '--state'], capture_output=True, text=True)
+    lines = (r.stdout + r.stderr).splitlines()
+    return set(l for l in lines if l.strip().startswith('[E_') or l.strip().startswith('[W_'))
+
+if not mev_available:
+    with open(path, 'w') as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+        fh.write(chr(10))
+    print('FLIPPED:' + bid)
+    print('UNVALIDATED: mev not on PATH -- schema check skipped, write landed with only json.load-level parsing')
+    sys.exit(0)
+
+baseline = diagnostics()
+
+with open(path, 'w') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
+    fh.write(chr(10))
+
+after = diagnostics()
+net_new = after - baseline
+
+if net_new:
+    with open(path, 'wb') as fh:
+        fh.write(pre_bytes)
+    print('REJECTED:' + bid)
+    for line in sorted(net_new):
+        print('NET_NEW: ' + line)
+    sys.exit(1)
+
+print('FLIPPED:' + bid)
+" "<RESOLVED_ID>"`
+}
+// <</shared:renderStateFlipScript>>
+
 // Given a task stage's self-reported filesModified (repo-root-relative) and a resolved vault, return
 // the vault-relative subset (the part of the path after "planning/") that needs an independent
 // vault-commit check. Derived from what the task ACTUALLY wrote — never a hard-coded filename list.
@@ -1905,42 +2019,7 @@ Then run the universal emoji gate (a harness rule, always) — DIFF-SCOPED to th
 recorded commit SHAs, never the whole ${baseSha}..HEAD range: it judges only lines ADDED by
 commits THIS run itself made, so neither a legacy file's pre-existing emoji nor a concurrent
 sibling session's commit on a shared in-place branch can fail a diff this run never touched:
-  cd ${runDir} && python3 - <<'PYEOF'
-import subprocess, re, sys
-EMOJI = re.compile(r'[\\U0001F300-\\U0001FAFF\\U00002600-\\U000027BF]')
-FOOTER = 'Generated with Claude Code'
-BASE_SHA = '${baseSha}'
-STATE_FILE = '${stateFile}'
-RUN_COMMITS = ${recordedCommitsJson}
-if not RUN_COMMITS:
-    base_diff = subprocess.run(['git','diff','--name-only',f'{BASE_SHA}..HEAD'], capture_output=True, text=True).stdout.strip()
-    if base_diff:
-        print(f'EMOJI CHECK: cannot scope diff -- no commits recorded in the run-state ({STATE_FILE}) for this run, but {BASE_SHA}..HEAD is non-empty. Refusing to pass on an unscoped diff.')
-        sys.exit(1)
-    print('EMOJI CHECK: OK'); sys.exit(0)
-hits = []
-for commit in RUN_COMMITS:
-    diff = subprocess.run(['git','diff','-M','-U0',f'{commit}^..{commit}','--','*.md','*.mdx'], capture_output=True, text=True).stdout.splitlines()
-    cur_file = None
-    cur_line = None
-    for line in diff:
-        if line.startswith('diff --git '):
-            cur_file = None; cur_line = None
-        elif line.startswith('+++ '):
-            p = line[4:]
-            cur_file = None if p == '/dev/null' else (p[2:] if p.startswith('b/') else p)
-        elif line.startswith('@@'):
-            m = re.match(r'@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@', line)
-            cur_line = int(m.group(1)) if m else None
-        elif cur_file and cur_line is not None and line.startswith('+') and not line.startswith('+++'):
-            content = line[1:]
-            if EMOJI.search(content) and FOOTER not in content:
-                hits.append(f'{cur_file}:{cur_line}: {content.rstrip()[:100]}')
-            cur_line += 1
-if hits:
-    print('EMOJI CHECK FAIL:'); [print(h) for h in hits[:25]]; sys.exit(1)
-print('EMOJI CHECK: OK'); sys.exit(0)
-PYEOF
+${renderEmojiGate({ runRoot: runDir, baseSha, stateFile, recordedCommitsJson })}
   A stray emoji ADDED in a commit THIS run made FAILS this gate; a pre-existing emoji in a file
   this task did not touch a line of, or an emoji added by a different, concurrent session's
   commit on a shared branch, does not.
@@ -2468,64 +2547,7 @@ Target:
      BEFORE baseline. Pre-existing corpus errors (e.g. a sibling lane's unrelated breakage) must never
      block this write — NET-NEW only, the same delta-attribution rule the push gate uses under D64.
      Substitute the id you resolved for <RESOLVED_ID> (keep it as the script's sole argv, quoted):
-     cd ${runDir} && python3 -c "
-import json, subprocess, sys, shutil
-
-path = 'planning/state.json'
-bid = sys.argv[1]
-
-with open(path, 'rb') as fh:
-    pre_bytes = fh.read()
-
-data = json.loads(pre_bytes)
-found = False
-for track in data.get('tracks', []):
-    for block in track.get('blocks', []):
-        if block.get('id') == bid:
-            block['status'] = 'closed'
-            found = True
-            break
-    if found:
-        break
-
-if not found:
-    print('NOT_FOUND')
-    sys.exit(0)
-
-mev_available = shutil.which('mev') is not None
-
-def diagnostics():
-    r = subprocess.run(['mev', 'validate-brain', '--state'], capture_output=True, text=True)
-    lines = (r.stdout + r.stderr).splitlines()
-    return set(l for l in lines if l.strip().startswith('[E_') or l.strip().startswith('[W_'))
-
-if not mev_available:
-    with open(path, 'w') as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
-        fh.write(chr(10))
-    print('FLIPPED:' + bid)
-    print('UNVALIDATED: mev not on PATH -- schema check skipped, write landed with only json.load-level parsing')
-    sys.exit(0)
-
-baseline = diagnostics()
-
-with open(path, 'w') as fh:
-    json.dump(data, fh, indent=2, ensure_ascii=False)
-    fh.write(chr(10))
-
-after = diagnostics()
-net_new = after - baseline
-
-if net_new:
-    with open(path, 'wb') as fh:
-        fh.write(pre_bytes)
-    print('REJECTED:' + bid)
-    for line in sorted(net_new):
-        print('NET_NEW: ' + line)
-    sys.exit(1)
-
-print('FLIPPED:' + bid)
-" "<RESOLVED_ID>"
+${renderStateFlipScript({ runRoot: runDir, indent: '     ' })}
      The script searches EVERY tracks[].blocks[] entry and only ever mutates the one matching block's
      "status" field. Read the script's own stdout AND exit code — do not infer success yourself:
        - "NOT_FOUND" (exit 0) → the file stays byte-unchanged. Report it in notes, do NOT fabricate a

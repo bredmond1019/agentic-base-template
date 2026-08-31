@@ -143,6 +143,21 @@ class RealArtifactsTest(unittest.TestCase):
         for engine in be.ENGINES:
             self.assertTrue(set(be.parse_regions(engine.read_text(), engine.name)) <= library)
 
+    def test_no_master_is_orphaned(self):
+        """An orphan master -- in the library, marked by no engine -- is the dangerous direction.
+        The block looks authoritative while neither engine contains it, so an engine CALLING it
+        throws at run time and `node --check` sees nothing wrong. This was created for real while
+        landing the second extraction cut."""
+        library = set(be.parse_regions(be.LIBRARY.read_text(), "shared.js"))
+        marked: set[str] = set()
+        for engine in be.ENGINES:
+            marked |= set(be.parse_regions(engine.read_text(), engine.name))
+        self.assertEqual(
+            sorted(library - marked),
+            [],
+            "master block(s) present in shared.js but inlined by no engine",
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)
