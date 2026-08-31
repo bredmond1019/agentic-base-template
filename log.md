@@ -6,6 +6,33 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-08-31
 
 ---
+## 2026-08-31 — the seven one-off stage commands are retired
+
+- **What:** Deleted `/implement`, `/test`, `/fix`, `/review-task`, `/document`, `/process-tasks`
+  and `/conditional_docs`, their `.agents/skills/` mirrors, and `docs/workflows/commands.md`.
+  Survivors: `/update-docs`, `/patch`, `/review-PR`, `/close-out`.
+- **Why:** a hand-driven third copy of what the engines already do, which the operator never runs,
+  and which had drifted onto an older data model — written against `tasks.md` prose, never migrated
+  through D45 (bare-array `tasks.json`) or D65 (block records). `/test` additionally carried a
+  hardcoded `main..HEAD` emoji gate and ignored every D6 check kind, so it returned a **wrong
+  verdict silently** on any project using `baseline-diff`, `warning-scan` or `rule-scan` checks.
+  Repairing all eight findings would have meant maintaining that third copy forever.
+- **Deletion pre-swept** per the two-wave rule (links, then graph edges) before touching anything:
+  only `docs/index.md`, `docs/workflows/index.md` and `prompt-parity.md` referenced them, all fixed
+  in the same commit. `validate-brain --links/--structure/--graph` reported **zero** errors from the
+  change. Four surviving commands referenced the deleted ones and were repointed.
+- **One coupling handled:** `test_emoji_gate_diff_scoped.py` gated `.claude/commands/test.md` by
+  name. Dropping it leaves `BASE_REF_SITES` with a single member, so `check_class` loses its
+  "sites in this class agree" assertion there — recorded in the file, since the substantive
+  per-scenario verdict assertion is unaffected. 20 tests still pass.
+- **Process note:** the retirement commit also swept in an unrelated `close-out.md` change that was
+  already uncommitted when this session started (the 2026-08-30 `emit_state_write.sh` fix). Staging
+  that file for my own two-line edit took its other changes too. Disclosed in the commit message
+  rather than split out, because its log entry was already committed and backing it out would have
+  left `log.md` describing uncommitted work.
+- **Refs:** [`docs/workflows/prompt-parity.md`](docs/workflows/prompt-parity.md) §4
+
+---
 ## 2026-08-31 — cut 3: three stage prompts shared, and five sync anchors repaired
 
 - **What:** `renderTriagePrompt` (38 lines, zero residual difference between the engines),
