@@ -484,6 +484,16 @@ const resumeMode    = hasFlag('--resume')
 // worktree (needed for true isolation).
 const useWorktree   = hasFlag('--worktree')
 
+// What to CALL the directory every stage runs from, in prose addressed to an agent.
+//
+// This engine runs on a plain branch in the MAIN WORKING TREE by default; `--worktree` is opt-in.
+// `worktreePath` is therefore the repo root on the default path, and eight stage prompts used to
+// say "run from the worktree root" unconditionally — telling the agent it was in a worktree that
+// does not exist, and contradicting this engine's own `W` preamble, which correctly says "MAIN
+// WORKING TREE, on branch X". Nobody chose that; it is wording left behind when branch mode became
+// the default. Say what is actually true in the mode this run is in.
+const runRootLabel = useWorktree ? 'worktree root' : 'repo root'
+
 const VALID_TEST_DEPTHS = ['fast', 'full']
 const testDepthFlag = flagStr('--test-depth')
 if (testDepthFlag && !VALID_TEST_DEPTHS.includes(testDepthFlag)) {
@@ -980,7 +990,7 @@ async function loadHarnessConfig(cwd) {
 You are the harness-config loader for the SDLC pipeline. Your ONLY job is to read the project's
 validation-policy file and return it as structured data. Do not run any checks or modify anything.
 
-STEP 1 — Read the config file (from the worktree root):
+STEP 1 — Read the config file (from the ${runRootLabel}):
   cd ${cwd} && cat planning/harness.json 2>/dev/null && echo "__HARNESS_PRESENT__" || echo "__HARNESS_ABSENT__"
 
 STEP 2 — Decide:
@@ -1283,7 +1293,7 @@ ${stateJson}`
   adding that one timestamp key):${bailOccurredAtNote}
 ${stateJson}`
   const result = await agent(`
-You maintain the run-state for an /sdlc-flow pipeline. You run from the WORKTREE root. Write two
+You maintain the run-state for an /sdlc-flow pipeline. You run from the ${runRootLabel}. Write two
 files to disk — do NOT run git commands, do not run checks, do not edit source, do not touch
 anything else. This state is read back off disk only (never out of git); it is deliberately not
 committed.
@@ -2063,7 +2073,7 @@ You are the test agent for the /sdlc-flow pipeline. Run the project's validation
 IMPORTANT — run ONLY the checks enumerated below (${usingOverride
     ? "this task declares its OWN validation_commands in tasks.json, which REPLACE the project-wide harness checks for this task (D63 — pure substitute for this engine) — the full harness suite still runs at the end review"
     : 'from planning/harness.json + the spec'}). Do NOT invent
-checks. All Bash calls run from the worktree root (prefix each with: cd ${worktreePath} &&).
+checks. All Bash calls run from the ${runRootLabel} (prefix each with: cd ${worktreePath} &&).
 
 ${checklistBody}
 
@@ -2330,7 +2340,7 @@ Target:
    If BREAKDOWN_EXISTS: read ${breakdownFile}, find "### Step ${taskNum}:", and use its atomic sub-steps as
    the execution guide (run each inline "Verify:" checkpoint). tasks.json stays authoritative for scope.
 
-3. Execute methodically with Read/Edit/Write/Bash (all paths resolve from the worktree root).
+3. Execute methodically with Read/Edit/Write/Bash (all paths resolve from the ${runRootLabel}).
 
 4. Follow every CLAUDE.md standing rule; add/update tests for new code/logic; verify any model ids /
    package names via the claude-api skill — never from memory.
@@ -2574,7 +2584,7 @@ if (!bailed) {
     const reviewResult = await tracedAgent(`${W}
 You are the SINGLE consolidated review agent for an /sdlc-flow run — one review over the whole
 integrated tree (it replaces per-task review entirely). Verify the spec's acceptance criteria against
-the ACTUAL code and issue a verdict. All Bash calls run from the worktree root.
+the ACTUAL code and issue a verdict. All Bash calls run from the ${runRootLabel}.
 
 Target:
   Spec:        ${blockId}
@@ -2653,7 +2663,7 @@ Return via StructuredOutput: verdict, failureReasons, unmetCriteria, localized, 
     await tracedAgent(`${W}
 You are the fix agent for the consolidated review of an /sdlc-flow run. Make the MINIMUM targeted changes
 to address ONLY the review's findings — do not re-implement or touch passing criteria. All Bash from the
-worktree root.
+${runRootLabel}.
 
 Review findings to address:
 ${findingsBlob}
@@ -2783,7 +2793,7 @@ if (!bailed && finalVerdict === 'PASS') {
   const docsStatePayload = buildDocsStatePayload()
   const docResult = await tracedAgent(`${W}
 You are the documentation agent for the /sdlc-flow pipeline — a surgical /update-docs --patch over only
-the surface this run changed. All Bash from the worktree root.
+the surface this run changed. All Bash from the ${runRootLabel}.
 
 1. Read the committed run-state for the list of files changed across all tasks:
    Run: cd ${worktreePath} && cat ${stateFile}
@@ -2911,7 +2921,7 @@ log(`Wrap-up. Verdict: ${finalVerdict} | passed ${passedTasks.length}/${taskList
 const wrapupStatePayload = buildWrapupStatePayload()
 const wrapupResult = await tracedAgent(`${W}
 You are the wrap-up agent for an /sdlc-flow run. Write the human-facing status/log + the D18 amendment log
-ON THIS BRANCH (the PR will carry them), then commit. All Bash from the worktree root.
+ON THIS BRANCH (the PR will carry them), then commit. All Bash from the ${runRootLabel}.
 
 Target:
   Spec:          ${blockId}
@@ -3110,7 +3120,7 @@ if (!noPr) {
     : `${blockId}: ${passedTasks.length} task(s), review ${finalVerdict}`
 
   prInfo = await tracedAgent(`${W}
-You open a pull request for a completed (or bailed) /sdlc-flow run. All Bash from the worktree root.
+You open a pull request for a completed (or bailed) /sdlc-flow run. All Bash from the ${runRootLabel}.
 The branch "${branchName}" already carries every commit (code, state, docs, status/log). The PR body is
 the handoff — build it from the committed run-state.
 
