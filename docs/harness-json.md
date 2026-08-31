@@ -432,7 +432,7 @@ project policy, so they are not config fields in the current schema:
 
 | Behavior | Why hardcoded |
 |---|---|
-| **No emoji in docs** | Universal harness rule — every project applies it. **Diff-scoped**: the gate parses `git diff -U0` and judges only lines *added* in the run's range (`+++`/`---` diff headers are never treated as content, a pure rename has no added lines and passes, a brand-new file's added lines are its whole content). A file with pre-existing emoji outside the diff never fails a change that didn't touch those lines — this is what lets the gate ratchet instead of blocking on legacy footprint. See `.claude/commands/test.md`, `.claude/workflows/sdlc-task.js`, `.claude/workflows/sdlc-flow.js`, and `.claude/commands/close-out.md` for the four sites (all four also exempt the literal `Generated with Claude Code` PR-footer). |
+| **No emoji in docs** | Universal harness rule — every project applies it. **Diff-scoped**: the gate parses `git diff -U0` and judges only lines *added* in the run's range (`+++`/`---` diff headers are never treated as content, a pure rename has no added lines and passes, a brand-new file's added lines are its whole content). A file with pre-existing emoji outside the diff never fails a change that didn't touch those lines — this is what lets the gate ratchet instead of blocking on legacy footprint. The engines share ONE copy via `renderEmojiGate` in `.claude/workflows/prompts/shared.js` (D83); `.claude/commands/close-out.md` carries its own. Both exempt the literal `Generated with Claude Code` PR-footer. |
 | **Parallel port = `port + taskNumber`** | One valid behavior; a knob with one value is noise |
 
 ## Deferred fields (not yet built)

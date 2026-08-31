@@ -7,9 +7,13 @@ task 2. The original task 1 moved four emoji-gate sites from whole-file scoping
 (`git diff -M -U0 ... -- '*.md' '*.mdx'` + scan only `+` content lines). `/close-out`'s inline
 gate (`.claude/commands/close-out.md`) was a fifth, undiscovered site that had neither the
 added-line scoping nor the PR-footer exemption; it has since been brought into line with the
-other four sites. This suite proves all FIVE sites actually agree, mechanically, rather than by eye.
+other sites. This suite proves the remaining sites actually agree, mechanically, rather than by eye.
 
-BT.ticket.emoji-gate-diff-window-concurrent-sessions, task 2, split the five sites into TWO
+`.claude/commands/test.md` was one of the original five. It was RETIRED along with the rest of the
+one-off stage commands -- the operator drives `/sdlc-task` and `/sdlc-flow` exclusively -- so this
+suite now covers THREE sites, and BASE_REF_SITES has a single member (see below).
+
+BT.ticket.emoji-gate-diff-window-concurrent-sessions, task 2, split the sites into TWO
 classes with different scoping capability, because a single shared `<base>..HEAD` range is
 provably wrong for two of them:
 
@@ -25,13 +29,12 @@ provably wrong for two of them:
                          never `<base>..HEAD` as a whole. An anti-vacuous guard fires if the
                          recorded commit set is empty while `<base>..HEAD` is non-empty, rather
                          than silently passing on an unscoped diff.
-  - BASE_REF_SITES    -- `.claude/commands/test.md` and `.claude/commands/close-out.md` are
-                         operator-invoked against a feature branch cut FROM the base, with no
-                         run-state to scope by and no shared-branch window to be exposed to (see
-                         the block record's "Out of Scope"). These two keep diffing
-                         `<base>..HEAD` as a whole, exactly as before.
+  - BASE_REF_SITES    -- `.claude/commands/close-out.md` is operator-invoked against a feature
+                         branch cut FROM the base, with no run-state to scope by and no
+                         shared-branch window to be exposed to (see the block record's "Out of
+                         Scope"). It keeps diffing `<base>..HEAD` as a whole, exactly as before.
 
-Cross-site agreement is therefore asserted WITHIN each class, not across all five: the whole
+Cross-site agreement is therefore asserted WITHIN each class, not across all sites: the whole
 point of the concurrent-sibling scenario below is that the two classes are now EXPECTED to
 disagree (RUN_STATE_SITES pass; BASE_REF_SITES still fail, correctly, since a real feature-branch
 checkout is never exposed to a sibling's commits in the first place). A case where two sites of
@@ -40,7 +43,7 @@ special-case around a real intra-class divergence.
 
 Each site embeds a real, runnable `python3 - <<'PYEOF' ... PYEOF` block. This suite extracts
 that literal script text out of each source file (undoing the JS template-literal double-
-backslash escaping the three `.js` sites carry, and substituting each site's base-ref and, for
+backslash escaping the `.js` sites carry, and substituting each site's base-ref and, for
 the two RUN_STATE_SITES, run-state-path placeholders with real values -- `close-out.md` takes its
 range as `sys.argv[1]` instead of a substituted literal, so it is invoked with an explicit
 `main...HEAD` argument matching what Step 0.5 would actually compute for a feature branch cut
@@ -68,7 +71,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SOURCE_FILES = {
-    "test.md": REPO_ROOT / ".claude" / "commands" / "test.md",
     "sdlc-task.js": REPO_ROOT / ".claude" / "workflows" / "sdlc-task.js",
     "sdlc-flow.js": REPO_ROOT / ".claude" / "workflows" / "sdlc-flow.js",
     "close-out.md": REPO_ROOT / ".claude" / "commands" / "close-out.md",
@@ -102,12 +104,17 @@ CALL_SITE_BASE_REF = {
 # script text -- these get the range passed as an extra command-line argument at run time.
 ARGV_SITES = {"close-out.md": "main...HEAD"}
 
-SITE_NAMES = ["test.md", "sdlc-task.js", "sdlc-flow.js", "close-out.md"]
+SITE_NAMES = ["sdlc-task.js", "sdlc-flow.js", "close-out.md"]
 
 # The two-class split (BT.ticket.emoji-gate-diff-window-concurrent-sessions, task 2). See the
 # module docstring for why cross-class agreement is no longer asserted.
 RUN_STATE_SITES = ["sdlc-task.js", "sdlc-flow.js"]
-BASE_REF_SITES = ["test.md", "close-out.md"]
+# `.claude/commands/test.md` was RETIRED with the rest of the one-off stage commands (the
+# operator drives /sdlc-task and /sdlc-flow exclusively), so this class now has a single member.
+# check_class() consequently loses its "all sites in the class AGREE" assertion here -- with one
+# site there is nothing to disagree with. The substantive assertion is unaffected: the class is
+# still checked against the expected PASS/FAIL verdict in every scenario below.
+BASE_REF_SITES = ["close-out.md"]
 assert set(RUN_STATE_SITES) | set(BASE_REF_SITES) == set(SITE_NAMES)
 assert set(RUN_STATE_SITES) & set(BASE_REF_SITES) == set()
 

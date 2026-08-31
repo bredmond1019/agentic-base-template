@@ -1,26 +1,26 @@
 ---
 type: Reference
 title: Prompt parity — sdlc-flow, sdlc-task, and the one-off commands
-description: "Where the two engines' stage prompts and the matching one-off commands agree, where they deliberately differ, and where the difference is unintended drift."
+description: "Where the two SDLC engines' stage prompts agree, where they deliberately differ, how the shared master library keeps them from drifting, and why the one-off stage commands were retired."
 doc_id: sdlc-prompt-parity
 layer: [factory]
 project: base-template
 status: active
 keywords: [prompt parity, sdlc-flow, sdlc-task, drift, stage prompts, one-off commands]
-related: [base-template-workflows-index, sdlc-flow, sdlc-task, sdlc-commands]
+related: [base-template-workflows-index, sdlc-flow, sdlc-task]
 ---
 
 # Prompt parity
 
-`sdlc-flow.js` and `sdlc-task.js` are **self-contained** — neither imports the other, so every
-shared stage prompt exists twice on disk. The one-off commands (`/implement`, `/test`, `/fix`,
-`/review-task`, `/document`) are a third copy of the same steps, written for a human driving the
+`sdlc-flow.js` and `sdlc-task.js` are **self-contained** — the Workflow harness runs one file per
+engine, so neither can import the other and every shared stage prompt existed twice on disk. A third
+copy lived in the one-off stage commands (`/implement`, `/test`, `/fix`, …) for a human driving the
 pipeline by hand.
 
-Three copies of one instruction is three chances to drift. This page records, per overlapping
-stage, whether a difference is **intended** (and why) or **drift** (and what the fix is). It is a
-findings register, not a spec — when a drift row is closed, move it to the intended table or delete
-it.
+Three copies of one instruction is three chances to drift, and all three had. This page is the
+register: what is **intended** difference (§2), what was **drift** and how it was closed (§3), why
+the third copy was retired rather than repaired (§4), and the shared library that stops the first
+two recurring (§5).
 
 Audited 2026-08-30 against `sdlc-task.js` (16 prompt regions) and `sdlc-flow.js` (20).
 
@@ -36,7 +36,7 @@ Verified byte-identical except for the run-root variable name (`runDir` vs `work
 `renderWorkAssertion` · `skipCountRegressionResult` · the emoji-gate Python script · the D46 vaulted
 commit recipe · the D64 validate-then-rollback `state.json` mutation script.
 
-That set is the de-facto shared library. It is what a real extraction (§4) would start from.
+That set is the de-facto shared library. It is what the extraction in §5 started from.
 
 ---
 
@@ -85,11 +85,22 @@ presenting five reasons as the complete set. Each was corrected before `--update
 
 ---
 
-## 4. Drift between the engines and the one-off commands
+## 4. The one-off commands — RETIRED 2026-08-31
 
-The one-off commands are on an **older data model** than the engines. This is the larger gap of the
-two, and most of it is one root cause: the commands were written against `tasks.md` prose and never
-migrated through D45 (bare-array `tasks.json`) or D65 (block record as the planning unit).
+`/implement`, `/test`, `/fix`, `/review-task`, `/document`, `/process-tasks` and `/conditional_docs`
+are **deleted**, along with `docs/workflows/commands.md` and their `.agents/skills/` mirrors. Run
+[`/sdlc-task`](sdlc-task.md) or [`/sdlc-flow`](sdlc-flow.md) instead — they perform every one of
+those stages against the current spec format with the gates wired in. `/update-docs` survives for
+ad-hoc documentation work outside a run; `/patch`, `/review-PR` and `/close-out` are unaffected.
+
+**Why they went rather than being repaired.** They were a hand-driven third copy of what the engines
+already do, nobody was running them, and they had drifted onto an older data model — written against
+`tasks.md` prose, never migrated through D45 (bare-array `tasks.json`) or D65 (block record as the
+planning unit). Repairing all eight findings below would have meant maintaining that third copy
+forever, which is the problem this whole page exists to remove.
+
+The findings are kept because they are the argument for the decision, and because anyone tempted to
+reimplement one of these commands should read what the last version got wrong.
 
 | # | Drift | Consequence |
 |---|---|---|

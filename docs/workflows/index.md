@@ -1,13 +1,13 @@
 ---
 type: Index
 title: SDLC Workflows — reference hub
-description: Navigation + shared concepts for the two SDLC orchestration engines (sdlc-flow, sdlc-task) and the manual command lifecycle.
+description: Navigation + shared concepts for the two SDLC orchestration engines (sdlc-flow, sdlc-task).
 doc_id: base-template-workflows-index
 layer: [factory]
 project: base-template
 status: active
 keywords: [SDLC workflows, engines, orchestration, harness, pipeline reference]
-related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-commands, base-template-orchestration-guide, base-template-orchestration-runbook]
+related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-prompt-parity, base-template-orchestration-guide, base-template-orchestration-runbook]
 ---
 
 # SDLC Workflows
@@ -18,8 +18,7 @@ related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-commands, base-te
 > registry/leases/queue/commander underneath it? Read [lane-coordination.md](lane-coordination.md).
 
 This is the canonical reference for the **harness's automated pipelines** — the `.claude/workflows/*.js`
-engines that drive a spec from a `tasks.md` to merged, tested, documented code, and the manual
-slash-command lifecycle they automate.
+engines that drive a spec from a `tasks.md` to merged, tested, documented code.
 
 > **This lives here on purpose.** These engines are authored and evolved in `base-template` (the
 > software-factory source). Downstream projects copy `.claude/` verbatim, so the workflows are
@@ -151,8 +150,9 @@ Several repos can each run their own lane concurrently as separate sessions; wit
 never parallel. See [orchestration.md](orchestration.md) for the lane lifecycle and
 [`.claude/commands/README.md`](../../.claude/commands/README.md) for the flag-level reference.
 
-For step-by-step **manual** control (run `/implement`, then inspect, then `/test`, …), see the
-[manual command lifecycle](commands.md). The engines automate exactly those commands.
+The one-off stage commands (`/implement`, `/test`, `/fix`, `/review-task`, `/document`) were
+**retired** — the engines are the only supported way to drive a spec. See
+[prompt-parity.md](prompt-parity.md) for why, and what to run instead.
 
 ```mermaid
 flowchart TD
@@ -333,7 +333,6 @@ each engine's committed state file — check the state JSON for real figures fro
 - **[sdlc-flow.md](sdlc-flow.md)** — the default for non-trivial feature work (D30). Shared worktree,
   per-task test-fix loop, triage-gated bail (D32), committed state model (D31), PR wrap-up (D33).
 - **[sdlc-task.md](sdlc-task.md)** — lean single-unit engine (D38). In-place or `--worktree`, implement→test→fix→commit, pairs with `/chore`/`/ticket`.
-- **[commands.md](commands.md)** — the manual command lifecycle the engines automate (Phase 1 → 7).
 - **[prompt-parity.md](prompt-parity.md)** — where the two engines' stage prompts and the matching
   one-off commands agree, where they deliberately differ, and the open drift register between them.
 - **[orchestration.md](orchestration.md)** — the lane lifecycle: what a lane is, the phases from

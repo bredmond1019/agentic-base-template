@@ -70,8 +70,6 @@ All 57 are flat — invoke as `/<name>` in Claude Code. Full parameter reference
 | [`/prime`](../.claude/commands/prime.md) | Deep orientation at session start — reads the key docs in order and summarises state. |
 | [`/session-recap`](../.claude/commands/session-recap.md) | The light version: recent log entries plus `status.md`, as a tight briefing. |
 | [`/next`](../.claude/commands/next.md) | What's up next, what's blocked and by what, plus a recommended next action. |
-| [`/process-tasks`](../.claude/commands/process-tasks.md) | Reads the block sequence and reports which blocks are eligible to start. |
-| [`/conditional_docs`](../.claude/commands/conditional_docs.md) | Routes you to the docs relevant to the kind of task you are about to do. |
 | [`/log-work`](../.claude/commands/log-work.md) | Appends a log entry, syncs status, regenerates the freshness spine via `mev emit-state`. |
 | [`/wrap-up`](../.claude/commands/wrap-up.md) | `/log-work` then `/commit` — a clean close with no handoff file. |
 | [`/handoff`](../.claude/commands/handoff.md) | Writes `handoff.md`, logs, commits — hands the in-flight session to a fresh agent. |
@@ -107,16 +105,21 @@ Each stage feeds the next: `/assess` → `/seams` → `/sequence` → `/plan`.
 | [`/update-state`](../.claude/commands/update-state.md) | Safely edits a repo's `planning/state.json` — the authoritative block dependency graph. |
 | [`/generate-master-plan`](../.claude/commands/generate-master-plan.md) | **Superseded** by `/plan --founding`; `master-plan.md` is now generated from the block graph. |
 
-### Build, test, review, document (Phases 2–5)
+### Build, test, review, document
+
+> **The one-off stage commands were retired (2026-08-31).** `/implement`, `/test`, `/fix`,
+> `/review-task`, `/document`, `/process-tasks` and `/conditional_docs` are gone. They were a hand-
+> driven copy of what the engines already do, they had drifted onto an older data model (they read
+> `tasks.md` prose and never learned `tasks.json` or block records), and nobody was running them.
+>
+> **Run [`/sdlc-task`](workflows/sdlc-task.md) or [`/sdlc-flow`](workflows/sdlc-flow.md) instead** —
+> they perform every one of those stages, against the current spec format, with the gates wired in.
+> `/update-docs` remains for ad-hoc documentation work outside a run. Full rationale:
+> [workflows/prompt-parity.md](workflows/prompt-parity.md).
 
 | Command | What it does |
 |---|---|
-| [`/implement`](../.claude/commands/implement.md) | Executes a plan file against the codebase. |
-| [`/fix`](../.claude/commands/fix.md) | Targeted fixes for a FAIL or PARTIAL review verdict. |
-| [`/test`](../.claude/commands/test.md) | Runs the project's validation suite, returning standardised JSON. |
-| [`/review-task`](../.claude/commands/review-task.md) | Verifies a completed task against its spec and acceptance criteria. |
 | [`/review-PR`](../.claude/commands/review-PR.md) | Spec-aware review of a branch-train PR — runs the gating suite, posts a structured verdict. |
-| [`/document`](../.claude/commands/document.md) | Updates docs from the real diff. Gates on the review verdict being PASS. |
 | [`/update-task`](../.claude/commands/update-task.md) | Records progress or a deviation in a task spec. |
 | [`/update-docs`](../.claude/commands/update-docs.md) | Documentation health sweep — finds stale sections, creates missing coverage. |
 | [`/patch`](../.claude/commands/patch.md) | Hotfix ladder: implement → validate → commit, nothing else. |

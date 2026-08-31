@@ -31,7 +31,6 @@ read `README.md` and `CLAUDE.md` instead.
 | [workflows/orchestration.md](workflows/orchestration.md) | The lane lifecycle, its mandatory artifacts, and the traps |
 | [workflows/sdlc-task.md](workflows/sdlc-task.md) | The lean engine: implement → test → fix → commit |
 | [workflows/sdlc-flow.md](workflows/sdlc-flow.md) | The feature engine: sequential tasks, one review, a PR |
-| [workflows/commands.md](workflows/commands.md) | Driving the same pipeline by hand, stage by stage |
 | [workflows/lane-coordination.md](workflows/lane-coordination.md) | The layer under a lane: registry, leases, message queue, commander |
 | [workflows/roadmap-sweep.md](workflows/roadmap-sweep.md) | The scripted mid-run check that wakes an agent only on real change |
 
