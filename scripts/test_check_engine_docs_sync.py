@@ -19,10 +19,14 @@ import io
 import sys
 import tempfile
 import unittest
+import importlib.util as _ilu
+from pathlib import Path as _P
+_spec=_ilu.spec_from_file_location("check_engine_docs_sync", _P(__file__).resolve().parent / "check_engine_docs_sync.py")
+MOD=_ilu.module_from_spec(_spec); _spec.loader.exec_module(MOD)
 from contextlib import redirect_stdout
 from pathlib import Path
 
-_MODULE_PATH = Path(__file__).resolve().parent / "check_engine_docs_sync.py"
+_MODULE_PATH = _P(__file__).resolve().parent / "check_engine_docs_sync.py"
 _spec = importlib.util.spec_from_file_location("check_engine_docs_sync", _MODULE_PATH)
 check_engine_docs_sync = importlib.util.module_from_spec(_spec)
 sys.modules["check_engine_docs_sync"] = check_engine_docs_sync
@@ -115,6 +119,28 @@ class DriftTripwire(unittest.TestCase):
         self.assertEqual(entry["docs_md"], "docs/workflows/GUIDE.md")
         self.assertEqual(entry["section"], "## Some Section")
 
+
+
+class RealAnchorMarkersTest(unittest.TestCase):
+    """Every anchor in the real ANCHORS table must declare an EXPECT marker, and its range must
+    still contain it.
+
+    An anchor's line range is hand-picked, and `--update` re-hashes whatever currently sits at those
+    numbers -- so an edit ABOVE an anchor silently re-points it at a different region and the
+    re-stamp blesses it. Measured 2026-08-31: after a series of extractions, FIVE of the real
+    anchors had drifted onto unrelated code (isolation-and-branch-naming was sitting on
+    postEmitHookRan schema properties; bookkeep-vault-commit on `const allTasks = ...`), and every
+    intervening --update had re-stamped the wrong window. The markers make that mechanical.
+    """
+
+    def test_every_real_anchor_declares_a_marker(self):
+        missing = [f"{rel}::{anchor}" for rel, anchor, *_ in MOD.ANCHORS
+                   if (Path(rel).name, anchor) not in MOD.EXPECT]
+        self.assertEqual(missing, [], "anchors with no EXPECT marker")
+
+    def test_every_real_anchor_range_still_contains_its_marker(self):
+        problems = MOD.assert_anchors_still_bracket_their_subject(MOD.ROOT, MOD.ANCHORS)
+        self.assertEqual(problems, [], "\n".join(problems))
 
 if __name__ == "__main__":
     unittest.main()

@@ -67,7 +67,7 @@ ANCHORS = [
      "docs/workflows/sdlc-task.md", "## Usage"),
     (".claude/workflows/sdlc-task.js", "stage-list", 87, 96,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 920, 1026,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1479, 1542,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -76,18 +76,63 @@ ANCHORS = [
      "docs/workflows/sdlc-task.md", "## Pipeline"),
     (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 440, 488,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 1839, 1964,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2651, 2678,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 305, 318,
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 672, 689,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 976, 1147,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1553, 1675,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 2155, 2310,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3095, 3130,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 
+
+EXPECT = {
+    ("sdlc-task.js", "flags-and-defaults"): "const useWorktree = hasFlag('--worktree')",
+    ("sdlc-task.js", "stage-list"): 'export const meta = {',
+    ("sdlc-flow.js", "flags-and-defaults"): "const autoMergeFlag = hasFlag('--auto-merge')",
+    ("sdlc-flow.js", "stage-list"): 'export const meta = {',
+    ("shared.js", "triage-bail-taxonomy-flow-doc"): 'function renderTriagePrompt(',
+    ("sdlc-task.js", "isolation-and-branch-naming"): 'WORKTREE MODE (--worktree)',
+    ("sdlc-task.js", "bookkeep-vault-commit"): '7. Commit your edits (stage explicitly',
+    ("sdlc-flow.js", "isolation-and-branch-naming"): 'const worktreeRecipe =',
+    ("sdlc-flow.js", "bookkeep-vault-commit"): '5. Commit (stage explicitly',
+    ("shared.js", "triage-bail-taxonomy"): 'function renderTriagePrompt(',
+    ("shared.js", "triage-bail-taxonomy-flow-guide"): 'function renderTriagePrompt(',
+}
+
+
+def assert_anchors_still_bracket_their_subject(root: Path, anchors: list) -> list:
+    """Fail loudly when an anchor's line range no longer contains the thing it is NAMED for.
+
+    `--update` re-hashes whatever currently sits at an anchor's line numbers. If an edit ABOVE the
+    anchor shifted the file, that is a DIFFERENT region -- and re-stamping blesses it, leaving a
+    tripwire that watches unrelated code and reports green forever. Measured 2026-08-31: after a
+    series of extractions, four of six anchors had drifted onto unrelated code
+    (`isolation-and-branch-naming` was sitting on `postEmitHookRan` schema properties;
+    `bookkeep-vault-commit` on `const allTasks = ...`), and each intervening `--update` had
+    re-stamped the wrong window.
+
+    EXPECT below pins one distinctive line each range must still contain, so the drift is caught
+    mechanically instead of by someone thinking to look.
+    """
+    problems = []
+    for rel, anchor, start, end, *_ in anchors:
+        needle = EXPECT.get((Path(rel).name, anchor))
+        if needle is None:
+            # No marker declared for this anchor -- nothing to verify. Synthetic anchors in the
+            # fixture suites land here. Every anchor in the real ANCHORS table is required to have
+            # one, which test_every_real_anchor_declares_a_marker() asserts separately.
+            continue
+        chunk = "\n".join((root / rel).read_text(encoding="utf-8").splitlines()[start - 1:end])
+        if needle not in chunk:
+            problems.append(
+                f"{rel}::{anchor}: lines {start}-{end} no longer contain {needle!r} -- "
+                "the range has drifted onto unrelated code. Re-pick it from CONTENT, do not --update."
+            )
+    return problems
 
 def hash_lines(path: Path, start: int, end: int) -> str:
     lines = path.read_text(encoding="utf-8").splitlines()
@@ -109,6 +154,14 @@ def run(root: Path, anchors: list, update: bool) -> int:
     existing_manifest = load_manifest()
     new_manifest = {}
     mismatches = []
+
+    drift = assert_anchors_still_bracket_their_subject(root, anchors)
+    if drift:
+        print('ANCHOR RANGES HAVE DRIFTED onto unrelated code:\n')
+        for d in drift: print(f'  - {d}')
+        print('\nRe-pick the range from CONTENT (find where the named section actually is now).')
+        print('Do NOT re-stamp: --update would bless the wrong window.')
+        return 1
 
     for engine_file, anchor, start, end, docs_md, section in anchors:
         engine_path = root / engine_file

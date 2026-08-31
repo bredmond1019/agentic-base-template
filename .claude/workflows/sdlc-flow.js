@@ -556,6 +556,108 @@ their output; empty when allPassed)${stateWrittenNote}.`
 }
 // <</shared:renderTestPrompt>>
 
+// <<shared:renderImplementPrompt>>
+// The per-task implement/fix prompt -- the largest shared stage at 88 lines, and 94% common before
+// extraction. Carries the D8 completeness self-check, the D81 post-commit work assertion, and the
+// D46 vaulted-planning commit recipe, all of which exist because of specific incidents and none of
+// which should ever exist in two versions.
+//
+// Three seams, all caller-supplied:
+//   roleIntro          the opening three lines. The engines describe the checkout they run in
+//                      differently, and /sdlc-flow's is MODE-AWARE (it defaults to a plain branch).
+//   runRootLabel       what to call the run directory in prose.
+//   extraReturnFields  StructuredOutput fields this engine wants that the other does not
+//                      (/sdlc-flow's reportFile). Empty string in the lean engine.
+function renderImplementPrompt({ roleIntro, runRootLabel, runRoot, extraReturnFields, isFix, taskNum, attempt, stem, blockId, specFile, specDesc, tasksJsonFile, breakdownFile, prevFailBlob, vault, GIT, renderCommitSafetyGuard, renderWorkAssertion }) {
+  return `${roleIntro}
+
+Target:
+  Spec:        ${blockId}
+  Task:        Task ${taskNum} only
+  Spec file:   ${specFile} ${specDesc}
+  Tasks file:  ${tasksJsonFile} (the task list — find the entry with "task_id": ${taskNum})
+
+1. Read CLAUDE.md and planning/context.md — internalize the project's standing rules (CLAUDE.md is the
+   authority; assume no stack/locale/narrative/content rule unless written there). Universal harness
+   rules always apply: no fabricated metrics or quotes, no emoji, every change ships with tests.
+   Run: cd ${runRoot} && cat CLAUDE.md
+
+2. Read the spec and the task list:
+   Run: cd ${runRoot} && cat ${specFile} ${tasksJsonFile}
+   tasks.json is a bare array — find the object whose "task_id" is ${taskNum}. Its "title",
+   "description", and "files" define exactly what this task is.
+   ${isFix ? `Do NOT re-implement from scratch. Make the MINIMUM targeted changes to address THIS failure:
+   ${prevFailBlob ? 'Failing checks/output from the last test run:\n' + prevFailBlob.split('\n').map(l => '     ' + l).join('\n') : ''}` : `Implement ONLY task id ${taskNum} — do NOT implement other tasks.`}
+
+2.5. Optional breakdown (more granular sub-steps from /breakdown):
+   Run: cd ${runRoot} && ls ${breakdownFile} 2>/dev/null && echo "BREAKDOWN_EXISTS" || echo "NO_BREAKDOWN"
+   If BREAKDOWN_EXISTS: read ${breakdownFile}, find "### Step ${taskNum}:", and use its atomic sub-steps as
+   the execution guide (run each inline "Verify:" checkpoint). tasks.json stays authoritative for scope.
+
+3. Execute methodically with Read/Edit/Write/Bash (all paths resolve from the ${runRootLabel}).
+
+4. Follow every CLAUDE.md standing rule; add/update tests for new code/logic; verify any model ids /
+   package names via the claude-api skill — never from memory.
+
+5. COMPLETENESS SELF-CHECK before committing (D8): no stub/placeholder on any path the task's acceptance
+   criteria require (no \`todo!()\`/\`unimplemented!()\`/\`unreachable!()\`, \`raise NotImplementedError\`,
+   \`throw new Error('not implemented')\`, empty \`pass\`-only bodies, or \`TODO\`/\`FIXME\` in required
+   paths); every deliverable named for Task ${taskNum} exists; any "unit-tested" criterion has a real,
+   hermetic test. Sanity-grep ONLY the files the in-scope criteria require:
+     cd ${runRoot} && grep -nE 'todo!\\(|unimplemented!\\(|unreachable!\\(|NotImplementedError|not implemented|FIXME' <those paths> 2>/dev/null
+   If something required is incomplete, finish it now — do not commit a partial task.
+
+6. Run the spec's "## Validation Commands" for Task ${taskNum} to confirm correctness.
+
+7. Commit on the branch. Never use git add -A or git add . — stage files explicitly by name.
+   Run: cd ${runRoot} && ${GIT} status
+   Stage your changed source/test files explicitly, then commit using HEREDOC:
+     cd ${runRoot} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
+${isFix ? `fix: fix pass ${attempt - 1} for ${stem}` : `feat: implement ${stem}`}
+EOF
+)"
+   Run: cd ${runRoot} && ${GIT} log --oneline -1   (capture the short hash)
+
+7a. Post-commit work assertion (D81 lift condition 2) — prove this commit actually contains Task
+   ${taskNum}'s declared work, not the absence of it:
+   Run: cd ${runRoot} && ${renderWorkAssertion('git', taskNum, tasksJsonFile)}
+   If this prints WORK_ASSERTION_ABORT, the commit failed the check — treat this as a task failure
+   (investigate, fix, and re-commit) before proceeding; do NOT report success with a failing assertion.
+${vault.vaulted ? `
+7b. planning/ is a vaulted symlink (D46) — its bytes live at ${vault.planningPath}, a DIFFERENT git
+    repo, invisible to the commit you just made in step 7. If this attempt created or edited ANY file
+    under planning/ (i.e. it belongs in filesModified with a "planning/" prefix), you MUST ALSO stage
+    and commit it there, through the real path — derive the exact set from what you actually wrote,
+    never a fixed list of filenames. NEVER git add -A, git add ., git reset, or git stash against the
+    vault repo — another lane's session may have unrelated work staged there right now; touch ONLY
+    your own paths, and do not checkout/switch/branch inside it (stay on whatever branch it is
+    already on). For each such file, let <relpath> be the part of its path AFTER "planning/":
+      cd ${runRoot} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
+    Then, once every such path is staged, commit ONLY those paths — pass them explicitly to \`git commit\`
+    itself (not merely to \`git add\`), so a sibling lane's unrelated pre-staged files are never swept
+    into this commit even if they happen to already be staged:
+      cd ${runRoot} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
+${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
+EOF
+)" -- <relpath1> <relpath2> ...)
+      cd ${runRoot} && ${GIT} -C ${vault.planningPath} log --oneline -1
+    If NOTHING you wrote this attempt lives under planning/, skip this step entirely — do not run any
+    vault command. If a vault add/commit fails, report it PLAINLY in notes; never paper over it, and
+    never "repair" it by committing on a different branch inside the vault.
+` : ''}
+Return via StructuredOutput:${extraReturnFields}
+  success: true if the work completed and the spec validation passed
+  filesModified: every file you created or modified this attempt — including any under planning/
+    (do NOT omit vault-side files just because they commit through a different repo)
+  commitHash: the 7-char short hash of THIS repo's commit (empty string if no commit was made here)
+  summary: one line — what this task now does
+  decisions: any non-obvious choices (empty array if none)
+  filesReadKb: telemetry — before returning, sum the byte size of every file you cat/Read this attempt
+    (cd ${runRoot} && wc -c <each file>), divide the total by 1024, and report the number.
+  notes: one-line status${vault.vaulted ? ' — mention explicitly whether a vault commit (step 7b) happened and, if so, its outcome' : ''}`
+}
+// <</shared:renderImplementPrompt>>
+
 // Given a stage's self-reported filesModified (repo-root-relative) and a resolved vault, return the
 // vault-relative subset (the part of the path after "planning/") that needs an independent
 // vault-commit check. Derived from what the stage ACTUALLY wrote — never a hard-coded filename list.
@@ -732,7 +834,7 @@ const STATE_LOAD_SCHEMA = {
   type: 'object',
   required: ['exists'],
   properties: {
-    exists:      { type: 'boolean', description: 'true if a valid sdlc-flow-state.json was read from the worktree' },
+    exists:      { type: 'boolean', description: 'true if a valid sdlc-flow-state.json was read' },
     startedAt:   { type: 'string',  description: "the file's started_at value, or '' when absent" },
     passedTasks: { type: 'array', items: { type: 'integer' }, description: 'task numbers whose status is "passed"' },
     bailReason:  { type: 'string',  description: 'the prior bail_reason, or "" when none' },
@@ -2351,96 +2453,11 @@ for (const taskNum of taskList) {
     log(`Task ${taskNum}: ${isFix ? `fix pass ${attempt - 1}` : 'implement'} (attempt ${attempt}/${MAX_TASK_ATTEMPTS})...`)
 
     // 2 / 5b. Implement (attempt 1) or targeted Fix (attempt > 1).
+    const roleIntro = `You are the ${isFix ? 'fix' : 'implementation'} agent for the /sdlc-flow pipeline. You run IN PLACE in
+    ${useWorktree ? 'the shared worktree' : 'the main working tree on this run\'s branch'} (sequential — earlier tasks in this spec are already committed on this branch). Work ONLY
+    on Task ${taskNum} of this spec.`
     const stageResult = await tracedAgent(`${W}
-You are the ${isFix ? 'fix' : 'implementation'} agent for the /sdlc-flow pipeline. You run IN PLACE in the
-shared worktree (sequential — earlier tasks in this spec are already committed on this branch). Work ONLY
-on Task ${taskNum} of this spec.
-
-Target:
-  Spec:        ${blockId}
-  Task:        Task ${taskNum} only
-  Spec file:   ${specFile} ${specDesc}
-  Tasks file:  ${tasksJsonFile} (the task list — find the entry with "task_id": ${taskNum})
-
-1. Read CLAUDE.md and planning/context.md — internalize the project's standing rules (CLAUDE.md is the
-   authority; assume no stack/locale/narrative/content rule unless written there). Universal harness
-   rules always apply: no fabricated metrics or quotes, no emoji, every change ships with tests.
-   Run: cd ${worktreePath} && cat CLAUDE.md
-
-2. Read the spec and the task list:
-   Run: cd ${worktreePath} && cat ${specFile} ${tasksJsonFile}
-   tasks.json is a bare array — find the object whose "task_id" is ${taskNum}. Its "title",
-   "description", and "files" define exactly what this task is.
-   ${isFix ? `Do NOT re-implement from scratch. Make the MINIMUM targeted changes to address THIS failure:
-   ${prevFailBlob ? 'Failing checks/output from the last test run:\n' + prevFailBlob.split('\n').map(l => '     ' + l).join('\n') : ''}` : `Implement ONLY task id ${taskNum} — do NOT implement other tasks.`}
-
-2.5. Optional breakdown (more granular sub-steps from /breakdown):
-   Run: cd ${worktreePath} && ls ${breakdownFile} 2>/dev/null && echo "BREAKDOWN_EXISTS" || echo "NO_BREAKDOWN"
-   If BREAKDOWN_EXISTS: read ${breakdownFile}, find "### Step ${taskNum}:", and use its atomic sub-steps as
-   the execution guide (run each inline "Verify:" checkpoint). tasks.json stays authoritative for scope.
-
-3. Execute methodically with Read/Edit/Write/Bash (all paths resolve from the ${runRootLabel}).
-
-4. Follow every CLAUDE.md standing rule; add/update tests for new code/logic; verify any model ids /
-   package names via the claude-api skill — never from memory.
-
-5. COMPLETENESS SELF-CHECK before committing (D8): no stub/placeholder on any path the task's acceptance
-   criteria require (no \`todo!()\`/\`unimplemented!()\`/\`unreachable!()\`, \`raise NotImplementedError\`,
-   \`throw new Error('not implemented')\`, empty \`pass\`-only bodies, or \`TODO\`/\`FIXME\` in required
-   paths); every deliverable named for Task ${taskNum} exists; any "unit-tested" criterion has a real,
-   hermetic test. Sanity-grep ONLY the files the in-scope criteria require:
-     cd ${worktreePath} && grep -nE 'todo!\\(|unimplemented!\\(|unreachable!\\(|NotImplementedError|not implemented|FIXME' <those paths> 2>/dev/null
-   If something required is incomplete, finish it now — do not commit a partial task.
-
-6. Run the spec's "## Validation Commands" for Task ${taskNum} to confirm correctness.
-
-7. Commit on the branch. Never use git add -A or git add . — stage files explicitly by name.
-   Run: cd ${worktreePath} && ${GIT} status
-   Stage your changed source/test files explicitly, then commit using HEREDOC:
-     cd ${worktreePath} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
-${isFix ? `fix: fix pass ${attempt - 1} for ${stem}` : `feat: implement ${stem}`}
-EOF
-)"
-   Run: cd ${worktreePath} && ${GIT} log --oneline -1   (capture the short hash)
-
-7a. Post-commit work assertion (D81 lift condition 2) — prove this commit actually contains Task
-   ${taskNum}'s declared work, not the absence of it:
-   Run: cd ${worktreePath} && ${renderWorkAssertion('git', taskNum, tasksJsonFile)}
-   If this prints WORK_ASSERTION_ABORT, the commit failed the check — treat this as a task failure
-   (investigate, fix, and re-commit) before proceeding; do NOT report success with a failing assertion.
-${vault.vaulted ? `
-7b. planning/ is a vaulted symlink (D46) — its bytes live at ${vault.planningPath}, a DIFFERENT git
-    repo, invisible to the commit you just made in step 7. If this attempt created or edited ANY file
-    under planning/ (i.e. it belongs in filesModified with a "planning/" prefix), you MUST ALSO stage
-    and commit it there, through the real path — derive the exact set from what you actually wrote,
-    never a fixed list of filenames. NEVER git add -A, git add ., git reset, or git stash against the
-    vault repo — another lane's session may have unrelated work staged there right now; touch ONLY
-    your own paths, and do not checkout/switch/branch inside it (stay on whatever branch it is
-    already on). For each such file, let <relpath> be the part of its path AFTER "planning/":
-      cd ${worktreePath} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
-    Then, once every such path is staged, commit ONLY those paths — pass them explicitly to \`git commit\`
-    itself (not merely to \`git add\`), so a sibling lane's unrelated pre-staged files are never swept
-    into this commit even if they happen to already be staged:
-      cd ${worktreePath} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
-${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
-EOF
-)" -- <relpath1> <relpath2> ...)
-      cd ${worktreePath} && ${GIT} -C ${vault.planningPath} log --oneline -1
-    If NOTHING you wrote this attempt lives under planning/, skip this step entirely — do not run any
-    vault command. If a vault add/commit fails, report it PLAINLY in notes; never paper over it, and
-    never "repair" it by committing on a different branch inside the vault.
-` : ''}
-Return via StructuredOutput:
-  reportFile: ""   (flow keeps state in state.json, not per-stage reports)
-  success: true if the work completed and the spec validation passed
-  filesModified: every file you created or modified this attempt — including any under planning/
-    (do NOT omit vault-side files just because they commit through a different repo)
-  commitHash: the 7-char short hash of THIS repo's commit (empty string if no commit was made here)
-  summary: one line — what this task now does
-  decisions: any non-obvious choices (empty array if none)
-  filesReadKb: telemetry — before returning, sum the byte size of every file you cat/Read this attempt
-    (cd ${worktreePath} && wc -c <each file>), divide the total by 1024, and report the number.
-  notes: one-line status${vault.vaulted ? ' — mention explicitly whether a vault commit (step 7b) happened and, if so, its outcome' : ''}
+${renderImplementPrompt({ roleIntro, runRootLabel: runRootLabel, runRoot: worktreePath, extraReturnFields: '\n  reportFile: ""   (flow keeps state in state.json, not per-stage reports)', isFix, taskNum, attempt, stem, blockId, specFile, specDesc, tasksJsonFile, breakdownFile, prevFailBlob, vault, GIT, renderCommitSafetyGuard, renderWorkAssertion })}
 `, withModel({ label: `${isFix ? 'fix' : 'implement'}-${taskNum}-${attempt}`, schema: STAGE_SCHEMA, phase: 'Tasks' }, isFix ? fixModel : MODEL.implement))
     recordFilesRead(stageResult)
 
