@@ -322,7 +322,16 @@ committed.
 one entry per bail — `occurred_at, task_id, check_id, failing_artifact, ownership, bail_class,
 reason, resolution`; `bail_reason` mirrors the newest entry's `reason` and is null when `bails` is
 empty — see BT.ticket.bails-must-be-append-only (`planning/blocks/BT.ticket.bails-must-be-append-only.json`)),
-`pr` (`url/number`), `tokens` (per-task and per-stage token usage + cumulative `total`).
+`pr` (`url/number`), `tokens` (per-task and per-stage token usage + cumulative `total`),
+`workflow_run_id` (nullable — see below).
+
+**`workflow_run_id`** is never written by the engine itself — same reasoning as `/sdlc-task`
+(`sdlc-task.md#workflow_run_id--stamped-by-the-caller-not-the-engine`): the Workflow script API has
+no `runId` global and no fs access, so the script cannot learn its own run id. Whichever session
+called `Workflow({name: 'sdlc-flow', args})` gets the run id back immediately in the tool result and
+is responsible for patching it into `sdlc-flow-state.json` once that file exists on disk. `null`/
+absent is the normal state for any run whose caller didn't patch it — consumers must not assume
+presence.
 
 > **Token roll-up note:** `tokens.total` covers substantive stages (implement, test, fix, review,
 > docs, wrap-up). Cheap Haiku helper agents (state writers, enumerate, update-task) are excluded.

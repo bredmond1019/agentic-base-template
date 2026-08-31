@@ -103,6 +103,7 @@ the corresponding skill before executing high-stakes fleet operations:
 | **`ping-agent`** | Cross-lane messaging envelopes & registry protocol | BEFORE sending or triaging cross-lane messages |
 | **`report-to-the-operator`** | Concise operator reporting ceiling & format | When drafting chat replies, turn outputs, and run reports |
 | **`run-the-gates`** | Fleet validation suite & gate diagnostics | BEFORE running `validate-brain` or `harness.json` checks |
+| **`stamp-workflow-run-id`** | Recording the Workflow run id into an engine's state file for exact cost telemetry | AFTER any `Workflow({name:'sdlc-task'\|'sdlc-flow', ...})` call |
 | **`stop-or-continue`** | Session restart vs continuation correctness criteria | When an underlying binary/engine changes; never restart for token budget |
 | **`write-okf-markdown`** | OKF YAML frontmatter & index.md row maintenance | BEFORE creating or editing any `.md` under `docs/` or `planning/` |
 | **`write-repo-doc`** | Reader-first internal documentation standards | BEFORE writing or restructuring docs under `docs/` or guides |

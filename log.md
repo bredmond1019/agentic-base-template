@@ -6,6 +6,36 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-08-31
 
 ---
+## 2026-08-31 — `workflow_run_id`: caller-stamped run-id field + `stamp-workflow-run-id` skill
+
+- **What:** jynx measured its `promptTokEst` cost estimate ~113x low against real Claude Code
+  session usage (`~/.claude/projects/.../subagents/workflows/wf_*/agent-*.jsonl`) and asked
+  base-template to stamp the Workflow run id into `sdlc-task-state.json`/`sdlc-flow-state.json` so
+  a run-state file can be joined to its transcript exactly instead of by timestamp window. Checked
+  feasibility first, per the handoff's own caveat: neither engine script can read its own run id —
+  the Workflow script API has no `runId` global and scripts have no filesystem/Node access, so
+  there is no code path inside `sdlc-task.js`/`sdlc-flow.js` that gets there.
+- **The actual fix is a calling-convention change, not an engine change.** `Workflow({name, args})`
+  returns the run id immediately, to whichever agent turn made the call — that agent has full file
+  access and can patch it into the state file once it exists on disk. Documented `workflow_run_id`
+  (nullable, absence-is-normal) as a caller-stamped field:
+  - `docs/workflows/sdlc-task.md` and `sdlc-flow.md` — the field, the patch recipe, why the engine
+    can't do it itself.
+  - `docs/data-contract.md` — cross-repo consumer note (treat `null`/absent as normal, not a defect).
+  - New skill `.claude/skills/stamp-workflow-run-id/SKILL.md`, registered in `CLAUDE.md`'s Fleet &
+    Core Skills table, so an agent sees the "AFTER any `Workflow(...)` call" trigger before it forgets
+    to patch the id in.
+- **Why not implemented as engine code:** confirmed (not assumed) via the Workflow script API
+  surface documented in `workflow-authoring` — no `runId`/env/fs access inside a script. Synthesizing
+  a substitute id was explicitly ruled out by the requester (jynx) as worse than the existing
+  timestamp-window join.
+- **Not done:** nothing yet *enforces* the patch step — it's a documented convention an agent must
+  remember, not automated into `/orchestrate` or elsewhere. `engine-rs` symmetry (does the Rust
+  engine have an equivalent field) was not checked — flagged as future `engine-rs` work if wanted.
+- **Refs:** `core/_planning/jynx/artifacts/base-template-handoff-stamp-the-workflow-run-id.md`
+  (resolution appended there).
+
+---
 ## 2026-08-31 — harness synced to 16 repos; carryover swept
 
 - **What:** Pulled the 2026-08-31 harness (D83 shared prompt library, two newly-registered skills,

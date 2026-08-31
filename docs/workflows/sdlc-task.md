@@ -347,6 +347,7 @@ Registered `gates: true` in `planning/harness.json`.
 {
   "spec_slug": "ticket-login-fix",
   "status": "done",
+  "workflow_run_id": null,
   "tasks": [
     { "task": 1, "status": "pass", "tokens": { "implement": 45000, "test": 1200, "total": 46200 } }
   ],
@@ -369,6 +370,36 @@ BT.ticket.bails-must-be-append-only (`planning/blocks/BT.ticket.bails-must-be-ap
 
 > **Token roll-up note:** `tokens.total` covers substantive stages (implement, test, fix).
 > Cheap Haiku helper agents are excluded. See D37 (`planning/decisions/D37-unified-committed-state-and-telemetry.md`).
+
+### `workflow_run_id` — stamped by the caller, not the engine
+
+The engine script itself has no way to learn its own Workflow run id: the Workflow script API
+(`agent`/`pipeline`/`parallel`/`log`/`phase`/`args`/`budget`/`workflow`) exposes no `runId` global,
+and scripts have no filesystem/Node API access to recover it from their own snapshot path either.
+The run id is only known to whichever session **called** `Workflow({name: 'sdlc-task', args})` —
+that call returns immediately with the run id, before the engine finishes.
+
+So the field is populated externally: **the invoking agent, immediately after the `Workflow(...)`
+call returns, captures the run id and patches it into `sdlc-task-state.json` once that file exists**
+(first write happens at the end of the Commit + state stage). This is a plain JSON patch, not an
+engine change:
+
+```bash
+python3 -c "
+import json, sys
+p = 'planning/<spec-slug>/sdlc/sdlc-task-state.json'
+d = json.load(open(p))
+d['workflow_run_id'] = sys.argv[1]
+json.dump(d, open(p, 'w'), indent=2)
+" '<runId from the Workflow tool result>'
+```
+
+Absent (`null` or the key missing) is a valid, common state — a consumer must not assume it is
+always present; readers should treat it as `null`/absent whenever the invoking session never
+patched it in (a manual/no-Workflow-tool run, or one where the patch step was skipped). It exists to
+let a cost/telemetry consumer (e.g. jynx) join a run-state file to the exact
+`~/.claude/projects/<project>/<session>/subagents/workflows/wf_*/agent-*.jsonl` transcript instead of
+inferring the join from a `started_at`/`updated_at` timestamp window.
 
 ---
 

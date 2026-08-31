@@ -95,6 +95,19 @@ sentence" surface D56's follow-up was missing).
   to `"done"` (the run looks finished at a glance) or identically to `"blocked"` (the run looks
   like ordinary in-progress work, hiding that a terminal gate is the specific thing that failed).
 
+## `workflow_run_id` — optional, caller-stamped
+
+Both state files also carry an optional, nullable `workflow_run_id` field. Neither engine can write
+it itself — the Workflow script API exposes no `runId` global and scripts have no filesystem access,
+so a script cannot learn its own run id. It is populated, if at all, by whichever session invoked
+`Workflow({name: 'sdlc-task'|'sdlc-flow', args})`: that call returns the run id immediately, and the
+invoking session patches it into the state file once the file exists on disk. **A consumer must
+treat `null`/absent as normal**, not as a data-quality defect — plenty of runs (manual replication,
+a skipped patch step) will never carry it. When present, it lets a consumer join the state file
+exactly to `~/.claude/projects/<project>/<session>/subagents/workflows/wf_*/agent-*.jsonl` instead of
+inferring the join from a `started_at`/`updated_at` timestamp window. Full detail:
+`docs/workflows/sdlc-task.md#workflow_run_id--stamped-by-the-caller-not-the-engine`.
+
 ## See also
 
 - [`docs/workflows/sdlc-task.md`](workflows/sdlc-task.md) — the reconcile mechanism itself (why it
