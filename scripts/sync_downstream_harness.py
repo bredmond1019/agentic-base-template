@@ -257,6 +257,16 @@ def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
     templates_dir = workflows_dir / "templates"
     if templates_dir.is_dir():
         files.extend(p for p in templates_dir.glob("*.md") if p.is_file())
+    # workflows/prompts/*.js — the shared master library the engines are built FROM
+    # (scripts/build_engines.py). Downstream repos receive the already-built, self-contained
+    # engines and never run the build, so strictly this file does no work there. It syncs anyway
+    # because every downstream engine carries `// <<shared:NAME>>` markers naming it: without it,
+    # those markers point at a path that does not exist in that repo, and the first person to read
+    # one goes looking for a missing file. Shipping it makes the reference resolvable and the
+    # provenance of the inlined block obvious.
+    prompts_dir = workflows_dir / "prompts"
+    if prompts_dir.is_dir():
+        files.extend(p for p in prompts_dir.glob("*.js") if p.is_file())
     # .claude/skills/<slug>/SKILL.md - model-triggered authoring guides. Like workflows/*.md these
     # are mechanism rather than project fact, so they are NOT gated on engines_only: the brain root
     # needs them as much as any leaf repo, and it is where both were authored.

@@ -81,7 +81,9 @@ export const meta = {
 // Ported verbatim (name, order) from core/mev/src/shared.rs GIT_REPO_ENV_VARS/git_command() — do not
 // re-derive this list. Every executable git invocation in this file's recipes must go through ${GIT},
 // never a bare `git`; prose mentions of git (descriptions, prohibitions) are left alone.
+// <<shared:GIT>>
 const GIT = 'env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_NAMESPACE -u GIT_PREFIX -u GIT_CEILING_DIRECTORIES git'
+// <</shared:GIT>>
 
 // ----------------------------------------------------------------
 // Parse args: "<spec-slug> [range] [--auto-merge] [--no-pr] [--worktree] [--resume] [--test-depth fast|full]"
@@ -96,11 +98,15 @@ if (!rawArgs) {
 const tokens = rawArgs.split(/\s+/)
 const blockId = tokens[0]
 
+// <<shared:hasFlag>>
 function hasFlag(name) { return tokens.includes(name) }
+// <</shared:hasFlag>>
+// <<shared:flagStr>>
 function flagStr(name) {
   const i = tokens.indexOf(name)
   return (i === -1 || i + 1 >= tokens.length) ? null : tokens[i + 1]
 }
+// <</shared:flagStr>>
 // Parse a task selection like "1-7", "1,3,5", "1-3,7", or "5" into a sorted int array.
 function parseRange(spec) {
   const out = new Set()
@@ -125,6 +131,7 @@ function parseRange(spec) {
 // like every other filesystem check in this engine. Returns { vaulted, planningPath }
 // where planningPath is always the absolute resolved directory: the vault's realpath
 // when vaulted, the plain planning/ directory otherwise.
+// <<shared:VAULT_DETECT_SCHEMA>>
 const VAULT_DETECT_SCHEMA = {
   type: 'object',
   required: ['vaulted', 'planningPath'],
@@ -133,6 +140,8 @@ const VAULT_DETECT_SCHEMA = {
     planningPath: { type: 'string', description: 'the resolved absolute real path of planning/' }
   }
 }
+// <</shared:VAULT_DETECT_SCHEMA>>
+// <<shared:detectPlanningVault>>
 async function detectPlanningVault(repoRoot) {
   const result = await agent(`
 Determine whether planning/ in this repo is a symlink (a brain-vaulted repo) or a plain directory.
@@ -146,6 +155,7 @@ resolved absolute path from the second line).
   if (!result) return { vaulted: false, planningPath: `${repoRoot}/planning` }
   return result
 }
+// <</shared:detectPlanningVault>>
 
 // BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root — resolve repoRoot ONCE, here in
 // the engine, and hand it to every later prompt as a GIVEN literal instead of asking the setup agent
@@ -159,6 +169,7 @@ resolved absolute path from the second line).
 // cheap Haiku agent turn instead of resolving the path in-process. Returns null on failure (unlike
 // detectPlanningVault's safe fallback) — a wrong repoRoot silently accepted here is exactly the
 // defect this ticket exists to remove, so the caller must abort rather than guess.
+// <<shared:RESOLVE_REPO_ROOT_SCHEMA>>
 const RESOLVE_REPO_ROOT_SCHEMA = {
   type: 'object',
   required: ['repoRoot', 'gitCommonDir', 'tierPrefix', 'brainTomlAtRoot'],
@@ -169,6 +180,8 @@ const RESOLVE_REPO_ROOT_SCHEMA = {
     brainTomlAtRoot: { type: 'boolean', description: 'true iff the BRAIN_TOML: line reads "yes" — a brain.toml exists at repoRoot' }
   }
 }
+// <</shared:RESOLVE_REPO_ROOT_SCHEMA>>
+// <<shared:resolveRepoRoot>>
 async function resolveRepoRoot() {
   const result = await agent(`
 Resolve this repo's root and related mechanical facts ONCE, before anything else runs.
@@ -182,6 +195,7 @@ value), tierPrefix (the TIER_PREFIX: value, "" when invoking at the repo root), 
 `, { label: 'resolve-repo-root', schema: RESOLVE_REPO_ROOT_SCHEMA, model: 'haiku' })
   return result || null
 }
+// <</shared:resolveRepoRoot>>
 
 // BINDING / BRAIN-ROOT / POPULATION checks (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root,
 // task 4) — run immediately after the setup agent returns (after its setupError handling) and BEFORE the
@@ -193,6 +207,7 @@ value), tierPrefix (the TIER_PREFIX: value, "" when invoking at the repo root), 
 // callers know what a "brain root" IS in any project-specific sense: the BRAIN-ROOT GUARD below compares two
 // mechanical facts (brain.toml presence at two paths, both ordinary filesystem facts), never a
 // harness-check count and never a hardcoded path (see out_of_scope on the ticket).
+// <<shared:SETUP_GUARD_SCHEMA>>
 const SETUP_GUARD_SCHEMA = {
   type: 'object',
   required: ['gitCommonDir', 'brainTomlAtRun'],
@@ -204,6 +219,7 @@ const SETUP_GUARD_SCHEMA = {
     notes:          { type: 'string' }
   }
 }
+// <</shared:SETUP_GUARD_SCHEMA>>
 async function verifySetupBinding(worktreePath, useWorktreeMode) {
   // Population check only runs in worktree mode — a branch-mode run has no separate checkout to
   // under-populate (worktreePath === repoRoot, already fully checked out).
@@ -233,6 +249,7 @@ BRAIN_TOML_AT_RUN: is yes)${useWorktreeMode ? ', missingCount (the MISSING_COUNT
 // re-verifies, for every filesModified path that resolves under the vault, that the path is BOTH
 // tracked and free of any staged/unstaged diff in the vault repo (i.e. actually landed in a commit
 // there), via a cheap Haiku agent turn rather than trusting the implementer's own report.
+// <<shared:VAULT_VERIFY_SCHEMA>>
 const VAULT_VERIFY_SCHEMA = {
   type: 'object',
   required: ['allCommitted'],
@@ -243,6 +260,8 @@ const VAULT_VERIFY_SCHEMA = {
     notes:            { type: 'string' }
   }
 }
+// <</shared:VAULT_VERIFY_SCHEMA>>
+// <<shared:verifyVaultCommit>>
 async function verifyVaultCommit(runDir, vault, vaultRelPaths) {
   if (!vault.vaulted || !vaultRelPaths.length) return { allCommitted: true, uncommittedPaths: [], brainRootExempt: [] }
   // The classification logic runs entirely IN THE SCRIPT, not in the model's own reasoning — a cheap
@@ -286,6 +305,7 @@ different repo), notes (paste the raw script output).
   if (!Array.isArray(result.brainRootExempt)) result.brainRootExempt = []
   return result
 }
+// <</shared:verifyVaultCommit>>
 
 // COMMIT-SAFETY GUARD (BT.ticket.worktree-run-can-commit-an-empty-tree) — the cause-independent
 // backstop. Joined to a `git commit` with `&&` in the SAME Bash call as the commit itself: a
@@ -296,9 +316,11 @@ different repo), notes (paste the raw script output).
 // own HEAD/index rather than the worktree's; the default 'git' reproduces the exact snippet verbatim.
 // Kept byte-identical with sdlc-task.js's copy — the two engines share no module, so this is
 // duplicated on purpose (see scripts/test_commit_safety_guard.py's cross-engine agreement check).
+// <<shared:renderCommitSafetyGuard>>
 function renderCommitSafetyGuard(gitCmd = 'git') {
   return `if ${gitCmd} rev-parse --verify -q HEAD >/dev/null; then TRACKED=$(${gitCmd} ls-tree -r HEAD --name-only | wc -l | tr -d ' '); STAGED=$(${gitCmd} ls-files -s | wc -l | tr -d ' '); if [ "$TRACKED" -gt 0 ] && [ "$STAGED" -eq 0 ]; then echo "COMMIT_GUARD_ABORT: index holds 0 entries but HEAD tracks $TRACKED files - refusing to commit a tree that deletes everything (BT.ticket.worktree-run-can-commit-an-empty-tree)"; exit 1; fi; fi`
 }
+// <</shared:renderCommitSafetyGuard>>
 
 // Post-commit work assertion (D81 lift condition 2 — BT.ticket.a-run-must-prove-its-commits-contain-the-work).
 // renderCommitSafetyGuard() above fires only on a TOTALLY empty index (TRACKED>0 && STAGED==0); EN.11.O had a
@@ -318,6 +340,7 @@ function renderCommitSafetyGuard(gitCmd = 'git') {
 // HEAD~1 that may not exist yet in a freshly-adopted vault checkout and that other concurrent lanes also write
 // to, so a false WORK_ASSERTION_ABORT there would block an honest vault commit on a shared repo it does not
 // fully control. Exempted outright rather than compared.
+// <<shared:renderWorkAssertion>>
 function renderWorkAssertion(gitCmd = 'git', taskNum, tasksJsonPath) {
   return `NAME_STATUS=$(${gitCmd} diff --name-status HEAD~1 HEAD); if [ -z "$NAME_STATUS" ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit diff is EMPTY (condition 1) - no work was committed"; exit 1; fi; WA_DECLARED=$(python3 -c "
 import json
@@ -326,6 +349,7 @@ t = [x for x in d if x.get('task_id') == ${taskNum}]
 print(chr(10).join(t[0].get('files', []) if t else []))
 "); WA_MATCH=0; WA_BADDEL=""; while IFS=$'\t' read -r WA_ST WA_P1 WA_P2; do WA_CHK="$WA_P1"; case "$WA_ST" in R*) WA_CHK="$WA_P2" ;; esac; if printf '%s\n' "$WA_DECLARED" | grep -qFx "$WA_CHK"; then WA_MATCH=1; else case "$WA_ST" in D*) WA_BADDEL="$WA_CHK" ;; esac; fi; done <<< "$NAME_STATUS"; if [ "$WA_MATCH" -eq 0 ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit's changed paths do not intersect declared files[] (condition 2) - declared: [$WA_DECLARED] - changed: [$NAME_STATUS]"; exit 1; fi; if [ -n "$WA_BADDEL" ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit deletes undeclared file '$WA_BADDEL' not present in files[] (condition 3) - declared: [$WA_DECLARED]"; exit 1; fi`
 }
+// <</shared:renderWorkAssertion>>
 
 // Given a stage's self-reported filesModified (repo-root-relative) and a resolved vault, return the
 // vault-relative subset (the part of the path after "planning/") that needs an independent
@@ -434,6 +458,24 @@ const ENUMERATE_SCHEMA = {
         }
       }
     },
+    // expect_red — BT.ticket.sdlc-task-cannot-express-a-deliberate-failing-test. A task whose
+    // declared deliverable IS a test observed FAILING (D68) may name a subset of its own
+    // validation_commands whose verdict is inverted: the check PASSES when that command exits
+    // NON-ZERO and FAILS when it exits 0. Scoped strictly to that task's own validationCommands —
+    // it can never touch a project-wide gates:true harness check (those are computed separately by
+    // gatingChecks() and this field is never consulted there).
+    taskExpectRed: {
+      type: 'array',
+      description: "One entry per task that declares a non-empty expect_red array. Omit tasks whose expect_red is absent or empty. Every command listed here MUST also appear in that same task's own validationCommands entry above — an expect_red command names ONE of the task's own declared checks and inverts its verdict, it does not add a new command.",
+      items: {
+        type: 'object',
+        required: ['taskId', 'commands'],
+        properties: {
+          taskId:   { type: 'integer' },
+          commands: { type: 'array', items: { type: 'string' }, description: "Subset of this task's own validationCommands whose verdict is inverted: PASSES on non-zero exit, FAILS on exit 0." }
+        }
+      }
+    },
     // Hardcoded engine-parse gate — mechanism, not project policy (see renderCheckList). Captures,
     // per task, ONLY the entries of that task's "files" array that live under .claude/workflows/ —
     // never the full files[] list. Omit tasks with no such path.
@@ -457,6 +499,7 @@ const ENUMERATE_SCHEMA = {
 // read the spec's authored step decomposition and
 // write a fresh D45-shaped tasks.json from it (never a verbatim copy of the prose, never the
 // superseded D44 {"tasks": [...]} wrapper).
+// <<shared:DERIVE_SCHEMA>>
 const DERIVE_SCHEMA = {
   type: 'object',
   required: ['derivable', 'written'],
@@ -468,6 +511,7 @@ const DERIVE_SCHEMA = {
     notes:      { type: 'string' }
   }
 }
+// <</shared:DERIVE_SCHEMA>>
 
 const STATE_LOAD_SCHEMA = {
   type: 'object',
@@ -493,6 +537,7 @@ const STAGE_SCHEMA = {
     commitHash:    { type: 'string', description: 'Short hash of the commit this agent made, or empty string' },
     summary:       { type: 'string', description: 'One-line summary of what was implemented/fixed (folded into state.tasks[N].summary)' },
     decisions:     { type: 'array', items: { type: 'string' }, description: 'Non-obvious choices made (folded into state)' },
+    filesReadKb:   { type: 'number', description: 'D15 telemetry — total KB of files this stage read, folded into the tokens block by recordFilesRead()' },
     notes:         { type: 'string' }
   }
 }
@@ -668,13 +713,17 @@ const MODEL = {
 
 // Final per-task fix pass and final review attempt before the loop gives up run on a stronger model.
 // The common path stays on Sonnet; only the genuinely-hard case that already failed gets an Opus shot.
+// <<shared:ESCALATION_MODEL>>
 const ESCALATION_MODEL = 'opus'
+// <</shared:ESCALATION_MODEL>>
 
 // Merge an optional model override into an agent's opts (omits the key when undefined, so the agent
 // inherits the session model rather than receiving model: undefined).
+// <<shared:withModel>>
 function withModel(base, model) {
   return model ? { ...base, model } : base
 }
+// <</shared:withModel>>
 
 // ----------------------------------------------------------------
 // TOKEN TELEMETRY (additive, no behavior change) — mirrors sdlc-task/run.
@@ -683,6 +732,7 @@ function withModel(base, model) {
 //                  Attributes cleanly for SEQUENTIAL stages — which is this engine's whole pipeline.
 // ----------------------------------------------------------------
 const metrics = []
+// <<shared:tracedAgent>>
 async function tracedAgent(prompt, opts = {}) {
   const before = (typeof budget !== 'undefined' && budget.spent) ? budget.spent() : 0
   const r = await agent(prompt, opts)
@@ -695,12 +745,23 @@ async function tracedAgent(prompt, opts = {}) {
   })
   return r
 }
+// <</shared:tracedAgent>>
+
+// Fold a stage's self-reported `filesReadKb` into the metrics entry the wrapper just pushed.
+// Safe to call immediately after the awaited tracedAgent call — that entry is always metrics[last].
+// <<shared:recordFilesRead>>
+function recordFilesRead(result) {
+  if (result && result.filesReadKb != null && metrics.length) {
+    metrics[metrics.length - 1].filesReadKb = result.filesReadKb
+  }
+}
+// <</shared:recordFilesRead>>
 
 // Build the canonical `tokens` block from the accumulated per-agent metrics (Block A — the shared
 // committed-state token contract, identical across all four engines; engines are self-contained, so
 // this is lifted, not imported). Per-stage output tokens + the D15 input-cost estimate (promptTok +
-// filesReadKb→tokens at ~256 tok/KB) + a cumulative total. filesReadKb is null here (flow stages do
-// not self-report it yet); inTokEst then reduces to promptTokEst. writeFlowState folds the latest
+// filesReadKb→tokens at ~256 tok/KB) + a cumulative total. A stage that does not self-report
+// filesReadKb leaves it null and its inTokEst reduces to promptTokEst. writeFlowState folds the latest
 // block into the COMMITTED state.json on every write, so token usage is persisted and rolled up
 // rather than vanishing when the run ends.
 //
@@ -708,6 +769,7 @@ async function tracedAgent(prompt, opts = {}) {
 // SUBSTANTIVE stages only. Cheap helper / state-writer agents (the Haiku state-writer, config + baseline
 // loaders) deliberately use bare agent() and are EXCLUDED; this bounded, Haiku-cheap exclusion is the
 // same boundary in both engines, named here so it is explicit rather than silent.
+// <<shared:buildTokensBlock>>
 function buildTokensBlock() {
   const stages = metrics.map(m => {
     const filesReadKb = m.filesReadKb != null ? m.filesReadKb : null
@@ -723,6 +785,7 @@ function buildTokensBlock() {
   }, { promptTokEst: 0, filesReadKb: 0, inTokEst: 0, outTok: 0 })
   return { stages, total }
 }
+// <</shared:buildTokensBlock>>
 
 // ----------------------------------------------------------------
 // HARNESS CONFIG — mechanism/policy split (see planning/harness.json)
@@ -828,6 +891,7 @@ Return your findings using the StructuredOutput tool.
 // baselineCount (coverage silently switched off), never on a nonzero absolute count. Kept as a
 // standalone pure function (no I/O) — exercised directly in unit tests without running a suite —
 // and mirrored verbatim into the rendered shell snippet's comparison so the two never drift.
+// <<shared:skipCountRegressionResult>>
 function skipCountRegressionResult(baselineCount, currentCount, dominantReason) {
   const regressed = currentCount > baselineCount
   const delta = currentCount - baselineCount
@@ -836,6 +900,7 @@ function skipCountRegressionResult(baselineCount, currentCount, dominantReason) 
     : `skip count did not rise (baseline=${baselineCount}, current=${currentCount})`
   return { regressed, message }
 }
+// <</shared:skipCountRegressionResult>>
 
 // Hardcoded, project-agnostic parse-time safety gate (mechanism, not policy — see CLAUDE.md standing
 // rule 1). Independent of harness.json/spec checks: any .js .claude/workflows/ file this task's own
@@ -844,6 +909,7 @@ function skipCountRegressionResult(baselineCount, currentCount, dominantReason) 
 // only — `node --check` throws ERR_UNKNOWN_FILE_EXTENSION on non-JS paths (.md/.json) regardless of
 // content, which is a false positive, not a real defect. No-op (renders '') when the task touches no
 // such file — never emits a check with no target.
+// <<shared:renderEngineParseChecks>>
 function renderEngineParseChecks(files, cd, startIndex) {
   files = (files || []).filter(f => f.endsWith('.js'))
   if (!files || !files.length) return ''
@@ -859,6 +925,7 @@ function renderEngineParseChecks(files, cd, startIndex) {
   on work that is actually correct (observed twice on 2026-08-19).`
   }).join('\n\n')
 }
+// <</shared:renderEngineParseChecks>>
 
 // Render the inner project-validation check list for a Test stage. When gatingOnly is true (the fast
 // per-task tripwire), emit only the checks with gates:true; the end-review runs the FULL suite. When
@@ -978,6 +1045,7 @@ ${ruleLines}
 // task, so the test stages can diff current output vs the pre-run state and fail only on regressions.
 // Resume-safe: only writes a baseline that does not already exist. No-op when no such checks are
 // configured. skip-count-regression writes a bare-integer count file (not JSON) at a sibling path.
+// <<shared:snapshotBaselines>>
 async function snapshotBaselines(cfg, cwd) {
   const checks = (cfg?.validation?.checks || [])
     .filter(c => (c.kind === 'baseline-diff' || c.kind === 'skip-count-regression') && c.baselineCommand)
@@ -1001,6 +1069,7 @@ ${steps}
 Return using StructuredOutput: done=true, and note which baselines were written vs already present.
 `, { label: 'baseline-snapshot', schema: { type: 'object', required: ['done'], properties: { done: { type: 'boolean' }, notes: { type: 'string' } } }, model: 'haiku' })
 }
+// <</shared:snapshotBaselines>>
 
 // ----------------------------------------------------------------
 // COMMITTED AUTHORITATIVE STATE (D31)
@@ -1486,12 +1555,80 @@ STEP 4 — Engine-parse gate scan. For each task, look at its "files" array. If 
   engineFiles, where files is ONLY the matching .claude/workflows/ path(s) from that task (never the
   task's other files). Skip every task whose "files" has no such path.
 
-Return via StructuredOutput: hasTasks, allTasks (integers in order), taskChecks, engineFiles, notes.
+STEP 5 — Deliberate-failing-test overrides (D68). For each task whose "expect_red" is present AND a
+  non-empty array, add {taskId, commands} to taskExpectRed. Skip every task whose "expect_red" is
+  absent, null, or []. Copy the command strings VERBATIM. Do NOT validate the subset rule yourself —
+  the engine enforces it after this call; just report exactly what tasks.json contains.
+
+Return via StructuredOutput: hasTasks, allTasks (integers in order), taskChecks, taskExpectRed,
+engineFiles, notes.
 `
 
 let enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
 
 if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
+  if (specSource === 'block-record') {
+    // D16 derive-from-block-record fallback — the D65 stage 2 counterpart of the
+    // derive-from-tasks.md branch below, used when this run's spec source is the authored block
+    // record rather than legacy tasks.md prose. Mirrors /generate-tasks' --from mode: read the
+    // block record's what/why/files/acceptance_criteria/testing_strategy fields and author a
+    // FRESH D45-shaped tasks.json from them (never a verbatim copy, never the superseded D44
+    // {"tasks": [...]} wrapper). Deriving from an authored block record is not guessing the task
+    // structure — D16 exists to refuse fabricating one out of nothing, which the abort below still does.
+    //
+    // Ported from sdlc-task.js: this engine already RESOLVES a block record as its spec source
+    // (D65 stage 2, setup STEP 6a) but had no recovery path from one, so a block-record-only spec
+    // with a missing or invalid tasks.json aborted here and recovered under /sdlc-task — for the
+    // same spec, on the same disk.
+    const deriveFromRecordResult = await tracedAgent(`${W}
+You are the D16 recovery generator for one /sdlc-flow spec. ${tasksJsonFile} is missing, invalid, or
+empty; ${blockRecordFile} (the authored block record, per block.schema.json) may still carry enough
+to decompose into tasks. Do NOT implement anything.
+
+STEP 1 — check for a derivable source:
+  cd ${worktreePath} && cat ${blockRecordFile} 2>/dev/null || echo "NO_BLOCK_RECORD"
+
+STEP 2 — Parse it as JSON per block.schema.json. If the block record is missing, invalid JSON, or
+  lacks a non-empty "what" and a non-empty "acceptance_criteria" array to decompose, set
+  derivable=false, written=false, and STOP — do not write anything.
+
+STEP 3 — Otherwise, author a FRESH decomposed ${tasksJsonFile} from the block record's "what" (scope),
+  "why" (intent), "files" (new/modified — use these to keep tasks disjoint), "acceptance_criteria",
+  "testing_strategy", and "validation_commands" fields (mirrors /generate-tasks' --from mode: a real
+  decomposition, not a verbatim copy of the record's prose). Write it as valid JSON: a BARE ARRAY (D45
+  shape — NOT the superseded D44 {"tasks": [...]} wrapper), each entry shaped { task_id, title,
+  description, acceptance_criteria, validation_commands, max_attempts, files, dependsOn } — task_id is
+  a 1-indexed integer in dependency order with no gaps, description is a single string, max_attempts is
+  3, and you must NEVER author a "status" or "attempt_count" key (those are engine-owned). Each task
+  names the concrete file(s) it owns in "files" (drawn from the record's files.new / files.modified
+  paths) so tasks stay disjoint.
+
+  Per-task "validation_commands" scoping — follow the convention documented at
+  \`.claude/commands/generate-tasks.md\` (search it for "validation_commands"); do not restate the
+  rubric in your own words, just apply it: "validation_commands" is [] for any task that touches
+  source the project's checks compile or lint — those tasks fall back to the project-wide harness
+  checks, which are authoritative for them. Set it ONLY for a task that CANNOT break the build
+  (docs-only, config-only, fixture-only), with cheap commands that actually verify that task (file
+  exists, frontmatter present, index updated). If you DO author an override that runs tests, it MUST
+  target that task's own tests specifically — never a bare/positional filter that could silently
+  match zero or the wrong tests — and a command matching nothing must fail rather than pass. Never
+  hardcode a stack-specific command (e.g. a particular test runner invocation) into this prompt;
+  that judgment belongs to the deriving agent at run time, per task.
+
+STEP 4 — Commit it on the current branch with an explicit pathspec. Run the guard and the commit as
+  ONE Bash call, joined with &&, so the guard evaluates the exact process the commit runs in:
+  ${GIT} add ${tasksJsonFile}
+  ${renderCommitSafetyGuard()} && ${GIT} commit -m "chore: derive tasks.json from block record (D16 fallback)"
+  ${GIT} log --oneline -1   (capture the short hash)
+
+Return via StructuredOutput: derivable, written, commitHash, taskCount, notes.
+`, withModel({ label: 'derive-tasks-json-from-record', schema: DERIVE_SCHEMA, phase: 'Plan' }, MODEL.derive))
+
+    if (deriveFromRecordResult?.derivable && deriveFromRecordResult?.written) {
+      log(`Derived tasks.json from block record (D16 derive-from-block-record fallback) — ${deriveFromRecordResult.taskCount || '?'} task(s), commit ${deriveFromRecordResult.commitHash || 'unknown'}.`)
+      enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate-post-derive', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
+    }
+  } else {
   // D16 derive-from-tasks.md fallback — before refusing, check whether the spec's authored
   // tasks.md carries a derivable step decomposition. Mirrors /generate-tasks' --from mode:
   // author a FRESH decomposition from tasks.md (never
@@ -1542,6 +1679,7 @@ Return via StructuredOutput: derivable, written, commitHash, taskCount, notes.
     log(`Derived tasks.json from tasks.md (D16 derive-from-tasks.md fallback) — ${deriveResult.taskCount || '?'} task(s), commit ${deriveResult.commitHash || 'unknown'}.`)
     enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate-post-derive', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
   }
+  }
 }
 
 if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
@@ -1574,6 +1712,37 @@ function taskCommandsFor(taskNum) { return taskCheckMap.get(taskNum) || null }
 if (taskCheckMap.size) {
   log(`Per-task validation overrides (tasks.json validation_commands): ${[...taskCheckMap.keys()].sort((a, b) => a - b).join(', ')} — D63: these tasks run ZERO planning/harness.json gates:true checks on their per-task tripwire (pure substitute, unchanged); the end review's full gating suite is the backstop.`)
 }
+
+// expect_red (BT.ticket.sdlc-task-cannot-express-a-deliberate-failing-test, D68) — a task whose
+// declared deliverable IS a test observed FAILING may invert the verdict of a NAMED SUBSET of its
+// own validation_commands. Enforced here, in the engine, not only in the docs: every expect_red
+// entry MUST also appear in that same task's own validationCommands (taskCheckMap above) — an entry
+// that does not is a hard spec error, refused outright, never silently ignored or downgraded to a
+// warning. BOUNDARY (D68): expect_red can never touch a project-wide gates:true harness check — it
+// is scoped strictly to that task's own validation_commands, so it can never invert or suppress a
+// harness check; gatingChecks() below computes the harness gating set and never consults this map.
+//
+// Ported verbatim from sdlc-task.js: D68 shipped to the lean engine only, which meant a block whose
+// deliverable is a failing test could not be run through /sdlc-flow at all — its task passed only
+// once the test it was supposed to add was already green. The subset rule and the abort are the
+// same here because the rule is about the spec, not about which engine reads it.
+const taskExpectRedMap = new Map()
+for (const er of (enumResult.taskExpectRed || [])) {
+  if (!er || !Number.isInteger(er.taskId) || !Array.isArray(er.commands) || !er.commands.length) continue
+  const ownCommands = taskCheckMap.get(er.taskId) || []
+  const invalidEntries = er.commands.filter(c => !ownCommands.includes(c))
+  if (invalidEntries.length) {
+    log(`ABORTED (spec error) — task ${er.taskId}'s expect_red names command(s) not present in its own validation_commands: ${JSON.stringify(invalidEntries)}. expect_red must be a subset of that task's own validation_commands (it can never invert a project-wide gates:true harness check).`)
+    return { error: 'expect_red not a subset of validation_commands', blockId, taskId: er.taskId, invalidEntries }
+  }
+  taskExpectRedMap.set(er.taskId, new Set(er.commands))
+}
+// <<shared:expectRedFor>>
+function expectRedFor(taskNum) { return taskExpectRedMap.get(taskNum) || new Set() }
+if (taskExpectRedMap.size) {
+  log(`Per-task expect_red overrides (inverted-verdict, D68): ${[...taskExpectRedMap.keys()].sort((a, b) => a - b).join(', ')} — each named command PASSES on a NON-ZERO exit and FAILS on exit 0; every other check on that task's list is judged normally.`)
+}
+// <</shared:expectRedFor>>
 
 // D63 — shared validated: vocabulary (identical strings in sdlc-task.js, per the ADR). This engine
 // only ever lands on ranHarnessList (no override) or ranNoneOfHarnessList (override present) — it
@@ -1664,6 +1833,7 @@ log(`Policy: testDepth=${testDepth} | autoMerge=${autoMerge} | prBase=${prBase} 
 await snapshotBaselines(harnessCfg, worktreePath)
 
 // The immediate-bail reason set the triage agent enforces (plan.md). "When unsure, prefer bail."
+// <<shared:BAIL_REASONS>>
 const BAIL_REASONS = [
   'Missing/undefined upstream dependency or symbol the spec assumes exists.',
   'Spec ambiguity/contradiction — intended behavior is genuinely undeterminable.',
@@ -1672,6 +1842,7 @@ const BAIL_REASONS = [
   'Same failure twice with no progress (stuck), or a structural design flaw needing a re-plan.',
   ...extraBailReasons,
 ].map((r, i) => `  ${i + 1}. ${r}`).join('\n')
+// <</shared:BAIL_REASONS>>
 
 // ----------------------------------------------------------------
 // Test stage helper (shared by per-task tripwire + the review's re-run)
@@ -1679,10 +1850,25 @@ const BAIL_REASONS = [
 // ----------------------------------------------------------------
 // Render a per-task validation override (tasks.json `validation_commands`) as a check list in the
 // same shape renderCheckList emits, so the test agent's instructions are identical either way.
-function renderTaskCheckList(commands, cwd) {
+function renderTaskCheckList(commands, cwd, expectRedSet = new Set()) {
   const cd = cwd ? `cd ${cwd} && ` : ''
   return commands.map((cmd, i) => {
     const n = i + 1
+    if (expectRedSet.has(cmd)) {
+      // expect_red (D68) — this task's declared DELIVERABLE is a test observed FAILING, so this
+      // ONE named command's verdict is inverted from every other check on this list: it PASSES on
+      // a NON-ZERO exit and FAILS on exit 0. The CHECK${n}_EXIT convention is unchanged so the
+      // test agent's parsing stays identical to every other check — only the pass/fail JUDGMENT
+      // of that same exit code is reversed for this command.
+      return `CHECK ${n} — task_validation_${n} (per-task validation_commands override from tasks.json) [GATING — a failure here blocks the verdict] — EXPECT_RED (D68, INVERTED VERDICT — do not read this as an ordinary check):
+  ${cd}${cmd}
+  echo "CHECK${n}_EXIT:$?"
+  This check's verdict is INVERTED: it PASSES on a NON-ZERO exit and FAILS on exit 0 — the exact
+  opposite of every other check on this list. Judge CHECK${n} ONLY by that inverted rule:
+  CHECK${n}_EXIT != 0 → PASS; CHECK${n}_EXIT == 0 → FAIL. This task's own deliverable is a test
+  that must be observed failing (D68); a zero exit here means the deliverable is missing, not that
+  the task succeeded.`
+    }
     return `CHECK ${n} — task_validation_${n} (per-task validation_commands override from tasks.json) [GATING — a failure here blocks the verdict]:
   ${cd}${cmd}
   echo "CHECK${n}_EXIT:$?"`
@@ -1726,7 +1912,7 @@ STEP W4 — use the Write tool for both files. Do NOT run \`git add\`, \`git com
 `
 }
 
-async function runTests(label, { gatingOnly, taskCommands = null, onPass = null, engineFiles = [] }) {
+async function runTests(label, { gatingOnly, taskCommands = null, expectRedSet = new Set(), onPass = null, engineFiles = [] }) {
   // Diff-window concurrent-sessions fix: the emoji gate scopes to the commit SHAs THIS run itself
   // recorded in the run-state (state.tasks[N].commit — the in-memory object writeFlowState()
   // persists to disk at stateFile), never to the whole prBase..HEAD range. Reading state.tasks
@@ -1741,6 +1927,22 @@ async function runTests(label, { gatingOnly, taskCommands = null, onPass = null,
   // for this task's per-task tripwire (not augmented, unlike sdlc-task.js). Safe here because the
   // end review below unconditionally re-runs the full gates:true suite over the integrated tree.
   const usingOverride = Array.isArray(taskCommands) && taskCommands.length > 0
+  const cd = worktreePath ? `cd ${worktreePath} && ` : ''
+
+  // The engine-parse gate is HARDCODED and UNCONDITIONAL — it is not part of the harness check list
+  // a per-task override substitutes for, so it must survive that substitution. It previously did
+  // not: the override branch rendered only the task's own commands, so a task that both edits
+  // .claude/workflows/*.js AND declares its own validation_commands skipped `prompt-template-parse`
+  // at the tripwire — precisely the check that exists because `node --check` cannot see a stray
+  // backtick (standing rule 6). The end review still caught it, so this closes a latency gap, not a
+  // hole; sdlc-task.js has always appended it on both branches.
+  const checklistBody = usingOverride
+    ? [
+        renderTaskCheckList(taskCommands, worktreePath, expectRedSet),
+        renderEngineParseChecks(engineFiles, cd, taskCommands.length + 1),
+      ].filter(Boolean).join('\n\n')
+    : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath, engineFiles })
+
   return tracedAgent(`${W}
 You are the test agent for the /sdlc-flow pipeline. Run the project's validation checks and report.
 
@@ -1749,16 +1951,14 @@ IMPORTANT — run ONLY the checks enumerated below (${usingOverride
     : 'from planning/harness.json + the spec'}). Do NOT invent
 checks. All Bash calls run from the worktree root (prefix each with: cd ${worktreePath} &&).
 
-${usingOverride
-    ? renderTaskCheckList(taskCommands, worktreePath)
-    : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath, engineFiles })}
+${checklistBody}
 
 Then run the universal emoji gate (a harness rule, always) — DIFF-SCOPED to this run's OWN
 recorded commit SHAs, never the whole ${prBase}..HEAD range: it judges only lines ADDED by
 commits THIS run itself made, so neither a legacy file's pre-existing emoji nor a concurrent
-sibling session's commit can fail a diff this run never touched (the literal "🤖 Generated with
-Claude Code" PR footer is exempt — it lives in the PR body, not a file, but the check exempts the
-phrase defensively too):
+sibling session's commit on a shared branch can fail a diff this run never touched (the literal
+"🤖 Generated with Claude Code" PR footer is exempt — it lives in the PR body, not a file, but the
+check exempts the phrase defensively too):
   cd ${worktreePath} && python3 - <<'PYEOF'
 import subprocess, re, sys
 EMOJI = re.compile(r'[\\U0001F300-\\U0001FAFF\\U00002600-\\U000027BF]')
@@ -1795,12 +1995,15 @@ if hits:
     print('EMOJI CHECK FAIL:'); [print(h) for h in hits[:25]]; sys.exit(1)
 print('EMOJI CHECK: OK'); sys.exit(0)
 PYEOF
-  A stray emoji ADDED in a commit THIS run made FAILS this gate.
+  A stray emoji ADDED in a commit THIS run made FAILS this gate; a pre-existing emoji in a file
+  this task did not touch a line of, or an emoji added by a different, concurrent session's
+  commit on a shared branch, does not.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
 ${onPass ? renderOnPassStateWriteRecipe(onPass) : ''}
-Return via StructuredOutput: allPassed (true only if EVERY check passed), passCount, failCount,
-failedTests (names), failBlob (compact: failing check names + the tail of their output; empty when allPassed)${onPass ? ', stateWritten (true only if you performed the additional state write above)' : ''}.
+Return via StructuredOutput: allPassed (true only if EVERY gating check passed and the emoji gate is
+clean), passCount, failCount, failedTests (names), failBlob (compact: failing check names + the tail
+of their output; empty when allPassed)${onPass ? ', stateWritten (true only if you performed the additional state write above)' : ''}.
 `, withModel({ label, schema: TEST_SCHEMA, phase: 'Tasks' }, MODEL.test))
 }
 
@@ -2054,8 +2257,12 @@ Target:
    package names via the claude-api skill — never from memory.
 
 5. COMPLETENESS SELF-CHECK before committing (D8): no stub/placeholder on any path the task's acceptance
-   criteria require; every deliverable named for Task ${taskNum} exists; any "unit-tested" criterion has a
-   real test. If something required is incomplete, finish it now — do not commit a partial task.
+   criteria require (no \`todo!()\`/\`unimplemented!()\`/\`unreachable!()\`, \`raise NotImplementedError\`,
+   \`throw new Error('not implemented')\`, empty \`pass\`-only bodies, or \`TODO\`/\`FIXME\` in required
+   paths); every deliverable named for Task ${taskNum} exists; any "unit-tested" criterion has a real,
+   hermetic test. Sanity-grep ONLY the files the in-scope criteria require:
+     cd ${worktreePath} && grep -nE 'todo!\\(|unimplemented!\\(|unreachable!\\(|NotImplementedError|not implemented|FIXME' <those paths> 2>/dev/null
+   If something required is incomplete, finish it now — do not commit a partial task.
 
 6. Run the spec's "## Validation Commands" for Task ${taskNum} to confirm correctness.
 
@@ -2103,8 +2310,11 @@ Return via StructuredOutput:
   commitHash: the 7-char short hash of THIS repo's commit (empty string if no commit was made here)
   summary: one line — what this task now does
   decisions: any non-obvious choices (empty array if none)
+  filesReadKb: telemetry — before returning, sum the byte size of every file you cat/Read this attempt
+    (cd ${worktreePath} && wc -c <each file>), divide the total by 1024, and report the number.
   notes: one-line status${vault.vaulted ? ' — mention explicitly whether a vault commit (step 7b) happened and, if so, its outcome' : ''}
 `, withModel({ label: `${isFix ? 'fix' : 'implement'}-${taskNum}-${attempt}`, schema: STAGE_SCHEMA, phase: 'Tasks' }, isFix ? fixModel : MODEL.implement))
+    recordFilesRead(stageResult)
 
     if (!stageResult) {
       log(`Task ${taskNum} attempt ${attempt}: agent returned null.`)
@@ -2179,7 +2389,7 @@ Return via StructuredOutput:
     const hasOverride = !!taskCommandsFor(taskNum)
     const passValidatedLabel = hasOverride ? VALIDATED_LABEL.ranNoneOfHarnessList : VALIDATED_LABEL.ranHarnessList
     const passPayload = buildPassPayload(taskNum, t, attempt, passValidatedLabel)
-    const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum), onPass: passPayload, engineFiles: engineFilesFor(taskNum) })
+    const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum), expectRedSet: expectRedFor(taskNum), onPass: passPayload, engineFiles: engineFilesFor(taskNum) })
     if (testResult && testResult.allPassed) {
       t.validated = passValidatedLabel
       // D63 — a task that ran ZERO harness.json gating checks must be VISIBLE in terminal output,

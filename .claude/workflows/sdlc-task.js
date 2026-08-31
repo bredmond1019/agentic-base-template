@@ -105,7 +105,9 @@ export const meta = {
 // never a bare `git`; prose mentions of git (descriptions, prohibitions) are left alone. Kept
 // byte-identical with sdlc-flow.js's copy — the two engines share no module, so this is duplicated on
 // purpose (see scripts/test_git_env_strip.py's cross-engine agreement check).
+// <<shared:GIT>>
 const GIT = 'env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_NAMESPACE -u GIT_PREFIX -u GIT_CEILING_DIRECTORIES git'
+// <</shared:GIT>>
 
 // ----------------------------------------------------------------
 // Parse args: "<spec-slug> [task|range] [--worktree] [--resume] [--test-depth fast|full]"
@@ -120,11 +122,15 @@ if (!rawArgs) {
 const tokens = rawArgs.split(/\s+/)
 const blockId = tokens[0]
 
+// <<shared:hasFlag>>
 function hasFlag(name) { return tokens.includes(name) }
+// <</shared:hasFlag>>
+// <<shared:flagStr>>
 function flagStr(name) {
   const i = tokens.indexOf(name)
   return (i === -1 || i + 1 >= tokens.length) ? null : tokens[i + 1]
 }
+// <</shared:flagStr>>
 // Parse a task selection like "1-7", "1,3,5", "1-3,7", or "5" into a sorted int array.
 function parseRange(spec) {
   const out = new Set()
@@ -186,6 +192,7 @@ const MAX_TASK_ATTEMPTS = 3   // implement→test→fix attempts per task before
 // where planningPath is always the absolute resolved directory: the vault's realpath
 // when vaulted, the plain planning/ directory otherwise. (Duplicated from sdlc-flow.js:
 // the engines are deliberately standalone files with no shared import.)
+// <<shared:VAULT_DETECT_SCHEMA>>
 const VAULT_DETECT_SCHEMA = {
   type: 'object',
   required: ['vaulted', 'planningPath'],
@@ -194,6 +201,8 @@ const VAULT_DETECT_SCHEMA = {
     planningPath: { type: 'string', description: 'the resolved absolute real path of planning/' }
   }
 }
+// <</shared:VAULT_DETECT_SCHEMA>>
+// <<shared:detectPlanningVault>>
 async function detectPlanningVault(repoRoot) {
   const result = await agent(`
 Determine whether planning/ in this repo is a symlink (a brain-vaulted repo) or a plain directory.
@@ -207,6 +216,7 @@ resolved absolute path from the second line).
   if (!result) return { vaulted: false, planningPath: `${repoRoot}/planning` }
   return result
 }
+// <</shared:detectPlanningVault>>
 
 // BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root — resolve repoRoot ONCE, here in
 // the engine, and hand it to every later prompt as a GIVEN literal instead of asking the setup agent
@@ -222,6 +232,7 @@ resolved absolute path from the second line).
 // cheap Haiku agent turn instead of resolving the path in-process. Returns null on failure (unlike
 // detectPlanningVault's safe fallback) — a wrong repoRoot silently accepted here is exactly the
 // defect this ticket exists to remove, so the caller must abort rather than guess.
+// <<shared:RESOLVE_REPO_ROOT_SCHEMA>>
 const RESOLVE_REPO_ROOT_SCHEMA = {
   type: 'object',
   required: ['repoRoot', 'gitCommonDir', 'tierPrefix', 'brainTomlAtRoot'],
@@ -232,6 +243,8 @@ const RESOLVE_REPO_ROOT_SCHEMA = {
     brainTomlAtRoot: { type: 'boolean', description: 'true iff the BRAIN_TOML: line reads "yes" — a brain.toml exists at repoRoot' }
   }
 }
+// <</shared:RESOLVE_REPO_ROOT_SCHEMA>>
+// <<shared:resolveRepoRoot>>
 async function resolveRepoRoot() {
   const result = await agent(`
 Resolve this repo's root and related mechanical facts ONCE, before anything else runs.
@@ -245,6 +258,7 @@ value), tierPrefix (the TIER_PREFIX: value, "" when invoking at the repo root), 
 `, { label: 'resolve-repo-root', schema: RESOLVE_REPO_ROOT_SCHEMA, model: 'haiku' })
   return result || null
 }
+// <</shared:resolveRepoRoot>>
 
 // BINDING / BRAIN-ROOT / POPULATION checks (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root,
 // task 4) — run immediately after the setup agent returns and BEFORE the enumerate/per-task stages, so a
@@ -258,6 +272,7 @@ value), tierPrefix (the TIER_PREFIX: value, "" when invoking at the repo root), 
 // its callers know what a "brain root" IS in any project-specific sense: the BRAIN-ROOT GUARD below compares
 // two mechanical facts (brain.toml presence at two paths, both ordinary filesystem facts), never a
 // harness-check count and never a hardcoded path (see out_of_scope on the ticket).
+// <<shared:SETUP_GUARD_SCHEMA>>
 const SETUP_GUARD_SCHEMA = {
   type: 'object',
   required: ['gitCommonDir', 'brainTomlAtRun'],
@@ -269,6 +284,7 @@ const SETUP_GUARD_SCHEMA = {
     notes:          { type: 'string' }
   }
 }
+// <</shared:SETUP_GUARD_SCHEMA>>
 async function verifySetupBinding(runDir, useWorktreeMode) {
   // Population check only runs in worktree mode — an in-place run has no separate checkout to
   // under-populate (runDir === repoRoot, already fully checked out).
@@ -298,6 +314,7 @@ BRAIN_TOML_AT_RUN: is yes)${useWorktreeMode ? ', missingCount (the MISSING_COUNT
 // every filesModified path that resolves under the vault, that the path is BOTH tracked and free of
 // any staged/unstaged diff in the vault repo (i.e. actually landed in a commit there), via a cheap
 // Haiku agent turn rather than trusting the implementer's own report.
+// <<shared:VAULT_VERIFY_SCHEMA>>
 const VAULT_VERIFY_SCHEMA = {
   type: 'object',
   required: ['allCommitted'],
@@ -308,6 +325,8 @@ const VAULT_VERIFY_SCHEMA = {
     notes:            { type: 'string' }
   }
 }
+// <</shared:VAULT_VERIFY_SCHEMA>>
+// <<shared:verifyVaultCommit>>
 async function verifyVaultCommit(runDir, vault, vaultRelPaths) {
   if (!vault.vaulted || !vaultRelPaths.length) return { allCommitted: true, uncommittedPaths: [], brainRootExempt: [] }
   // The classification logic runs entirely IN THE SCRIPT, not in the model's own reasoning — a cheap
@@ -351,6 +370,7 @@ different repo), notes (paste the raw script output).
   if (!Array.isArray(result.brainRootExempt)) result.brainRootExempt = []
   return result
 }
+// <</shared:verifyVaultCommit>>
 
 // COMMIT-SAFETY GUARD (BT.ticket.worktree-run-can-commit-an-empty-tree) — the cause-independent
 // backstop. Joined to a `git commit` with `&&` in the SAME Bash call as the commit itself: a
@@ -361,9 +381,11 @@ different repo), notes (paste the raw script output).
 // own HEAD/index rather than the worktree's; the default 'git' reproduces the exact snippet verbatim.
 // Kept byte-identical with sdlc-flow.js's copy — the two engines share no module, so this is
 // duplicated on purpose (see scripts/test_commit_safety_guard.py's cross-engine agreement check).
+// <<shared:renderCommitSafetyGuard>>
 function renderCommitSafetyGuard(gitCmd = 'git') {
   return `if ${gitCmd} rev-parse --verify -q HEAD >/dev/null; then TRACKED=$(${gitCmd} ls-tree -r HEAD --name-only | wc -l | tr -d ' '); STAGED=$(${gitCmd} ls-files -s | wc -l | tr -d ' '); if [ "$TRACKED" -gt 0 ] && [ "$STAGED" -eq 0 ]; then echo "COMMIT_GUARD_ABORT: index holds 0 entries but HEAD tracks $TRACKED files - refusing to commit a tree that deletes everything (BT.ticket.worktree-run-can-commit-an-empty-tree)"; exit 1; fi; fi`
 }
+// <</shared:renderCommitSafetyGuard>>
 
 // Post-commit work assertion (D81 lift condition 2 — BT.ticket.a-run-must-prove-its-commits-contain-the-work).
 // renderCommitSafetyGuard() above fires only on a TOTALLY empty index (TRACKED>0 && STAGED==0); EN.11.O had a
@@ -383,6 +405,7 @@ function renderCommitSafetyGuard(gitCmd = 'git') {
 // HEAD~1 that may not exist yet in a freshly-adopted vault checkout and that other concurrent lanes also write
 // to, so a false WORK_ASSERTION_ABORT there would block an honest vault commit on a shared repo it does not
 // fully control. Exempted outright rather than compared.
+// <<shared:renderWorkAssertion>>
 function renderWorkAssertion(gitCmd = 'git', taskNum, tasksJsonPath) {
   return `NAME_STATUS=$(${gitCmd} diff --name-status HEAD~1 HEAD); if [ -z "$NAME_STATUS" ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit diff is EMPTY (condition 1) - no work was committed"; exit 1; fi; WA_DECLARED=$(python3 -c "
 import json
@@ -391,6 +414,7 @@ t = [x for x in d if x.get('task_id') == ${taskNum}]
 print(chr(10).join(t[0].get('files', []) if t else []))
 "); WA_MATCH=0; WA_BADDEL=""; while IFS=$'\t' read -r WA_ST WA_P1 WA_P2; do WA_CHK="$WA_P1"; case "$WA_ST" in R*) WA_CHK="$WA_P2" ;; esac; if printf '%s\n' "$WA_DECLARED" | grep -qFx "$WA_CHK"; then WA_MATCH=1; else case "$WA_ST" in D*) WA_BADDEL="$WA_CHK" ;; esac; fi; done <<< "$NAME_STATUS"; if [ "$WA_MATCH" -eq 0 ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit's changed paths do not intersect declared files[] (condition 2) - declared: [$WA_DECLARED] - changed: [$NAME_STATUS]"; exit 1; fi; if [ -n "$WA_BADDEL" ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit deletes undeclared file '$WA_BADDEL' not present in files[] (condition 3) - declared: [$WA_DECLARED]"; exit 1; fi`
 }
+// <</shared:renderWorkAssertion>>
 
 // Given a task stage's self-reported filesModified (repo-root-relative) and a resolved vault, return
 // the vault-relative subset (the part of the path after "planning/") that needs an independent
@@ -494,6 +518,7 @@ const ENUMERATE_SCHEMA = {
 // D16 derive-from-tasks.md fallback — see the abort below. Mirrors /generate-tasks' --from mode: read the spec's authored step decomposition and
 // write a fresh D45-shaped tasks.json from it (never a verbatim copy of the prose, never the
 // superseded D44 {"tasks": [...]} wrapper).
+// <<shared:DERIVE_SCHEMA>>
 const DERIVE_SCHEMA = {
   type: 'object',
   required: ['derivable', 'written'],
@@ -505,6 +530,7 @@ const DERIVE_SCHEMA = {
     notes:      { type: 'string' }
   }
 }
+// <</shared:DERIVE_SCHEMA>>
 
 const STATE_LOAD_SCHEMA = {
   type: 'object',
@@ -612,13 +638,17 @@ const MODEL = {
 
 // Final per-task fix pass before the loop gives up runs on a stronger model. The common path
 // stays on Sonnet; only the genuinely-hard case that already failed gets an Opus shot.
+// <<shared:ESCALATION_MODEL>>
 const ESCALATION_MODEL = 'opus'
+// <</shared:ESCALATION_MODEL>>
 
 // Merge an optional model override into an agent's opts (omits the key when undefined, so the agent
 // inherits the session model rather than receiving model: undefined).
+// <<shared:withModel>>
 function withModel(base, model) {
   return model ? { ...base, model } : base
 }
+// <</shared:withModel>>
 
 // ----------------------------------------------------------------
 // TOKEN TELEMETRY (Block A — the shared committed-state token contract)
@@ -635,6 +665,7 @@ function withModel(base, model) {
 //   inTokEst     — D15 input-cost estimate = promptTokEst + filesReadKb→tokens (~256 tok/KB).
 // ----------------------------------------------------------------
 const metrics = []
+// <<shared:tracedAgent>>
 async function tracedAgent(prompt, opts = {}) {
   const before = (typeof budget !== 'undefined' && budget.spent) ? budget.spent() : 0
   const r = await agent(prompt, opts)
@@ -647,14 +678,17 @@ async function tracedAgent(prompt, opts = {}) {
   })
   return r
 }
+// <</shared:tracedAgent>>
 
 // Fold a stage's self-reported `filesReadKb` into the metrics entry the wrapper just pushed.
 // Safe to call immediately after the awaited tracedAgent call — that entry is always metrics[last].
+// <<shared:recordFilesRead>>
 function recordFilesRead(result) {
   if (result && result.filesReadKb != null && metrics.length) {
     metrics[metrics.length - 1].filesReadKb = result.filesReadKb
   }
 }
+// <</shared:recordFilesRead>>
 
 // Build the canonical `tokens` block from the accumulated per-agent metrics (Block A — the shared
 // committed-state token contract, identical across all four engines): per-stage output tokens + the
@@ -664,6 +698,7 @@ function recordFilesRead(result) {
 // SUBSTANTIVE stages only. Cheap helper / state-writer agents (the Haiku state-writer, config + baseline
 // loaders) deliberately use bare agent() and are EXCLUDED; this bounded, Haiku-cheap exclusion is the
 // same boundary in both engines, named here so it is explicit rather than silent.
+// <<shared:buildTokensBlock>>
 function buildTokensBlock() {
   const stages = metrics.map(m => {
     const filesReadKb = m.filesReadKb != null ? m.filesReadKb : null
@@ -679,6 +714,7 @@ function buildTokensBlock() {
   }, { promptTokEst: 0, filesReadKb: 0, inTokEst: 0, outTok: 0 })
   return { stages, total }
 }
+// <</shared:buildTokensBlock>>
 
 // ----------------------------------------------------------------
 // HARNESS CONFIG — mechanism/policy split (see planning/harness.json)
@@ -736,6 +772,14 @@ const HARNESS_CONFIG_SCHEMA = {
               }
             }
           }
+        },
+        flow: {
+          type: 'object',
+          description: 'Shared engine policy block. Historically flow-only, hence the name; this engine reads testDepth and bailReasons out of it and ignores autoMerge/prBase, which ARE flow-only.',
+          properties: {
+            testDepth:   { type: 'string', description: 'fast (default) | full — per-task validation depth' },
+            bailReasons: { type: 'array', items: { type: 'string' }, description: 'extra project-specific immediate-bail reasons' }
+          }
         }
       }
     },
@@ -759,7 +803,8 @@ STEP 2 — Decide:
     validation.checks[] (each: {kind, name, command, purpose, gates,
     perTask, fastCommand} plus any kind-specific fields present — baselineCommand, reasonCommand,
     compareKeys[], countPattern, failOn, warningPatterns[], rules[] ({id, pattern, paths,
-    allowlistPattern})). Preserve kind-specific fields verbatim; ignore any other fields.
+    allowlistPattern})); flow ({testDepth, bailReasons[]} only — ignore autoMerge/prBase, which
+    belong to the other engine). Preserve kind-specific fields verbatim; ignore any other fields.
 
 Return your findings using the StructuredOutput tool.
 `, { label: 'harness-config', schema: HARNESS_CONFIG_SCHEMA, model: 'sonnet' })
@@ -772,6 +817,7 @@ Return your findings using the StructuredOutput tool.
 // baselineCount (coverage silently switched off), never on a nonzero absolute count. Kept as a
 // standalone pure function (no I/O) — exercised directly in unit tests without running a suite —
 // and mirrored verbatim into the rendered shell snippet's comparison so the two never drift.
+// <<shared:skipCountRegressionResult>>
 function skipCountRegressionResult(baselineCount, currentCount, dominantReason) {
   const regressed = currentCount > baselineCount
   const delta = currentCount - baselineCount
@@ -780,6 +826,7 @@ function skipCountRegressionResult(baselineCount, currentCount, dominantReason) 
     : `skip count did not rise (baseline=${baselineCount}, current=${currentCount})`
   return { regressed, message }
 }
+// <</shared:skipCountRegressionResult>>
 
 // Hardcoded, project-agnostic parse-time safety gate (mechanism, not policy — see CLAUDE.md standing
 // rule 1). Independent of harness.json/spec checks: any .js .claude/workflows/ file this task's own
@@ -788,6 +835,7 @@ function skipCountRegressionResult(baselineCount, currentCount, dominantReason) 
 // only — `node --check` throws ERR_UNKNOWN_FILE_EXTENSION on non-JS paths (.md/.json) regardless of
 // content, which is a false positive, not a real defect. No-op (renders '') when the task touches no
 // such file — never emits a check with no target.
+// <<shared:renderEngineParseChecks>>
 function renderEngineParseChecks(files, cd, startIndex) {
   files = (files || []).filter(f => f.endsWith('.js'))
   if (!files || !files.length) return ''
@@ -803,6 +851,7 @@ function renderEngineParseChecks(files, cd, startIndex) {
   on work that is actually correct (observed twice on 2026-08-19).`
   }).join('\n\n')
 }
+// <</shared:renderEngineParseChecks>>
 
 // Render the inner project-validation check list for a Test stage. When gatingOnly is true (the fast
 // per-task tripwire), emit only the checks with gates:true; --test-depth full runs the whole suite.
@@ -921,6 +970,7 @@ ${ruleLines}
 // task, so the test stages can diff current output vs the pre-run state and fail only on regressions.
 // Resume-safe: only writes a baseline that does not already exist. No-op when no such checks are
 // configured. skip-count-regression writes a bare-integer count file (not JSON) at a sibling path.
+// <<shared:snapshotBaselines>>
 async function snapshotBaselines(cfg, cwd) {
   const checks = (cfg?.validation?.checks || [])
     .filter(c => (c.kind === 'baseline-diff' || c.kind === 'skip-count-regression') && c.baselineCommand)
@@ -944,6 +994,7 @@ ${steps}
 Return using StructuredOutput: done=true, and note which baselines were written vs already present.
 `, { label: 'baseline-snapshot', schema: { type: 'object', required: ['done'], properties: { done: { type: 'boolean' }, notes: { type: 'string' } } }, model: 'haiku' })
 }
+// <</shared:snapshotBaselines>>
 
 // ----------------------------------------------------------------
 // COMMITTED AUTHORITATIVE STATE (Block A)
@@ -1529,10 +1580,12 @@ for (const er of (enumResult.taskExpectRed || [])) {
   }
   taskExpectRedMap.set(er.taskId, new Set(er.commands))
 }
+// <<shared:expectRedFor>>
 function expectRedFor(taskNum) { return taskExpectRedMap.get(taskNum) || new Set() }
 if (taskExpectRedMap.size) {
   log(`Per-task expect_red overrides (inverted-verdict, D68): ${[...taskExpectRedMap.keys()].sort((a, b) => a - b).join(', ')} — each named command PASSES on a NON-ZERO exit and FAILS on exit 0; every other check on that task's list is judged normally.`)
 }
+// <</shared:expectRedFor>>
 
 // D63 — shared validated: vocabulary (identical strings in sdlc-flow.js, per the ADR). A pass
 // always lands on exactly one of these three; never a fourth ad hoc label.
@@ -1619,21 +1672,34 @@ if (taskCheckMap.size && harnessGatingCheckCount === 0) {
   log(`WARNING (D63): planning/harness.json defines ZERO gates:true checks — task(s) [${[...taskCheckMap.keys()].sort((a, b) => a - b).join(', ')}] with a validation_commands override will run ONLY their own declared commands; there is nothing of the project-wide harness list to augment with.`)
 }
 
-// Resolve test depth: CLI flag overrides the built-in 'fast' default.
-const testDepth = testDepthFlag || 'fast'
+// Resolve test depth: CLI flag overrides harness.json overrides the built-in 'fast' default.
+//
+// The config block is named `flow` for historical reasons — it predates this engine reading any of
+// it. `testDepth` and `bailReasons` are NOT flow-specific (both engines accept --test-depth, and a
+// failure is retryable or fatal for the same reasons in either), so this engine reads those two
+// keys out of the same block rather than inventing a second one. It deliberately does NOT read
+// `autoMerge` or `prBase`, which ARE flow-only. The block is not renamed because six repos already
+// set it on disk and one (jynx) carries real project-specific bailReasons there; a rename would
+// silently drop them.
+const flowCfg = harnessCfg?.flow || {}
+const testDepth = testDepthFlag || (VALID_TEST_DEPTHS.includes(flowCfg.testDepth) ? flowCfg.testDepth : 'fast')
+const extraBailReasons = Array.isArray(flowCfg.bailReasons) ? flowCfg.bailReasons : []
 log(`Policy: testDepth=${testDepth}`)
 
 // Snapshot baselines once (resume-safe; no-op without baseline-diff checks).
 await snapshotBaselines(harnessCfg, runDir)
 
 // The immediate-bail reason set the triage agent enforces. "When unsure, prefer bail."
+// <<shared:BAIL_REASONS>>
 const BAIL_REASONS = [
   'Missing/undefined upstream dependency or symbol the spec assumes exists.',
   'Spec ambiguity/contradiction — intended behavior is genuinely undeterminable.',
   'Environment/credential/auth/network failure (not a code defect).',
   'Change would require a destructive or out-of-scope action.',
   'Same failure twice with no progress (stuck), or a structural design flaw needing a re-plan.',
+  ...extraBailReasons,
 ].map((r, i) => `  ${i + 1}. ${r}`).join('\n')
+// <</shared:BAIL_REASONS>>
 
 // ----------------------------------------------------------------
 // Test stage helper — gatingOnly=true → fast tripwire (gating checks); false → full suite.

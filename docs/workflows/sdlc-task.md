@@ -62,7 +62,7 @@ Default is in-place on a plain branch (cheaper); pass `--worktree` for true isol
 | `[range]` | Optional task selection (positional or `--tasks`). Forms: `1-3`, `1,3,5`, `5`. | all tasks |
 | `--worktree` | Isolated `trees/<branch>/` checkout — see [In-place vs. `--worktree`](#in-place-vs-worktree). | in-place |
 | `--resume` | Re-attach and continue from the last committed state. | off |
-| `--test-depth fast\|full` | Per-task validation depth. `fast` runs only `gates:true` checks (the tripwire) via each check's `fastCommand`; `full` runs the whole suite (authoritative `command`) per task, which also skips the terminal reconcile stage — see [Terminal authoritative reconcile (D56)](#terminal-authoritative-reconcile-d56) below. Unlike `/sdlc-flow`, there is no `harness.json` config key for this — CLI-flag-only, default `fast`. | `fast` |
+| `--test-depth fast\|full` | Per-task validation depth. `fast` runs only `gates:true` checks (the tripwire) via each check's `fastCommand`; `full` runs the whole suite (authoritative `command`) per task, which also skips the terminal reconcile stage — see [Terminal authoritative reconcile (D56)](#terminal-authoritative-reconcile-d56) below. Also readable from `planning/harness.json` as `flow.testDepth`; the flag overrides the config, which overrides the `fast` default. | `fast` |
 
 ---
 
@@ -118,6 +118,11 @@ at enumerate time as a hard spec error (`ABORTED (spec error)`), never silently 
 what stops `expect_red` from ever becoming a way to invert or skip a harness gating check. A
 task with no `expect_red` is unaffected; the field is optional and additive.
 
+[`/sdlc-flow`](sdlc-flow.md) honours `expect_red` with the identical rule and the identical abort —
+it was ported there in 2026-08. Before that, a block whose deliverable was a failing test could not
+be run through `/sdlc-flow` at all: its task passed only once the test it was meant to add had been
+made green, which is the opposite of the deliverable.
+
 ---
 
 ## D16 preflight — derive, then abort
@@ -147,8 +152,10 @@ fix, commit) walks that array. The preflight is **derive-then-abort**, not a bar
    refuse *guessing* a task structure out of nothing; deriving from an authored block record or
    `tasks.md` is not guessing, so the abort survives only the genuinely underivable case.
 
-`/sdlc-flow` runs the same derive-then-abort shape, but its D16 derive branch is `tasks.md`-only —
-it does not derive from a block record — see [its Enumerate stage](./sdlc-flow.md#pipeline).
+`/sdlc-flow` runs the same derive-then-abort shape, with the same two derive branches — the
+block-record branch was ported to it in 2026-08 so that a block-record-only spec with a missing or
+invalid `tasks.json` no longer aborts under one engine and recovers under the other. See
+[its Enumerate stage](./sdlc-flow.md#pipeline).
 
 ---
 

@@ -334,6 +334,8 @@ each engine's committed state file — check the state JSON for real figures fro
   per-task test-fix loop, triage-gated bail (D32), committed state model (D31), PR wrap-up (D33).
 - **[sdlc-task.md](sdlc-task.md)** — lean single-unit engine (D38). In-place or `--worktree`, implement→test→fix→commit, pairs with `/chore`/`/ticket`.
 - **[commands.md](commands.md)** — the manual command lifecycle the engines automate (Phase 1 → 7).
+- **[prompt-parity.md](prompt-parity.md)** — where the two engines' stage prompts and the matching
+  one-off commands agree, where they deliberately differ, and the open drift register between them.
 - **[orchestration.md](orchestration.md)** — the lane lifecycle: what a lane is, the phases from
   `/begin-orchestration` through the terminal `review.md`, the mandatory artifacts (including the
   escalation record), and the traps.

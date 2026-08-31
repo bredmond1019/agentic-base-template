@@ -162,10 +162,18 @@ TASK_ZERO_GATES_REPORTED_PATTERN = (
 
 # The /sdlc-flow per-task override branch: taskPart REPLACES the harness list (no harnessPart at
 # all) -- proves the cost-saving is untouched there too, structurally different from /sdlc-task.
+# The override branch moved out of an inline template ternary into a `checklistBody` const when the
+# engine-parse gate was added to it (parity drift D3 -- that gate is hardcoded mechanism and must
+# survive a per-task substitution, exactly as it does in sdlc-task.js). The pinned INVARIANT is
+# unchanged and is what the assertions below actually check: the override branch renders the task's
+# own commands and the engine-parse gate, and never `renderCheckList(harnessCfg, ...)`.
 FLOW_OVERRIDE_REPLACES_PATTERN = (
-    r"\$\{usingOverride\n"
-    r"\s*\? renderTaskCheckList\(taskCommands, worktreePath\)\n"
-    r"\s*: renderCheckList\(harnessCfg, \{ gatingOnly, cwd: worktreePath, engineFiles \}\)\}"
+    r"const checklistBody = usingOverride\n"
+    r"\s*\? \[\n"
+    r"\s*renderTaskCheckList\(taskCommands, worktreePath, expectRedSet\),\n"
+    r"\s*renderEngineParseChecks\(engineFiles, cd, taskCommands\.length \+ 1\),\n"
+    r"\s*\]\.filter\(Boolean\)\.join\('\\n\\n'\)\n"
+    r"\s*: renderCheckList\(harnessCfg, \{ gatingOnly, cwd: worktreePath, engineFiles \}\)"
 )
 
 # /sdlc-flow's end review re-runs the FULL suite unconditionally -- no reference to any per-task
@@ -455,7 +463,40 @@ class CostCaseSurvivesTest(unittest.TestCase):
         # Confirms /sdlc-flow's per-task override still costs only the task's own commands (never
         # the harness list too) -- augmenting here would add cost with no corresponding safety
         # gain, per the ADR's explicit rejection of "always augment".
-        extract(_read(FLOW_JS), FLOW_OVERRIDE_REPLACES_PATTERN, "sdlc-flow.js override-replaces mechanism")
+        block = extract(
+            _read(FLOW_JS), FLOW_OVERRIDE_REPLACES_PATTERN, "sdlc-flow.js override-replaces mechanism"
+        )
+        # The invariant, asserted directly rather than left implicit in the pattern: the OVERRIDE
+        # arm must never reach for the harness list. `renderCheckList(harnessCfg` may appear only
+        # once in this block -- in the non-override arm after the colon.
+        self.assertEqual(
+            block.count("renderCheckList(harnessCfg"),
+            1,
+            "the override arm must not render the harness check list (that is the augment "
+            "behaviour, which is sdlc-task.js's contract, not this engine's)",
+        )
+
+    def test_flow_engine_override_still_runs_the_hardcoded_engine_parse_gate(self):
+        # Parity drift D3: the engine-parse gate is hardcoded MECHANISM, not part of the harness
+        # check list a per-task override substitutes for, so it must survive that substitution.
+        # It previously did not -- a task both editing .claude/workflows/*.js and declaring its own
+        # validation_commands skipped `prompt-template-parse` at the tripwire, the one check
+        # `node --check` cannot replace. sdlc-task.js has always appended it on both arms.
+        block = extract(
+            _read(FLOW_JS), FLOW_OVERRIDE_REPLACES_PATTERN, "sdlc-flow.js override-replaces mechanism"
+        )
+        self.assertIn("renderEngineParseChecks(engineFiles", block)
+
+    def test_flow_override_engine_parse_pin_is_not_vacuous(self):
+        """Sanity check: the D3 assertion must fail against the pre-fix shape, which rendered the
+        task's own commands alone."""
+        pre_fix_shape = (
+            "const checklistBody = usingOverride\n"
+            "    ? renderTaskCheckList(taskCommands, worktreePath, expectRedSet)\n"
+            "    : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath, engineFiles })"
+        )
+        with self.assertRaises(AssertionError):
+            extract(pre_fix_shape, FLOW_OVERRIDE_REPLACES_PATTERN, "synthetic pre-D3 fixture")
 
     def test_flow_engine_end_review_unconditionally_reruns_full_suite(self):
         # Regression guard for task 3's "unregressed" AC: the backstop that makes /sdlc-flow's

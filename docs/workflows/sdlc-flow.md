@@ -156,7 +156,7 @@ flowchart TD
 | Stage | Model | What it does |
 |---|---|---|
 | **Setup** | haiku | Creates (or re-attaches on `--resume`) the `<spec>-flow` branch for the whole spec: `git checkout -b` in the main tree by default (aborts on a dirty tree), or the isolated-worktree D5/P5 cone-all-tracked-dirs recipe under `trees/<spec>-flow/` when `--worktree` is passed. Resolves the spec source (D65 stage 2): checks `planning/blocks/<BlockID>.json` (the authored block record) first and prefers it when present; falls back to the legacy `planning/<spec>/tasks.md` only when no block record exists. `specSource` (`'block-record'` / `'tasks-md'` / `'missing'`) is reported and drives which file downstream stages treat as the spec. The D19 thin-spec token check runs only when `specSource == 'tasks-md'` — a block record is structured JSON, not prose, so it has no `{{TOKEN}}` placeholders to check. |
-| **Enumerate** | haiku | Reads `tasks.json` for its task entries (D16 preflight lint) — independent of `specSource` above, since `tasks.json` is always the task array regardless of which file supplied the spec's narrative. If `tasks.json` is missing/invalid/empty but `tasks.md` has a derivable step list, derives a fresh D45-shaped `tasks.json` and commits it before re-enumerating; refuses to run only when nothing is derivable either — see [D16 preflight — derive, then abort](#d16-preflight--derive-then-abort) below. `/sdlc-flow`'s D16 derive path only derives from `tasks.md`; it does not derive from a block record — see [`sdlc-task.md`](./sdlc-task.md#d16-preflight--derive-then-abort) for the engine that does. On `--resume`, reads the on-disk (uncommitted) `sdlc-flow-state.json` to identify already-passed tasks and skip them. |
+| **Enumerate** | haiku | Reads `tasks.json` for its task entries (D16 preflight lint) — independent of `specSource` above, since `tasks.json` is always the task array regardless of which file supplied the spec's narrative. If `tasks.json` is missing/invalid/empty but `tasks.md` has a derivable step list, derives a fresh D45-shaped `tasks.json` and commits it before re-enumerating; refuses to run only when nothing is derivable either — see [D16 preflight — derive, then abort](#d16-preflight--derive-then-abort) below. Two derive branches, selected by `specSource`: from the authored **block record** when the spec came from one, else from `tasks.md`. Also reports each task's `expect_red` commands (D68) for the inverted-verdict rule. On `--resume`, reads the on-disk (uncommitted) `sdlc-flow-state.json` to identify already-passed tasks and skip them. |
 | **update-task** | haiku | Marks the current task in-progress in `tasks.md` (surgical checkbox edit). Disk-only, like the state-writer — neither commits. |
 | **Implement** | sonnet | Executes task N against the spec (and `breakdown.md` if present). Runs the D8 completeness self-check before committing `feat:`. |
 | **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` (the per-task tripwire). Falls back to the spec's `## Validation Commands` if no config. Also runs the universal emoji gate on changed markdown. |
@@ -259,18 +259,42 @@ walks `tasks.json`, not raw `tasks.md` prose — every downstream stage (impleme
 triage, fix, review) enumerates from that array. The preflight is derive-then-abort:
 
 1. **Enumerate.** Parse `planning/<spec>/tasks.json`. If it's a non-empty bare array, proceed.
-2. **Derive.** If `tasks.json` is missing, invalid, or empty but `tasks.md` carries a usable step
-   decomposition, an `opus` recovery generator authors a fresh
-   D45 (`planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md`)-shaped
-   `tasks.json` from it (bare array, integer `task_id`, single-string `description`, no `status`/
-   `attempt_count` — never a verbatim copy of the prose), writes and commits it, then re-enumerates.
+2. **Derive.** If `tasks.json` is missing, invalid, or empty, an `opus` recovery generator authors a
+   fresh D45 (`planning/decisions/D45-tasks-json-orchestrator-schema-alignment.md`)-shaped
+   `tasks.json` (bare array, integer `task_id`, single-string `description`, no `status`/
+   `attempt_count` — never a verbatim copy of the source), writes and commits it, then
+   re-enumerates. Which source it derives *from* follows `specSource`, resolved at setup:
+   - `block-record` → the authored `planning/blocks/<BlockID>.json`, decomposing its `what`, `why`,
+     `files`, `acceptance_criteria`, `testing_strategy` and `validation_commands` fields.
+   - `tasks-md` → the legacy `tasks.md` step list plus its Acceptance Criteria / Validation Commands
+     sections.
 3. **Abort.** Only when nothing is derivable either does the engine log
    `ABORTED (D16) — <path> is missing, invalid, or is an empty array.` and stop before touching the
    tree. D16 exists to refuse guessing a task structure out of nothing; deriving from an authored
-   `tasks.md` is not guessing, so the abort survives only the genuinely underivable case.
+   block record or `tasks.md` is not guessing, so the abort survives only the genuinely underivable
+   case.
 
-`/sdlc-task` runs the identical derive-then-abort preflight — see
+`/sdlc-task` runs the identical derive-then-abort preflight, with the same two derive branches — see
 [its Pipeline stage](./sdlc-task.md#pipeline).
+
+---
+
+## `expect_red` — a task whose deliverable is a deliberately-failing test (D68)
+
+A task in `tasks.json` may carry `"expect_red": ["<command>", ...]` — one or more commands that MUST
+also appear in that same task's own `validation_commands`. Each named command has its verdict
+**inverted**: it **passes on a non-zero exit** and **fails on exit 0**, while every other check on
+that task's list is judged normally. This exists for the D68 shape, a task whose declared deliverable
+is a test *observed failing*; under the ordinary rule such a task can never close, because the thing
+it was asked to produce is the thing that fails.
+
+The boundary is enforced in the engine, not only documented: `expect_red` is scoped strictly to a
+task's own `validation_commands`, so it can never invert or suppress a project-wide `gates:true`
+harness check. An entry naming a command absent from that list is rejected at enumerate time as a
+hard spec error (`ABORTED (spec error)`), never silently ignored.
+
+The rule, the scope and the abort are identical in [`/sdlc-task`](sdlc-task.md#expect_red--a-task-whose-deliverable-is-a-deliberately-failing-test-d68),
+where the feature originated; it was ported here in 2026-08.
 
 ---
 
@@ -340,6 +364,13 @@ the `flow` block. Every key has a CLI flag that overrides it for a single run.
 Projects append project-specific reasons via `flow.bailReasons[]`. The triage agent's bias is
 **when unsure, bail** — a wasted retry loop costs more than one human glance at a draft PR. See
 D32 (`planning/decisions/D32-triage-gated-bail.md`).
+
+> **The block is named `flow` but two of its keys are not flow-only.** `testDepth` and
+> `bailReasons` are read by [`/sdlc-task`](sdlc-task.md) as well — both engines accept
+> `--test-depth`, and a failure is retryable or fatal for the same reasons whichever engine hit it.
+> `autoMerge` and `prBase` genuinely are flow-only and `/sdlc-task` ignores them. The block keeps
+> its name because six repos already set it on disk and one carries real project-specific
+> `bailReasons` there; renaming it would silently drop them.
 
 ---
 

@@ -3,7 +3,72 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-30
+**Last updated:** 2026-08-31
+
+---
+## 2026-08-31 — engine parity: 8 drifts closed, then one master copy of every shared block (D83)
+
+- **What:** Audited every stage prompt in `sdlc-task.js` against `sdlc-flow.js` and found **eight**
+  engine-to-engine divergences, all now closed. Two changed what the harness could do: `expect_red`
+  (D68) was implemented in `sdlc-task` only, so a block whose deliverable is a test *observed
+  failing* could not be run through `/sdlc-flow` at all — its task passed only once the test it was
+  meant to add had been made green; and the D16 derive-from-block-record fallback was likewise
+  task-only, so the *same* block-record spec with an invalid `tasks.json` aborted under one engine
+  and recovered under the other. The rest: flow dropped the hardcoded engine-parse gate whenever a
+  task declared its own `validation_commands` (skipping `prompt-template-parse`, the check
+  `node --check` cannot replace); flow's D8 completeness self-check was one sentence against task's
+  full stub checklist; `flow.testDepth` and `flow.bailReasons` were read by flow only; flow never
+  reported `filesReadKb`, so its D15 cost estimate was systematically low; and the emoji-gate prose
+  and `allPassed` definition disagreed.
+  Then extracted the **23 blocks already byte-identical in both engines** (~230 lines) into
+  `.claude/workflows/prompts/shared.js`, inlined in place by `scripts/build_engines.py`, with two
+  new gated checks — `engines-inlined` (rebuild and fail on a one-byte difference) and
+  `build-engines-tests` (16 fixtures over the builder). 56 -> 58 gated checks.
+- **Why:** Three copies of every instruction (two engines plus the one-off commands) with nothing
+  comparing them. `skill-guide-sync` and `engine-docs-sync` already guard engine-to-prose drift;
+  **nothing guarded engine-to-engine drift**, which is why `expect_red` could ship to one engine and
+  sit unnoticed. The operator asked for a parity review and, ultimately, one master copy per stage.
+- **Verified, not assumed:** the extraction changed **no executable byte** — strip the marker lines
+  from the post-extraction engines and they are byte-identical to the pre-extraction snapshots, so
+  behaviour cannot have changed. The gate was positively controlled: a simulated hand-edit inside an
+  inlined region makes `build_engines.py` exit 1.
+- **The sync tripwires earned their keep.** They fired twice. The first firing caught **four**
+  statements these changes made false — `sdlc-task.md`'s "there is no `harness.json` config key for
+  this — CLI-flag-only", `sdlc-flow.md`'s "its D16 derive path only derives from `tasks.md`", the
+  mirror of that claim on `sdlc-task.md`, and `sdlc-task`'s SKILL.md presenting five bail reasons as
+  the complete set. All corrected before `--update`. The second firing was pure line-shift from the
+  marker comments.
+- **Not renamed:** the `flow` harness config block, though `testDepth`/`bailReasons` are now read by
+  both engines. Six repos set it on disk and `jynx` carries real project-specific `bailReasons`
+  there; a rename would silently drop them. The misnomer is documented in both engines, both docs
+  pages and `sdlc-task`'s SKILL.md instead.
+- **Refs:** [D83](planning/decisions/D83-shared-engine-library-inlined-at-build-time.md) ·
+  [`docs/workflows/prompt-parity.md`](docs/workflows/prompt-parity.md) — the parity register:
+  what is intended difference, what was drift, and the next extraction cuts.
+
+---
+## 2026-08-30 — post-merge `emit-state` runs now get committed; `emit_state_write.sh` wired in where it exists
+
+- **What:** Fixed a real defect in `/close-out --merge-branch` Step 5b and `/clean-worktree` Step
+  6.6: both ran `mev emit-state --write --require-fresh` on the base branch after a merge but never
+  committed the result, leaving regenerated `planning/state.json`/`status.md`/cache-doc changes
+  dirty in the working tree after a "clean" close-out or worktree cleanup. Both now commit that
+  result locally (scoped `git add`, never `git add -A`) and explicitly never push. Also updated
+  `/log-work` and `/handoff` (this repo's harness commands, used by every scaffolded project) to
+  **check for `$BRAIN_ROOT/scripts/sync/emit_state_write.sh`** before falling back to the bare
+  `mev emit-state --write` — where a brain provides that script (agentic-portfolio's does), it adds
+  content-loss guards and auto-commits what it wrote, still local-only. The harness only checks for
+  the script's existence; it never assumes one, keeping these commands project-agnostic per
+  Standing Rule 1.
+- **Why:** `agentic-portfolio/scripts/sync/emit_state_write.sh` already solves "commit derived state
+  locally, never push" — it pushes only under `ROUTINE_PUSH=1`, set only by the nightly cron, never
+  by an interactive command. The operator wanted that same commit-not-push pattern used by
+  `/log-work`/`/close-out`/`/handoff`, and reading the merge-cleanup paths surfaced they had a
+  genuine missing-commit bug independent of that script's existence.
+- **Also updated:** `agentic-portfolio/.claude/commands/log-work.md` (HQ's own copy, not synced —
+  D54) now calls `emit_state_write.sh` directly rather than checking for it, since HQ always has it.
+- **Not changed:** `/log-work` still does not commit `log.md`/`status.md`/the `_root` Quick Status
+  edit itself by design — that's `/commit`, `/wrap-up`, or `/handoff`'s job, unchanged by this pass.
 
 ---
 ## 2026-08-30 — `/update-docs` gains a five-defect-class gap analysis

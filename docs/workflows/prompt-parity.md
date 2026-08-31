@@ -1,0 +1,178 @@
+---
+type: Reference
+title: Prompt parity — sdlc-flow, sdlc-task, and the one-off commands
+description: "Where the two engines' stage prompts and the matching one-off commands agree, where they deliberately differ, and where the difference is unintended drift."
+doc_id: sdlc-prompt-parity
+layer: [factory]
+project: base-template
+status: active
+keywords: [prompt parity, sdlc-flow, sdlc-task, drift, stage prompts, one-off commands]
+related: [base-template-workflows-index, sdlc-flow, sdlc-task, sdlc-commands]
+---
+
+# Prompt parity
+
+`sdlc-flow.js` and `sdlc-task.js` are **self-contained** — neither imports the other, so every
+shared stage prompt exists twice on disk. The one-off commands (`/implement`, `/test`, `/fix`,
+`/review-task`, `/document`) are a third copy of the same steps, written for a human driving the
+pipeline by hand.
+
+Three copies of one instruction is three chances to drift. This page records, per overlapping
+stage, whether a difference is **intended** (and why) or **drift** (and what the fix is). It is a
+findings register, not a spec — when a drift row is closed, move it to the intended table or delete
+it.
+
+Audited 2026-08-30 against `sdlc-task.js` (16 prompt regions) and `sdlc-flow.js` (20).
+
+---
+
+## 1. What is already identical
+
+Verified byte-identical except for the run-root variable name (`runDir` vs `worktreePath`):
+
+`detect-vault` · `resolve-repo-root` · `verify-setup-binding` · `verify-vault-commit` ·
+`baseline-snapshot` · `state-load` · the triage prompt (including the whole
+"before you assert this pre-dates the task" evidence clause) · `renderCommitSafetyGuard` ·
+`renderWorkAssertion` · `skipCountRegressionResult` · the emoji-gate Python script · the D46 vaulted
+commit recipe · the D64 validate-then-rollback `state.json` mutation script.
+
+That set is the de-facto shared library. It is what a real extraction (§4) would start from.
+
+---
+
+## 2. Intended differences — do not "fix" these
+
+| # | Difference | Why it is correct |
+|---|---|---|
+| I1 | **`/tmp` scratch paths** are `<block>-task-*` vs `<block>-flow-*` | Two engines can run against the same block; a shared path would collide. |
+| I2 | **Per-task `validation_commands` semantics (D63)**: task **augments** the harness `gates:true` checks; flow **substitutes** them | Flow's end review unconditionally re-runs the full suite over the integrated tree, so a narrowed per-task tripwire is safe there. Task has no review, so its tripwire must never drop a project gate. Both engines carry this rationale in a source comment at the `usingOverride` branch. |
+| I3 | **Task has a terminal `reconcile` stage (D56); flow does not** | Flow's consolidated review already re-runs every check in its authoritative form. Reconcile is task's substitute for that review. |
+| I4 | **Flow writes `sdlc/worklog.md` + `state.json`; task writes `state.json` only** | Task is the lean engine; its run history lives entirely in `state.json`. See the note in `renderOnPassStateWriteRecipe`. |
+| I5 | **Flow has Review / Docs / Wrap-up / PR / auto-merge stages; task has `bookkeep`** | The engines' stated scope split. Task's `bookkeep` is deliberately *not* a wrap-up: it flips authored status markers and commits, and explicitly does not write a `log.md` narrative or a D18 amendment log (that is `/log-work`'s job). |
+| I6 | **Flow's `harness.json` loader keeps the `flow` block** (`autoMerge`, `testDepth`, `prBase`, `bailReasons[]`); task's does not | Only partly correct — see D5 and D6 below. `autoMerge`/`prBase` are genuinely flow-only. |
+| I7 | **Task's implement stage reports `filesReadKb`; flow's does not** | Documented as not-yet-implemented in flow, not as a decision: `sdlc-flow.js` line ~702 says "flow stages do not self-report it yet". Tracked as D7 below rather than here. |
+
+---
+
+## 3. Drift between the two engines — CLOSED 2026-08-30
+
+All eight are fixed. Kept here as a record of what each one was, because every row is a shape the
+next edit could reintroduce, and three of them are now pinned by a test.
+
+| # | Drift | What it would have cost | Resolution |
+|---|---|---|---|
+| **D1** | `expect_red` / D68 inverted-verdict checks existed only in `sdlc-task.js` (`grep -c expect_red`: task 11, flow 0). | A block whose deliverable is a test observed *failing* could not run through `/sdlc-flow` at all — the task passed only once the test it was meant to add was already green. | Ported to flow: `ENUMERATE_PROMPT` STEP 5, the `taskExpectRed` schema field, the subset-guard abort, `expectRedFor()`, and the inverted-verdict branch of `renderTaskCheckList`. |
+| **D2** | The D16 derive-from-**block-record** fallback existed only in `sdlc-task.js`; flow resolved a block record as its spec source (D65) but recovered only from `tasks.md`. | The *same* block-record spec with an invalid `tasks.json` aborted under one engine and recovered under the other. | Ported flow's `derive-tasks-json-from-record` branch, selected on `specSource`. |
+| **D3** | Flow dropped the engine-parse gate on the per-task override path — `renderTaskCheckList(...)` *or* `renderCheckList(...)`, and only the latter carried `engineFiles`. | A task both editing `.claude/workflows/*.js` and declaring its own `validation_commands` skipped `prompt-template-parse` at the tripwire — the check that exists because `node --check` cannot see a stray backtick. Flow's end review still caught it, so latency, not a hole. | Override arm now renders the task's commands **and** `renderEngineParseChecks`. Pinned by `test_flow_engine_override_still_runs_the_hardcoded_engine_parse_gate`, with a non-vacuity check against the pre-fix shape. |
+| **D4** | The D8 completeness self-check was a real checklist in task and one sentence in flow. | The engine used for *larger* specs had the weaker completeness gate. | Task's step 5 copied verbatim into flow — stub forms enumerated, scoped `grep -nE` included. |
+| **D5** | `flow.bailReasons[]` was read by flow only. | A project could not declare a project-specific immediate-bail reason for `/sdlc-task` runs, though bail classification is engine-agnostic. | Task now reads it. See the naming note below. |
+| **D6** | `flow.testDepth` was read by flow only; task resolved `testDepthFlag \|\| 'fast'`. | `testDepth: full` was honoured by one engine and silently ignored by the other, though both accept `--test-depth`. | Task now reads it, same precedence: flag > config > `fast`. |
+| **D7** | `filesReadKb` telemetry was task-only. Flow's rollup accepted the field but no flow prompt asked for it. | Flow's D15 input-cost estimate was systematically low. | Flow's implement prompt reports it; `recordFilesRead()` and the schema field added. |
+| **D8** | Emoji-gate prose and the `allPassed` definition differed, though the executed Python was identical. | Cosmetic then — but it is the divergence class that becomes real the next time one side is edited. | Reconciled on task's more specific wording. |
+
+**On the `flow` config block's name.** `testDepth` and `bailReasons` are now read by both engines,
+so the block is misnamed. It was **not** renamed: six repos set it on disk today and one (`jynx`)
+carries real project-specific `bailReasons` there, so a rename would silently drop them. Both
+engines' source, both docs pages and `sdlc-task`'s SKILL.md say so explicitly; `autoMerge` and
+`prBase` remain genuinely flow-only and `/sdlc-task` ignores them.
+
+**What the two sync tripwires caught, which is the point of having them.** Re-stamping
+`skill_sync_manifest.json` / `engine_docs_sync_manifest.json` was not a formality — the anchors
+flagged four statements these changes made false: `sdlc-task.md`'s "there is no `harness.json`
+config key for this — CLI-flag-only", `sdlc-flow.md`'s "its D16 derive path only derives from
+`tasks.md`", the mirror of that claim on `sdlc-task.md`, and `sdlc-task`'s SKILL.md bail list
+presenting five reasons as the complete set. Each was corrected before `--update` ran.
+
+---
+
+## 4. Drift between the engines and the one-off commands
+
+The one-off commands are on an **older data model** than the engines. This is the larger gap of the
+two, and most of it is one root cause: the commands were written against `tasks.md` prose and never
+migrated through D45 (bare-array `tasks.json`) or D65 (block record as the planning unit).
+
+| # | Drift | Consequence |
+|---|---|---|
+| **C1** | `/implement`, `/fix`, `/review-task`, `/document` all take `planning/<slug>/tasks.md` and read its `## Step-by-Step Tasks` prose. None of them mentions `tasks.json` or `planning/blocks/<id>.json`. | The manual ladder cannot drive a spec authored the way `/generate-tasks` authors one today. |
+| **C2** | `/test`'s emoji gate is hardcoded to `main..HEAD` and is not scoped to this run's own commits. The engines scope to the commit SHAs recorded in `state.json`. | On any repo whose base branch is not `main`, or any shared branch with a concurrent session, `/test` fails on a diff it never produced — the exact bug the engines' scoping fixed. |
+| **C3** | `/test` runs each check's `command` and ignores the D6 check *kinds* — `baseline-diff`, `warning-scan`, `skip-count-regression`, `count-delta`, `rule-scan` — which the engines' `renderCheckList` handles explicitly. It also ignores `gates`, `perTask`, and `fastCommand`. | A project using any non-plain check kind gets a wrong verdict from `/test`, silently. |
+| **C4** | `/implement` has no post-commit work assertion (D81), no commit-safety guard, no D46 vault-commit step for its own code commit, and no D8 completeness self-check. | Every guard the engines added after a real incident is absent from the manual path. |
+| **C5** | `/implement`, `/test`, `/fix`, `/review-task`, `/document` all instruct "record it the way `/sdlc-flow` and `/sdlc-task` do (D31)" and then write `sdlc/worklog.md`. **`/sdlc-task` has no worklog** (I4). | The stated contract is wrong for one of the two engines it cites. |
+| **C6** | `/review-task` lacks flow's review-stage `localized` judgement and its IDENTITY INTEGRITY check (flagging a handle/URL that contradicts `CLAUDE.md`). | The manual review is weaker than the automated one it is meant to mirror. |
+| **C7** | `/document` has no BOOTSTRAP mode and does not invoke the `write-repo-doc` skill; flow's docs stage does both (its step 2b and 3b). `/document` defers to `/update-docs`, which *does* carry the skill. | Reachable, but the manual path silently produces docs held to a lower standard unless the operator knows to run `/update-docs` first. |
+| **C8** | `/process-tasks` derives eligibility from `planning/status.md` prose, not `state.json` `depends_on` edges. | Contradicts the standing rule that the graph is authoritative; it cannot see operator/approval/external gates at all. |
+
+---
+
+## 5. The shared master library
+
+The drift above was all one structural problem: the same block authored twice, with nothing
+comparing the copies. The fix is a single master copy plus a gate that proves the engines match it.
+
+**How it works.** `.claude/workflows/prompts/shared.js` holds the master copy of every block that is
+identical in both engines, each wrapped in `// <<shared:NAME>> … <</shared:NAME>>`. Both engines
+carry the same markers around their own inlined copy.
+[`scripts/build_engines.py`](../../scripts/build_engines.py) replaces each engine's marked region
+with the library's version, **in place** — position is never changed, so `const` ordering and TDZ
+behaviour are preserved exactly.
+
+```
+.claude/workflows/prompts/shared.js     the master copy — edit HERE
+        │
+        │  python3 scripts/build_engines.py --write
+        ▼
+.claude/workflows/sdlc-task.js   ──┐
+.claude/workflows/sdlc-flow.js   ──┴─  self-contained, committed, shipped downstream
+```
+
+The engines stay self-contained because they must: the Workflow harness copies **one** `.js` per
+engine into a per-session snapshot and executes that copy (standing rule 10), so `import` is not
+available to them. Downstream repos receive the already-built engines and never run the build.
+
+**The workflow.** Edit the block in `shared.js`, run `python3 scripts/build_engines.py --write`,
+commit the library and both engines together. Editing an engine's inlined copy directly accomplishes
+nothing — the next build overwrites it, and the gate fails until it does.
+
+**Two gated checks:**
+
+| Check | What it does |
+|---|---|
+| `engines-inlined` | Rebuilds both engines in memory and fails if either differs from disk by a byte. |
+| `build-engines-tests` | 16 fixtures over the builder: marker parsing and its refusals, drift inside an inlined region being caught, engine-local code and region *position* preserved, and a marker with no master erroring rather than blanking the region. |
+
+**The extraction was proved behaviour-neutral rather than assumed to be.** The first cut took the 23
+blocks that were already byte-identical in both engines (~230 lines), and the engines after
+extraction are byte-identical to the engines before it once the marker lines are stripped. Nothing
+about what either engine does could have changed, because none of their executable bytes did. The
+gate was also positively controlled: a simulated hand-edit inside an inlined region makes it exit 1.
+
+**What is deliberately NOT in the library.** A block only belongs here while it is byte-identical in
+both engines. Where they genuinely must differ — the run-root variable (`runDir` vs `worktreePath`),
+worklog vs no worklog, review vs terminal reconcile — the block stays engine-local and is recorded
+in §2 as intended. A shared library needing a per-engine flag every second line has not removed the
+duplication, only moved it somewhere harder to read.
+
+**Next cuts, in order of value:**
+
+1. The blocks that differ *only* by the run-root variable name — `renderOnPassStateWriteRecipe`,
+   `renderBailStateWriteRecipe`, `verifySetupBinding`, `vaultRelPathsFrom`, the triage prompt, the
+   emoji-gate script. Each becomes a master taking the run root as a parameter. This is the biggest
+   remaining block of true duplication.
+2. `renderCheckList` — identical apart from the `/tmp` scratch prefix (I1) and two comments.
+3. `ENUMERATE_PROMPT` and the derive prompts, now that D1/D2 have made them agree in substance.
+
+**Then `engine-rs`.** `SDLC_FLOW` / `SDLC_TASK` consume the same masters — but by classification,
+not wholesale: environment and orientation text ports verbatim; an enforceable invariant becomes a
+node rather than prose (engine-rs runs checks in Rust via `run_checks`, so re-prompting them would
+move an enforced invariant back somewhere a model can ignore it); project-specific rules belong in
+`harness.json` or `CLAUDE.md`; anything redundant with the JSON schema is dropped. Prompt text is
+not free, and `STABLE_SYSTEM_PROMPT` is held byte-stable so it caches.
+
+---
+
+## Keeping this page true
+
+This page is **not** covered by `scripts/check_engine_docs_sync.py` — that check hashes the
+behaviour-defining regions of `sdlc-flow.md` and `sdlc-task.md`, not this register. Re-run the audit
+by extracting each engine's prompt regions with the same opener/closer rule
+`scripts/check_prompt_templates.py` uses, and diffing the shared stages side by side.
