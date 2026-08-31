@@ -330,8 +330,14 @@ for the `/tmp` prefix, I1), `ENUMERATE_PROMPT` and the derive prompts, `harness-
 `setup`'s worktree-creation recipe (94%, needs its step cross-references de-numbered first). The
 state-writer stays split at 59% — that gap is flow's worklog, a genuine difference (I4).
 
-**Then `engine-rs`.** `SDLC_FLOW` / `SDLC_TASK` consume the same masters — but by classification,
-not wholesale: environment and orientation text ports verbatim; an enforceable invariant becomes a
+**Then `engine-rs`.** A port package is prepared and waiting at
+[`planning/engine-rs-port/`](../../planning/engine-rs-port/index.md): per-stage four-bin
+classification, Rust-ready text split STABLE/BODY for the cache breakpoint, the schema fields each
+stage needs, token-cost estimates, test assertions, and a script that re-extracts the current JS
+prompt so a stale quote cannot be ported by mistake. The ticket it serves is
+`EN.ticket.prompt-parity-with-the-js-engines`.
+
+`SDLC_FLOW` / `SDLC_TASK` consume the same masters — but by classification, not wholesale: environment and orientation text ports verbatim; an enforceable invariant becomes a
 node rather than prose (engine-rs runs checks in Rust via `run_checks`, so re-prompting them would
 move an enforced invariant back somewhere a model can ignore it); project-specific rules belong in
 `harness.json` or `CLAUDE.md`; anything redundant with the JSON schema is dropped. Prompt text is
