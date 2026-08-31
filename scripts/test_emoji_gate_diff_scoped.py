@@ -87,10 +87,15 @@ BASE_REF_PLACEHOLDER = {
     "sdlc-flow.js": "${baseSha}",
 }
 
-# The call-site expression each engine must pass as the shared renderer's `baseSha` argument.
+# The call-site expression each engine must pass as its diff base.
+#
+# This moved once more when the TEST PROMPT itself became a shared master: the engines no longer
+# call renderEmojiGate directly, they pass `diffBase` into renderTestPrompt, which forwards it. The
+# invariant is unchanged and is still the point -- /sdlc-flow must scope to the PR base, /sdlc-task
+# to setup-time HEAD -- only the seam it crosses moved one level out.
 CALL_SITE_BASE_REF = {
-    "sdlc-task.js": "renderEmojiGate({ runRoot: runDir, baseSha, stateFile, recordedCommitsJson })",
-    "sdlc-flow.js": "renderEmojiGate({ runRoot: worktreePath, baseSha: prBase, stateFile, recordedCommitsJson })",
+    "sdlc-task.js": "diffBase: baseSha,",
+    "sdlc-flow.js": "diffBase: prBase,",
 }
 
 # Sites whose script reads its diff range from argv instead of a literal embedded in the
@@ -673,8 +678,9 @@ class CallSiteBaseRefTest(unittest.TestCase):
         task_call = CALL_SITE_BASE_REF["sdlc-task.js"]
         flow_call = CALL_SITE_BASE_REF["sdlc-flow.js"]
         self.assertNotEqual(task_call, flow_call)
-        self.assertIn("baseSha: prBase", flow_call)
+        self.assertIn("prBase", flow_call)
         self.assertNotIn("prBase", task_call)
+        self.assertIn("baseSha", task_call)
 
     def test_neither_engine_still_carries_its_own_inline_copy(self):
         """The point of the shared master is that there is exactly ONE copy. A second, engine-local

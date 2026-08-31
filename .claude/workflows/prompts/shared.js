@@ -488,3 +488,42 @@ ${sameContext ? `(Previous attempt context for the same-failure check: ${sameCon
 }
 // <</shared:renderTriagePrompt>>
 
+// <<shared:renderTestPrompt>>
+// The per-run test prompt. 96% common between the engines before extraction; the four seams below
+// are the whole of the difference, and each is a NOUN or a whole sentence supplied by the caller --
+// never a branch on engine identity inside this text (D83).
+//
+//   enginePhrase    "lean /sdlc-task" | "/sdlc-flow"
+//   runRootLabel    what to CALL the directory in prose. Each engine decides: /sdlc-flow is
+//                   mode-aware (worktree root vs repo root) because it defaults to a plain branch.
+//   diffBase        the range the emoji gate's no-commits-recorded abort checks against --
+//                   setup-time HEAD in the lean engine, the PR base in the flow engine.
+//   emojiScopeNote  the one sentence that closes the diff-scoping rationale. The engines genuinely
+//                   say different things here: the lean engine warns about a sibling session on a
+//                   shared in-place branch, the flow engine about the PR footer. A whole sentence
+//                   from the caller, not a conditional in the middle of one.
+function renderTestPrompt({ enginePhrase, overrideNote, runRootLabel, runRoot, checklistBody, diffBase, stateFile, recordedCommitsJson, emojiScopeNote, onPassRecipe, stateWrittenNote }) {
+  return `You are the test agent for the ${enginePhrase} pipeline. Run the project's validation checks and report.
+
+IMPORTANT — run ONLY the checks enumerated below (${overrideNote}). Do NOT invent
+checks. All Bash calls run from the ${runRootLabel} (prefix each with: cd ${runRoot} &&).
+
+${checklistBody}
+
+Then run the universal emoji gate (a harness rule, always) — DIFF-SCOPED to this run's OWN
+recorded commit SHAs, never the whole ${diffBase}..HEAD range: it judges only lines ADDED by
+commits THIS run itself made, so neither a legacy file's pre-existing emoji nor a concurrent
+${emojiScopeNote}
+${renderEmojiGate({ runRoot, baseSha: diffBase, stateFile, recordedCommitsJson })}
+  A stray emoji ADDED in a commit THIS run made FAILS this gate; a pre-existing emoji in a file
+  this task did not touch a line of, or an emoji added by a different, concurrent session's
+  commit on a shared branch, does not.
+
+For each check record: name, passed (true iff exit code 0), the command, and failure output.
+${onPassRecipe}
+Return via StructuredOutput: allPassed (true only if EVERY gating check passed and the emoji gate is
+clean), passCount, failCount, failedTests (names), failBlob (compact: failing check names + the tail of
+their output; empty when allPassed)${stateWrittenNote}.`
+}
+// <</shared:renderTestPrompt>>
+
