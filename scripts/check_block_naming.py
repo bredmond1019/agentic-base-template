@@ -26,6 +26,18 @@ them would flag ~90 correct directories. Same exemption for their repo-scoped si
 lets a ticket/chore dir sort and grep next to that repo's real blocks without being mistaken for
 one.
 
+OUT OF SCOPE BY CONSTRUCTION: PREFIX vs. `repo`
+------------------------------------------------
+This guard reads `brain.toml`'s `[[repos]] prefix` values, so it is the obvious place to look for
+"does this block's prefix agree with the repo that owns it" -- and it does NOT answer that, ever.
+It validates directory NAMES; a block record's / lane entry's `repo` FIELD is not a directory name
+and is invisible here. Measured 2026-09-01 on the context-handling-between-nodes run: `sequence.md`
+filed the unattended-migration-runner block as `EN.14.H` with repo `agentic-portfolio` ("filed
+under HQ because the files are HQ's"), and this guard is structurally incapable of seeing it.
+That check lives in two places instead -- `check_block_records.py` (block records) and
+`check_lane_records.py` (lane records' `blocks[]`), both gated. Do not "fix" this guard to cover it;
+a directory name carries no repo field to compare against.
+
 This guard makes NO assertion about file CONTENT -- only directory NAMES. Old-form strings like
 `10.B-foo` legitimately appear in roadmap prose, closed specs' bodies, `log.md` history, and
 `state.json` as historical IDs; a blanket content grep over a literal with legitimate other uses is

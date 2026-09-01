@@ -520,6 +520,99 @@ def check_cli_clean_corpus_exits_zero() -> None:
               proc.returncode == 0, proc.stdout + proc.stderr)
 
 
+
+# --- prefix/repo agreement (2026-09-01) ----------------------------------------------------
+#
+# The defect: `sequence.md` filed the unattended-migration-runner block as `EN.14.H` with repo
+# `agentic-portfolio`, reasoning "filed under HQ because the files are HQ's". EN is engine-rs's
+# prefix, so registering that Wave 0 row files the block into engine-rs's namespace from HQ's
+# graph. check_block_naming.py reads the same [[repos]] prefixes but validates SPEC DIRECTORY
+# NAMES, so it is out of scope by construction and nothing downstream caught it.
+
+_PREFIXES = {"EN": "engine-rs", "HQ": "brain", "BT": "base-template"}
+
+
+def _prefix_lane(tmp: Path, block_id: str, repo: str) -> Path:
+    path = tmp / "planning" / "roadmaps" / "r" / "lane-x.json"
+    _write_json(path, {
+        "lane": "x",
+        "roadmap": "r",
+        "blocks": [{"id": block_id, "origin_roadmap": "r", "repo": repo}],
+    })
+    return path
+
+
+def check_negative_prefix_repo_mismatch() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        path = _prefix_lane(Path(td), "EN.14.H", "brain")
+        problems, _ = check_lane_records.check(str(path), {}, _PREFIXES)
+        hits = [p for p in problems if "PREFIX/REPO MISMATCH" in p]
+        check("a block ID under another repo's prefix is an error",
+              len(hits) == 1, f"problems: {problems}")
+        check("the mismatch names both the prefix's owner and the authored repo",
+              hits and "engine-rs" in hits[0] and "brain" in hits[0],
+              f"message: {hits}")
+
+
+def check_positive_prefix_repo_agreement() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        path = _prefix_lane(Path(td), "EN.14.H", "engine-rs")
+        problems, _ = check_lane_records.check(str(path), {}, _PREFIXES)
+        check("a block ID whose prefix matches its repo is clean",
+              not [p for p in problems if "PREFIX/REPO" in p], f"problems: {problems}")
+
+
+def check_unregistered_prefix_is_not_a_mismatch() -> None:
+    """A prefix brain.toml does not declare cannot be attributed to anyone -- silence, not a
+    guess. The ID grammar check already covers a malformed prefix."""
+    with tempfile.TemporaryDirectory() as td:
+        path = _prefix_lane(Path(td), "ZZ.1.A", "engine-rs")
+        problems, _ = check_lane_records.check(str(path), {}, _PREFIXES)
+        check("an unregistered prefix raises no mismatch",
+              not [p for p in problems if "PREFIX/REPO" in p], f"problems: {problems}")
+
+
+def check_prefix_map_resolves_from_brain_toml() -> None:
+    """Positive control for the resolution path itself: the same mismatch must be caught with
+    NO explicit map passed, reading prefixes off a real brain.toml by walking up from the file.
+    Without this, every case above could pass against a hand-fed dict while the production call
+    path resolved {} and checked nothing."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        _write(tmp / "brain.toml", '''
+[[repos]]
+slug = "engine-rs"
+prefix = "EN"
+repo_path = "engine-rs"
+
+[[repos]]
+slug = "brain"
+prefix = "HQ"
+repo_path = "."
+''')
+        check_lane_records._REPO_PREFIX_CACHE.clear()
+        resolved = check_lane_records.repo_prefixes_for(tmp)
+        check("prefixes resolve from a real brain.toml", resolved.get("EN") == "engine-rs",
+              f"resolved: {resolved}")
+
+        path = _prefix_lane(tmp, "EN.14.H", "brain")
+        problems, _ = check_lane_records.check(str(path))
+        check("the mismatch is caught with no explicit prefix map (production call path)",
+              any("PREFIX/REPO MISMATCH" in p for p in problems), f"problems: {problems}")
+        check_lane_records._REPO_PREFIX_CACHE.clear()
+
+
+def check_no_brain_toml_disables_the_check() -> None:
+    """A standalone repo scaffolded from this template has no brain, so the check must be silent
+    rather than failing every block."""
+    with tempfile.TemporaryDirectory() as td:
+        check_lane_records._REPO_PREFIX_CACHE.clear()
+        path = _prefix_lane(Path(td), "EN.14.H", "brain")
+        problems, _ = check_lane_records.check(str(path), {}, {})
+        check("no brain.toml means no prefix check, not a failure",
+              not [p for p in problems if "PREFIX/REPO" in p], f"problems: {problems}")
+
+
 def main() -> int:
     check_no_records_is_not_a_failure()
     check_dependency_free()
@@ -542,6 +635,11 @@ def main() -> int:
     check_nonexistent_repo_path_is_an_error_not_heavy_false()
     check_cli_named_path_and_reason_on_malformed_record()
     check_cli_clean_corpus_exits_zero()
+    check_negative_prefix_repo_mismatch()
+    check_positive_prefix_repo_agreement()
+    check_unregistered_prefix_is_not_a_mismatch()
+    check_prefix_map_resolves_from_brain_toml()
+    check_no_brain_toml_disables_the_check()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed:")

@@ -3,7 +3,75 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-08-31
+**Last updated:** 2026-09-01
+
+---
+## 2026-09-01 — roadmap→registration gap: registration inputs, prefix/repo gate, wave convention
+
+- **What:** a `/generate-roadmap` run over an authored `/sequence` cut
+  (`planning/roadmaps/context-handling-between-nodes/`, 12 blocks across engine-rs, bastion and
+  the brain) registered its Wave 0 by hand, and the gap between authoring and registering produced
+  two real defects plus six facts that had to be derived from outside the roadmap. Both harness
+  files that own that seam were corrected, and the two mechanical ones were made gateable.
+- **`.claude/commands/generate-roadmap.md`** (single-copy — excluded from downstream sync by
+  `EXCLUDED_COMMAND_FILENAMES`):
+  - New **required** "Registration inputs" section in Step 7: per repo, the block-ID prefix
+    (`brain.toml`), the wave convention **observed** in that repo's `state.json`, the gating
+    commands from its `harness.json`, and the `CLAUDE.md` standing rules a block must satisfy. A
+    roadmap says WHAT and IN WHAT ORDER; registration needs IDENTITY, ORDERING KEYS and PER-REPO
+    MECHANICS, and none of those live in the roadmap unless put there.
+  - Step 6 gains a mechanical prefix-vs-repo check before Wave 0 is written.
+  - The lane table now requires an **Engine** column (`task`/`flow`) — `sdlc_workflow` is required
+    at registration and `sequence.md` never states it, so the roadmap decides it rather than the
+    registering agent inventing it one row at a time.
+  - Three new Step 8 boxes (prefix check · every row names an engine · `mev conformance --check
+    toolchain-freshness` clean *before* any `emit-state --write`), plus: a cut row that defers work
+    to a future ticket must file it (`carryover[]`/`backlog[]`) or say in the row that it is
+    unfiled. Four rows said "Own /ticket" and no ticket existed.
+  - Fixed a stale `bastion validate-brain --okf-structure` in Step 8's own snippet (real flag is
+    `--structure`; the stale name errors out).
+- **`.claude/workflows/block-registration.md`** (~10 downstream copies — needs
+  `/sync-downstream-harness`):
+  - **Step 5's `wave` rule was wrong.** "For a roadmap block, `10 * <phase>`" holds for bastion
+    (23 -> 230) and the brain (9 -> 90) but not engine-rs, whose phase 12 sits at waves 186–198 and
+    whose `10 * 14 = 140` is already occupied. Following it collided twice for real (200, 240).
+    Replaced with: read the owning repo's observed convention out of its `state.json`, continue the
+    nearest phase track's run, and assert the chosen waves are unused before writing. `10 * phase`
+    demoted to the fallback for a repo with no established pattern.
+  - Step 2's operator-edge example showed `"slug": "operator-<kebab>"`, which is the stutter mev
+    warns about (`OP.operator-foo`, `W_STATE_OP_SLUG_STUTTER`) and contradicted
+    `docs/state/state-schema.md`. Now a bare kebab slug, with a note that `lane.schema.json`'s
+    `held_until` DOES take an `operator-`-prefixed token — two fields, two conventions.
+  - Step 3 gains the registration-satisfies-its-own-predicate trap: a carryover predicated on
+    `file_contains "<block-id>"` is satisfied by *filing* the block while none of the work is done
+    (`W_STATE_CARRYOVER_ALREADY_SATISFIED` fired immediately on this run). Re-predicate to
+    `block_closed` on the last block of the chain; never delete.
+  - Step 7 C3's signature gains its control. "Two blocks with identical `depends_on`" flagged three
+    groups, **all false positives** — shared prerequisites, not inherited edges. A split row is
+    confirmed re-derived when the two halves' edge sets DIFFER; identical sets are only suspicious
+    when both halves trace to ONE source row.
+- **Made gateable, not just written down:**
+  - `scripts/check_block_records.py` — block ID prefix must name the same repo as the record's
+    `repo` field (error), and the operator/approval slug rule is inverted: bare kebab accepted, an
+    `operator-` prefix now WARNS with the `mev normalize-op-slugs --write` fix. The checker
+    previously *required* the stutter. Severity mirrors mev's exactly because 9 of the fleet's 13
+    slugs still carry the prefix.
+  - `scripts/check_lane_records.py` — same prefix/repo agreement over every `blocks[]` entry, as a
+    hard error. Measured first: 84 live lane records / 962 block entries, **zero** mismatches, so
+    it fails only on the defect. This is the gate that would have caught `EN.14.H` filed with repo
+    `agentic-portfolio`.
+  - `scripts/check_block_naming.py` — docstring now states that prefix-vs-`repo` is out of its
+    scope **by construction** (it reads the same `[[repos]]` prefixes but validates spec DIRECTORY
+    NAMES), and names the two checkers that do own it. That misreading is why nothing caught the
+    defect.
+  - 18 new fixture cases across `test_check_block_records.py` and `test_check_lane_records.py`,
+    including a positive control that the mismatch is caught through the production call path
+    (brain.toml resolved by walking up) and not only against a hand-fed prefix map, and one proving
+    a repo with no reachable `brain.toml` disables the check rather than failing every block.
+- **No new ADR:** both doc corrections align the text with decisions already settled (D76 +
+  `docs/state/state-schema.md` for the slug; per-repo wave allocation was always "read `state.json`",
+  Step 5 just stated a wrong shortcut). Superseding nothing, so nothing to supersede.
+- **Gates:** 58/58 base-template gated checks green; `validate-brain --state/--links/--graph` clean.
 
 ---
 ## 2026-08-31 — `workflow_run_id`: caller-stamped run-id field + `stamp-workflow-run-id` skill

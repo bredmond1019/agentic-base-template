@@ -40,30 +40,120 @@ def check(label, condition, detail=""):
         print(f"[FAIL] {label}" + (f" -- {detail}" if detail else ""))
 
 
-def record(spec_dir):
-    return {
+def record(spec_dir, **over):
+    r = {
         "id": "HQ.9.A", "repo": "brain", "kind": "chore", "phase": 9,
         "title": "t", "description": "d", "what": "w", "why": "y",
         "sdlc_workflow": "task", "acceptance_criteria": ["a"],
         "testing_strategy": "s", "spec_dir": spec_dir,
         "created": "2026-08-21", "updated": "2026-08-21",
     }
+    r.update(over)
+    return r
 
 
-def run(spec_dir, make_dirs=()):
-    """Write the record into a throwaway planning tree and return (errors, warnings)."""
+BRAIN_TOML = """
+[[repos]]
+slug = "brain"
+prefix = "HQ"
+repo_path = "."
+
+[[repos]]
+slug = "engine-rs"
+prefix = "EN"
+repo_path = "engine-rs"
+"""
+
+
+def run(spec_dir, make_dirs=(), brain_toml=None, **over):
+    """Write the record into a throwaway planning tree and return (errors, warnings).
+
+    `brain_toml` writes a brain.toml one level above `planning/`, which is what the prefix/
+    repo check walks up to find. Omit it and no brain is reachable -- the standalone-repo
+    case, where that check must stay silent.
+    """
     with tempfile.TemporaryDirectory() as td:
+        check_block_records._PREFIX_CACHE.clear()
+        if brain_toml:
+            (Path(td) / "brain.toml").write_text(brain_toml)
         planning = Path(td) / "planning"
         (planning / "blocks").mkdir(parents=True)
         for d in make_dirs:
             (planning / d).mkdir(parents=True, exist_ok=True)
-        p = planning / "blocks" / "HQ.9.A.json"
-        p.write_text(json.dumps(record(spec_dir), indent=2, ensure_ascii=False) + "\n")
-        return check_block_records.check(str(p), planning_root=str(planning))
+        rec = record(spec_dir, **over)
+        p = planning / "blocks" / (rec["id"] + ".json")
+        p.write_text(json.dumps(rec, indent=2, ensure_ascii=False) + "\n")
+        try:
+            return check_block_records.check(str(p), planning_root=str(planning))
+        finally:
+            check_block_records._PREFIX_CACHE.clear()
 
 
 def spec_msgs(msgs):
     return [m for m in msgs if "spec_dir" in m]
+
+
+
+
+def prefix_msgs(msgs):
+    return [m for m in msgs if "namespace" in m or "not registered in brain.toml" in m]
+
+
+def op_msgs(msgs):
+    return [m for m in msgs if "slug" in m]
+
+
+def operator_edge(slug):
+    return [{"type": "operator", "slug": slug, "exit": "certs/prod.pem", "start": "make certs"}]
+
+
+def prefix_and_operator_checks():
+    """The two rules added 2026-09-01 from the context-handling-between-nodes run."""
+
+    # --- prefix/repo agreement -------------------------------------------------------------
+    # The defect: sequence.md filed the unattended-migration-runner block as `EN.14.H` with repo
+    # `agentic-portfolio` ("filed under HQ because the files are HQ's"). EN is engine-rs's prefix.
+    errs, warns = run("planning/EN.14.H/", brain_toml=BRAIN_TOML, id="EN.14.H", repo="brain")
+    check("a block ID under another repo's prefix is an error", len(prefix_msgs(errs)) == 1,
+          f"errors: {errs}")
+    check("the prefix error names the prefix's owner and the authored repo",
+          prefix_msgs(errs) and "engine-rs" in prefix_msgs(errs)[0] and "brain" in prefix_msgs(errs)[0],
+          f"errors: {errs}")
+
+    errs, warns = run("planning/EN.14.H/", brain_toml=BRAIN_TOML, id="EN.14.H", repo="engine-rs")
+    check("a block ID whose prefix matches its repo is clean", not prefix_msgs(errs),
+          f"errors: {errs}")
+
+    # An unregistered prefix cannot be attributed to anyone -- warn, never guess an owner.
+    errs, warns = run("planning/ZZ.1.A/", brain_toml=BRAIN_TOML, id="ZZ.1.A", repo="brain")
+    check("an unregistered prefix warns rather than erroring", not prefix_msgs(errs),
+          f"errors: {errs}")
+    check("an unregistered prefix does warn", len(prefix_msgs(warns)) == 1, f"warnings: {warns}")
+
+    # Positive control for the resolution path: the SAME record must be silent with no brain.toml
+    # reachable. Without this, the cases above could pass while production resolved {} and checked
+    # nothing -- a standalone repo scaffolded from this template has no brain at all.
+    errs, warns = run("planning/EN.14.H/", id="EN.14.H", repo="brain")
+    check("no reachable brain.toml disables the prefix check entirely",
+          not prefix_msgs(errs) and not prefix_msgs(warns), f"errors: {errs} warnings: {warns}")
+
+    # --- operator slug stutter -------------------------------------------------------------
+    # mev renders an operator edge as OP.<slug>, so an `operator-` prefix stutters to
+    # OP.operator-foo and raises W_STATE_OP_SLUG_STUTTER. This checker used to REQUIRE that
+    # prefix, i.e. it enforced the stutter.
+    errs, warns = run("planning/HQ.9.A/", depends_on=operator_edge("mac-mini-visit"))
+    check("a bare kebab-case operator slug is accepted", not op_msgs(errs) and not op_msgs(warns),
+          f"errors: {errs} warnings: {warns}")
+
+    errs, warns = run("planning/HQ.9.A/", depends_on=operator_edge("operator-mac-mini-visit"))
+    check("an `operator-`-prefixed slug is NOT an error", not op_msgs(errs), f"errors: {errs}")
+    check("an `operator-`-prefixed slug warns about the stutter", len(op_msgs(warns)) == 1,
+          f"warnings: {warns}")
+    check("the stutter warning names the fix command",
+          op_msgs(warns) and "normalize-op-slugs" in op_msgs(warns)[0], f"warnings: {warns}")
+
+    errs, warns = run("planning/HQ.9.A/", depends_on=operator_edge("Mac_Mini_Visit"))
+    check("a non-kebab slug is still an error", len(op_msgs(errs)) == 1, f"errors: {errs}")
 
 
 def main():
@@ -96,6 +186,8 @@ def main():
         check("the real HQ.9.A record has no spec_dir error", not spec_msgs(errs), f"errors: {errs}")
     else:
         print("[skip] real HQ.9.A record not present from this checkout")
+
+    prefix_and_operator_checks()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed:")

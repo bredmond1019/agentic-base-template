@@ -331,9 +331,40 @@ sizing flag, or an ungrounded operator artifact. Its five checks (C1–C5) are t
 which any of those is cheap to fix; after Wave 0 closes, four concurrent lanes are running on them.
 Record its findings in Wave 0 — including "none".
 
+### Check the prefixes against the repos before you write Wave 0
+
+**Run this before a single Wave 0 row is written.** A block ID's prefix declares whose *namespace*
+the block lives in; the `repo` field declares who *owns the work*. They are different questions and
+a pre-plan document will conflate them. Measured 2026-09-01: `sequence.md` filed the
+unattended-migration-runner block as `EN.14.H` with repo `agentic-portfolio`, reasoning "filed under
+HQ because the files are HQ's" — sound reasoning about ownership, and wrong about identity. `EN` is
+engine-rs's prefix. An agent copying that Wave 0 row registers the block into HQ's graph under
+engine-rs's namespace, and the roadmap reads correctly the whole time.
+
+```bash
+python3 - <<'PY'
+import json, glob, tomllib
+pfx = {r['prefix']: r['slug'] for r in tomllib.load(open('brain.toml', 'rb'))['repos']}
+for f in sorted(glob.glob('planning/roadmaps/<slug>/lane-*.json')):
+    for b in json.load(open(f))['blocks']:
+        owner = pfx.get(b['id'].split('.')[0])
+        if owner != b['repo']:
+            print('PREFIX/REPO MISMATCH', b['id'], 'prefix->', owner, 'repo->', b['repo'])
+PY
+```
+
+Every hit is a defect: renumber the block under its owning repo's own prefix, or correct `repo`.
+`scripts/check_block_records.py` and `scripts/check_lane_records.py` both gate this too, so a hit
+here fails the gate anyway — running it now matters because it is free to fix before registration
+and expensive after four lanes have launched on it. Do **not** expect
+`scripts/check_block_naming.py` to catch it: it reads the same `[[repos]]` prefixes but validates
+spec *directory names*, so a `repo` field is out of its scope by construction.
+
 Wave 0 also carries:
 - Any **claim correction** from Step 2's re-verification, before a downstream lane cites it.
 - The **operator ratifications** that gate a lane's first block.
+- `mev conformance --check toolchain-freshness`, clean, **before** any `mev emit-state --write`
+  (Step 8) — a stale binary rewrites the derived boards in an old format.
 - `mev emit-state --write`, then commit every touched `state.json` with an explicit pathspec.
 
 A roadmap whose sequence table is empty before Wave 0 is correct and should say so. A *populated*
@@ -350,6 +381,23 @@ table is the signal the lanes may launch.
 > notes column, an operator paragraph, or a "still to decide" line is not scheduled, not sorted, and
 > not on any board — it is lost, not deferred. Where the two disagree, the graph wins.
 
+**A cut-list row that defers work to a future ticket is that same failure wearing a cut-list hat.**
+`block-registration.md`'s C6 accepts "a cut-list line with a reason" as a legitimate destination,
+and it is one — for work that is genuinely *dropped*. It is not one for work that is *postponed*.
+"Own /ticket" is a promise, and a promise nothing holds is lost exactly the way an `## Open
+questions` bullet is lost. Measured 2026-09-01: four cut rows on this run said "Own /ticket" and no
+ticket existed for any of them.
+
+So every cut row that names a future ticket, a follow-up, or a later phase must do one of two
+things, in the row itself:
+
+- **File it** — a `carryover[]` entry with kind `deferred`, or a `backlog[]` row in the HQ brain —
+  and cite the slug in the cut row; or
+- **Say it is unfiled** — verbatim, e.g. "unfiled; lost unless someone picks it up" — so the
+  operator reads a decision rather than a plan.
+
+A row that names a future ticket and does neither is a defect in the roadmap, not a deferral.
+
 ---
 
 ## Step 7 — Write the files
@@ -365,9 +413,10 @@ superseded roadmap). Then, in order:
 | The trade | Why this work, now. Lead with the finding that motivated it, with evidence |
 | The outcomes | Three to five, each an observable statement |
 | How to use this document | The generated table is authoritative; lane tables are execution order; `[*]` means filed in Wave 0 |
+| **Registration inputs** | **REQUIRED.** Per repo: block-ID prefix, wave convention, gating validation commands, and the standing rules a block must satisfy. See below |
 | Wave 0 | The gate. A table of registration, corrections and operator ratifications |
 | Dependency graph | ASCII lane chains, then the cross-lane edges |
-| The lanes | One table per lane: block, engine, and a **notes column that carries the evidence** — file:line, `AR-nn`/`SQ-nn`, the trap, the blast radius from `seams.md`, the thing the last run got wrong |
+| The lanes | One table per lane. **Required columns: Block · Repo · Engine (`task` or `flow`) · Notes.** The notes column **carries the evidence** — file:line, `AR-nn`/`SQ-nn`, the trap, the blast radius from `seams.md`, the thing the last run got wrong. The Engine column is not decoration — see below |
 | Isolation and CPU budget | The policy table plus the two-heavy rule |
 | Operator lane | Every gate, what it gates, and enough detail to act without re-reading a source doc |
 | Coverage crosswalk | **Required whenever `--from` includes a runbook or action register.** One row per source item → where it lands. See below |
@@ -375,6 +424,45 @@ superseded roadmap). Then, in order:
 | Definition of done | See below — this is the section that decides whether the roadmap worked |
 | Sequence | The generated region, between the markers |
 | Live board · Lane log | Pointers |
+
+#### Registration inputs — the section that makes the roadmap registerable
+
+**A roadmap is a good spec and a poor registration input, and the two are not the same document.**
+A roadmap says WHAT will be done and IN WHAT ORDER. Registering it needs three other things —
+**identity** (which namespace a block ID belongs to), **ordering keys** (what wave number is
+correct in *that* repo), and **per-repo mechanics** (what "passing" means there, and what house
+rules a block must satisfy). None of those live in the roadmap unless you put them there. They
+live in `brain.toml`, each repo's `state.json`, its `harness.json`, and its `CLAUDE.md`.
+
+Measured 2026-09-01 on the context-handling-between-nodes run — 12 blocks over three repos — **six
+separate facts had to be derived from outside the roadmap at Wave 0**, by an agent reading four
+other files under time pressure while the roadmap sat open and looked complete. That is the failure
+this section closes: the roadmap did not contain a wrong answer, it contained no answer, and the
+gap did not look like a gap.
+
+Write one row per repo this roadmap touches:
+
+| Repo | Prefix | Wave convention observed | Gating validation commands | Standing rules a block must satisfy |
+|---|---|---|---|---|
+| `<slug>` | `<PFX>`, from `brain.toml`'s `[[repos]]` table — never guessed from the repo name | The convention **actually observed** in that repo's `state.json`, with the phase and wave range you read (e.g. "phase 12 sits at waves 186–198; continue the run") — not the `10 * phase` default | The `gates: true` check commands from that repo's `planning/harness.json`, so a block's acceptance criteria can end in a real command | Anything in that repo's `CLAUDE.md` a block must satisfy — e.g. "never `git push` a `core/*` repo directly", "one `validate-brain` flag per invocation" |
+
+Each cell is **read**, not inferred, and the row says where it was read from. A prefix guessed from
+a repo name is exactly the `EN.14.H` defect above; a wave assumed from `10 * phase` is
+`block-registration.md` Step 5's collision case, which produced two real collisions on this run.
+
+#### The Engine column — `sdlc_workflow` is decided here, not at registration
+
+Every lane-table row names an engine: `task` or `flow`. This is not a formatting preference.
+`sdlc_workflow` is **required** at registration (`block-registration.md` Step 5): a block with no
+value cannot be resolved to an engine, so `/orchestrate` silently drops it from any chain that
+names it — the lane does not error, the block simply never runs.
+
+`sequence.md` never states an engine, so if the roadmap does not decide it, the agent doing Wave 0
+invents it — one row at a time, with no view of the initiative. **Decide it here, where the whole
+cut is visible.** The rule is `docs/workflows/index.md`'s ceremony ladder in one line: `task` for a
+single small tested change (a `/ticket` or `/chore`), `flow` for a spec with several moving parts
+that should terminate in a review and a PR. When a row's engine is genuinely uncertain, write
+`flow` — the extra ceremony is recoverable; a silently-dropped block is not.
 
 **The coverage crosswalk is not documentation — it is the check.** A roadmap built from an action
 register absorbs 30–60 discrete items and re-homes them into lanes. Items do not get dropped by
@@ -651,7 +739,7 @@ the reason.
 ## Step 8 — Verify before handing over
 
 ```bash
-bastion validate-brain --okf-structure   # one invocation per flag; they do not compose
+bastion validate-brain --structure       # one invocation per flag; they do not compose
 bastion validate-brain --links
 bastion validate-brain --state
 ```
@@ -662,6 +750,20 @@ Then check by hand:
       check above. A `SQ-nn` ref, a slug or a title in that field makes the lane unrunnable,
       and both crosswalks pass anyway.
 - [ ] Every block ID in every lane record exists in a `state.json`, **or** is marked `[*]` and appears in Wave 0.
+- [ ] **Every block ID's prefix matches its repo, per `brain.toml`** — run Step 6's prefix/repo
+      script. A block filed under another repo's prefix registers into that repo's namespace, and
+      `check_block_naming.py` cannot see it (it validates directory names, not `repo` fields).
+- [ ] **Every lane-table row names an engine** — `task` or `flow`. A block registered with no
+      `sdlc_workflow` cannot be resolved to an engine, so `/orchestrate` drops it from any chain
+      that names it, silently.
+- [ ] **`mev conformance --check toolchain-freshness` is clean BEFORE any `mev emit-state --write`.**
+      A stale binary rewrites the derived boards in an old format. Redirect and check `$?` — a
+      piped exit code is the pipe's. If it is not clean, **skip the emit** and say so: leaving
+      `W_STATE_FOCUS_DRIFT` standing is the correct outcome, not a failure to fix. (This happened
+      on 2026-09-01: `mev` was built from `4c85fc0` against source at `96da193`.)
+- [ ] **Every cut row that names a future ticket either cites the `carryover[]`/`backlog[]` slug
+      that holds it, or says in the row that it is unfiled and will be lost.** "Own /ticket" with
+      no ticket is the "lost, not deferred" failure in a cut list's clothing.
 - [ ] No lane has more than one heavy repo live at a time, given the stated ordering.
 - [ ] Every cross-lane edge in the ASCII appears on the *waiting* lane's record (its `held_until` or
       the held block's own `depends_on` edge, per the routing table above).

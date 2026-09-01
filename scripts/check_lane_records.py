@@ -88,6 +88,37 @@ def find_brain_root(start) -> Path | None:
     return None
 
 
+def load_repo_prefixes(brain_root: Path) -> dict:
+    """prefix -> repo slug, from brain.toml's [[repos]] table. {} if unreadable.
+
+    A block ID's prefix declares which repo's NAMESPACE the block lives in; the entry's `repo`
+    field declares which repo OWNS the work. When they disagree the block is registered into
+    another repo's namespace, and nothing else in the fleet catches it: check_block_naming.py
+    reads these same prefixes but validates SPEC DIRECTORY NAMES, so a lane entry's `repo` field
+    is out of its scope by construction. Measured 2026-09-01 on the context-handling-between-nodes
+    run -- `sequence.md` filed the unattended-migration-runner block as `EN.14.H` with repo
+    `agentic-portfolio`, reasoning "filed under HQ because the files are HQ's". EN is engine-rs's
+    prefix; an agent copying that Wave 0 row registers it into HQ's graph under engine-rs's
+    namespace. Measured the same day across 84 live lane records / 962 block entries: zero
+    mismatches, so this is a hard ERROR and not a warning -- it fails only on the defect.
+    """
+    try:
+        import tomllib
+    except ImportError:  # pragma: no cover - Python < 3.11 fallback, not expected in this fleet
+        return {}
+    try:
+        with open(brain_root / "brain.toml", "rb") as fh:
+            data = tomllib.load(fh)
+    except Exception:                              # noqa: BLE001 - report, never raise
+        return {}
+    out = {}
+    for entry in data.get("repos", []):
+        prefix, slug = entry.get("prefix"), entry.get("slug")
+        if prefix and slug:
+            out[prefix] = slug
+    return out
+
+
 def load_repo_paths(brain_root: Path) -> dict:
     """slug -> absolute repo path, from brain.toml's [[repos]] table. {} if unreadable."""
     toml_path = brain_root / "brain.toml"
@@ -121,6 +152,20 @@ def repo_paths_for(start) -> dict:
     if key not in _REPO_PATH_CACHE:
         _REPO_PATH_CACHE[key] = load_repo_paths(brain_root)
     return _REPO_PATH_CACHE[key]
+
+
+_REPO_PREFIX_CACHE: dict = {}
+
+
+def repo_prefixes_for(start) -> dict:
+    """Cached prefix->slug map for the brain root reached by walking up from `start`."""
+    brain_root = find_brain_root(start)
+    if brain_root is None:
+        return {}
+    key = str(brain_root)
+    if key not in _REPO_PREFIX_CACHE:
+        _REPO_PREFIX_CACHE[key] = load_repo_prefixes(brain_root)
+    return _REPO_PREFIX_CACHE[key]
 
 
 def cross_check_heavy(lane_repo, authored_heavy: bool, repo_paths: dict) -> str | None:
@@ -161,9 +206,11 @@ def cross_check_heavy(lane_repo, authored_heavy: bool, repo_paths: dict) -> str 
 
 # --- record validation --------------------------------------------------------------------
 
-def check(path, repo_paths: dict | None = None):
+def check(path, repo_paths: dict | None = None, repo_prefixes: dict | None = None):
     """Return (errors, warnings) for one lane record file."""
     problems = []
+    if repo_prefixes is None:
+        repo_prefixes = repo_prefixes_for(path)
 
     try:
         with open(path) as fh:
@@ -217,6 +264,18 @@ def check(path, repo_paths: dict | None = None):
                 v = b.get(field)
                 if isinstance(v, str) and v and not SLUG_RE.match(v):
                     problems.append(f"blocks[{i}].{field} value `{v}` does not match slug pattern")
+
+            # The block ID's prefix must name the same repo as the entry's `repo` field.
+            brepo = b.get("repo")
+            if isinstance(bid, str) and bid and isinstance(brepo, str) and brepo and repo_prefixes:
+                pfx = bid.split(".")[0]
+                owner = repo_prefixes.get(pfx)
+                if owner and owner != brepo:
+                    problems.append(
+                        f"blocks[{i}] PREFIX/REPO MISMATCH: id `{bid}` uses {owner}'s prefix "
+                        f"`{pfx}` but repo is `{brepo}` — registering this row files the block "
+                        f"into {owner}'s namespace. Renumber it under `{brepo}`'s own prefix, or "
+                        f"correct `repo` to `{owner}`")
     elif blocks is not None:
         problems.append("blocks must be an array")
 
