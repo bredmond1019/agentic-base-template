@@ -320,6 +320,11 @@ HOOK_FILENAMES: list[str] = [
     "pre-commit",
     "check_frontmatter.py",
     "test_pre-commit.sh",
+    # The shared new-errors-only, this-repo-only validate-brain delta gate (2026-09-01) —
+    # sourced by both pre-push (stage 1) and pre-commit (gate 2). Without this file, a
+    # synced pre-commit/pre-push degrades gracefully (warns "not found — skipping"
+    # instead of erroring), but gate 2 is inert until this ships alongside them.
+    "validate_brain_gate.sh",
 ]
 
 
