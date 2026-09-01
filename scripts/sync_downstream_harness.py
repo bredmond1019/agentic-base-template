@@ -665,10 +665,37 @@ def commit_repo_half(report: RepoReport, brain_root: Path, message: str) -> Comm
         return CommitOutcome(slug, skipped="brain-owned; folded into the brain commit")
 
     paths = repo_commit_paths(report)
-    add = subprocess.run(["git", "-C", str(repo_path), "add", "--", *paths],
-                         capture_output=True, text=True)
-    if add.returncode != 0:
-        return CommitOutcome(slug, error=f"git add failed: {add.stderr.strip()}")
+
+    # Only UNTRACKED paths need `git add`; a tracked modification (or deletion) is committed by
+    # `git commit -o` directly. That distinction is what makes portfolio-tier repos work.
+    #
+    # Portfolio-tier repos gitignore `.claude/` entirely, by design -- D8, published-repo hygiene.
+    # The sync still writes those files locally, which is harmless and intended. Two things follow,
+    # both measured on this flag's first live run against rag-engine-rs:
+    #   * `git add` on a path under an ignored DIRECTORY fails and aborts the whole add, even when
+    #     the leaf file itself is tracked. So a blanket add of every path breaks repos that are
+    #     behaving exactly as designed, and reporting that as a commit FAILURE would exit the run 1.
+    #   * `git check-ignore` is the wrong probe for it: on a tracked file under an ignored directory
+    #     it correctly answers "not ignored" (exit 1) while `git add` still refuses. Checked
+    #     directly, not assumed.
+    # So: add only the untracked ones, tolerate an ignored-path refusal there, and let `commit -o`
+    # carry everything git already tracks.
+    untracked = [q for q in paths if not path_is_tracked(repo_path, q)]
+    if untracked:
+        add = subprocess.run(["git", "-C", str(repo_path), "add", "--", *untracked],
+                             capture_output=True, text=True)
+        if add.returncode != 0:
+            combined = (add.stderr + add.stdout).lower()
+            if "ignored by one of your .gitignore files" not in combined:
+                return CommitOutcome(slug, error=f"git add failed: {add.stderr.strip()}")
+            # Deliberate repo policy, not a defect. Drop the ignored paths and carry on with
+            # whatever git already tracks.
+            paths = [q for q in paths if q not in untracked]
+            if not paths:
+                return CommitOutcome(
+                    slug,
+                    skipped=f"all {len(untracked)} synced path(s) are gitignored here "
+                            f"(published-repo hygiene, D8) — files written, not committed")
 
     status = subprocess.run(["git", "-C", str(repo_path), "status", "--porcelain", "--", *paths],
                             capture_output=True, text=True)
@@ -684,6 +711,15 @@ def commit_repo_half(report: RepoReport, brain_root: Path, message: str) -> Comm
     sha = subprocess.run(["git", "-C", str(repo_path), "rev-parse", "--short", "HEAD"],
                          capture_output=True, text=True).stdout.strip()
     return CommitOutcome(slug, sha=sha, count=len(paths))
+
+
+def path_is_tracked(repo_path: Path, rel_path: str) -> bool:
+    """True when git already tracks `rel_path` in `repo_path`."""
+    result = subprocess.run(
+        ["git", "-C", str(repo_path), "ls-files", "--error-unmatch", "--", rel_path],
+        capture_output=True, text=True,
+    )
+    return result.returncode == 0
 
 
 def repo_commit_message(message: str, paths: list[str]) -> str:
@@ -832,6 +868,9 @@ def main() -> None:
                     print(f"    -> committed {outcome.count} path(s) in {target.slug} ({outcome.sha})")
                 elif outcome.skipped:
                     print(f"    -> not committed here: {outcome.skipped}")
+                    if "gitignored" in outcome.skipped:
+                        print(f"       (the files were still written — {target.slug} tracks its "
+                              f"harness copy deliberately outside git)")
                 else:
                     print(f"    -> nothing to commit in {target.slug}")
 

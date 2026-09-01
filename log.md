@@ -102,6 +102,15 @@ records changes to the **factory** — it is never copied into generated project
   harness edits therefore ships those edits under a provenance hash that does not contain them.
   Hit for real while smoke-testing this change against `bella`; corrected by committing first and
   re-syncing. Commit base-template before you sync.
+- **`--commit` found its own bug on its first live run**, which is the point of shipping it
+  behind a real run: `rag-engine-rs` gitignores `.claude/` by design (D8), and `git add` on a path
+  under an ignored *directory* fails and aborts the whole add — reported as `COMMIT FAILED` and
+  exited 1 for a repo behaving exactly as intended. Fixed by splitting tracked from untracked:
+  only untracked paths need `add` at all (a tracked modification is carried by `commit -o`
+  directly), an ignored-path refusal there is a skip rather than an error, and a partially-ignored
+  repo still commits the half it tracks. **`git check-ignore` is the wrong probe** and there is a
+  test pinning why: on a tracked file under an ignored directory it answers "not ignored" while
+  `git add` still refuses. 35 -> 39 tests.
 
 ---
 ## 2026-08-31 — `workflow_run_id`: caller-stamped run-id field + `stamp-workflow-run-id` skill

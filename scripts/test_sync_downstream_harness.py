@@ -564,6 +564,79 @@ class CommitFlag(unittest.TestCase):
         self.assertIsNone(out.error)
         self.assertIsNone(out.sha)
 
+
+    # --- gitignored harness trees (D8 published-repo hygiene) --------------------------------
+
+    def _portfolio_tier_leaf(self) -> Path:
+        """rag-engine-rs's real shape: `.claude/` is gitignored and was NEVER committed, so its
+        files are untracked AND ignored. (A tracked-then-ignored file is a different case entirely
+        -- git keeps tracking it and `commit -o` handles it with no `add` at all, which is why the
+        first version of this fixture passed for the wrong reason.)"""
+        leaf = self._init_repo(self.tmp / "portfolio-leaf")
+        _write(leaf / ".gitignore", ".claude/\n")
+        _write(leaf / "README.md", "x\n")
+        self._git("add", "--", ".gitignore", "README.md", cwd=leaf)
+        self._git("commit", "-qm", "fixture", cwd=leaf)
+        _write(leaf / ".claude" / "workflows" / "block-registration.md", "v2\n")
+        _write(leaf / ".claude" / ".harness-manifest.json", '{"files": {}}\n')
+        return leaf
+
+    def test_a_gitignored_harness_tree_is_skipped_not_failed(self):
+        """Portfolio-tier repos gitignore .claude/ on purpose (D8). `git add` on a path under an
+        ignored directory fails the whole add; reporting that as a commit FAILURE (and exiting 1)
+        would make every sync red for a repo behaving exactly as designed. Found on this flag's
+        first live run against rag-engine-rs."""
+        leaf = self._portfolio_tier_leaf()
+        report = sync.RepoReport(
+            target=sync.RepoTarget(slug="portfolio-leaf", repo_path=leaf),
+            diffs=[sync.FileDiff(rel_path="workflows/block-registration.md", status="changed",
+                                 dest_prefix=".claude")],
+        )
+        out = sync.commit_repo_half(report, self.brain, "test sync")
+        self.assertIsNone(out.error, f"a gitignored tree was reported as an error: {out.error}")
+        self.assertIsNone(out.sha)
+        self.assertIn("gitignored", out.skipped or "")
+
+    def test_a_partially_ignored_repo_still_commits_what_it_tracks(self):
+        """rag-engine-rs's real shape: .claude/ ignored, scripts/ tracked. The tracked half must
+        still land -- dropping the whole commit because one path is ignored loses real work."""
+        leaf = self._portfolio_tier_leaf()
+        _write(leaf / "scripts" / "check_block_records.py", "v2\n")
+        self._git("add", "--", "scripts", cwd=leaf)
+        self._git("commit", "-qm", "fixture", cwd=leaf)
+        (leaf / "scripts" / "check_block_records.py").write_text("v3\n")
+        report = sync.RepoReport(
+            target=sync.RepoTarget(slug="portfolio-leaf", repo_path=leaf),
+            diffs=[sync.FileDiff(rel_path="check_block_records.py", status="changed",
+                                 dest_prefix="scripts"),
+                   sync.FileDiff(rel_path="workflows/block-registration.md", status="changed",
+                                 dest_prefix=".claude")],
+        )
+        out = sync.commit_repo_half(report, self.brain, "test sync")
+        self.assertIsNone(out.error, out.error)
+        self.assertIsNotNone(out.sha, "the tracked half was dropped along with the ignored one")
+        shown = self._git("show", "--stat", "--format=", "HEAD", cwd=leaf).stdout
+        self.assertIn("scripts/check_block_records.py", shown)
+        self.assertNotIn(".claude/workflows", shown)
+
+    def test_tracked_probe_is_false_for_an_unknown_path(self):
+        """A path git cannot classify must not be treated as tracked -- that would skip the `add`
+        a genuinely new file needs and commit nothing."""
+        self.assertFalse(sync.path_is_tracked(self.leaf, ".claude/never-existed.md"))
+
+    def test_check_ignore_is_the_wrong_probe_and_this_pins_why(self):
+        """Positive control for the comment in commit_repo_half: on a TRACKED file under an
+        IGNORED directory, `git check-ignore` answers "not ignored" while `git add` still
+        refuses. If git ever changes that, this fails and the simpler probe becomes available."""
+        _write(self.leaf / ".gitignore", ".claude/\n")
+        self._git("add", "--", ".gitignore", cwd=self.leaf)
+        self._git("commit", "-qm", "ignore .claude", cwd=self.leaf)
+        ci = self._git("check-ignore", "-q", "--", ".claude/workflows/block-registration.md",
+                       cwd=self.leaf)
+        self.assertEqual(ci.returncode, 1, "check-ignore now calls the tracked file ignored")
+        add = self._git("add", "--", ".claude/workflows/block-registration.md", cwd=self.leaf)
+        self.assertNotEqual(add.returncode, 0, "git add now accepts it; the workaround is stale")
+
     # --- the CLI precondition ---------------------------------------------------------------
 
     def test_commit_without_apply_is_a_usage_error(self):
