@@ -65,6 +65,14 @@ Usage:
   python3 scripts/sync_downstream_harness.py --repo bastion       # dry run, one repo
   python3 scripts/sync_downstream_harness.py --apply              # write changes, all repos
   python3 scripts/sync_downstream_harness.py --repo bastion --apply --message "D44-D47 tasks.json fix"
+  python3 scripts/sync_downstream_harness.py --apply --commit --message "D83 shared library"
+
+--commit (requires --apply) makes N+1 commits: one per repo for its own .claude/.agents/scripts/
+hooks half, then ONE brain commit carrying every planning/.template-version stamp. That split is
+not a style choice — each repo's planning/ is a symlink into the brain's vault, so staging both
+halves together fails with "beyond a symbolic link" AND ABORTS THE WHOLE `git add`, committing
+nothing while appearing to run. Every pathspec is explicit and derived from what this run wrote;
+this script never runs `git add -A`.
 
 Run from anywhere inside the brain (walks up to find brain.toml); intended to be run from
 base-template's own root, since that's where the source-of-truth .claude/ lives.
@@ -595,12 +603,152 @@ def update_template_version(target: RepoTarget, commit_hash: str, message: str) 
     tv_path.write_text("\n".join(new_lines) + "\n")
 
 
+
+# --- committing (--commit) ----------------------------------------------------------------
+#
+# WHY THIS IS NOT ONE `git add -A`: a synced repo's working tree spans TWO git repos. The repo
+# owns `.claude/`, `.agents/`, `scripts/` and `hooks/`; the BRAIN owns every
+# `planning/.template-version`, because each repo's `planning/` is a symlink into the brain's
+# `_planning/<slug>/` vault. Staging both halves in one `git add` fails with
+# "fatal: <path>: 'planning/.template-version' is beyond a symbolic link" AND ABORTS THE WHOLE
+# ADD -- committing nothing while looking like it ran. So --commit makes N+1 commits: one per
+# repo for its own half, then one in the brain for every `.template-version` stamp at once.
+#
+# Every pathspec is explicit and derived from what THIS RUN wrote (report.diffs + the manifest).
+# Never `git add -A` / `git add .` here: one git index backs every repo's planning/, several
+# agents write to it concurrently, and a bare add sweeps their in-flight work into your commit.
+
+
+class CommitOutcome:
+    """What --commit did for one repo. `sha` is None when nothing needed committing."""
+
+    def __init__(self, slug: str, sha: str | None = None, error: str | None = None,
+                 skipped: str | None = None, count: int = 0):
+        self.slug, self.sha, self.error, self.skipped, self.count = slug, sha, error, skipped, count
+
+
+def git_toplevel(path: Path) -> Path | None:
+    """The git repo owning `path`, or None if it is not in one."""
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return None
+    top = result.stdout.strip()
+    return Path(top).resolve() if top else None
+
+
+def repo_commit_paths(report: RepoReport) -> list[str]:
+    """Repo-relative paths this run wrote into the target's OWN repo, manifest included.
+
+    Deletions ('stale-safe') are included -- `git add` stages a removal of a tracked file, and
+    the commit must record it. 'stale-conflict' paths are excluded: apply_repo() deliberately
+    leaves them on disk for the operator, so committing them would launder a conflict into a
+    routine sync commit.
+    """
+    paths = [f"{d.dest_prefix}/{d.rel_path}" for d in report.diffs if d.status != "stale-conflict"]
+    paths.append(MANIFEST_REL_PATH)
+    return sorted(set(paths))
+
+
+def commit_repo_half(report: RepoReport, brain_root: Path, message: str) -> CommitOutcome:
+    """Stage and commit this repo's own half. No-op (sha=None) when the repo is the brain itself
+    -- the brain's harness files are committed by commit_brain_half() alongside the stamps, in
+    ONE commit, rather than being split across two commits of the same index."""
+    slug, repo_path = report.target.slug, report.target.repo_path
+    top = git_toplevel(repo_path)
+    if top is None:
+        return CommitOutcome(slug, skipped="not a git repository")
+    if top == brain_root.resolve():
+        # engines_only brain root, or a repo whose harness tree lives in the brain's index.
+        return CommitOutcome(slug, skipped="brain-owned; folded into the brain commit")
+
+    paths = repo_commit_paths(report)
+    add = subprocess.run(["git", "-C", str(repo_path), "add", "--", *paths],
+                         capture_output=True, text=True)
+    if add.returncode != 0:
+        return CommitOutcome(slug, error=f"git add failed: {add.stderr.strip()}")
+
+    status = subprocess.run(["git", "-C", str(repo_path), "status", "--porcelain", "--", *paths],
+                            capture_output=True, text=True)
+    if not status.stdout.strip():
+        return CommitOutcome(slug)  # nothing actually differed; not an error
+
+    commit = subprocess.run(
+        ["git", "-C", str(repo_path), "commit", "-q", "-o", *paths, "-m", repo_commit_message(message, paths)],
+        capture_output=True, text=True,
+    )
+    if commit.returncode != 0:
+        return CommitOutcome(slug, error=f"git commit failed: {(commit.stderr or commit.stdout).strip()}")
+    sha = subprocess.run(["git", "-C", str(repo_path), "rev-parse", "--short", "HEAD"],
+                         capture_output=True, text=True).stdout.strip()
+    return CommitOutcome(slug, sha=sha, count=len(paths))
+
+
+def repo_commit_message(message: str, paths: list[str]) -> str:
+    body = "\n".join(f"  {p}" for p in paths)
+    return f"chore(harness): sync base-template — {message}\n\n{body}"
+
+
+def template_version_vault_path(target: RepoTarget, brain_root: Path) -> str | None:
+    """`planning/.template-version` resolved through the symlink to its REAL path inside the
+    brain's vault, brain-relative, for use as a git pathspec.
+
+    Staging the symlinked face (`<repo>/planning/.template-version`) is what produces
+    "beyond a symbolic link"; the vault path (`core/_planning/<slug>/.template-version`) is the
+    file git actually tracks.
+    """
+    tv = (target.repo_path / "planning" / ".template-version").resolve()
+    if not tv.is_file():
+        return None
+    try:
+        return str(tv.relative_to(brain_root.resolve()))
+    except ValueError:
+        return None
+
+
+def commit_brain_half(brain_root: Path, stamp_paths: list[str], brain_owned: list[str],
+                      message: str) -> CommitOutcome:
+    """One commit in the brain for every `.template-version` stamp this run wrote, plus any
+    harness paths the brain owns itself (the engines_only case)."""
+    paths = sorted(set(stamp_paths + brain_owned))
+    if not paths:
+        return CommitOutcome("brain")
+    add = subprocess.run(["git", "-C", str(brain_root), "add", "--", *paths],
+                         capture_output=True, text=True)
+    if add.returncode != 0:
+        return CommitOutcome("brain", error=f"git add failed: {add.stderr.strip()}")
+    status = subprocess.run(["git", "-C", str(brain_root), "status", "--porcelain", "--", *paths],
+                            capture_output=True, text=True)
+    if not status.stdout.strip():
+        return CommitOutcome("brain")
+    body = "\n".join(f"  {p}" for p in paths)
+    msg = (f"chore(harness): record base-template sync — {message}\n\n"
+           f"{len(stamp_paths)} planning/.template-version stamp(s).\n\n{body}")
+    commit = subprocess.run(["git", "-C", str(brain_root), "commit", "-q", "-o", *paths, "-m", msg],
+                            capture_output=True, text=True)
+    if commit.returncode != 0:
+        return CommitOutcome("brain", error=f"git commit failed: {(commit.stderr or commit.stdout).strip()}")
+    sha = subprocess.run(["git", "-C", str(brain_root), "rev-parse", "--short", "HEAD"],
+                         capture_output=True, text=True).stdout.strip()
+    return CommitOutcome("brain", sha=sha, count=len(paths))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--repo", action="append", dest="repos", help="Limit to this repo slug (repeatable). Default: all eligible repos.")
     parser.add_argument("--apply", action="store_true", help="Write changes. Default is dry-run (report only).")
-    parser.add_argument("--message", default="harness pull", help="Description recorded in planning/.template-version's synced: line.")
+    parser.add_argument("--message", default="harness pull", help="Description recorded in planning/.template-version's synced: line, and used as the commit subject under --commit.")
+    parser.add_argument("--commit", action="store_true", help="After applying, commit each repo's own half and one brain commit for the .template-version stamps. Requires --apply.")
     args = parser.parse_args()
+
+    # --commit without --apply is a usage error, never a silent implication of --apply: a dry run
+    # writes nothing, so there would be nothing to commit, and quietly turning a report-only
+    # invocation into a 19-repo write is the opposite of what a dry run is for.
+    if args.commit and not args.apply:
+        print("ERROR: --commit requires --apply (a dry run writes nothing to commit).", file=sys.stderr)
+        sys.exit(2)
 
     script_dir = Path(__file__).resolve().parent
     base_template_root = find_base_template_root(script_dir)
@@ -627,6 +775,9 @@ def main() -> None:
     print()
 
     total_changed = 0
+    commit_outcomes: list[CommitOutcome] = []
+    stamp_paths: list[str] = []
+    brain_owned_paths: list[str] = []
     for target in targets:
         report = diff_repo(base_template_root, brain_root, target)
         if report.error:
@@ -667,10 +818,49 @@ def main() -> None:
             update_template_version(target, commit_hash, args.message)
             print(f"    -> planning/.template-version updated (commit {commit_hash[:12]})")
 
+            if args.commit:
+                stamp = template_version_vault_path(target, brain_root)
+                if stamp:
+                    stamp_paths.append(stamp)
+                outcome = commit_repo_half(report, brain_root, args.message)
+                if outcome.skipped == "brain-owned; folded into the brain commit":
+                    brain_owned_paths.extend(repo_commit_paths(report))
+                commit_outcomes.append(outcome)
+                if outcome.error:
+                    print(f"    -> COMMIT FAILED: {outcome.error}")
+                elif outcome.sha:
+                    print(f"    -> committed {outcome.count} path(s) in {target.slug} ({outcome.sha})")
+                elif outcome.skipped:
+                    print(f"    -> not committed here: {outcome.skipped}")
+                else:
+                    print(f"    -> nothing to commit in {target.slug}")
+
     print()
+    if args.apply and args.commit:
+        brain_outcome = commit_brain_half(brain_root, stamp_paths, brain_owned_paths, args.message)
+        commit_outcomes.append(brain_outcome)
+        if brain_outcome.error:
+            print(f"[brain] COMMIT FAILED: {brain_outcome.error}")
+        elif brain_outcome.sha:
+            print(f"[brain] committed {brain_outcome.count} path(s) ({brain_outcome.sha}) — "
+                  f"{len(stamp_paths)} .template-version stamp(s)")
+        else:
+            print("[brain] nothing to commit")
+        print()
+
     if args.apply:
         print(f"Done. {total_changed} file(s) written across {len(targets)} repo(s).")
-        print("Review the diff in each repo and commit there — this script does not commit for you.")
+        if args.commit:
+            ok = [o for o in commit_outcomes if o.sha]
+            failed = [o for o in commit_outcomes if o.error]
+            print(f"Committed in {len(ok)} repo(s)" + (f"; {len(failed)} FAILED" if failed else "."))
+            for o in failed:
+                print(f"    {o.slug}: {o.error}")
+            if failed:
+                sys.exit(1)
+        else:
+            print("Review the diff in each repo and commit there — pass --commit to have this "
+                  "script do it (repo half + one brain commit for the stamps).")
     else:
         print(f"Dry run complete. {total_changed} file(s) would change across {len(targets)} repo(s).")
         print("Re-run with --apply to write.")

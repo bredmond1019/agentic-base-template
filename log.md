@@ -73,6 +73,36 @@ records changes to the **factory** — it is never copied into generated project
   Step 5 just stated a wrong shortcut). Superseding nothing, so nothing to supersede.
 - **Gates:** 58/58 base-template gated checks green; `validate-brain --state/--links/--graph` clean.
 
+### Same day — `--commit` for `/sync-downstream-harness`
+
+- **What:** the sync script applied changes but never committed, so every pull ended in a manual
+  N+1 commit dance the operator (or an agent) got right by reading a long doc section. `--commit`
+  now does it: one commit per repo for its own `.claude`/`.agents`/`scripts`/`hooks` half, then
+  **one** brain commit carrying every `planning/.template-version` stamp.
+- **Why N+1 and not one `git add`:** each repo's `planning/` is a symlink into the brain's
+  `_planning/` vault, so the stamp is tracked by the brain, not the repo. Staging both halves
+  together fails with `beyond a symbolic link` **and aborts the whole add** — committing nothing
+  while appearing to run. The script stages the stamp through its real vault path instead.
+- **Guards:** `--commit` without `--apply` is a usage error (exit 2), never a silent implication of
+  `--apply`. Pathspecs are explicit and derived from `report.diffs` + the manifest, so a
+  `stale-conflict` path is never committed and unrelated in-flight work is never swept in. A
+  brain-owned repo (the `engines_only` brain root) is folded into the brain commit rather than
+  committed twice. Any per-repo commit failure exits 1 rather than being buried in a 19-repo report.
+- **Tests** (`scripts/test_sync_downstream_harness.py`, 22 -> 35): real `git init` fixtures in a
+  temp dir, including the vault-path resolution, a **positive control that staging the symlinked
+  face really does still fail** (without it the N+1 split would be unfalsifiable superstition), the
+  brain-owned fold, a non-git directory, empty-change no-ops, the `--apply` precondition, and a
+  source-level assertion that the script never runs `git add -A`.
+- **Two drift fixes found while doing it:** the `.agents/` skill mirror's guard tested for
+  `sdlc-run.js` — a RETIRED engine — so a shell-less agent following it aborted on every run; and
+  both the command and the skill told you to run `fleet_concurrency_check.py list`, which is not a
+  subcommand (it is `status`). The skill was also missing the live-lane guard entirely.
+- **Known sharp edge, now on the record:** the sync copies from base-template's WORKING TREE, not
+  from `HEAD`, while `.template-version` is stamped with `HEAD`. Running `--apply` with uncommitted
+  harness edits therefore ships those edits under a provenance hash that does not contain them.
+  Hit for real while smoke-testing this change against `bella`; corrected by committing first and
+  re-syncing. Commit base-template before you sync.
+
 ---
 ## 2026-08-31 — `workflow_run_id`: caller-stamped run-id field + `stamp-workflow-run-id` skill
 

@@ -414,5 +414,172 @@ class SkillSlugRegistrationGuard(unittest.TestCase):
         )
 
 
+
+class CommitFlag(unittest.TestCase):
+    """--commit: the two-repo split, the explicit pathspec, and the --apply precondition.
+
+    These build REAL git repos in a temp dir and make REAL commits. Nothing touches the fleet:
+    every path is under tempfile.TemporaryDirectory(), and git is given -C explicitly so it can
+    never walk up into agentic-portfolio.
+
+    The failure this suite exists to catch is not "the commit did not happen" -- it is
+    "`git add` hit the planning/ symlink, aborted the whole add, and the run reported success
+    while committing nothing." That is why test_symlinked_stamp_is_staged_via_the_vault_path
+    exists and why it asserts on the brain's log, not on the script's own output.
+    """
+
+    def _git(self, *args, cwd):
+        import subprocess
+        r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True)
+        return r
+
+    def _init_repo(self, path: Path):
+        path.mkdir(parents=True, exist_ok=True)
+        self._git("init", "-q", "-b", "main", cwd=path)
+        self._git("config", "user.email", "t@example.com", cwd=path)
+        self._git("config", "user.name", "T", cwd=path)
+        self._git("config", "commit.gpgsign", "false", cwd=path)
+        # core.hooksPath is deliberately left alone; these repos have no hooks.
+        return path
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name).resolve()
+
+        # The brain: owns the vault, therefore owns every repo's planning/.template-version.
+        self.brain = self._init_repo(self.tmp / "brain")
+        _write(self.brain / "brain.toml", "# brain.toml\n")
+        _write(self.brain / "_planning" / "leaf" / ".template-version",
+               "template: base-template\ncommit: old\nsynced: 2026-01-01 — before\n")
+        self._git("add", "-A", cwd=self.brain)          # fixture setup only, not script behaviour
+        self._git("commit", "-qm", "fixture", cwd=self.brain)
+
+        # The leaf repo: owns .claude/, and reaches its planning/ through a symlink into the vault.
+        self.leaf = self._init_repo(self.brain / "leaf")
+        _write(self.leaf / ".claude" / "workflows" / "block-registration.md", "v2\n")
+        _write(self.leaf / ".claude" / ".harness-manifest.json", '{"files": {}}\n')
+        (self.leaf / "planning").symlink_to(self.brain / "_planning" / "leaf")
+        self._git("add", "-A", cwd=self.leaf)
+        self._git("commit", "-qm", "fixture", cwd=self.leaf)
+
+        self.target = sync.RepoTarget(slug="leaf", repo_path=self.leaf)
+        self.report = sync.RepoReport(
+            target=self.target,
+            diffs=[sync.FileDiff(rel_path="workflows/block-registration.md", status="changed",
+                                 dest_prefix=".claude")],
+        )
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    # --- the pathspec ----------------------------------------------------------------------
+
+    def test_commit_paths_are_explicit_and_include_the_manifest(self):
+        paths = sync.repo_commit_paths(self.report)
+        self.assertEqual(paths, [".claude/.harness-manifest.json",
+                                 ".claude/workflows/block-registration.md"])
+
+    def test_stale_conflict_paths_are_never_committed(self):
+        """apply_repo() deliberately leaves a conflict on disk for the operator; committing it
+        would launder an unresolved conflict into a routine sync commit."""
+        self.report.diffs.append(
+            sync.FileDiff(rel_path="commands/local-edit.md", status="stale-conflict"))
+        self.assertNotIn(".claude/commands/local-edit.md", sync.repo_commit_paths(self.report))
+
+    def test_deletions_are_committed(self):
+        self.report.diffs.append(
+            sync.FileDiff(rel_path="commands/retired.md", status="stale-safe"))
+        self.assertIn(".claude/commands/retired.md", sync.repo_commit_paths(self.report))
+
+    # --- the repo half ---------------------------------------------------------------------
+
+    def test_repo_half_commits_its_own_files(self):
+        (self.leaf / ".claude" / "workflows" / "block-registration.md").write_text("v3\n")
+        out = sync.commit_repo_half(self.report, self.brain, "test sync")
+        self.assertIsNone(out.error, out.error)
+        self.assertIsNotNone(out.sha)
+        left = self._git("status", "--porcelain", "--", ".claude", cwd=self.leaf).stdout.strip()
+        self.assertEqual(left, "", f"leaf still dirty after commit: {left}")
+
+    def test_repo_half_is_a_no_op_when_nothing_changed(self):
+        out = sync.commit_repo_half(self.report, self.brain, "test sync")
+        self.assertIsNone(out.error)
+        self.assertIsNone(out.sha, "committed an empty change")
+
+    def test_a_repo_owned_by_the_brain_is_folded_into_the_brain_commit(self):
+        """The engines_only brain-root case: its harness files are in the BRAIN's index, so
+        committing them from the per-repo loop would split one index across two commits."""
+        report = sync.RepoReport(target=sync.RepoTarget(slug="brain", repo_path=self.brain),
+                                 diffs=list(self.report.diffs))
+        out = sync.commit_repo_half(report, self.brain, "test sync")
+        self.assertIsNone(out.sha)
+        self.assertEqual(out.skipped, "brain-owned; folded into the brain commit")
+
+    def test_a_non_git_directory_is_reported_not_crashed(self):
+        loose = self.tmp / "loose"
+        (loose / ".claude").mkdir(parents=True)
+        report = sync.RepoReport(target=sync.RepoTarget(slug="loose", repo_path=loose),
+                                 diffs=list(self.report.diffs))
+        out = sync.commit_repo_half(report, self.brain, "test sync")
+        self.assertIsNone(out.sha)
+        self.assertIsNotNone(out.skipped)
+
+    # --- the brain half and the symlink trap ------------------------------------------------
+
+    def test_template_version_resolves_to_the_vault_path_not_the_symlink(self):
+        rel = sync.template_version_vault_path(self.target, self.brain)
+        self.assertEqual(rel, "_planning/leaf/.template-version")
+        self.assertNotIn("leaf/planning", rel)
+
+    def test_symlinked_stamp_is_staged_via_the_vault_path(self):
+        """The whole reason --commit is N+1 commits. Staging <repo>/planning/.template-version
+        fails with 'beyond a symbolic link' and aborts the entire `git add`; the vault path is
+        what git actually tracks. Asserted on the brain's committed tree, not on stdout."""
+        sync.update_template_version(self.target, "abc123", "test sync")
+        rel = sync.template_version_vault_path(self.target, self.brain)
+        out = sync.commit_brain_half(self.brain, [rel], [], "test sync")
+        self.assertIsNone(out.error, out.error)
+        self.assertIsNotNone(out.sha)
+        shown = self._git("show", "--stat", "--format=", "HEAD", cwd=self.brain).stdout
+        self.assertIn("_planning/leaf/.template-version", shown)
+        # Scoped to the vault, deliberately: the leaf repo is an untracked directory inside the
+        # brain here (as sub-repos are, gitignored, in the real fleet), and a bare status would
+        # report it. Gitignoring it in the fixture instead would make
+        # test_staging_the_symlinked_face_really_does_fail pass for the WRONG reason -- git would
+        # refuse the path as ignored rather than as beyond a symlink.
+        left = self._git("status", "--porcelain", "--", "_planning", cwd=self.brain).stdout.strip()
+        self.assertEqual(left, "", f"vault still dirty after brain commit: {left}")
+
+    def test_staging_the_symlinked_face_really_does_fail(self):
+        """Positive control for the claim above -- without this, the vault-path test could pass
+        for reasons unrelated to the symlink, and the N+1 split would look like superstition."""
+        sync.update_template_version(self.target, "abc123", "test sync")
+        r = self._git("add", "--", "leaf/planning/.template-version", cwd=self.brain)
+        self.assertNotEqual(r.returncode, 0,
+                            "staging through the symlink SUCCEEDED — the split may be unnecessary")
+        self.assertIn("symbolic link", (r.stderr + r.stdout).lower())
+
+    def test_brain_half_is_a_no_op_with_no_stamps(self):
+        out = sync.commit_brain_half(self.brain, [], [], "test sync")
+        self.assertIsNone(out.error)
+        self.assertIsNone(out.sha)
+
+    # --- the CLI precondition ---------------------------------------------------------------
+
+    def test_commit_without_apply_is_a_usage_error(self):
+        import subprocess
+        r = subprocess.run([sys.executable, str(_MODULE_PATH), "--commit"],
+                           capture_output=True, text=True, cwd=str(_MODULE_PATH.parent))
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("--commit requires --apply", r.stderr)
+
+    def test_the_script_never_runs_git_add_dash_a(self):
+        """A bare `git add -A` here would sweep concurrent sessions' in-flight vault work into a
+        sync commit. Asserted against the module source so it cannot creep back in."""
+        src = _MODULE_PATH.read_text()
+        for banned in ('"add", "-A"', '"add", "."', "'add', '-A'", "'add', '.'"):
+            self.assertNotIn(banned, src, f"sync script must never {banned}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
