@@ -48,6 +48,14 @@ MANIFEST_PATH = ROOT / "scripts" / "skill_sync_manifest.json"
 # Ranges were hand-picked from the current engines to bracket exactly the load-bearing section
 # named by `anchor` — see the file for the surrounding phase/comment markers if a range needs
 # re-picking after a refactor moves code around.
+#
+# DUPLICATION, deliberate: the `start, end` in each tuple below and the `"lines": "<start>-<end>"`
+# string stored per key in scripts/skill_sync_manifest.json are the SAME line range. **These tuples
+# are authoritative**; the manifest field is derived from them and rewritten on every run (see the
+# `new_manifest[key] = {... "lines": f"{start}-{end}" ...}` assignment further down). It is stored
+# only as a human-readable breadcrumb for whoever reads the manifest — nothing reads it back, and
+# the drift check compares hashes, never the `lines` string. So edit a range HERE and re-run with
+# `--update`; hand-editing `lines` in the manifest changes nothing and will be silently overwritten.
 ANCHORS = [
     (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1479, 1542,
      ".agents/skills/sdlc-task/SKILL.md"),

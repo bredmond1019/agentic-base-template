@@ -208,6 +208,12 @@ periodically as a heartbeat (repeat the same `register --repo <this-repo-name> -
 <category> --agent <this lane's agent identity>` call): a repeat register for the SAME agent
 refreshes `started_at` on the existing entry in place rather than consuming a second slot.
 
+**The old release → register → re-take workaround is superseded by this heartbeat.** Before the entry
+was keyed on `--agent`, the only way to refresh a long-running heavy lane's slot was to `release`
+it and `register` again — which genuinely gave the slot up and let another lane claim it
+mid-chain. Do not do that any more: repeat the `register` in place. (The *repo lease*
+release/drain/re-take at the block boundary is a different mechanism and is still required.)
+
 **Release the slot when this repo's chain finishes — this is required, not optional:**
 `... release --repo <this-repo-name> --agent <this lane's agent identity>`, on success, failure,
 or abandonment. A lane killed mid-run

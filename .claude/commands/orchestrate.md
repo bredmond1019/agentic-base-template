@@ -388,6 +388,12 @@ runs longer than that, re-register periodically as a heartbeat (`... register --
 SAME agent refreshes `started_at` on the existing entry in place rather than consuming a second
 slot.
 
+**The old release → register → re-take workaround is superseded by this heartbeat.** Before the entry
+was keyed on `--agent`, refreshing a long-running heavy lane's slot meant `release` followed by a
+fresh `register` — which really did give the slot up and let another lane claim it mid-chain. Do
+not do that any more: repeat the `register` in place. (The *repo lease* release/drain/re-take at
+the block boundary in rule 10 and step 10 is a different mechanism and is still required.)
+
 **The lane MUST release its slot on exit** — success, failure, or abandonment — with
 `... release --repo <name> --agent <this lane's agent identity>` when the heavy repo's chain
 finishes. A stale entry (one past the TTL,
