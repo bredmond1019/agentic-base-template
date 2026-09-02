@@ -187,6 +187,30 @@ records changes to the **factory** — it is never copied into generated project
   delegate.
 - **HQ-only.** Added to `EXCLUDED_COMMAND_FILENAMES` — it reads every repo's records from the brain
   root and has nothing to consolidate inside a leaf repo, the same reasoning as `/generate-roadmap`.
+- **First real run, and the command's own feedback applied.** `/consolidate-fleet` ran over five
+  roadmaps (nine records, ~570 findings, 11 mechanisms) and its "where this did not survive contact"
+  section proved **two of the four expectations it was given wrong** — both mine:
+  - **`finding_id` is NOT absent.** 30 of 268 entries carry one and 29 clusters render. The real
+    gap is that **zero clusters are cross-repo**, against 100 cross-repo similarity suggestions —
+    every id was minted inside one repo by an author who could not see the sibling saying the same
+    thing. Step 4's justification rewritten to the measured fact, which is the stronger argument.
+  - **`engine-updates-and-fixes` is not a thin record** (14 sections) and was not even in scope.
+    The example is dropped rather than replaced: there is no reliable thin example, and shape
+    variance is worse than stated — nine records, nine section sets, `## ` counts 2–28, and **six**
+    status vocabularies, one of them declared in a legend the record then ignores.
+- **Step 6 reversed: this command IS the harvest.** It now stamps `lifecycle: consolidated` on every
+  record it extracted from, instead of delegating that to `/consolidate-run`. The first run showed
+  why: the operator asked for mechanisms, Step 6 was skipped, and five roadmaps were left neither
+  harvested nor consolidated with nothing on disk saying which. A pass that reads a record and does
+  not stamp it leaves the corpus ambiguous, invisibly. `--no-per-roadmap` is replaced by
+  `--also-per-roadmap`, off by default — running both produces two disposal queues over one body of
+  findings.
+- **`--since <YYYY-MM-DD>` added** (M11): a roadmap is not a run. One run spans several roadmaps and
+  one roadmap spans months, so a slug list cannot express "the run of 2026-09-02" — the question
+  that was actually asked.
+- **Fan-out unevenness accepted, not fixed:** jynx's 2,014-line record took ~9 minutes and seven
+  tool calls against the others' two, but splitting a record across agents would split a
+  `CORRECTION` from what it corrects. Launch the largest record first so it is not the tail.
 - **Revised the same day** for capabilities that landed alongside it: HQ's `/triage-carryover`
   (423c51e04) now owns working the carryover backlog, so this command reads its evidence and never
   audits or disposes of an entry itself; okf-core's `Carryover.needs` (code · docs · state ·

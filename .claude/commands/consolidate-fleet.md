@@ -51,7 +51,8 @@ Usage: /consolidate-fleet [<roadmap-slug>...] [--since-watermark] [--all]
 | `<roadmap-slug>...` | — | Roadmaps to consolidate. Repeatable and positional. |
 | `--since-watermark` | — | Select every roadmap whose `lane-log.jsonl` has lines past its watermark. The normal invocation. |
 | `--all` | — | Every roadmap with a `lane-log.jsonl`, watermark ignored. Use for a first run or a deliberate re-read. |
-| `--no-per-roadmap` | off | Skip the `/consolidate-run` pass (Step 6); produce only the mechanism analysis. |
+| `--also-per-roadmap` | off | **Additionally** invoke `/consolidate-run` per roadmap for its own `consolidated-review.md`. Off by default — this command is the harvest (Step 6). |
+| `--since <YYYY-MM-DD>` | — | Select by lane-log activity date rather than by roadmap. A roadmap is not a run: one run spans several roadmaps and one roadmap spans months, so a slug list cannot express "the run of 2026-09-02". Composes with the selectors above; narrows, never widens. |
 | `--dry-run` | off | Do everything except write the analysis and advance the watermarks. |
 | `--out <path>` | `planning/open-work/orchestration-runs/retros/pattern-analysis-<YYYY-MM-DD>.md` | Where the analysis lands. |
 
@@ -67,6 +68,9 @@ python3 <path-to-base-template>/scripts/lane_log_watermark.py status --root "$BR
 ```
 
 `--since-watermark` selects every roadmap the table reports with `N new` where N > 0.
+
+`verify` prints `0 watermark(s) checked, 0 drifted` both when five roadmaps are clean and when five
+have never been consolidated. Read the `status` table, not `verify`, to tell those apart.
 
 **A `DRIFTED` row stops this command for that roadmap.** Drift means `lane-log.jsonl` was rewritten
 or truncated, so its line numbers no longer mean what the watermark thinks — resuming would skip
@@ -129,6 +133,11 @@ that means it got fixed, and the warning should come out.
 One agent per `(repo × roadmap)` record pair. Give each agent **explicit absolute paths** and the
 warnings below; an agent that has to work out where things live will read a `trees/` copy.
 
+**The unit is uneven and that is accepted, not fixed.** Measured: nine agents, nine returns, ~570
+findings; jynx's 2,014-line record took ~9 minutes and seven tool calls against the others' two.
+Splitting a record across agents would split a `CORRECTION` from what it corrects (rule 2), which
+costs more than the wall-clock. Launch the largest record first so it is not the tail.
+
 Each agent returns a strict JSON array, one object per finding:
 
 ```json
@@ -145,10 +154,13 @@ Tell every agent, verbatim, all five:
 2. **A `CORRECTION:` section supersedes earlier text in the same file, and nothing marks the
    superseded passage.** Extract the corrected claim and set `superseded: true` on the one it
    replaces. A naive read yields both the wrong and the right cause of one finding as two findings.
-3. **Record shape varies and some records are thin.** There is no common body schema — four
-   incompatible shapes are in use, status vocabularies are three disjoint sets, and
-   `engine-updates-and-fixes` is a bare commit ledger with no dates, decisions or findings section.
-   Extract what is there and **say what was absent**; never infer a field to fill the envelope.
+3. **Record shape varies, and more than you expect.** Measured over nine records: **nine different
+   section sets**, `## ` counts ranging from **2 to 28**, and at least **six** status vocabularies —
+   one record declares a vocabulary in a legend then uses four words outside it, another declares
+   `WONTFIX` and never uses it. Extract what is there and **say what was absent**; never infer a
+   field to fill the envelope. (An earlier draft named `engine-updates-and-fixes` as the thin
+   example. It is not thin — 14 sections — and the claim was wrong; there is no reliable thin
+   example, which is the point.)
 4. **`provenance` is not optional.** `verified` = the record shows the command and its output;
    `relayed` = another lane told this one; `assumed` = the record asserts it. The prior analysis was
    useful precisely because every claim carried this tag.
@@ -170,8 +182,14 @@ Name each `M<n>` with a severity and a **breadth count**, following the shape al
 the number of independent repos or lanes that hit it, counted from the extraction, never estimated.
 
 **Mint one `finding_id` per mechanism** and attach it to every contributing finding. This is what
-`mev`'s `cluster_by_finding_id` groups on, and today it has nothing: zero of the corpus's records
-carry one, which is why the CLUSTERS section renders empty.
+`mev`'s `cluster_by_finding_id` groups on.
+
+**The gap is cross-repo, not absence — measured 2026-09-02, correcting this file's first draft.**
+30 of 268 carryover entries carry a `finding_id` and 29 clusters render, so the ids exist and the
+mechanism works. What does not exist is a single **cross-repo** cluster, against **100 cross-repo
+similarity suggestions**: every id in the fleet was minted inside one repo, by an author who could
+not see the other repo saying the same thing. That is the gap this command's vantage point closes,
+and it is a stronger argument than "nothing writes them" — which was false.
 
 Cross-check against `mev carryover`'s `suggestions`, and **never auto-merge**. A false merge
 destroys durable knowledge exactly the way a false `cleared` does. Two entries join only when a
@@ -219,11 +237,27 @@ JSON payload, never per-field flags). A `carryover[]` entry is authored per the
 **`write-carryover-entry`** skill — load it before proposing one, and do not restate its rules here.
 This command still **proposes only**; see the write boundary.
 
-## Step 6 — Per-roadmap consolidation (unless `--no-per-roadmap`)
+## Step 6 — Stamp what you consumed: this command IS the harvest
 
-For each selected roadmap, invoke `/consolidate-run <slug>`. It owns record discovery, D57 selection,
-`carryover[]` proposals and the `lifecycle: consolidated` stamp. Do not duplicate any of it here;
-pass the `finding_id`s minted in Step 4 so both artifacts agree.
+**A record this command read is harvested.** Its findings are in the mechanisms; re-reading it in a
+later pass re-proposes work that is already filed. So stamp `lifecycle: consolidated` on every run
+record Step 2 selected and Step 3 actually extracted from, naming this analysis in the record's
+`consolidated_by:` field.
+
+This is a deliberate reversal of the first draft, which delegated the stamp to `/consolidate-run`.
+Measured on the first real run: the operator asked for mechanisms, Step 6 was skipped, and five
+roadmaps were left with their records `lane-complete` and no `consolidated-review*.md` — neither
+harvested nor consolidated, and nothing on disk said which. **A pass that reads a record and does
+not stamp it leaves the corpus ambiguous**, and the ambiguity is invisible.
+
+**Do not stamp a record Step 3 failed to extract from** — a fan-out that errored, or a record the
+selection reached but no agent read. Those stay unstamped and are named in the report.
+
+`--also-per-roadmap` additionally invokes `/consolidate-run <slug>` per roadmap, for the per-roadmap
+`consolidated-review.md` and its `carryover[]` proposals. **Off by default**: the mechanism pass
+already routes every finding through Step 5's disposal table, and running both produces two disposal
+queues over one body of findings. Reach for it when a single roadmap needs its own reviewable
+artifact — a handover, or an operator who owns one roadmap and not the run.
 
 ## Step 7 — Advance the watermarks
 
