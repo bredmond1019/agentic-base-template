@@ -187,6 +187,40 @@ records changes to the **factory** — it is never copied into generated project
   delegate.
 - **HQ-only.** Added to `EXCLUDED_COMMAND_FILENAMES` — it reads every repo's records from the brain
   root and has nothing to consolidate inside a leaf repo, the same reasoning as `/generate-roadmap`.
+- **First DISPOSAL run, and it found four defects in the instructions it was given — three mine.**
+  All eleven rows filed (9 blocks + 1 chore + 1 carryover, M1/M2 first, commits `6ec3ea38b`,
+  `7e92ef80a`), and the filing agent's refusals were worth more than the count:
+  - **`finding_id` and `needs` cannot go on a block.** `block.schema.json` is
+    `additionalProperties: false` over 29 properties and declares neither; `mev create-block`'s
+    payload does not `deny_unknown_fields`, so both would have been **silently dropped**. Zero of
+    the fleet's block records carry either. The disposal table's own routing is not expressible
+    until the schema gains the fields — recorded in `disposal.json`'s spec and carried in the
+    block's `notes` meanwhile.
+  - **`block.schema.json` required the operator-slug prefix that D76 strips.** Its pattern was
+    `^operator-[a-z0-9][a-z0-9-]*$` while `docs/state/state-schema.md`, `block-registration.md`,
+    `check_block_records.py` and `mev normalize-op-slugs` all treat bare kebab as canonical — and
+    live data is **30 bare against 7 prefixed**. Earlier the same session I had changed the doc and
+    the checker and left the schema disagreeing with both. Relaxed to `^(operator-)?...` with a
+    description saying bare is canonical and the optional group is tolerance for the 7 legacy
+    slugs, not permission to write new ones.
+  - **"File these but do not emit" is an instruction nothing can obey** — `create-block --write`
+    chains `emit-state --write` unconditionally. The same class as the commander retro's "advice
+    that was unachievable when given". The command now says to check freshness immediately before
+    filing and to snapshot any file another lane has dirty.
+  - **A stale reading reported as current.** `toolchain-freshness` was quoted RED from a
+    measurement taken hours earlier; it was GREEN at filing time. Also "8 blocks — base-template 6,
+    mev 3" sums to 9. The Scope section now requires recounting every stated total, which is the
+    audit this analysis performs on other documents and had not performed on itself.
+  - **Zero operator edges filed, not the four proposed** — two already existed, and the other two
+    gate none of the nine blocks, so filing them would have meant inventing a gate. Correct refusal
+    under standing rule 7.
+- **`disposal.json` added** beside the analysis: the machine-readable half, with `route`,
+  `owner_repo`, `needs`, `severity`, `breadth`, `evidence[]`, a grounded-fields-only `payload`, and
+  a **required `ungrounded[]`** naming every required field the evidence does not support, so the
+  filing agent knows what to ask instead of guessing. A downstream parser reading the markdown table
+  by column heading breaks on the first differently-worded analysis — the same mistake `finding_id`
+  exists to fix, one level up — and this is the surface disposal will consume when it ports to
+  `engine-rs`.
 - **First real run, and the command's own feedback applied.** `/consolidate-fleet` ran over five
   roadmaps (nine records, ~570 findings, 11 mechanisms) and its "where this did not survive contact"
   section proved **two of the four expectations it was given wrong** — both mine:

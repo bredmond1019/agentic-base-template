@@ -219,21 +219,64 @@ retros `index.md` (standing rule 7), and these sections:
 
 | Section | Content |
 |---|---|
-| Scope | Roadmaps, watermark ranges consumed (`<slug> lines N–M`), records read, records skipped and why |
+| Scope | Roadmaps, watermark ranges consumed (`<slug> lines N–M`), records read, records skipped and why. **Recount every total you state** — a per-repo breakdown that does not sum to the headline is the self-report failure this document audits in others |
 | Mechanisms | `M1..Mn`, each: claim · severity · breadth · owning repo · `finding_id` · the contributing findings with their provenance tags |
 | Instrument failures | Their own section. Every command that returned a plausible wrong answer, with the correct form. The single most transferable output a run produces |
 | Carryover health | Read from `/triage-carryover`'s evidence, never re-audited here: per-repo rot rate **beside pool age**, machine-checkable share, broken-predicate counts in all three directions, `needs` coverage, retired-kind survivors (`known_issue`/`constraint` on disk mark entries nobody has re-read since August) |
 | Self-report audit | Every number a record asserted about itself, recounted, with the delta |
 | Already known | Mechanisms matching a prior analysis — reported as another instance, with the instance count |
-| Proposed disposal | One row per mechanism → a block, a `carryover[]` entry, or explicitly nothing, each with its `needs` value so the row routes by executor |
+| Proposed disposal | A **pointer to `disposal.json`** (below) plus the same rows rendered for a human reader. The JSON is the contract; the table is the courtesy copy |
 | What needs the operator | Only what genuinely cannot be decided by an agent |
 
 Every claim carries a provenance tag. A section that reports nothing says so as a claim
 ("no instrument failures found in 6 records") so a reader can tell it ran.
 
+### `disposal.json` — the machine-readable half, written beside the analysis
+
+**Write `disposal.json` next to `--out`, and treat it as the deliverable the prose table describes.**
+A downstream command that parses the markdown table by column heading breaks the first time an
+analysis words its section differently — and record-shape variance is measured at nine section sets
+across nine records. Depending on prose for a machine handoff is the same mistake `finding_id`
+exists to fix, one level up. This file is also the port surface: when disposal moves into
+`engine-rs`, it consumes this, not a heading.
+
+```json
+{"analysis": "<path to the .md>", "generated": "<ISO8601>", "roadmaps": ["..."],
+ "rows": [
+   {"finding_id": "gates-that-cannot-fail", "mechanism": "M1",
+    "route": "block|chore|carryover|operator|none",
+    "owner_repo": "base-template", "needs": "code|docs|state|operator|dedupe",
+    "severity": "P0", "breadth": {"repos": 7, "instances": 17},
+    "evidence": ["<record path>:<line>", "..."],
+    "payload": {},
+    "ungrounded": ["files", "acceptance_criteria"],
+    "rationale": "one line: why this route"}
+ ]}
+```
+
+- **`payload`** carries only fields the analysis can GROUND against `block.schema.json`. Leave a
+  field out rather than inventing it.
+- **`ungrounded[]` is required and is the point.** It names every required field the evidence does
+  not support, so the filing agent knows exactly what to ask rather than guessing. A row with an
+  empty `payload` and an honest `ungrounded[]` is more useful than a full one that guesses.
+- **`route: "none"` is a real value.** A mechanism the analysis decided to file nothing for says so
+  here, so the filer reports it as a decision rather than an omission.
+
+**Two fields have nowhere to land on a block today, and the row must say so rather than pretend.**
+`block.schema.json` is `additionalProperties: false` over 29 properties and declares **neither
+`finding_id` nor `needs`**; `mev create-block`'s payload does not `deny_unknown_fields`, so both are
+**silently dropped**. Measured 2026-09-02 on the first disposal: zero of the fleet's block records
+carry either. So a block row's `finding_id` and `needs` are carried in `disposal.json` and written
+into the block's `notes` as prose, and the analysis records the schema gap as its own finding —
+until the schema gains the fields, the disposal table's own routing is not fully expressible.
+
 **Disposal has machinery now; propose against it rather than inventing a shape.** A block is filed
 with `mev create-block --from <payload.json>` (`block.schema.json`'s 15 required fields arrive as a
-JSON payload, never per-field flags). A `carryover[]` entry is authored per the
+JSON payload, never per-field flags). **`create-block --write` chains `emit-state --write`
+unconditionally**, so filing anything at all means emitting: check
+`mev conformance --check toolchain-freshness` immediately before, not from a reading taken earlier
+in the session, and snapshot any file another lane has dirty so the emit can be shown not to have
+altered it. "File these but do not emit" is an instruction nothing can obey. A `carryover[]` entry is authored per the
 **`write-carryover-entry`** skill — load it before proposing one, and do not restate its rules here.
 This command still **proposes only**; see the write boundary.
 
