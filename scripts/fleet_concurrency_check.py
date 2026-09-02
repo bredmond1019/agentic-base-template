@@ -415,6 +415,14 @@ def register(
                 f"{scope_desc}; no register is granted until that lease is released or goes stale"
             ),
             active=[],
+            # Name the lease that caused this refusal, in the SAME shape `status()` reports
+            # leases in -- a caller that only reads the structured payload could otherwise not
+            # say which lease blocked it (the field was left empty here, so a refusal and a
+            # quiet fleet were indistinguishable in `exclusive_leases`).
+            exclusive_leases=[
+                f"{blocking_lease.get('repo')} (exclusive, scope `{lease_scope}`, "
+                f"lane `{blocking_lease.get('lane')}`, agent `{blocking_lease.get('agent')}`)"
+            ],
         )
 
     survivors = _sweep_stale(lock_dir, ttl_seconds)
@@ -423,6 +431,28 @@ def register(
     # Idempotent: if this exact repo+agent (or, absent an agent, repo+pid) already holds a slot, re-registering succeeds without
     # consuming a second slot.
     own_path = _lock_path(lock_dir, repo, agent, pid)
+
+    # Supersede, don't duplicate: an agent-keyed register for a repo that already holds an
+    # OLD-SCHEME pid-keyed entry (agent: null) in this same category adopts that slot instead of
+    # writing a second file beside it. Without this, one lane occupies two of the category's
+    # slots -- measured as `register` leaving `probe__99999.json` AND
+    # `probe__agent-probe-agent.json` where it should leave exactly one. Scoped deliberately:
+    # only a null-agent entry is superseded (another agent's entry is another lane), and only
+    # within this category (the same repo may legitimately hold a slot in a different one).
+    if agent:
+        for entry in list(category_survivors):
+            if entry.get("repo") != repo or entry.get("agent") is not None:
+                continue
+            entry_path = entry.get("_path")
+            if not entry_path or entry_path == str(own_path):
+                continue
+            try:
+                Path(entry_path).unlink(missing_ok=True)
+            except OSError:
+                # Cannot remove it -- leave it in the count rather than double-book the slot.
+                continue
+            category_survivors.remove(entry)
+
     already_registered = any(entry.get("_path") == str(own_path) for entry in category_survivors)
     active_repos = [e["repo"] for e in category_survivors]
 

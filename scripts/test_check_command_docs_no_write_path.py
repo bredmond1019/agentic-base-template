@@ -302,6 +302,54 @@ def test_main_reflects_both_rules_against_live_root():
           f"expected 0, got {exit_code}")
 
 
+# ---------------------------------------------------------------------------
+# (g) the .claude/skills/ tree is scanned at all. Before this case SCAN_DIRS was
+#     (".claude/commands", ".agents/skills") only, so the 14 live SKILL.md files under
+#     .claude/skills/ were ungated -- a write-path instruction there was invisible.
+#     Positive control (HQ standing rule 11): the same fixture is first placed under
+#     .claude/commands/, where the checker is known to look, and must be found there too;
+#     if the control comes back empty the instrument is broken, not the tree.
+# ---------------------------------------------------------------------------
+
+def test_claude_skills_tree_is_scanned():
+    import tempfile
+
+    fixture = INSTRUCTING_FIXTURES["bare_fenced_line"]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+
+        control = root / ".claude/commands"
+        control.mkdir(parents=True)
+        (control / "control.md").write_text(fixture, encoding="utf-8")
+
+        subject = root / ".claude/skills/some-skill"
+        subject.mkdir(parents=True)
+        (subject / "SKILL.md").write_text(fixture, encoding="utf-8")
+
+        collected = {p.relative_to(root).as_posix() for p in checker.collect_files(root)}
+
+        check("positive control: .claude/commands/control.md is collected",
+              ".claude/commands/control.md" in collected,
+              f"instrument broken -- collected {sorted(collected)!r}")
+        check(".claude/skills/some-skill/SKILL.md is collected",
+              ".claude/skills/some-skill/SKILL.md" in collected,
+              f"expected the .claude/skills tree to be scanned; collected {sorted(collected)!r}")
+
+        exit_code = checker.main(["--root", str(root), "--quiet"])
+        check("main() reports a finding under .claude/skills (exit 1)", exit_code == 1,
+              f"expected 1, got {exit_code}")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        subject = root / ".claude/skills/only-skill"
+        subject.mkdir(parents=True)
+        (subject / "SKILL.md").write_text(fixture, encoding="utf-8")
+        exit_code = checker.main(["--root", str(root), "--quiet"])
+        check("a .claude/skills finding alone is enough to fail main()", exit_code == 1,
+              f"expected 1, got {exit_code} -- the tree is still unscanned")
+
+
 def main():
     test_instructing_fixtures_fail()
     test_discussion_fixture_passes()
@@ -315,6 +363,8 @@ def main():
     test_wrapper_rule_unaffected_by_emit_state_fixtures()
     test_emit_state_rule_live_root_snapshot_task1()
     test_main_reflects_both_rules_against_live_root()
+
+    test_claude_skills_tree_is_scanned()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s): {FAILURES}")

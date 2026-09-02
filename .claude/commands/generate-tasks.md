@@ -429,6 +429,28 @@ the spec-level markdown sections stay authoritative for those. **Set it for a ta
 the build** — docs-only, config-only, fixture-only — with the cheap commands that actually verify
 that task (file exists, frontmatter present, index updated).
 
+**A task that writes or edits OKF frontmatter must be told what a legal `related:` target is.** An
+engine executing the spec has no independent way to know, and the failure mode is that it invents
+one — a carryover slug, a block id, a filename, a plausible-looking id for a doc that does not
+exist — which red-gates the **whole corpus** for every concurrent lane the next time `--graph`
+gates, not just the authoring repo. So spell the constraint out in the task's `description`, and
+back it with a check in that task's `validation_commands`:
+
+- A `related:` entry is a **`doc_id`**, not a filename, a slug, a title, or a block id. The
+  `doc_id` is the `doc_id:` field in the target document's own frontmatter (defaulting to its
+  filename stem when that field is absent).
+- The target must be a **real, existing, crawled document**. Verify it before writing the edge —
+  `rg -L -n "^doc_id: <id>$" <repo>` , or confirm the file whose stem is `<id>` exists in the
+  corpus. A leading `_` in a filename excludes it from the corpus, so such a target is unresolved
+  even though the file is on disk.
+- A **cross-repo** target must be qualified `<repo>:<doc_id>` (e.g.
+  `base-template:D48-downstream-harness-sync-script`). A bare `doc_id` resolves only inside the
+  authoring repo and is treated as unresolved everywhere else.
+- When no real target exists, **omit `related:` entirely**. An empty or absent edge list is always
+  correct; an invented edge never is.
+
+See `docs/okf-frontmatter.md` for the full schema.
+
 **The two engines run an override differently ([D63](../../planning/decisions/D63-per-task-validation-commands-augment-gating.md)) — know which one the spec is targeting:**
 - **`/sdlc-flow`** still runs the override commands INSTEAD of the project-wide gating checks for
   that task, so a markdown edit stops paying for a full compile; its end review unconditionally

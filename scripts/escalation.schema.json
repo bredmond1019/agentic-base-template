@@ -73,7 +73,7 @@
     },
     "verified_at_sha": {
       "type": "string",
-      "description": "The short git SHA at write time -- dates the `verified_by` claim so a stale escalation is distinguishable from a fresh one. Not in the design doc's own field table; added because `verified_by` alone carries no date.",
+      "description": "The short git SHA at write time OF THE SUBJECT REPO -- the repo the `verified_by` command actually ran in, NOT the brain root. A claim whose command cds into a sub-repo is dated by that sub-repo's HEAD; the brain SHA says nothing about whether the checked thing moved, so comparing against it flags every cross-repo escalation permanently stale. Dates the `verified_by` claim so a stale escalation is distinguishable from a fresh one. Not in the design doc's own field table; added because `verified_by` alone carries no date.",
       "pattern": "^[0-9a-f]{7,40}$"
     },
     "durable_home": {

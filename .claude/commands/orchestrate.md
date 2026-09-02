@@ -422,7 +422,12 @@ Invoke the workflow **in this session**:
 - `sdlc-flow <spec-slug> --auto-merge [--worktree]` — prefer `--auto-merge` in a chain so an open
   PR does not block the next block. Drop it when the change deserves a look first.
 
-It returns a task ID immediately. **Now go back to step 4 for the next un-specced blocks** and keep
+It returns a task ID immediately. **Check the script path in the launch result before going on** —
+the `Workflow` tool inherits the session cwd, so an engine launched from the wrong tree silently
+runs against another repo's `.claude/workflows/`. The path must name the repo you intend to drive;
+if it does not, stop the launch rather than letting the engine proceed.
+
+**Now go back to step 4 for the next un-specced blocks** and keep
 generating specs until either the notification arrives or you are out of blocks to prepare.
 
 ### 7. On the completion notification

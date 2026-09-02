@@ -231,7 +231,7 @@ def main():
     sync_command_skills(root_skills, root_commands)
     
     # 3. Copy base-template skills to global config
-    global_skills = "~/agentic-portfolio"
+    global_skills = os.path.expanduser("~/agentic-portfolio")
     copy_to_global(base_skills, global_skills)
     
     # 4. Sub-brain tiers (core, portfolio, side, client)

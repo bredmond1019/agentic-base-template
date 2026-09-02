@@ -62,7 +62,7 @@ from pathlib import Path
 
 SKIP_DIRS = {"node_modules", ".git", "archive", "target", ".fleet-locks", "trees"}
 
-SCAN_DIRS = (".claude/commands", ".agents/skills")
+SCAN_DIRS = (".claude/commands", ".agents/skills", ".claude/skills")
 
 WRAPPER_SCRIPTS = (
     "validate_brain.sh",

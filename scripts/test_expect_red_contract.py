@@ -52,7 +52,29 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 ENGINE_PATH = REPO_ROOT / ".claude" / "workflows" / "sdlc-task.js"
+# BT.ticket.sdlc-flow-cannot-express-a-deliberate-failing-test: D68 shipped expect_red to the lean
+# engine only, so a block whose deliverable is a failing test could not be run through /sdlc-flow at
+# all. The engine half of that port has landed; this fixture's flow half had not -- the suite matched
+# `sdlc-flow` zero times while `expect-red-contract` was already a gating check, so a regression that
+# removed expect_red from sdlc-flow.js alone would have left this suite green.
+FLOW_ENGINE_PATH = REPO_ROOT / ".claude" / "workflows" / "sdlc-flow.js"
 GENERATE_TASKS_PATH = REPO_ROOT / ".claude" / "commands" / "generate-tasks.md"
+
+# The two engines carry expectRedFor() between a matched pair of sync anchors; the region must be
+# byte-identical across them (assertion F) -- the rule is about the spec, not about which engine
+# reads it, so a fix applied to one engine and not the other is the defect this pins.
+EXPECT_RED_ANCHOR_OPEN = "// <<shared:expectRedFor>>"
+EXPECT_RED_ANCHOR_CLOSE = "// <</shared:expectRedFor>>"
+
+# sdlc-flow.js has no `gatingChecks(cfg)`; its harness gating SET is computed by the
+# `if (gatingOnly)` filter inside renderCheckList(), so assertion D's "the gating-set computation
+# never consults expect_red" is checked against that function's body there.
+FLOW_CHECKLIST_FN_RE = re.compile(
+    r"function\s+renderCheckList\s*\(\s*cfg\s*,\s*\{[^}]*\}\s*=\s*\{\}\s*\)\s*\{"
+)
+FLOW_GATING_FILTER_RE = re.compile(
+    r"if\s*\(gatingOnly\)\s*checks\s*=\s*checks\.filter\("
+)
 
 # --- Assertion A: ENUMERATE_SCHEMA declares taskExpectRed {taskId, commands} ------------------
 ENUMERATE_SCHEMA_RE = re.compile(r"const\s+ENUMERATE_SCHEMA\s*=\s*\{")
@@ -103,7 +125,12 @@ class Result:
         self.failures: list[str] = []
         self.passes: list[str] = []
 
+        # Prefixed onto every label so the same assertion run against both engines reports two
+        # distinguishable results instead of one ambiguous one.
+        self.prefix: str = ""
+
     def check(self, label: str, ok: bool, detail: str = "") -> None:
+        label = f"{self.prefix}{label}"
         if ok:
             self.passes.append(label)
         else:
@@ -217,6 +244,78 @@ def assertion_e(text: str, r: Result) -> None:
             f"step 8 self-check section mentions expect_red={step8_ok}")
 
 
+def _brace_body(text: str, header_end: int) -> str | None:
+    """Body of the block whose opening `{` is the last char of the matched header."""
+    start = header_end - 1
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
+def assertion_d_flow(text: str, r: Result) -> None:
+    """Assertion D, adapted to sdlc-flow.js's shape.
+
+    The boundary claim is the same -- expect_red is scoped to a task's own validation_commands and
+    can never invert or suppress a project-wide `gates: true` harness check. What differs is where
+    the harness gating SET is computed: sdlc-task.js has `gatingChecks(cfg)`; sdlc-flow.js filters
+    inside `renderCheckList(cfg, { gatingOnly })`. That filter is this engine's equivalent of the
+    untouched function, so it is what must stay free of any expect-red mention.
+    """
+    boundary_ok = bool(BOUNDARY_PHRASE_RE.search(text))
+    fn_m = FLOW_CHECKLIST_FN_RE.search(text)
+    if not fn_m:
+        r.check("D (harness-check boundary stated; gating-set filter untouched)", False,
+                "renderCheckList(cfg, { ... }) function definition not found")
+        return
+    body = _brace_body(text, fn_m.end())
+    if body is None:
+        r.check("D (harness-check boundary stated; gating-set filter untouched)", False,
+                "could not locate renderCheckList() function body (unbalanced braces)")
+        return
+    filter_ok = bool(FLOW_GATING_FILTER_RE.search(body))
+    fn_untouched = not EXPECT_RED_MENTION_RE.search(body)
+    r.check("D (harness-check boundary stated; gating-set filter untouched)",
+            boundary_ok and filter_ok and fn_untouched,
+            f"boundary phrase present={boundary_ok}, gatingOnly filter present={filter_ok}, "
+            f"renderCheckList() body free of expect-red mentions={fn_untouched}")
+
+
+def assertion_f(task_text: str, flow_text: str, r: Result) -> None:
+    """Cross-engine parity: the anchored expectRedFor() region is byte-identical in both engines.
+
+    A/B/C/D re-run per engine catch an engine that LOST the feature; this catches the subtler
+    case -- both engines still mention expect_red, but one's implementation has drifted from the
+    other's, which is how the two halves of a ported rule silently disagree.
+    """
+    regions = {}
+    for name, text in (("sdlc-task.js", task_text), ("sdlc-flow.js", flow_text)):
+        open_i = text.find(EXPECT_RED_ANCHOR_OPEN)
+        close_i = text.find(EXPECT_RED_ANCHOR_CLOSE)
+        if open_i < 0 or close_i < 0 or close_i < open_i:
+            r.check("F (expectRedFor region byte-identical across both engines)", False,
+                    f"{name}: sync anchors {EXPECT_RED_ANCHOR_OPEN} / "
+                    f"{EXPECT_RED_ANCHOR_CLOSE} not found in order")
+            return
+        regions[name] = text[open_i:close_i + len(EXPECT_RED_ANCHOR_CLOSE)]
+    task_region, flow_region = regions["sdlc-task.js"], regions["sdlc-flow.js"]
+    # Positive control against a vacuous pass: two empty regions would compare equal.
+    if "expectRedFor" not in task_region:
+        r.check("F (expectRedFor region byte-identical across both engines)", False,
+                "the anchored region does not contain expectRedFor -- anchors bracket the "
+                "wrong subject, so equality here would prove nothing")
+        return
+    r.check("F (expectRedFor region byte-identical across both engines)",
+            task_region == flow_region,
+            f"the anchored regions differ ({len(task_region)} vs {len(flow_region)} chars) -- "
+            "expect_red has been changed in one engine and not the other")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--quiet", action="store_true", help="only print output on failure")
@@ -224,6 +323,7 @@ def main(argv: list[str] | None = None) -> int:
 
     r = Result()
 
+    r.prefix = "[sdlc-task] "
     engine_text = _read(ENGINE_PATH)
     if engine_text is None:
         r.check("engine file exists", False, f"{ENGINE_PATH} not found")
@@ -233,6 +333,21 @@ def main(argv: list[str] | None = None) -> int:
         assertion_c(engine_text, r)
         assertion_d(engine_text, r)
 
+    r.prefix = "[sdlc-flow] "
+    flow_text = _read(FLOW_ENGINE_PATH)
+    if flow_text is None:
+        r.check("engine file exists", False, f"{FLOW_ENGINE_PATH} not found")
+    else:
+        assertion_a(flow_text, r)
+        assertion_b(flow_text, r)
+        assertion_c(flow_text, r)
+        assertion_d_flow(flow_text, r)
+
+    r.prefix = "[both engines] "
+    if engine_text is not None and flow_text is not None:
+        assertion_f(engine_text, flow_text, r)
+
+    r.prefix = ""
     docs_text = _read(GENERATE_TASKS_PATH)
     if docs_text is None:
         r.check("generate-tasks.md exists", False, f"{GENERATE_TASKS_PATH} not found")

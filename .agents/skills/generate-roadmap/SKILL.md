@@ -631,7 +631,7 @@ the reason.
 ## Step 8 — Verify before handing over
 
 ```bash
-bastion validate-brain --okf-structure   # one invocation per flag; they do not compose
+bastion validate-brain --structure   # one invocation per flag; they do not compose
 bastion validate-brain --links
 bastion validate-brain --state
 ```
