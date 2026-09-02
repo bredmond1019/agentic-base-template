@@ -110,7 +110,10 @@ GATING_CHECKS_FN_RE = re.compile(r"function\s+gatingChecks\s*\(\s*cfg\s*\)\s*\{"
 EXPECT_RED_MENTION_RE = re.compile(r"expect[_-]?red", re.IGNORECASE)
 
 # --- Assertion E: generate-tasks.md documents expect_red -----------------------------------------
-OUTPUT_FORMAT_HEADING_RE = re.compile(r"^##\s*Output Format", re.IGNORECASE | re.MULTILINE)
+# Anchored on the `expect_red` field's own heading, not the much-earlier `## Output Format` section
+# heading -- that section runs long enough (field-by-field task-shape prose) that the field's actual
+# documentation can sit past any window bounded to avoid running past the next top-level heading.
+OUTPUT_FORMAT_HEADING_RE = re.compile(r"\*\*`expect_red`\*\*", re.IGNORECASE | re.MULTILINE)
 STEP8_HEADING_RE = re.compile(
     r"^\d+\.\s*\*\*Property self-check", re.IGNORECASE | re.MULTILINE
 )
@@ -229,7 +232,7 @@ def assertion_e(text: str, r: Result) -> None:
     step8_m = STEP8_HEADING_RE.search(text)
     if not output_m:
         r.check("E (generate-tasks.md documents expect_red)", False,
-                "'## Output Format' heading not found")
+                "'**`expect_red`**' field heading not found")
         return
     if not step8_m:
         r.check("E (generate-tasks.md documents expect_red)", False,

@@ -318,17 +318,6 @@ class SkillSlugRegistrationGuard(unittest.TestCase):
         "compare": "base-template's own drift check between .agents/skills and .claude "
                    "commands/workflows — a tool ABOUT the sync, not a guide to be synced",
         "compare-contents": "text-diff companion to `compare`, same reason",
-        # NOT factory-local, unlike its three neighbours here: .agents/skills/record-a-bail/
-        # SKILL.md is a fleet-general judgement guide, addressed to any lane in any repo that
-        # bails (engine-driven or hand-driven via /orchestrate), and its worked example is a
-        # cross-repo run. The previous reason on this line -- "documents this repo's own
-        # bail-recording convention; not authored for downstream distribution" -- was simply
-        # untrue of that file. It stays allowlisted only because it is unregistered pending an
-        # operator call on distributing it; that call, not this string, is what retires the row.
-        "record-a-bail": "fleet-general bail-classification guide that is not yet registered "
-                          "for distribution — allowlisted pending an operator decision on "
-                          "whether to add it to AGENT_SKILL_SLUGS, not because it is "
-                          "factory-local",
         "sync-skills": "the generator that populates .agents/skills from .claude/commands; "
                         "shipping it downstream would ship the generator, not a guide",
     }

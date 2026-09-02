@@ -351,6 +351,7 @@ def hook_files(brain_root: Path) -> list[Path]:
 # deliberately, per-slug, once a guide has actually been checked.
 AGENT_SKILL_SLUGS: list[str] = [
     "write-carryover-entry",
+    "record-a-bail",
     "sdlc-task",
     "sdlc-flow",
     # Mirrors of .claude/skills/<slug>/SKILL.md for the vendor-neutral surface. Their BODIES are
@@ -387,6 +388,7 @@ AGENT_SKILL_SLUGS: list[str] = [
 # instead of repo-relative links, because a ../../../ link is correct in exactly one of 17 repos.
 CLAUDE_SKILL_SLUGS: list[str] = [
     "write-carryover-entry",
+    "record-a-bail",
     "report-to-the-operator",
     "write-okf-markdown",
     "edit-state-json",
