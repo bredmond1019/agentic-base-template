@@ -162,6 +162,27 @@ records changes to the **factory** — it is never copied into generated project
   delegate.
 - **HQ-only.** Added to `EXCLUDED_COMMAND_FILENAMES` — it reads every repo's records from the brain
   root and has nothing to consolidate inside a leaf repo, the same reasoning as `/generate-roadmap`.
+- **Revised the same day** for capabilities that landed alongside it: HQ's `/triage-carryover`
+  (423c51e04) now owns working the carryover backlog, so this command reads its evidence and never
+  audits or disposes of an entry itself; okf-core's `Carryover.needs` (code · docs · state ·
+  operator · dedupe) joins the extraction envelope so findings route by executor rather than by
+  repo; mev's new broken-predicate, `finding_id`-typo and misfiled-operator diagnostics join the
+  consumed set; disposal now names `mev create-block --from` and the `write-carryover-entry` skill
+  instead of describing a shape. Two flag traps written in: never `--repo` (it hid 47 cross-repo
+  entries, and cross-repo recurrence is this command's whole subject) and never `--dispose`.
+  Step 0d's "treat the tools as a hypothesis" discipline adopted wholesale — an agent-vs-tool
+  disagreement is a deliverable, and a warned-about failure that cannot be reproduced means the
+  warning should come out.
+- **Corrected while writing it: predicates fail in THREE directions, not two.** Already-satisfied at
+  authoring (retires a live finding), brain-relative (never fires, reports live forever), and the
+  round-3 class — *becomes* satisfied after authoring through unrelated work while the finding stays
+  live. The third is the nastiest: well-formed, typed, genuinely passing, caught by none of the
+  broken-predicate classes. `/triage-carryover` carries it as pattern 9, seen in 3 repos.
+- **Found by checking rather than assuming:** `write-carryover-entry` — the skill that governs how
+  an entry is authored — has **zero** mentions of `needs`, verified with `clears_when` (5 hits) as a
+  positive control. okf-core shipped the field and mev consumes it; the authoring skill does not
+  know it exists, which is the `finding_id` failure repeating one field later. Not fixed here: the
+  skill has ~10 downstream copies and a fix needs a sync. Filed for the operator.
 - **Not fixed, not mine:** four gated checks are red from the commander's own DO-NOW commits
   (`9117dc3`, `e7e24b2`, `21d12f7`) — `skill-guide-sync` and `engine-docs-sync` anchors moved
   unstamped, `step2-reverify-rules` assertion D on `begin-orchestration.md`, and `escalations-schema`

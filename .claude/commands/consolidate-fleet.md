@@ -32,6 +32,12 @@ Step 4 does not.
 - **Not `/roadmap-status`** — that is a live projection of one roadmap mid-run. This is retrospective.
 - **Not `/attention`** — that triages stale items against `brain.toml` thresholds. This finds why
   they keep appearing.
+- **Not `/triage-carryover`** (HQ) — that *works* the carryover backlog: one fan-out round of
+  read-only per-repo audits, applied by a single writer, evidence written into the repo. This
+  command **reads the evidence it leaves** (`planning/carryover-triage-*/`) and asks what the rot
+  rate across rounds says about authoring. Do not audit entries here, and never dispose of one:
+  `/triage-carryover` owns that, and bans bulk `--dispose` for reasons this command must not
+  second-guess.
 
 ## Variables
 
@@ -91,7 +97,7 @@ honours it rather than adding a second one for the same files.
 |---|---|---|
 | Lane-log lines | `lane_log_watermark.py pending --roadmap <slug> --json` | The per-block narrative; the `note` field carries the real signal |
 | Run records | the `find` above | Decisions, findings, ledgers |
-| Carryover state | `mev carryover --json --allow-exec` | Clusters, suggested duplicates, single-repo `finding_id` warnings |
+| Carryover state | `mev carryover --json --allow-exec` | Clusters, suggested duplicates, single-repo `finding_id` warnings, broken-predicate diagnostics, misfiled-operator warnings |
 | Commander retros | `planning/open-work/orchestration-runs/retros/*.md` | Instrument failures; the highest-transfer material there is |
 | Commander chronology | `planning/open-work/orchestration-runs/run-log-*.md` | Drain-by-drain timeline |
 | Carryover triage | `planning/carryover-triage-*/` (per-repo files + `evidence/`) | Per-repo rot rates and their causes |
@@ -102,8 +108,21 @@ finding written to a board at 05:45Z was re-diagnosed from first principles five
 different role that never read the board.
 
 **`mev carryover` is the deriver; this command is a projector.** Consume its `clusters`,
-`suggestions` and `single_repo_finding_ids`; never reimplement similarity, ranking or staleness.
-`--allow-exec` matters — without it 38 entries sat one flag short of a verdict (ACTIONABLE 54 → 83).
+`suggestions`, `single_repo_finding_ids`, broken-predicate diagnostics and misfiled-operator
+warnings; never reimplement similarity, ranking or staleness.
+
+Three flags matter and one is a trap:
+
+- **`--allow-exec`** — without it 38 entries sit one flag short of a verdict (ACTIONABLE 54 → 83).
+- **Never `--repo`** here. It hides cross-repo-scoped entries, measured at 47 of them, and this
+  command's whole subject is what recurs *across* repos.
+- **Never `--dispose`, not even with `--would-block`.** Disposal is `/triage-carryover`'s call.
+
+**Treat the tools as a hypothesis, not an answer** — the discipline `/triage-carryover` step 0d
+establishes, applied here to your own reading. Every disagreement between what an extraction agent
+read in a record and what `mev` reports is a **first-class deliverable**, not a discrepancy to
+reconcile quietly. And if a tool failure this command warns about cannot be reproduced, **say so** —
+that means it got fixed, and the warning should come out.
 
 ## Step 3 — Extraction (Sonnet, one agent per record pair)
 
@@ -115,6 +134,7 @@ Each agent returns a strict JSON array, one object per finding:
 ```json
 {"repo": "", "roadmap": "", "block": "", "claim": "", "owner_repo": "", "severity": "P0|P1|P2|P3",
  "status": "OPEN|DONE|HELD|WONTFIX", "disposition": "carryover|block|escalation|none|unstated",
+ "needs": "code|docs|state|operator|dedupe|unstated",
  "carryover_slug": "", "evidence": "file:line or command", "provenance": "verified|assumed|relayed",
  "superseded": false, "quote": ""}
 ```
@@ -134,6 +154,11 @@ Tell every agent, verbatim, all five:
    useful precisely because every claim carried this tag.
 5. **No finding in this corpus has a `finding_id`.** Do not invent one. Minting them is Step 4's job,
    after clustering — an id assigned per-record cannot cluster anything.
+6. **`needs` answers "what kind of work closes this", not "why does it exist".** `kind` (defect ·
+   deferred · drift · env) already carries the why; `needs` (code · docs · state · operator ·
+   dedupe, okf-core's field) is what lets the analysis route findings by executor instead of by
+   repo. It is optional on disk and **most entries will not have it** — record `unstated` rather
+   than guessing, and report the coverage, because an inferred `needs` is worse than an absent one.
 
 ## Step 4 — The mechanism pass (Opus, in this session)
 
@@ -160,8 +185,12 @@ human confirms it by authoring the shared id.
 - **A young pool and a healthy pool look identical in the retire rate.** mev and engine-rs measured
   16–19% dead — low because 22 of engine-rs's 42 entries were five days old, not because the pool is
   healthy. Report retire rate only beside pool age.
-- **Predicates fail in both directions.** An already-satisfied `clears_when` retires a live finding;
-  a brain-relative one never fires and reports live forever. Count both; they are one mechanism.
+- **Predicates fail in three directions, not two.** An already-satisfied `clears_when` retires a live
+  finding at authoring; a brain-relative one never fires and reports live forever; and — the round-3
+  class, `/triage-carryover` pattern 9, seen in 3 repos — one **becomes** satisfied *after* authoring
+  through unrelated work, while the finding stays live. The third is the nastiest because the entry
+  is well-formed, typed, and genuinely passing: none of the broken-predicate classes catch it. Count
+  all three; they are one mechanism with three signs.
 - **Self-reported counts are unreliable.** A prior analysis recounted a liaison retro's "6 sends" and
   found 8. Recount every number a record asserts about itself, mechanically, and report the delta.
 
@@ -175,14 +204,20 @@ retros `index.md` (standing rule 7), and these sections:
 | Scope | Roadmaps, watermark ranges consumed (`<slug> lines N–M`), records read, records skipped and why |
 | Mechanisms | `M1..Mn`, each: claim · severity · breadth · owning repo · `finding_id` · the contributing findings with their provenance tags |
 | Instrument failures | Their own section. Every command that returned a plausible wrong answer, with the correct form. The single most transferable output a run produces |
-| Carryover health | Per-repo rot rate **beside pool age**, machine-checkable share, broken-predicate counts in both directions, retired-kind survivors |
+| Carryover health | Read from `/triage-carryover`'s evidence, never re-audited here: per-repo rot rate **beside pool age**, machine-checkable share, broken-predicate counts in all three directions, `needs` coverage, retired-kind survivors (`known_issue`/`constraint` on disk mark entries nobody has re-read since August) |
 | Self-report audit | Every number a record asserted about itself, recounted, with the delta |
 | Already known | Mechanisms matching a prior analysis — reported as another instance, with the instance count |
-| Proposed disposal | One row per mechanism → block, `carryover[]` with a typed `clears_when`, or explicitly nothing |
+| Proposed disposal | One row per mechanism → a block, a `carryover[]` entry, or explicitly nothing, each with its `needs` value so the row routes by executor |
 | What needs the operator | Only what genuinely cannot be decided by an agent |
 
 Every claim carries a provenance tag. A section that reports nothing says so as a claim
 ("no instrument failures found in 6 records") so a reader can tell it ran.
+
+**Disposal has machinery now; propose against it rather than inventing a shape.** A block is filed
+with `mev create-block --from <payload.json>` (`block.schema.json`'s 15 required fields arrive as a
+JSON payload, never per-field flags). A `carryover[]` entry is authored per the
+**`write-carryover-entry`** skill — load it before proposing one, and do not restate its rules here.
+This command still **proposes only**; see the write boundary.
 
 ## Step 6 — Per-roadmap consolidation (unless `--no-per-roadmap`)
 
