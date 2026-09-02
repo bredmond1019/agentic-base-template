@@ -3,7 +3,26 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-01
+**Last updated:** 2026-09-02
+
+---
+## 2026-09-02 — cli-surface-to-skills lane driven end-to-end: 6 blocks, no D65 records existed for any
+
+- **What:** ran `/begin-orchestration`+`/orchestrate` over the `cli-surface-to-skills` roadmap's
+  base-template lane. Closed `BT.3.I` (29 stub skill descriptions → real ones), `BT.3.B` (fixed
+  `mev lane-frontier` → `mev frontier | grep`), `BT.3.H` (new `check_cli_invocations.py` verb/flag
+  gate, motivated by BT.3.B's bug), `BT.3.C` (retired 3 drifted carryover-routing prose copies in
+  favor of the shipped `edit-state-json` skill), `BT.3.D` (deleted the stale `update-state` mirror,
+  trimmed the command), `BT.3.E` (new `epic` skill, verified against a fixture brain). Also fixed 5
+  `skill-guide-sync`/`engine-docs-sync` anchors drifted by an unrelated prior commit's insertions.
+  `BT.3.F`/`BT.3.G` remain `HELD` on two unmet operator push gates.
+- **Why:** none of the 8 blocks had a D65 block record (`planning/blocks/<id>.json`) before this
+  session — every one was authored from scratch, not decomposed from an existing spec. `/close-out`
+  ran afterward and caught a real gap (`epic` wasn't registered in `CLAUDE_SKILL_SLUGS`, so it would
+  never have synced downstream) plus a docs drift (`docs/gates.md` 8 checks behind `harness.json`,
+  filed as carryover).
+- **Refs:** `planning/roadmaps/cli-surface-to-skills/{sequence.md,roadmap.md,index.md,lane-log.jsonl}`,
+  `planning/orchestration-run/cli-surface-to-skills/{notes.md,review.md}`.
 
 ---
 ## 2026-09-01 — roadmap→registration gap: registration inputs, prefix/repo gate, wave convention
