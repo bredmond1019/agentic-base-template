@@ -72,7 +72,7 @@ This stage does not author block records or register `state.json`. That is `/pla
    be checkable by running something:
 
    ```
-   OK   `mev lane-frontier --repo engine-rs` lists EN.9.B as ready
+   OK   `mev frontier | grep engine-rs` lists EN.9.B as ready
    OK   `curl -s localhost:8080/api/runs/<id> | jq .status` returns "aborted" within 5s
    BAD  EN.9.A and EN.9.B closed
    BAD  the engine can stop
