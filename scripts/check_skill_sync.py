@@ -57,7 +57,7 @@ MANIFEST_PATH = ROOT / "scripts" / "skill_sync_manifest.json"
 # the drift check compares hashes, never the `lines` string. So edit a range HERE and re-run with
 # `--update`; hand-editing `lines` in the manifest changes nothing and will be silently overwritten.
 ANCHORS = [
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1479, 1542,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1492, 1555,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -69,11 +69,11 @@ ANCHORS = [
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 440, 488,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2651, 2678,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2672, 2699,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1553, 1675,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1566, 1688,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3095, 3130,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3108, 3143,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 
