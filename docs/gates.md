@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: The gates — every check base-template runs on itself
-description: All 52 gated checks in base-template's planning/harness.json, what each one protects, and how to run one on its own.
+description: 54 of base-template's gated checks in planning/harness.json, what each one protects, and how to run one on its own. The harness itself carries 62 as of 2026-09-02 — see the drift note below.
 doc_id: base-template-gates
 layer: [factory]
 project: base-template
@@ -12,9 +12,12 @@ related: [base-template-capabilities, harness-json, base-template-docs-index, ha
 
 # The gates
 
-What "passing" means in this repo. 52 checks, **all of them gating** — one red check fails the
-run. This page lists them; [harness-json.md](harness-json.md) is the schema and how to configure
-your own.
+What "passing" means in this repo. This page lists 54 checks, all of them gating — one red check
+fails the run. `planning/harness.json` itself carries 62 as of 2026-09-02 (`python3 -c
+"import json;print(sum(1 for c in json.load(open('planning/harness.json'))['validation']['checks']
+if c.get('gates')))"`); this page has drifted 8 checks behind and needs a full catch-up pass, tracked
+as a `carryover[]` entry rather than fixed here (out of scope for a surgical `/close-out` patch — see
+[harness-json.md](harness-json.md) for the schema and how to configure your own).
 
 ## What this page is for
 
@@ -87,6 +90,8 @@ state in every downstream repo. These are the guards.
 | `engine-parse-gate-extension-filter-tests` | The engine-parse gate's `.js`-only extension filter, extracted from live engine source. | `python3 scripts/test_engine_parse_gate_extension_filter.py` |
 | `skill-guide-sync` | Drift tripwire between the engines and their Gemini-facing `SKILL.md` replication guides. Red means "go re-verify the guide", not "the guide is wrong". | `python3 scripts/check_skill_sync.py` |
 | `skill-sync-tripwire-tests` | The skill-sync hashing/manifest logic itself. | `python3 scripts/test_check_skill_sync.py` |
+| `cli-invocations` | Detection before authoring: a `mev`/`bastion` verb or flag named in `.claude/`/`.agents/` prose that the installed binary doesn't actually define. | `python3 scripts/check_cli_invocations.py` |
+| `cli-invocations-tests` | Fixtures for the verb/flag gate, including the false-positive class its first regex draft produced. | `python3 scripts/test_check_cli_invocations.py` |
 | `engine-docs-sync` | Same tripwire for the prose pages `docs/workflows/sdlc-task.md` and `sdlc-flow.md`. | `python3 scripts/check_engine_docs_sync.py` |
 | `engine-docs-sync-tests` | The engine-docs-sync hashing/manifest logic itself. | `python3 scripts/test_check_engine_docs_sync.py` |
 | `state-write-validation-tests` | The validate-then-commit contract: an engine never commits a `state.json` it has not validated. | `python3 scripts/test_state_write_validation.py` |
