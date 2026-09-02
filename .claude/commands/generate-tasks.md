@@ -205,17 +205,24 @@ $ARGUMENTS — one of two input modes:
    - **`tasks.json` parses as valid JSON** and is a non-empty array (not wrapped in an object —
      orchestrator's `LoadTaskStateNode` expects a bare array).
    - **Every task except the final Validate task names ≥1 file** in its `files[]` (so the dependency
-     analysis and the compilable-boundary review below can see boundaries). This does **not** imply
-     the named files must be disjoint *across* tasks — two tasks are free to touch the same file
-     under the sequential engines, since there is no inter-task merge to collide. This property and
-     the compilable-boundary check below do not contradict each other: naming files is about
+     analysis and the gate-passing boundary review below can see boundaries). This does **not**
+     imply the named files must be disjoint *across* tasks — two tasks are free to touch the same
+     file under the sequential engines, since there is no inter-task merge to collide. This property
+     and the gate-passing boundary check below do not contradict each other: naming files is about
      visibility, not ownership.
-   - **Compilable task boundaries — can fail.** Check whether any single breaking public-surface
-     change (a renamed public type, a struct's changed fields, an altered trait/interface signature)
-     is split across two or more tasks such that an intermediate task would leave the repository
-     non-compiling. If it is, this check **fails**: merge those tasks into one before proceeding, per
-     the compilable task boundaries rule in step 6, then re-run this self-check — a task that cannot
-     compile on its own is never valid, under either engine.
+   - **Gate-passing task boundaries — can fail.** The bar is **the project's gating suite passing**
+     (`planning/harness.json` → `validation.checks[]` with `gates: true`) at every task boundary —
+     not merely "it compiles". Compiling is one stack's instance of that bar and never the whole of
+     it: a task can compile fine and still leave `fmt`, `clippy -D warnings`, a lint, a type-check,
+     a schema check or the test suite red, and both engines run the full gating suite after every
+     single task, so such a task fails its gate and burns a fix loop. Check whether any single
+     change is split across two or more tasks such that an intermediate task would leave any gated
+     check failing — a renamed public type, a struct's changed fields, an altered trait/interface
+     signature and every call site each one touches; a lint that only passes once the old code path
+     is deleted; a test updated in one task for behaviour that lands in the next. If so, this check
+     **fails**: merge those tasks into one before proceeding, per the compilable task boundaries
+     rule in step 6, then re-run this self-check — a task that cannot pass the gate on its own is
+     never valid, under either engine.
    - **`dependsOn` ids are all valid** — every id referenced exists as some task's `task_id` in the
      same array, and the final Validate task depends on every other task's id.
    - **Acceptance Criteria are non-empty and observable** — each criterion can be judged true/false.

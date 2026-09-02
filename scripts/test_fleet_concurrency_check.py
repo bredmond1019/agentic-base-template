@@ -288,9 +288,54 @@ class HeavyRepoDetection(unittest.TestCase):
         self.assertFalse(fcc.is_heavy_repo(str(self.repo)))
         self.assertIsNone(fcc.heavy_category(str(self.repo)))
 
-    def test_missing_harness_json_is_not_heavy(self) -> None:
-        self.assertFalse(fcc.is_heavy_repo(str(self.repo)))
-        self.assertIsNone(fcc.heavy_category(str(self.repo)))
+    def test_missing_harness_json_is_unknown_not_light(self) -> None:
+        # "no manifest" must NOT collapse into the light verdict -- that is the permissive
+        # direction (an unbounded heavy lane starts because the classifier could not find the
+        # file that would have stopped it).
+        with self.assertRaises(fcc.HeavinessUnknown):
+            fcc.heavy_category(str(self.repo))
+        with self.assertRaises(fcc.HeavinessUnknown):
+            fcc.is_heavy_repo(str(self.repo))
+
+    def test_nonexistent_repo_path_is_unknown_not_light(self) -> None:
+        missing = str(self.repo / "no-such-repo")
+        with self.assertRaises(fcc.HeavinessUnknown):
+            fcc.heavy_category(missing)
+
+    def test_unparseable_harness_json_is_unknown_not_light(self) -> None:
+        (self.repo / "planning" / "harness.json").write_text("{ not json")
+        with self.assertRaises(fcc.HeavinessUnknown):
+            fcc.heavy_category(str(self.repo))
+
+    def test_is_heavy_cli_reports_unknown_with_exit_2(self) -> None:
+        missing = str(self.repo / "no-such-repo")
+        proc = subprocess.run(
+            [sys.executable, str(_MODULE_PATH), "is-heavy", "--repo-path", missing],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 2, f"stdout={proc.stdout!r}")
+        payload = json.loads(proc.stdout)
+        self.assertTrue(payload["unknown"])
+        self.assertIsNone(payload["heavy"])
+        self.assertIsNone(payload["category"])
+
+    def test_is_heavy_cli_light_still_exits_1_and_is_not_unknown(self) -> None:
+        # The difference-observing half: a manifest that IS readable and carries no heavy signal
+        # keeps the old exit 1 / heavy:false contract, so exit 2 means only "unclassifiable".
+        self._write_harness(
+            {
+                "uiTest": {"enabled": False},
+                "validation": {"checks": [{"name": "lint", "command": "node --check foo.js"}]},
+            }
+        )
+        proc = subprocess.run(
+            [sys.executable, str(_MODULE_PATH), "is-heavy", "--repo-path", str(self.repo)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 1, f"stdout={proc.stdout!r}")
+        payload = json.loads(proc.stdout)
+        self.assertFalse(payload["unknown"])
+        self.assertIs(payload["heavy"], False)
 
     def test_cargo_build_release_is_native_build_heavy(self) -> None:
         self._write_harness(
@@ -745,10 +790,11 @@ class ExclusiveLeaseMatrix(unittest.TestCase):
         # case, which now requires `scope: fleet` to keep blocking a DIFFERENT repo's register --
         # a `scope: repo` (or scope-absent) lease on `brain` no longer blocks `engine-rs`.
         nonexistent_repo_path = str(Path(self._tmp.name) / "brain-repo-with-no-harness-json")
-        self.assertIsNone(
-            fcc.heavy_category(nonexistent_repo_path),
-            "test setup assumption broken: the leasing repo must have NO heavy signal",
-        )
+        with self.assertRaises(
+            fcc.HeavinessUnknown,
+            msg="test setup assumption broken: the leasing repo must have NO classifiable manifest",
+        ):
+            fcc.heavy_category(nonexistent_repo_path)
         self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a", scope="fleet")
 
         result = self._run(
@@ -1184,6 +1230,207 @@ class AgentKeyedPoolLeak(unittest.TestCase):
             f"a pre-existing old-scheme entry must still be visible/counted, not silently "
             f"dropped: {stat_out}",
         )
+
+
+class AgentKeyedRegisterSupersedesPidKeyedEntry(unittest.TestCase):
+    """An agent-keyed `register` must ADOPT the repo's pre-existing pid-keyed (agent: null)
+    entry in the same category, not write a second file beside it.
+
+    Reproduced 2026-09-01 against the unmodified script: seed `probe__99999.json`
+    (`agent: null`, fresh `started_at` so the TTL sweep leaves it), then
+    `register --repo probe --category native-build --agent probe-agent` exits 0 and the lock
+    dir holds TWO files -- one lane occupying two of the category's four slots.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.lock_dir = Path(self._tmp.name) / "locks"
+        self.lock_dir.mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _seed_pid_keyed(self, repo: str, pid: int, category: str) -> Path:
+        path = self.lock_dir / f"{repo}__{pid}.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "repo": repo,
+                    "pid": pid,
+                    "pid_source": "self",
+                    "agent": None,
+                    "category": category,
+                    "started_at": time.time(),
+                },
+                indent=2,
+            )
+        )
+        return path
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(_MODULE_PATH), *args, "--lock-dir", str(self.lock_dir)],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_agent_keyed_register_supersedes_the_pid_keyed_entry(self) -> None:
+        seeded = self._seed_pid_keyed("probe", 99999, "native-build")
+
+        reg = self._run(
+            "register", "--repo", "probe", "--category", "native-build",
+            "--agent", "probe-agent",
+        )
+        self.assertEqual(reg.returncode, 0, f"register refused: {reg.stdout!r}")
+
+        entries = sorted(p.name for p in self.lock_dir.glob("*.json"))
+        self.assertEqual(
+            entries,
+            ["probe__agent-probe-agent.json"],
+            f"the agent-keyed entry must SUPERSEDE the pid-keyed one, leaving exactly one "
+            f"file; got {entries} -- one lane holding two of the category's slots",
+        )
+        self.assertFalse(seeded.exists())
+
+    def test_superseding_does_not_double_count_capacity(self) -> None:
+        # Positive control that the seeded entry is real and countable: with no supersede it
+        # would occupy a slot of its own. Four native-build slots; seed one repo pid-keyed,
+        # then register the SAME repo agent-keyed plus three others -- all four must fit.
+        self._seed_pid_keyed("probe", 99999, "native-build")
+
+        first = self._run(
+            "register", "--repo", "probe", "--category", "native-build",
+            "--agent", "probe-agent",
+        )
+        self.assertEqual(first.returncode, 0, f"register refused: {first.stdout!r}")
+
+        for name in ("r2", "r3", "r4"):
+            res = self._run(
+                "register", "--repo", name, "--category", "native-build", "--agent", name,
+            )
+            self.assertEqual(
+                res.returncode, 0,
+                f"{name} refused -- the superseded pid-keyed entry is still consuming a "
+                f"slot: {res.stdout!r}",
+            )
+
+        fifth = self._run(
+            "register", "--repo", "r5", "--category", "native-build", "--agent", "r5",
+        )
+        self.assertEqual(
+            fifth.returncode, 3,
+            f"positive control: the 5th native-build lane must still be refused, got "
+            f"{fifth.returncode} / {fifth.stdout!r}",
+        )
+
+    def test_a_different_agents_entry_is_never_superseded(self) -> None:
+        other = self.lock_dir / "probe__agent-other.json"
+        other.write_text(
+            json.dumps(
+                {
+                    "repo": "probe",
+                    "pid": 4242,
+                    "pid_source": "self",
+                    "agent": "other",
+                    "category": "native-build",
+                    "started_at": time.time(),
+                },
+                indent=2,
+            )
+        )
+
+        reg = self._run(
+            "register", "--repo", "probe", "--category", "native-build",
+            "--agent", "probe-agent",
+        )
+        self.assertEqual(reg.returncode, 0, f"register refused: {reg.stdout!r}")
+        self.assertTrue(
+            other.exists(),
+            "another AGENT's entry for the same repo is another lane -- it must survive",
+        )
+
+    def test_pid_keyed_entry_in_another_category_is_left_alone(self) -> None:
+        seeded = self._seed_pid_keyed("probe", 99999, "browser-automation")
+
+        reg = self._run(
+            "register", "--repo", "probe", "--category", "native-build",
+            "--agent", "probe-agent",
+        )
+        self.assertEqual(reg.returncode, 0, f"register refused: {reg.stdout!r}")
+        self.assertTrue(
+            seeded.exists(),
+            "the same repo may legitimately hold a slot in a different category",
+        )
+
+
+class ExclusiveRefusalNamesTheLease(unittest.TestCase):
+    """The exclusive-lease refusal must report the blocking lease in `exclusive_leases`.
+
+    Pre-fix, `register()` returned that refusal with `exclusive_leases: []`, so a caller reading
+    only the structured payload could not say WHICH lease blocked it -- a refusal and a quiet
+    fleet looked identical in that field.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.lock_dir = Path(self._tmp.name) / "locks"
+        self.leases_dir = self.lock_dir / "leases"
+        self.leases_dir.mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _write_lease(self, repo: str, lane: str, agent: str, scope: str) -> None:
+        (self.leases_dir / f"lease-{lane}.json").write_text(
+            json.dumps(
+                {
+                    "repo": repo,
+                    "lane": lane,
+                    "agent": agent,
+                    "acquired_at": datetime.now(timezone.utc).isoformat(),
+                    "kind": "exclusive",
+                    "scope": scope,
+                }
+            )
+        )
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(_MODULE_PATH), *args, "--lock-dir", str(self.lock_dir)],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_refusal_payload_names_the_blocking_lease(self) -> None:
+        self._write_lease(repo="brain", lane="quiesce-lane", agent="agent-a", scope="fleet")
+
+        res = self._run("register", "--repo", "base-template", "--category", "native-build")
+        self.assertEqual(res.returncode, 3, f"expected refusal, got {res.stdout!r}")
+
+        payload = json.loads(res.stdout)
+        leases = payload["exclusive_leases"]
+        self.assertEqual(len(leases), 1, f"expected exactly the blocking lease, got {leases!r}")
+        self.assertIn("brain", leases[0])
+        self.assertIn("quiesce-lane", leases[0])
+        self.assertIn("agent-a", leases[0])
+        self.assertIn("fleet", leases[0])
+
+    def test_repo_scoped_refusal_reports_its_scope(self) -> None:
+        self._write_lease(repo="probe", lane="probe-lane", agent="agent-b", scope="repo")
+
+        res = self._run("register", "--repo", "probe", "--category", "native-build")
+        self.assertEqual(res.returncode, 3, f"expected refusal, got {res.stdout!r}")
+
+        leases = json.loads(res.stdout)["exclusive_leases"]
+        self.assertEqual(len(leases), 1, f"got {leases!r}")
+        self.assertIn("scope `repo`", leases[0])
+
+    def test_a_granted_register_reports_no_blocking_lease(self) -> None:
+        # Positive control for the negative: the field is empty when, and only when, nothing
+        # blocked the call.
+        res = self._run("register", "--repo", "probe", "--category", "native-build")
+        self.assertEqual(res.returncode, 0, f"expected grant, got {res.stdout!r}")
+        self.assertEqual(json.loads(res.stdout)["exclusive_leases"], [])
 
 
 if __name__ == "__main__":

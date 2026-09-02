@@ -350,6 +350,7 @@ def hook_files(brain_root: Path) -> list[Path]:
 # sdlc-task/sdlc-flow were in the 2026-08 audit) is never accidentally propagated - widen this
 # deliberately, per-slug, once a guide has actually been checked.
 AGENT_SKILL_SLUGS: list[str] = [
+    "write-carryover-entry",
     "sdlc-task",
     "sdlc-flow",
     # Mirrors of .claude/skills/<slug>/SKILL.md for the vendor-neutral surface. Their BODIES are
@@ -385,6 +386,7 @@ AGENT_SKILL_SLUGS: list[str] = [
 # Both are deliberately path-portable: they carry a "paths are relative to the brain root" banner
 # instead of repo-relative links, because a ../../../ link is correct in exactly one of 17 repos.
 CLAUDE_SKILL_SLUGS: list[str] = [
+    "write-carryover-entry",
     "report-to-the-operator",
     "write-okf-markdown",
     "edit-state-json",

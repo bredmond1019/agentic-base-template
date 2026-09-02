@@ -17,9 +17,11 @@ BUDGET CROSS-CHECK: when a record authors `budget.heavy`, this shells out to
 `fleet_concurrency_check.py is-heavy --repo-path <ABSOLUTE PATH>` for the lane's top-level `repo`
 and fails if the authored value disagrees. The repo slug is resolved to a path via the brain
 root's `brain.toml` `[[repos]]` table (slug -> repo_path), found by walking upward from the lane
-file. `is-heavy` reports `heavy:false` indistinguishably from "repo not found" when given a path
-that does not resolve -- so this script checks the resolved path exists BEFORE shelling out, and
-reports a nonexistent path as a named ERROR, never silently as `heavy:false`
+file. This script checks the resolved path exists BEFORE shelling out, and reports a nonexistent path
+as a named ERROR, never silently as `heavy:false`. `is-heavy` itself now distinguishes the third
+answer -- it exits 2 with `"heavy": null, "unknown": true` when there is no readable manifest to
+classify -- and this script reports that as a WARNING ("could not be cross-checked"), never
+silently as agreement with an authored `heavy: false`
 (carryover `is-heavy-answers-light-for-a-nonexistent-repo-path`).
 
 Usage:
@@ -168,19 +170,27 @@ def repo_prefixes_for(start) -> dict:
     return _REPO_PREFIX_CACHE[key]
 
 
-def cross_check_heavy(lane_repo, authored_heavy: bool, repo_paths: dict) -> str | None:
-    """Return an error string if `authored_heavy` disagrees with the concurrency script's
-    verdict for `lane_repo`, or if `lane_repo` cannot be resolved to a real path. None if OK."""
+def cross_check_heavy(lane_repo, authored_heavy: bool, repo_paths: dict):
+    """Cross-check an authored `budget.heavy` against fleet_concurrency_check.py.
+
+    Returns `(error, warning)`, either of which may be None:
+      - error   -- the authored value DISAGREES with a verdict we actually computed, or the repo
+                   cannot be resolved to a real path at all.
+      - warning -- the verdict could not be computed (`is-heavy` reports `unknown`: no readable
+                   planning/harness.json). That is not the same as disagreeing, and it is not the
+                   lane record's fault, so it is surfaced rather than gated on.
+    """
     if not isinstance(lane_repo, str) or not lane_repo:
-        return "budget.heavy is authored but lane `repo` is missing/invalid, cannot cross-check"
+        return ("budget.heavy is authored but lane `repo` is missing/invalid, cannot cross-check",
+                None)
 
     repo_path = repo_paths.get(lane_repo)
     if repo_path is None:
         return (f"budget.heavy cross-check failed: repo `{lane_repo}` is not registered in "
-                f"brain.toml's [[repos]] table, cannot resolve a --repo-path")
+                f"brain.toml's [[repos]] table, cannot resolve a --repo-path", None)
     if not Path(repo_path).is_dir():
         return (f"budget.heavy cross-check failed: resolved repo path for `{lane_repo}` does "
-                f"not exist: {repo_path}")
+                f"not exist: {repo_path}", None)
 
     abs_path = str(Path(repo_path).resolve())
     try:
@@ -189,19 +199,29 @@ def cross_check_heavy(lane_repo, authored_heavy: bool, repo_paths: dict) -> str 
             capture_output=True, text=True, timeout=30,
         )
     except Exception as exc:                       # noqa: BLE001 - report, never raise
-        return f"budget.heavy cross-check errored shelling out to fleet_concurrency_check.py: {exc}"
+        return (f"budget.heavy cross-check errored shelling out to fleet_concurrency_check.py: "
+                f"{exc}", None)
 
     try:
         result = json.loads(proc.stdout)
     except (json.JSONDecodeError, ValueError):
         return (f"budget.heavy cross-check: could not parse fleet_concurrency_check.py output: "
-                f"{proc.stdout!r}")
+                f"{proc.stdout!r}", None)
+
+    if result.get("unknown"):
+        # is-heavy could not read a manifest at all (exit 2). Unknown is not light -- so this must
+        # NOT be compared against the authored value as if it were `heavy: false`. It is also not
+        # the lane record's defect, so it warns rather than fails.
+        return (None,
+                f"budget.heavy={authored_heavy} could not be cross-checked: "
+                f"fleet_concurrency_check.py cannot classify repo `{lane_repo}` at {abs_path} "
+                f"({result.get('error') or 'no readable planning/harness.json'})")
 
     actual_heavy = bool(result.get("heavy"))
     if actual_heavy != authored_heavy:
         return (f"budget.heavy={authored_heavy} disagrees with fleet_concurrency_check.py "
-                f"is-heavy (heavy={actual_heavy}) for repo `{lane_repo}` at {abs_path}")
-    return None
+                f"is-heavy (heavy={actual_heavy}) for repo `{lane_repo}` at {abs_path}", None)
+    return (None, None)
 
 
 # --- record validation --------------------------------------------------------------------
@@ -209,6 +229,7 @@ def cross_check_heavy(lane_repo, authored_heavy: bool, repo_paths: dict) -> str 
 def check(path, repo_paths: dict | None = None, repo_prefixes: dict | None = None):
     """Return (errors, warnings) for one lane record file."""
     problems = []
+    warnings = []
     if repo_prefixes is None:
         repo_prefixes = repo_prefixes_for(path)
 
@@ -293,9 +314,11 @@ def check(path, repo_paths: dict | None = None, repo_prefixes: dict | None = Non
                 if not isinstance(heavy, bool):
                     problems.append("budget.heavy must be a boolean")
                 else:
-                    err = cross_check_heavy(record.get("repo"), heavy, repo_paths or {})
+                    err, warn = cross_check_heavy(record.get("repo"), heavy, repo_paths or {})
                     if err:
                         problems.append(err)
+                    if warn:
+                        warnings.append(warn)
 
             not_with = budget.get("not_with")
             if not_with is not None and not isinstance(not_with, list):
@@ -315,7 +338,7 @@ def check(path, repo_paths: dict | None = None, repo_prefixes: dict | None = Non
         if v is not None and not isinstance(v, list):
             problems.append(f"`{field}` must be an array")
 
-    return problems, []
+    return problems, warnings
 
 
 # --- discovery ----------------------------------------------------------------------------

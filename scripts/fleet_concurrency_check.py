@@ -53,6 +53,10 @@ Design (recorded in full in planning/decisions/D61-fleet-concurrency-enforcement
   build`, `npm run build`, ...), `"native-build"` if a check names a native compile/link command
   (`cargo build --release`), or `None` if neither. Capacity (`MAX_LANES_BY_CATEGORY`) is counted
   per category — a native-build lane never competes with a browser-automation lane for a slot.
+  If there is no readable manifest at all (bad `--repo-path`, missing/corrupt `harness.json`),
+  the answer is UNKNOWN, not light: `heavy_category` raises `HeavinessUnknown` and the `is-heavy`
+  CLI exits 2 with `"heavy": null, "unknown": true`. Exit 1 still means "read a manifest, it is
+  light".
 
 CLI:
   python3 scripts/fleet_concurrency_check.py register --repo <name> --agent <id> [--pid PID] [--ttl SECONDS] [--lock-dir DIR]
@@ -597,20 +601,39 @@ def acquire_exclusive(
     return LockResult(allowed=True)
 
 
+class HeavinessUnknown(Exception):
+    """The target repo's heaviness could not be determined at all.
+
+    Raised when the repo path does not exist, or its `planning/harness.json` is missing,
+    unreadable, or unparseable. This is deliberately NOT the same answer as `None`: `None` means
+    "a manifest was read and it carries no heavy signal" (genuinely light), whereas this means
+    "no manifest was read". Returning `None` for both made a typo'd or nonexistent `--repo-path`
+    report as light, which is the permissive direction — an unbounded heavy lane starting because
+    the classifier could not find the file that would have stopped it
+    (carryover `is-heavy-answers-light-for-a-nonexistent-repo-path`).
+    """
+
+
 def heavy_category(repo_path: str) -> Optional[str]:
     """The heavy-lane category for `repo_path`'s planning/harness.json, or None if light.
 
     `uiTest.enabled` and any browser-automation signal classify as "browser-automation" (checked
     first — it is the more resource-dangerous category, so a repo matching both is not
     under-counted). Otherwise a native-build signal classifies as "native-build". Neither -> None.
+
+    Raises HeavinessUnknown if there is no readable manifest to classify — never returns None for
+    that case, because "unknown" and "light" must not be the same answer.
     """
     harness_path = Path(repo_path) / "planning" / "harness.json"
     if not harness_path.exists():
-        return None
+        raise HeavinessUnknown(
+            f"no manifest to classify: {harness_path} does not exist"
+            + ("" if Path(repo_path).exists() else f" (repo path {repo_path} does not exist either)")
+        )
     try:
         data = json.loads(harness_path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HeavinessUnknown(f"could not read/parse {harness_path}: {exc}") from exc
 
     if data.get("uiTest", {}).get("enabled"):
         return "browser-automation"
@@ -629,7 +652,11 @@ def heavy_category(repo_path: str) -> Optional[str]:
 
 def is_heavy_repo(repo_path: str) -> bool:
     """True if the target repo's planning/harness.json indicates any heavy gate (either
-    category). Kept as a boolean convenience wrapper around heavy_category()."""
+    category). Kept as a boolean convenience wrapper around heavy_category().
+
+    Propagates HeavinessUnknown — a caller that wants a bool for an unclassifiable repo must say
+    which way it wants to be wrong, in its own code.
+    """
     return heavy_category(repo_path) is not None
 
 
@@ -722,10 +749,32 @@ def main(argv: Optional[list] = None) -> int:
         return 0
 
     if args.action == "is-heavy":
-        category = heavy_category(args.repo_path)
+        # Three outcomes, three exit codes: 0 heavy, 1 light, 2 unknown. A caller that treats
+        # any non-zero exit as "light" now gets `"heavy": null` in the JSON to catch it on.
+        try:
+            category = heavy_category(args.repo_path)
+        except HeavinessUnknown as exc:
+            print(
+                json.dumps(
+                    {
+                        "repo_path": args.repo_path,
+                        "heavy": None,
+                        "category": None,
+                        "unknown": True,
+                        "error": str(exc),
+                    },
+                    indent=2,
+                )
+            )
+            return 2
         print(
             json.dumps(
-                {"repo_path": args.repo_path, "heavy": category is not None, "category": category},
+                {
+                    "repo_path": args.repo_path,
+                    "heavy": category is not None,
+                    "category": category,
+                    "unknown": False,
+                },
                 indent=2,
             )
         )
