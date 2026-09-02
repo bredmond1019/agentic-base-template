@@ -26,6 +26,13 @@ $ARGUMENTS — optional flags, space-separated:
 - `--commit` — after applying, commit each repo's own half and make one brain commit for all the
   `planning/.template-version` stamps. **Requires `--apply`**; passing it alone is a usage error
   and exits 2. See step 5.
+- `--commit-pending` — widen `--commit`'s pathspec to every base-template-**owned** path the repo
+  has dirty, not only what this run wrote. **Requires `--commit`.** The catch-up case: an earlier
+  `--apply` that was never committed leaves files that are current on disk and unrecorded in git,
+  and they never appear in a dry run because their content already matches. Ownership is computed
+  from the same source sets `--apply` writes from, so a repo's own file is never swept in; an owned
+  path whose content *differs* from base-template is **withheld and reported**, never staged under a
+  "sync base-template" subject. Measured 2026-09-02: 103 such paths across 18 repos.
 
 ## Instructions
 

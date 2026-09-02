@@ -102,6 +102,25 @@ records changes to the **factory** — it is never copied into generated project
   harness edits therefore ships those edits under a provenance hash that does not contain them.
   Hit for real while smoke-testing this change against `bella`; corrected by committing first and
   re-syncing. Commit base-template before you sync.
+- **`--commit-pending` (same day, from the flag's first real limitation).** `--commit` can only
+  ever stage what its own run wrote — correct, and the rule that stops it sweeping a concurrent
+  session's work — but it means a repo already carrying uncommitted harness files stays that way,
+  one file deeper every run. Measured on the `needs`-field sync: **103 base-template-owned paths
+  uncommitted across 18 repos**, six per repo (`README.md`, `begin-orchestration.md`,
+  `consolidate-run.md`, `orchestrate.md`, and an untracked `record-a-bail/` in both skill mirrors),
+  written by an earlier `--apply` that was never committed. They never surface in a dry run because
+  their content already MATCHES base-template: current on disk, unrecorded in git.
+  - **Ownership is computed from the same four source-set functions `apply_repo()` writes from**, so
+    it cannot drift from what the sync ships, and a repo's own dirty file is invisible to the flag.
+  - **A dirty owned path whose content DIFFERS is withheld and reported, never staged** — that is a
+    local edit, not a pending sync, and committing it under a "sync base-template" subject buries a
+    real change behind a misleading message.
+  - `--commit-pending` requires `--commit` (exit 2), rather than implying it: "commit more than you
+    asked" is the wrong direction to guess in a command that writes to nineteen repos.
+  - **`git status --porcelain` reports an untracked DIRECTORY as one entry with a trailing slash**,
+    so a bare read misses every file inside it — exactly the shape the real backlog took, with an
+    untracked `.claude/skills/record-a-bail/` in 17 repos. `-uall` expands them; there is a test.
+  - 39 -> 46 tests.
 - **`--commit` found its own bug on its first live run**, which is the point of shipping it
   behind a real run: `rag-engine-rs` gitignores `.claude/` by design (D8), and `git add` on a path
   under an ignored *directory* fails and aborts the whole add — reported as `COMMIT FAILED` and

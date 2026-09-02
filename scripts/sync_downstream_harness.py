@@ -66,6 +66,7 @@ Usage:
   python3 scripts/sync_downstream_harness.py --apply              # write changes, all repos
   python3 scripts/sync_downstream_harness.py --repo bastion --apply --message "D44-D47 tasks.json fix"
   python3 scripts/sync_downstream_harness.py --apply --commit --message "D83 shared library"
+  python3 scripts/sync_downstream_harness.py --apply --commit --commit-pending --message "catch-up"
 
 --commit (requires --apply) makes N+1 commits: one per repo for its own .claude/.agents/scripts/
 hooks half, then ONE brain commit carrying every planning/.template-version stamp. That split is
@@ -73,6 +74,15 @@ not a style choice — each repo's planning/ is a symlink into the brain's vault
 halves together fails with "beyond a symbolic link" AND ABORTS THE WHOLE `git add`, committing
 nothing while appearing to run. Every pathspec is explicit and derived from what this run wrote;
 this script never runs `git add -A`.
+
+--commit-pending (requires --commit) widens that pathspec to every base-template-OWNED path the
+repo has dirty, not only what this run wrote -- the catch-up case. An earlier --apply that was
+never committed leaves files that are current on disk and unrecorded in git, and they never show in
+a dry run because their content already matches; without this flag each later run commits only its
+own output and the limbo deepens. Ownership is computed from the same four source-set functions
+apply_repo() writes from, so a repo's own files can never be swept in, and an owned path whose
+content DIFFERS from base-template is withheld and reported rather than buried under a "sync
+base-template" subject.
 
 Run from anywhere inside the brain (walks up to find brain.toml); intended to be run from
 base-template's own root, since that's where the source-of-truth .claude/ lives.
@@ -630,8 +640,12 @@ class CommitOutcome:
     """What --commit did for one repo. `sha` is None when nothing needed committing."""
 
     def __init__(self, slug: str, sha: str | None = None, error: str | None = None,
-                 skipped: str | None = None, count: int = 0):
+                 skipped: str | None = None, count: int = 0,
+                 withheld: list | None = None, pending: int = 0):
         self.slug, self.sha, self.error, self.skipped, self.count = slug, sha, error, skipped, count
+        # Owned paths deliberately NOT staged because they diverge from base-template's source.
+        self.withheld = withheld or []
+        self.pending = pending  # how many pending-owned paths this commit picked up
 
 
 def git_toplevel(path: Path) -> Path | None:
@@ -659,7 +673,88 @@ def repo_commit_paths(report: RepoReport) -> list[str]:
     return sorted(set(paths))
 
 
-def commit_repo_half(report: RepoReport, brain_root: Path, message: str) -> CommitOutcome:
+
+def owned_dest_paths(base_template_root: Path, brain_root: Path,
+                     target: RepoTarget) -> dict[str, Path]:
+    """Every repo-relative path base-template OWNS in `target`, mapped to its source file.
+
+    Computed from the SAME four source-set functions apply_repo() writes from, so ownership can
+    never drift from what the sync actually ships. This is the whole safety property of
+    --commit-pending: a path not in this map is the repo's own file and is never staged, however
+    dirty it is.
+    """
+    owned: dict[str, Path] = {}
+    for src in harness_files(base_template_root, target.engines_only):
+        if src.is_relative_to(base_template_root / "scripts"):
+            rel = src.relative_to(base_template_root / "scripts")
+            owned[f"scripts/{rel}"] = src
+        else:
+            rel = src.relative_to(base_template_root / ".claude")
+            owned[f".claude/{rel}"] = src
+    for src in agent_skill_files(base_template_root):
+        owned[f".agents/{src.relative_to(base_template_root / '.agents')}"] = src
+    for src in hook_files(brain_root):
+        owned[f"hooks/{src.relative_to(brain_root / 'hooks')}"] = src
+    return owned
+
+
+def dirty_paths(repo_path: Path) -> list[str]:
+    """Repo-relative paths git reports as changed or untracked, files only.
+
+    `git status --porcelain` reports an untracked DIRECTORY as one entry with a trailing slash
+    (`?? .claude/skills/record-a-bail/`), so a bare read misses every file inside it -- which is
+    exactly the shape the pending backlog takes. `-uall` expands those to individual files.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(repo_path), "status", "--porcelain", "-uall"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return []
+    out = []
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].strip().strip('"')
+        if " -> " in path:                          # a rename; take the destination
+            path = path.split(" -> ", 1)[1]
+        out.append(path)
+    return out
+
+
+def pending_owned(base_template_root: Path, brain_root: Path, report: RepoReport,
+                  already: set[str]) -> tuple[list[str], list[tuple[str, str]]]:
+    """Split this repo's dirty base-template-owned paths into (committable, withheld).
+
+    A path is committable only when its on-disk bytes MATCH base-template's current source. A
+    dirty owned path whose content DIFFERS is a local modification, not a pending sync, and
+    committing it under a "sync base-template" message would bury a real local change behind a
+    misleading subject. Those are withheld and reported, never staged.
+
+    `already` is the set of paths this run is committing anyway (its own diffs plus the manifest),
+    excluded so they are not counted twice.
+    """
+    owned = owned_dest_paths(base_template_root, brain_root, report.target)
+    committable, withheld = [], []
+    for rel in dirty_paths(report.target.repo_path):
+        if rel in already or rel not in owned:
+            continue
+        dst = report.target.repo_path / rel
+        src = owned[rel]
+        if not dst.is_file():
+            # Owned, tracked, and deleted locally -- committing the deletion is correct.
+            committable.append(rel)
+        elif hash_file(dst) == hash_file(src):
+            committable.append(rel)
+        else:
+            withheld.append((rel, "differs from base-template source — a local edit, not a "
+                                  "pending sync"))
+    return sorted(committable), sorted(withheld)
+
+
+def commit_repo_half(report: RepoReport, brain_root: Path, message: str,
+                     base_template_root: Path | None = None,
+                     commit_pending: bool = False) -> CommitOutcome:
     """Stage and commit this repo's own half. No-op (sha=None) when the repo is the brain itself
     -- the brain's harness files are committed by commit_brain_half() alongside the stamps, in
     ONE commit, rather than being split across two commits of the same index."""
@@ -672,6 +767,17 @@ def commit_repo_half(report: RepoReport, brain_root: Path, message: str) -> Comm
         return CommitOutcome(slug, skipped="brain-owned; folded into the brain commit")
 
     paths = repo_commit_paths(report)
+
+    # --commit-pending widens the pathspec to every base-template-owned path this repo has dirty,
+    # not only what THIS run wrote. Measured 2026-09-02: 103 such paths sat uncommitted across 18
+    # repos -- six per repo, written by an earlier --apply that was never committed. They never
+    # appear in a dry run, because their content already MATCHES base-template; they are current on
+    # disk and merely unrecorded in git. Without this flag the sync can only ever commit its own
+    # output, so a repo already in limbo stays in limbo, one file deeper every run.
+    withheld: list[tuple[str, str]] = []
+    if commit_pending and base_template_root is not None:
+        extra, withheld = pending_owned(base_template_root, brain_root, report, set(paths))
+        paths = sorted(set(paths) | set(extra))
 
     # Only UNTRACKED paths need `git add`; a tracked modification (or deletion) is committed by
     # `git commit -o` directly. That distinction is what makes portfolio-tier repos work.
@@ -707,7 +813,7 @@ def commit_repo_half(report: RepoReport, brain_root: Path, message: str) -> Comm
     status = subprocess.run(["git", "-C", str(repo_path), "status", "--porcelain", "--", *paths],
                             capture_output=True, text=True)
     if not status.stdout.strip():
-        return CommitOutcome(slug)  # nothing actually differed; not an error
+        return CommitOutcome(slug, withheld=withheld)  # nothing differed; not an error
 
     commit = subprocess.run(
         ["git", "-C", str(repo_path), "commit", "-q", "-o", *paths, "-m", repo_commit_message(message, paths)],
@@ -717,7 +823,8 @@ def commit_repo_half(report: RepoReport, brain_root: Path, message: str) -> Comm
         return CommitOutcome(slug, error=f"git commit failed: {(commit.stderr or commit.stdout).strip()}")
     sha = subprocess.run(["git", "-C", str(repo_path), "rev-parse", "--short", "HEAD"],
                          capture_output=True, text=True).stdout.strip()
-    return CommitOutcome(slug, sha=sha, count=len(paths))
+    return CommitOutcome(slug, sha=sha, count=len(paths), withheld=withheld,
+                         pending=len(paths) - len(repo_commit_paths(report)))
 
 
 def path_is_tracked(repo_path: Path, rel_path: str) -> bool:
@@ -784,6 +891,7 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true", help="Write changes. Default is dry-run (report only).")
     parser.add_argument("--message", default="harness pull", help="Description recorded in planning/.template-version's synced: line, and used as the commit subject under --commit.")
     parser.add_argument("--commit", action="store_true", help="After applying, commit each repo's own half and one brain commit for the .template-version stamps. Requires --apply.")
+    parser.add_argument("--commit-pending", action="store_true", help="Widen --commit's pathspec to every base-template-owned path the repo has dirty, not only this run's writes. Requires --commit. A dirty owned path whose content DIFFERS from base-template is withheld and reported, never staged.")
     args = parser.parse_args()
 
     # --commit without --apply is a usage error, never a silent implication of --apply: a dry run
@@ -791,6 +899,13 @@ def main() -> None:
     # invocation into a 19-repo write is the opposite of what a dry run is for.
     if args.commit and not args.apply:
         print("ERROR: --commit requires --apply (a dry run writes nothing to commit).", file=sys.stderr)
+        sys.exit(2)
+    # --commit-pending widens --commit's pathspec; on its own it has no pathspec to widen. Made a
+    # usage error rather than implying --commit, because "commit more than you asked" is the wrong
+    # direction to guess in a command that writes to nineteen repos.
+    if args.commit_pending and not args.commit:
+        print("ERROR: --commit-pending requires --commit (it widens that flag's pathspec).",
+              file=sys.stderr)
         sys.exit(2)
 
     script_dir = Path(__file__).resolve().parent
@@ -865,14 +980,20 @@ def main() -> None:
                 stamp = template_version_vault_path(target, brain_root)
                 if stamp:
                     stamp_paths.append(stamp)
-                outcome = commit_repo_half(report, brain_root, args.message)
+                outcome = commit_repo_half(report, brain_root, args.message,
+                                           base_template_root=base_template_root,
+                                           commit_pending=args.commit_pending)
                 if outcome.skipped == "brain-owned; folded into the brain commit":
                     brain_owned_paths.extend(repo_commit_paths(report))
                 commit_outcomes.append(outcome)
                 if outcome.error:
                     print(f"    -> COMMIT FAILED: {outcome.error}")
                 elif outcome.sha:
-                    print(f"    -> committed {outcome.count} path(s) in {target.slug} ({outcome.sha})")
+                    extra = f", {outcome.pending} pending" if outcome.pending else ""
+                    print(f"    -> committed {outcome.count} path(s){extra} in {target.slug} "
+                          f"({outcome.sha})")
+                    for rel, why in outcome.withheld:
+                        print(f"       WITHHELD {rel} — {why}")
                 elif outcome.skipped:
                     print(f"    -> not committed here: {outcome.skipped}")
                     if "gitignored" in outcome.skipped:
@@ -899,7 +1020,16 @@ def main() -> None:
         if args.commit:
             ok = [o for o in commit_outcomes if o.sha]
             failed = [o for o in commit_outcomes if o.error]
-            print(f"Committed in {len(ok)} repo(s)" + (f"; {len(failed)} FAILED" if failed else "."))
+            pend = sum(o.pending for o in commit_outcomes)
+            held = [(o.slug, r, w) for o in commit_outcomes for r, w in o.withheld]
+            print(f"Committed in {len(ok)} repo(s)"
+                  + (f", {pend} pending path(s) picked up" if pend else "")
+                  + (f"; {len(failed)} FAILED" if failed else "."))
+            if held:
+                print(f"{len(held)} owned path(s) WITHHELD — they differ from base-template's "
+                      f"source, so they are local edits, not pending syncs:")
+                for slug, rel, _ in held:
+                    print(f"    {slug}: {rel}")
             for o in failed:
                 print(f"    {o.slug}: {o.error}")
             if failed:

@@ -635,6 +635,104 @@ class CommitFlag(unittest.TestCase):
         add = self._git("add", "--", ".claude/workflows/block-registration.md", cwd=self.leaf)
         self.assertNotEqual(add.returncode, 0, "git add now accepts it; the workaround is stale")
 
+
+    # --- --commit-pending: the catch-up case ------------------------------------------------
+    #
+    # Measured 2026-09-02: 103 base-template-owned paths sat uncommitted across 18 repos, six per
+    # repo, written by an earlier --apply that was never committed. They never appear in a dry run
+    # because their content already MATCHES base-template -- current on disk, unrecorded in git.
+
+    def _owned_pending(self, rel=".claude/commands/orchestrate.md", body="synced body\n"):
+        """Put an owned path on disk in the leaf, dirty and matching a base-template source."""
+        src_root = self.tmp / "bt"
+        src = src_root / rel.replace(".claude/", ".claude/", 1)
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text(body)
+        dst = self.leaf / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(body)
+        return src_root, rel
+
+    def test_pending_owned_picks_up_a_matching_dirty_owned_path(self):
+        src_root, rel = self._owned_pending()
+        owned = {rel: src_root / rel}
+        orig = sync.owned_dest_paths
+        sync.owned_dest_paths = lambda a, b, c: owned
+        try:
+            keep, held = sync.pending_owned(src_root, self.brain, self.report, set())
+        finally:
+            sync.owned_dest_paths = orig
+        self.assertEqual(keep, [rel], f"keep={keep} held={held}")
+        self.assertEqual(held, [])
+
+    def test_a_dirty_owned_path_that_DIFFERS_is_withheld_not_committed(self):
+        """The safety property: an owned path whose bytes diverge is a LOCAL EDIT, not a pending
+        sync. Committing it under a 'sync base-template' subject buries a real change."""
+        src_root, rel = self._owned_pending()
+        (self.leaf / rel).write_text("locally edited\n")
+        owned = {rel: src_root / rel}
+        orig = sync.owned_dest_paths
+        sync.owned_dest_paths = lambda a, b, c: owned
+        try:
+            keep, held = sync.pending_owned(src_root, self.brain, self.report, set())
+        finally:
+            sync.owned_dest_paths = orig
+        self.assertEqual(keep, [], f"a diverged path was staged: {keep}")
+        self.assertEqual([r for r, _ in held], [rel])
+        self.assertIn("local edit", held[0][1])
+
+    def test_a_repos_OWN_file_is_never_pending(self):
+        """The whole safety property of the flag: ownership comes from base-template's source set,
+        so a repo's own dirty file is invisible to it however dirty it is."""
+        (self.leaf / ".claude" / "commands").mkdir(parents=True, exist_ok=True)
+        (self.leaf / ".claude" / "commands" / "repo-local.md").write_text("mine\n")
+        orig = sync.owned_dest_paths
+        sync.owned_dest_paths = lambda a, b, c: {}
+        try:
+            keep, held = sync.pending_owned(self.tmp / "bt", self.brain, self.report, set())
+        finally:
+            sync.owned_dest_paths = orig
+        self.assertEqual(keep, [], f"a repo-local file was staged: {keep}")
+        self.assertEqual(held, [])
+
+    def test_untracked_directories_are_expanded_to_files(self):
+        """`git status --porcelain` reports an untracked DIRECTORY as one entry with a trailing
+        slash, so a bare read misses every file inside it -- and that is exactly the shape the real
+        backlog took (an untracked .claude/skills/record-a-bail/ in 17 repos)."""
+        d = self.leaf / ".claude" / "skills" / "record-a-bail"
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text("x\n")
+        paths = sync.dirty_paths(self.leaf)
+        self.assertIn(".claude/skills/record-a-bail/SKILL.md", paths, str(paths))
+        self.assertNotIn(".claude/skills/record-a-bail/", paths, str(paths))
+
+    def test_paths_this_run_already_commits_are_not_double_counted(self):
+        src_root, rel = self._owned_pending()
+        owned = {rel: src_root / rel}
+        orig = sync.owned_dest_paths
+        sync.owned_dest_paths = lambda a, b, c: owned
+        try:
+            keep, _ = sync.pending_owned(src_root, self.brain, self.report, {rel})
+        finally:
+            sync.owned_dest_paths = orig
+        self.assertEqual(keep, [])
+
+    def test_commit_pending_requires_commit(self):
+        import subprocess
+        r = subprocess.run([sys.executable, str(_MODULE_PATH), "--apply", "--commit-pending"],
+                           capture_output=True, text=True, cwd=str(_MODULE_PATH.parent))
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("--commit-pending requires --commit", r.stderr)
+
+    def test_ownership_map_is_built_from_the_real_source_sets(self):
+        """Not a mock: the map must actually contain paths base-template ships, or the flag would
+        silently pick up nothing and read as 'no pending work'."""
+        bt = _MODULE_PATH.parent.parent
+        owned = sync.owned_dest_paths(bt, bt.parent, sync.RepoTarget(slug="x", repo_path=self.leaf))
+        self.assertTrue(any(p.startswith(".claude/commands/") for p in owned), "no commands owned")
+        self.assertTrue(any(p.startswith(".agents/skills/") for p in owned), "no agent skills owned")
+        self.assertIn(".claude/workflows/sdlc-task.js", owned, "the engines must be owned")
+
     # --- the CLI precondition ---------------------------------------------------------------
 
     def test_commit_without_apply_is_a_usage_error(self):
