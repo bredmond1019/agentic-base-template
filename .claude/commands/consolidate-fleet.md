@@ -262,13 +262,22 @@ exists to fix, one level up. This file is also the port surface: when disposal m
 - **`route: "none"` is a real value.** A mechanism the analysis decided to file nothing for says so
   here, so the filer reports it as a decision rather than an omission.
 
-**Two fields have nowhere to land on a block today, and the row must say so rather than pretend.**
-`block.schema.json` is `additionalProperties: false` over 29 properties and declares **neither
-`finding_id` nor `needs`**; `mev create-block`'s payload does not `deny_unknown_fields`, so both are
-**silently dropped**. Measured 2026-09-02 on the first disposal: zero of the fleet's block records
-carry either. So a block row's `finding_id` and `needs` are carried in `disposal.json` and written
-into the block's `notes` as prose, and the analysis records the schema gap as its own finding —
-until the schema gains the fields, the disposal table's own routing is not fully expressible.
+**A block carries neither `finding_id` nor `needs`, and that is correct — do not try.**
+`block.schema.json` is `additionalProperties: false` and declares neither; `mev create-block`'s
+payload does not `deny_unknown_fields`, so writing them is **silently dropped** (measured
+2026-09-02 on the first disposal, when they were written into `notes` prose instead). The reason is
+not an oversight in the schema:
+
+- **`needs` is a routing key**, consumed the moment a finding becomes work. It is open while
+  something is a `carryover[]` finding; a block already answers it with `sdlc_workflow`, `files[]`
+  and `what`. It belongs in `disposal.json` and on the carryover entry, and nowhere after that.
+- **Clustering is a carryover concern.** Carryover entries already carry `finding_id` and `mev`
+  clusters on it. A block does not need to join that cluster — it needs to *point at* the mechanism
+  that produced it, which is what `origin` is for:
+  `{"type": "mechanism", "slug": "<the mechanism's finding_id>"}`.
+
+So a block row's `payload` sets `origin.type = "mechanism"` and `origin.slug` to the `finding_id`,
+and `disposal.json` keeps `needs` for the routing decision itself.
 
 **Disposal has machinery now; propose against it rather than inventing a shape.** A block is filed
 with `mev create-block --from <payload.json>` (`block.schema.json`'s 15 required fields arrive as a

@@ -190,12 +190,15 @@ records changes to the **factory** — it is never copied into generated project
 - **First DISPOSAL run, and it found four defects in the instructions it was given — three mine.**
   All eleven rows filed (9 blocks + 1 chore + 1 carryover, M1/M2 first, commits `6ec3ea38b`,
   `7e92ef80a`), and the filing agent's refusals were worth more than the count:
-  - **`finding_id` and `needs` cannot go on a block.** `block.schema.json` is
-    `additionalProperties: false` over 29 properties and declares neither; `mev create-block`'s
-    payload does not `deny_unknown_fields`, so both would have been **silently dropped**. Zero of
-    the fleet's block records carry either. The disposal table's own routing is not expressible
-    until the schema gains the fields — recorded in `disposal.json`'s spec and carried in the
-    block's `notes` meanwhile.
+  - **`finding_id` and `needs` cannot go on a block** — `additionalProperties: false`, neither
+    declared, and `mev create-block` does not `deny_unknown_fields`, so both are silently dropped.
+    **The first reading of this — that the schema should gain the two fields — was wrong**, and the
+    operator caught it. `needs` is a routing key consumed when a finding becomes work, which a
+    block then answers with `sdlc_workflow`/`files[]`/`what`; clustering is a carryover concern and
+    those entries already carry `finding_id`. What a block actually needs is to point AT the
+    mechanism, which is `origin`'s job — so `origin.type` gains a `mechanism` variant whose `slug`
+    is the mechanism's `finding_id`. One enum value instead of two top-level fields and a parallel
+    id space.
   - **`block.schema.json` required the operator-slug prefix that D76 strips.** Its pattern was
     `^operator-[a-z0-9][a-z0-9-]*$` while `docs/state/state-schema.md`, `block-registration.md`,
     `check_block_records.py` and `mev normalize-op-slugs` all treat bare kebab as canonical — and
