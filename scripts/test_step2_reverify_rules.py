@@ -26,11 +26,12 @@ Four independent, named assertions per file:
        restating the rule in full.
   C -- the Step 2 region states the lane-record isolation override rule with BOTH branches present:
        record the basis checked (and the command run to check it), or fall back to the table.
-  D -- the isolation table still holds exactly its three existing rows, and both the `base-template`
-       row and the brain-root row still read `--no-worktree`. This is the no-new-forced-rows guard;
-       it must pass BEFORE and AFTER the edits -- it is the fixture's own positive control, proving
-       the Step 2 region was actually located and read rather than the other assertions failing
-       because the slice came back empty.
+  D -- the isolation table holds exactly its four rows (the fourth, added by commit 21d12f7, is the
+       "any repo that already has another session live in it" concurrent-lane row), and both the
+       `base-template` row and the brain-root row still read `--no-worktree`. This is the
+       no-new-forced-rows guard; it must pass BEFORE and AFTER the edits -- it is the fixture's own
+       positive control, proving the Step 2 region was actually located and read rather than the
+       other assertions failing because the slice came back empty.
 
 Usage:
     python3 scripts/test_step2_reverify_rules.py
@@ -81,8 +82,8 @@ FALLBACK_BRANCH_PHRASES = [
     "fall back to the table",
 ]
 
-# --- Assertion D: exactly three rows, base-template and brain-root read --no-worktree ----------
-EXPECTED_ROW_COUNT = 3
+# --- Assertion D: exactly four rows, base-template and brain-root read --no-worktree -----------
+EXPECTED_ROW_COUNT = 4
 BASE_TEMPLATE_ROW_RE = re.compile(
     r"\|\s*`base-template`\s*\|[^\n]*`--no-worktree`", re.IGNORECASE
 )
