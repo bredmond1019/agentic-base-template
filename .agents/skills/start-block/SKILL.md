@@ -1,7 +1,7 @@
 ---
 name: start-block
 description: >
-  Custom skill: start-block
+  Mark a block as in-progress in status.md and flip its status in state.json, after checking that any preceding blocks are already Done. Use when beginning work on a specific block to keep status.md and the state graph in sync.
 ---
 
 # Start Block — Mark a block as in-progress in status.md.

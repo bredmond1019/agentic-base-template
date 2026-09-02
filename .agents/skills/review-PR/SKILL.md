@@ -1,7 +1,7 @@
 ---
 name: review-PR
 description: >
-  Custom skill: review-PR
+  Check out a branch-train PR, run the project's gating suite and emoji gate, review the diff against the block's acceptance criteria, and post a structured verdict via gh pr review. Use to review a PR produced by /sdlc-block (or any spec-based block) against its spec before merging.
 ---
 
 # Review PR — Spec-aware review for a branch-train PR.

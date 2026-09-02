@@ -1,7 +1,7 @@
 ---
 name: commit
 description: >
-  Custom skill: commit
+  Stage and commit changes with a conventional commit message, splitting code and docs/planning changes into separate commits and confirming with the user before committing. Use for an ordinary git commit in this repo instead of hand-running git commands.
 ---
 
 # Commit — Stage and commit changes with a conventional message.

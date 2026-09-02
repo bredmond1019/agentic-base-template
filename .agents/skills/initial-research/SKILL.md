@@ -1,7 +1,7 @@
 ---
 name: initial-research
 description: >
-  Custom skill: initial-research
+  Conduct deep reconnaissance on a topic — code, docs, and architectural decisions — and report back with file paths, signatures, snippets, and rationale detailed enough for another agent to dig in without re-investigating. Use before planning or implementing something whose context isn't already understood; pass --capture to save it as a pre-plan notes file.
 ---
 
 # Initial Research — Conduct reconnaissance on a topic and report back

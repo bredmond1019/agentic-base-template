@@ -1,7 +1,7 @@
 ---
 name: assess
 description: >
-  Custom skill: assess
+  Fan out recon agents over an existing codebase to produce one dated, cited, independently re-checked assessment.md — evidence only, no plan. Use as stage 1 of the pre-plan pipeline (assess -> seams -> sequence -> plan) before planning work on a system large enough that the cut isn't obvious.
 ---
 
 # Assess — Fan out recon agents over an existing codebase and produce a verified assessment.

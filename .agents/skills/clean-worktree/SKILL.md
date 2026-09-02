@@ -1,7 +1,7 @@
 ---
 name: clean-worktree
 description: >
-  Custom skill: clean-worktree
+  Merge a completed SDLC worktree branch into main and remove the worktree. Use after /sdlc-task or /sdlc-flow finishes work in an isolated worktree and it's ready to land.
 ---
 
 # Clean Worktree — Merge a completed SDLC worktree branch into main and remove it.

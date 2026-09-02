@@ -1,7 +1,7 @@
 ---
 name: generate-tasks
 description: >
-  Custom skill: generate-tasks
+  Decompose a block definition (from master-plan.md or a standalone plan file) into planning/<BlockID>/tasks.json — the task list the SDLC engines actually execute. Use after a block record exists and before running /sdlc-task or /sdlc-flow against it.
 ---
 
 # Generate Tasks — Generate a task spec for a specified phase and block.

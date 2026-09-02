@@ -1,7 +1,7 @@
 ---
 name: ticket
 description: >
-  Custom skill: ticket
+  Plan a small, well-scoped behavior-change with observable acceptance criteria, producing a block record plus a task list feeding directly into lean /sdlc-task. Use for a bug fix or targeted enhancement that requires new or modified tests — for non-behavior-changing maintenance use /chore instead.
 ---
 
 # Ticket — Plan a small behavior-change with observable Acceptance Criteria.

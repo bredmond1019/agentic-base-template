@@ -1,7 +1,7 @@
 ---
 name: sync-brain-skills
 description: >
-  Custom skill: sync-brain-skills
+  Discover sub-brain tiers from brain.toml and rsync base-template's shared generic session/planning skills into each tier's .agents/skills/. Use after updating base-template's own .agents/skills/ to propagate the change to every sub-brain tier.
 ---
 
 # sync-brain-skills — Distribute shared skills to all sub-brain tiers

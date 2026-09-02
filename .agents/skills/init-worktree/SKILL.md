@@ -1,7 +1,7 @@
 ---
 name: init-worktree
 description: >
-  Custom skill: init-worktree
+  Create an isolated git worktree at trees/<spec-slug>[-taskN]/ for an SDLC spec or task, checked out on its own branch. Use when a spec or task needs isolated execution rather than running in place on the main branch.
 ---
 
 # Init Worktree — Create an isolated git worktree for an SDLC spec or task.

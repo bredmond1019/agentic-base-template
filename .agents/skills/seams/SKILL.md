@@ -1,7 +1,7 @@
 ---
 name: seams
 description: >
-  Custom skill: seams
+  Classify every capability the planned work depends on as built/half-built/absent, map where new work attaches to the existing system, and name what breaks if the attachment is wrong. Use as stage 2 of the pre-plan pipeline (assess -> seams -> sequence -> plan) after an assessment exists and before cutting a sequence.
 ---
 
 # Seams — Map where new work attaches to the existing system.

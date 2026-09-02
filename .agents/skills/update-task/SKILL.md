@@ -1,7 +1,7 @@
 ---
 name: update-task
 description: >
-  Custom skill: update-task
+  Mark a task-spec step done and/or append a note to a spec's Amendment Log (planning/<spec-slug>/amendments.md), auto-detecting the current spec from status.md if not given. Use to record progress or a deviation mid-task without editing tasks.md/tasks.json directly.
 ---
 
 # Update Task — Record progress in a task spec.

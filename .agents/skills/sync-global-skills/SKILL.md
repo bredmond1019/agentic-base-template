@@ -1,7 +1,7 @@
 ---
 name: sync-global-skills
 description: >
-  Custom skill: sync-global-skills
+  Install all harness skills from .agents/skills/ into ~/.gemini/config/skills/, mirroring what /sync-global-commands does for Claude Code. Use after adding or changing a skill in .agents/skills/ so vendor-neutral agent tools (e.g. Gemini) pick it up globally.
 ---
 
 # sync-global-skills — Sync harness skills to global install

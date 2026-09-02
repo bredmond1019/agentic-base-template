@@ -1,7 +1,7 @@
 ---
 name: update-docs
 description: >
-  Custom skill: update-docs
+  Audit the documentation set against the current codebase and recent git history, producing a gap report of stale/missing/confirmed-current sections, with --patch to fix stale sections and create missing docs. Use for periodic doc health checks or bootstrapping outside the SDLC pipeline — inside the pipeline use /document instead.
 ---
 
 # Update Docs — Documentation health sweep: find stale sections and create missing coverage.

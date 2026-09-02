@@ -1,7 +1,7 @@
 ---
 name: backlog-ticket
 description: >
-  Custom skill: backlog-ticket
+  Capture a queued idea, improvement, or research thread into the HQ backlog with a repo, type, and status tag. Use to park work that isn't ready to become a real plan yet, without losing it to prose.
 ---
 
 # Backlog Ticket — Capture a queued idea into the HQ backlog

@@ -1,7 +1,7 @@
 ---
 name: define-polish-standard
 description: >
-  Custom skill: define-polish-standard
+  Write a falsifiable polish-standard.md describing what 'good' looks like for a specific existing product, precise enough that two reviewers shown the same screenshot agree. Use before a UI review, a ticket's acceptance criteria, or a reviewer's checklist needs an objective bar to judge against.
 ---
 
 # Define Polish Standard — write the document a UI can actually be judged against.

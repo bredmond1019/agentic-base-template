@@ -1,7 +1,7 @@
 ---
 name: define-design-system
 description: >
-  Custom skill: define-design-system
+  For a UI that does not exist yet, produce the design tokens, theme config, component inventory, icon set, and consistency rules a new product is built from, then prove it on one real screen. Use when starting a new client/side/app UI from scratch — if the product already has a discernible system in use, use /define-polish-standard instead.
 ---
 
 # Define Design System — establish the tokens, components and rules a new UI is built from.

@@ -1,7 +1,7 @@
 ---
 name: breakdown
 description: >
-  Custom skill: breakdown
+  Decompose a block's spec into a granular, execution-precise breakdown naming exact file paths, function/class names, and what to write — a reading aid for the implementer, not something the SDLC engines execute. Use before implementing a block whose tasks.json steps are too coarse to act on without interpretation.
 ---
 
 # Breakdown — Decompose a task spec into agent-executable sub-steps.

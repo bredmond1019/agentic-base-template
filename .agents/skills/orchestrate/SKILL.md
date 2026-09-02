@@ -1,7 +1,7 @@
 ---
 name: orchestrate
 description: >
-  Custom skill: orchestrate
+  Drive an ordered chain of blocks end-to-end through the SDLC engines in one session — spec, breakdown, engine run, integrate, verify state, advance — running engines as background workflows so later blocks' specs prepare while earlier ones build. Use to run a lane-file or an inline list of block IDs through the pipeline without babysitting each one by hand.
 ---
 
 # Orchestrate — Run an ordered chain of blocks through the SDLC engines, in one session.

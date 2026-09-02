@@ -1,7 +1,7 @@
 ---
 name: blocked
 description: >
-  Custom skill: blocked
+  Record a newly discovered blocker on a block or track by appending a depends_on entry (external or block-type) to planning/state.json and regenerating derived state. Use the moment you discover a block is blocked by something new, so the graph reflects it instead of a stray note.
 ---
 
 # Blocked — Capture a new blocker on the fly

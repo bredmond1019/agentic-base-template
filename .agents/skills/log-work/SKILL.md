@@ -1,7 +1,7 @@
 ---
 name: log-work
 description: >
-  Custom skill: log-work
+  Append a Log entry, sync status.md, and regenerate the freshness spine via mev emit-state — the standard end-of-session bookkeeping step. Use whenever completed work needs to be recorded and the repo's derived state kept current.
 ---
 
 # Log Work — Append a Log entry, sync status, and regenerate the freshness spine via `mev emit-state`.

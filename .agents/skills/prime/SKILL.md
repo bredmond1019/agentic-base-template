@@ -1,7 +1,7 @@
 ---
 name: prime
 description: >
-  Custom skill: prime
+  Deeply orient to the current project at session start: read the key docs, check for an active handoff, run the brain freshness gate, and load warm memory by budget. Use for the first session in a repo, returning after a long gap, or when /session-recap's summary isn't enough — not for routine session starts.
 ---
 
 # Prime — Deep orient to the current project at the start of a session.

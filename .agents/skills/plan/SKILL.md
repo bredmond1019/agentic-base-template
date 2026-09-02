@@ -1,7 +1,7 @@
 ---
 name: plan
 description: >
-  Custom skill: plan
+  Author one initiative in one repo: the narrative (goal, sequencing rationale, cut list) plus a block record per member block, without decomposing tasks yet. Use for multi-block work confined to a single repo — for a multi-repo program use /generate-roadmap, for one block use /ticket or /chore.
 ---
 
 # Plan — Author an initiative: its narrative and its block records.

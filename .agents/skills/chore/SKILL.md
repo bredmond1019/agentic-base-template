@@ -1,7 +1,7 @@
 ---
 name: chore
 description: >
-  Custom skill: chore
+  Plan a maintenance or housekeeping task with no behavior change, producing a block record + task list for lean /sdlc-task. Use for cleanup/refactor work where tests are incidental rather than required — for behavior changes use /ticket instead.
 ---
 
 # Chore — Plan a maintenance or housekeeping task.

@@ -1,7 +1,7 @@
 ---
 name: generate-master-plan
 description: >
-  Custom skill: generate-master-plan
+  Superseded by /plan --founding (D65) — master-plan.md is now generated from the block graph, not hand-authored. This skill only explains the redirect; use /plan --founding to actually author an initiative.
 ---
 
 # Generate Master Plan — superseded by `/plan --founding` (D65)

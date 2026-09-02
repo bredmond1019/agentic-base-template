@@ -1,7 +1,7 @@
 ---
 name: sequence
 description: >
-  Custom skill: sequence
+  Cut a verified seam map into an ordered set of candidate blocks, each with an owning repo and each shipping something usable on its own, sequenced by dependency. Use as stage 3 of the pre-plan pipeline (assess -> seams -> sequence -> plan) — its sequence.md is the only input /plan or /generate-roadmap needs.
 ---
 
 # Sequence — Cut a verified seam map into an ordered set of blocks each of which ships something.

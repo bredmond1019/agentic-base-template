@@ -1,7 +1,7 @@
 ---
 name: archive
 description: >
-  Custom skill: archive
+  Retire a folder or file into planning/archive/, distilling its durable residue into knowledge.md/memory.md/decisions/ first. Use when a planning directory or file is finished and ready to leave the live corpus — never delete without archiving through this.
 ---
 
 # Archive — Retire a folder/file into `planning/archive/`, distilling its durable residue first.

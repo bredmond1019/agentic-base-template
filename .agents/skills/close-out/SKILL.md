@@ -1,7 +1,7 @@
 ---
 name: close-out
 description: >
-  Custom skill: close-out
+  Run the full test suite, fill coverage gaps, patch stale docs, then produce a clean handoff — the quality-closing loop after an implementation session. Use after /sdlc-run, /sdlc-flow, or any implementation session before handing work off.
 ---
 
 # Close Out — Verify test coverage, patch docs, and hand off cleanly.

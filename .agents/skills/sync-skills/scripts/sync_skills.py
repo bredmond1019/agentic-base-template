@@ -10,7 +10,7 @@ NEW_SKILLS_DESCRIPTIONS = {
     "sync-global-commands": "Install harness commands into ~/.claude/commands/",
     "sdlc-flow": "Run a spec sequentially in one shared worktree with a per-task test→fix loop, one end review, a docs patch, and a PR",
     "apply": "Tailor the résumé + cover letter to a specific job posting",
-    "generate-master-plan": "Author the full roadmap as canonical block definitions",
+    "generate-master-plan": "Superseded by /plan --founding (D65) — master-plan.md is now generated from the block graph, not hand-authored. This skill only explains the redirect; use /plan --founding to actually author an initiative.",
     "handoff": "Write handoff + log work + commit; hands off to a fresh session",
     "session-recap": "Briefing: recent Log entries, where you left off, next step",
     "next": "Show what's up next, what's blocked and by what, and recommend the next action based on company and sub-brain goals",

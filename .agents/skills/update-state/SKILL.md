@@ -1,7 +1,7 @@
 ---
 name: update-state
 description: >
-  Custom skill: update-state
+  The canonical workflow for safely hand-editing a repo's planning/state.json — the authoritative work-block dependency graph — covering the authored-vs-derived field split and the schema rules. Use before any non-trivial state.json edit: adding/closing a block, appending carryover, promoting a backlog item, or fixing a validator warning.
 ---
 
 # Update State — Safely edit a repo's `planning/state.json` per the canonical schema.
