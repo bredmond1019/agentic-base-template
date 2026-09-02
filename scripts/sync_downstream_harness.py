@@ -942,7 +942,32 @@ def main() -> None:
             print(f"[{target.slug}] SKIPPED — {report.error}")
             continue
         if not report.diffs:
-            print(f"[{target.slug}] up to date")
+            # "Up to date" means no CONTENT differs -- it says nothing about git. Under
+            # --commit-pending we must NOT skip here: a repo whose owned files are current on disk
+            # but uncommitted is exactly the backlog this flag exists to clear, and it reports as
+            # up to date every time. Skipping it is how rag-engine-rs kept one path in limbo
+            # through two consecutive --commit runs (measured 2026-09-02).
+            if not (args.apply and args.commit and args.commit_pending):
+                print(f"[{target.slug}] up to date")
+                continue
+            outcome = commit_repo_half(report, brain_root, args.message,
+                                       base_template_root=base_template_root,
+                                       commit_pending=True)
+            commit_outcomes.append(outcome)
+            if outcome.error:
+                print(f"[{target.slug}] up to date — COMMIT FAILED: {outcome.error}")
+            elif outcome.sha:
+                print(f"[{target.slug}] up to date, {outcome.pending} pending path(s) "
+                      f"committed ({outcome.sha})")
+            elif outcome.skipped:
+                print(f"[{target.slug}] up to date — {outcome.skipped}")
+            else:
+                print(f"[{target.slug}] up to date")
+            for rel, why in outcome.withheld:
+                print(f"    WITHHELD {rel} — {why}")
+            stamp = template_version_vault_path(target, brain_root)
+            if stamp:
+                stamp_paths.append(stamp)
             continue
 
         actionable = [d for d in report.diffs if d.status != "stale-conflict"]

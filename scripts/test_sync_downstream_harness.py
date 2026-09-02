@@ -733,6 +733,34 @@ class CommitFlag(unittest.TestCase):
         self.assertTrue(any(p.startswith(".agents/skills/") for p in owned), "no agent skills owned")
         self.assertIn(".claude/workflows/sdlc-task.js", owned, "the engines must be owned")
 
+
+    def test_an_up_to_date_repo_with_a_pending_path_is_not_skipped(self):
+        """The hole this flag shipped with. main() used to `continue` on empty diffs BEFORE the
+        commit block, so a repo whose owned files are current on disk but uncommitted -- exactly
+        the backlog --commit-pending exists to clear -- reported 'up to date' and was skipped.
+        rag-engine-rs kept one path in limbo through two consecutive --commit runs that way."""
+        src = self.leaf / ".claude" / "commands" / "orchestrate.md"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("current\n")
+        empty = sync.RepoReport(target=self.target, diffs=[])
+        self.assertEqual(sync.repo_commit_paths(empty), [".claude/.harness-manifest.json"],
+                         "an empty report should carry only the manifest")
+        owned = {".claude/commands/orchestrate.md": src}
+        orig = sync.owned_dest_paths
+        sync.owned_dest_paths = lambda a, b, c: owned
+        try:
+            keep, _ = sync.pending_owned(self.tmp / "bt", self.brain, empty, set())
+        finally:
+            sync.owned_dest_paths = orig
+        self.assertEqual(keep, [".claude/commands/orchestrate.md"],
+                         "a pending path must be found even when the run has zero diffs")
+
+    def test_the_up_to_date_branch_is_guarded_on_all_three_flags(self):
+        """Source-level: the early `continue` must only be bypassed under
+        --apply AND --commit AND --commit-pending, never on --apply alone."""
+        src = _MODULE_PATH.read_text()
+        self.assertIn("if not (args.apply and args.commit and args.commit_pending):", src)
+
     # --- the CLI precondition ---------------------------------------------------------------
 
     def test_commit_without_apply_is_a_usage_error(self):

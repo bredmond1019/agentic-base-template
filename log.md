@@ -120,7 +120,13 @@ records changes to the **factory** — it is never copied into generated project
   - **`git status --porcelain` reports an untracked DIRECTORY as one entry with a trailing slash**,
     so a bare read misses every file inside it — exactly the shape the real backlog took, with an
     untracked `.claude/skills/record-a-bail/` in 17 repos. `-uall` expands them; there is a test.
-  - 39 -> 46 tests.
+  - **The flag shipped with a hole, found on its own cleanup run.** `main()` `continue`d on
+    "up to date" *before* the commit block, so a repo whose owned files are content-current but
+    git-dirty was skipped entirely — which is exactly the backlog shape the flag exists for.
+    `rag-engine-rs` kept one path in limbo through two consecutive `--commit` runs that way.
+    "Up to date" is a statement about CONTENT and says nothing about git. Fixed, guarded on all
+    three flags, with a source-level test pinning the guard.
+  - 39 -> 48 tests.
 - **`--commit` found its own bug on its first live run**, which is the point of shipping it
   behind a real run: `rag-engine-rs` gitignores `.claude/` by design (D8), and `git add` on a path
   under an ignored *directory* fails and aborts the whole add — reported as `COMMIT FAILED` and
