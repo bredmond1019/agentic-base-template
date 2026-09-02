@@ -112,6 +112,62 @@ records changes to the **factory** — it is never copied into generated project
   test pinning why: on a tracked file under an ignored directory it answers "not ignored" while
   `git add` still refuses. 35 -> 39 tests.
 
+### Same day — `/consolidate-fleet`: the cross-run half of consolidation
+
+- **What:** `/consolidate-run` answers "what did this roadmap turn up?" and proposes `carryover[]`
+  entries. Nothing answered "across every run since we last looked, what is wrong with the
+  orchestration system, the engines, and the way we file findings?" — that artifact existed, written
+  by hand, as `planning/open-work/orchestration-runs/retros/pattern-analysis-*.md`. New
+  `.claude/commands/consolidate-fleet.md` automates it: several roadmaps at once, lane-log +
+  run records + commander retros + `planning/carryover-triage-*/`, output is named **mechanisms**
+  (`M1..Mn`, each with severity, a counted breadth, and a minted `finding_id`).
+- **A second command, not flags on the first.** The two jobs read different inputs and emit
+  different artifacts, and both already existed separately on disk (`consolidated-review*.md` per
+  roadmap; `pattern-analysis-*.md` across runs). Folding them into one command would have forked it
+  internally into two modes — the shape that already makes `/generate-roadmap` hard to follow.
+  `/consolidate-fleet` invokes `/consolidate-run` per roadmap rather than duplicating discovery,
+  D57 selection, or the `lifecycle: consolidated` stamp.
+- **`scripts/lane_log_watermark.py` — resume across days.** `lifecycle: consolidated` already solves
+  resume for run records (15 carry it), but `lane-log.jsonl` has no frontmatter and so no stamp, and
+  it is the only artifact carrying the per-block narrative. The watermark is a per-roadmap line
+  cursor plus a sha256 of the last consumed line. **A line number is only a valid cursor while the
+  file is append-only, and a broken cursor fails silently** — it resumes at the wrong offset and the
+  consolidation reports a clean pass over data it never read. So a rewritten or truncated log is
+  reported as DRIFT and **refuses** an advance rather than re-basing; backwards and out-of-range
+  advances refuse too. 33 fixture cases, gated as `lane-log-watermark-tests` (59 gated checks).
+- **Malformed lines are reported and still emitted, never skipped.** 9 of the corpus's 421 lane-log
+  lines do not parse — all in `demand-ready`, each truncated mid-`note` at exactly 533 bytes. They
+  still describe real blocks. `--strict` turns their presence into exit 3.
+- **Designed from the records, not from first principles.** Four readers went through all 24 run
+  records (~13k lines, 7 repos, 6 roadmaps) before a line of this was written. What that changed:
+  - **No finding carries a `finding_id`. Zero, corpus-wide** — which is why `mev carryover`'s
+    CLUSTERS section renders empty. Minting them is now the command's central output, done *after*
+    clustering (an id assigned per-record cannot cluster anything).
+  - **Corrections are appended, not linked.** `CORRECTION:` sections strike earlier text with
+    nothing marking the superseded passage, so a naive miner extracts both the wrong and the right
+    cause of one finding as two. The extraction envelope carries `superseded`.
+  - **Record shape has drifted to four incompatible bodies** with three disjoint status
+    vocabularies; `engine-updates-and-fixes` is a bare commit ledger. Agents are told to report what
+    was absent rather than infer a field to fill the envelope.
+  - **Four analytic traps, each measured, each producing a confident wrong answer:** not-evaluable
+    is not the same as stale (learn-ai's pool was *undescribed* — 5 of 9 live entries could carry a
+    typed predicate that day); a young pool and a healthy pool are indistinguishable by retire rate
+    (engine-rs 19%, but 22 of 42 entries were five days old); predicates fail in **both** directions
+    (already-satisfied retires a live finding, brain-relative never fires); and self-reported counts
+    need mechanical recounting (a prior analysis recounted "6 sends" and found 8).
+  - **Vault paths, never `trees/`.** Six records are duplicated under `core/bastion/trees/`;
+    including both double-counts every finding. One of the four readers had to be told twice.
+- **Model tiering is in the command, not left to the caller:** Sonnet per `(repo x roadmap)`
+  extraction against explicit absolute paths, Opus for the mechanism synthesis, which does not
+  delegate.
+- **HQ-only.** Added to `EXCLUDED_COMMAND_FILENAMES` — it reads every repo's records from the brain
+  root and has nothing to consolidate inside a leaf repo, the same reasoning as `/generate-roadmap`.
+- **Not fixed, not mine:** four gated checks are red from the commander's own DO-NOW commits
+  (`9117dc3`, `e7e24b2`, `21d12f7`) — `skill-guide-sync` and `engine-docs-sync` anchors moved
+  unstamped, `step2-reverify-rules` assertion D on `begin-orchestration.md`, and `escalations-schema`
+  with 18 of 25 records failing. Deliberately **not** `--update`d: re-stamping a tripwire without
+  re-reading what moved is exactly how it becomes decorative.
+
 ---
 ## 2026-08-31 — `workflow_run_id`: caller-stamped run-id field + `stamp-workflow-run-id` skill
 

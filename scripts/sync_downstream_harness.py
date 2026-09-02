@@ -225,7 +225,10 @@ class RepoReport:
 # running from BRAIN_ROOT ("This command runs at HQ") - it has no meaning inside a single leaf repo,
 # so it stays single-copy at base-template rather than fanning out to all 17 (see
 # planning/ticket-generate-roadmap-command/review.md, Task 3 decision).
-EXCLUDED_COMMAND_FILENAMES: set[str] = {"generate-roadmap.md"}
+# consolidate-fleet reads every repo's run records, the commander's retros and the fleet-wide
+# carryover sweep from the brain root; inside a single leaf repo there is nothing for it to
+# consolidate. Same reasoning as generate-roadmap: HQ-only by nature, not by target.
+EXCLUDED_COMMAND_FILENAMES: set[str] = {"generate-roadmap.md", "consolidate-fleet.md"}
 
 
 def harness_files(root: Path, engines_only: bool = False) -> list[Path]:

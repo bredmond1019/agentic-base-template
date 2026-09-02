@@ -135,6 +135,7 @@ Each stage feeds the next: `/assess` → `/seams` → `/sequence` → `/plan`.
 | [`/orchestration-commander`](../.claude/commands/orchestration-commander.md) | One stateless drain: re-derives the remainder of a run and reports it. See the two run paths in [orchestration.md](workflows/orchestration.md). |
 | [`/roadmap-status`](../.claude/commands/roadmap-status.md) | Read-only mid-run view of one roadmap's lanes across every repo. Writes nothing. |
 | [`/consolidate-run`](../.claude/commands/consolidate-run.md) | Gathers findings across the fleet for one roadmap and proposes `carryover[]` entries. Writes no `state.json`. |
+| [`/consolidate-fleet`](../.claude/commands/consolidate-fleet.md) | Mines several runs at once — lane logs, run records, commander retros, carryover triage — for the mechanisms behind them; emits one pattern analysis and advances a per-roadmap lane-log watermark. HQ-only. Writes no `state.json`. |
 | [`/begin-session`](../.claude/commands/begin-session.md) | Drives one **operator session** — work an agent cannot do alone (a decision, a credential, a judgement call). |
 
 ### Branches and worktrees
