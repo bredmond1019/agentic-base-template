@@ -736,6 +736,48 @@ the reason.
 
 ---
 
+## Step 7b — Relocate the pre-plan, so the slug lives in one place
+
+**Only when `--from` named a `sequence.md`** (Step 1b's case). Skip silently otherwise.
+
+Move the pre-plan folder's contents into `<roadmap_dir>/pre-plan/`:
+
+```
+planning/<slug>/{assessment,verification,seams,sequence,notes,index}.md, evidence/
+   ->  planning/roadmaps/<slug>/pre-plan/
+```
+
+**Why this is a step and not housekeeping.** `/assess`, `/seams` and `/sequence` all write to
+`planning/<slug>/`, and which successor consumes them is unknown until `/sequence` counts the repos
+in its cut: one repo goes to `/plan`, which authors `plan.md` into that same directory, several come
+here, which writes `planning/roadmaps/<slug>/`. So on the multi-repo path the slug ends up in BOTH
+places, every time, by design — and a slug in both places is what `/begin-orchestration` Step 1C and
+`scripts/lane_log_watermark.py` have to disambiguate. They now do so correctly (a legacy roadmap is
+one holding `lane-log.jsonl` or `roadmap.md`; residue is not), but leaving two directories with one
+name is still confusing for a human reading `planning/`. Moving the evidence under the roadmap it
+produced puts cause and effect in one place.
+
+**The invariant this maintains, and it is the whole point:**
+
+> `planning/<slug>/` and `planning/roadmaps/<slug>/` are never both populated.
+
+`/plan` satisfies it by staying put. This command satisfies it by taking the pre-plan with it.
+
+Three things to get right:
+
+1. **Move, never copy or delete.** `evidence/` holds each scout's raw return and the roadmap cites
+   it; that is the audit trail behind every block in the cut.
+2. **Move through the REAL vault path**, `core/_planning/<repo>/<slug>/`, never through the
+   `planning/` symlink face — `git mv` there fails with "source directory is empty" and silently
+   does nothing (brain-root standing rule 10).
+3. **Move AFTER the roadmap files are written and verified**, never before. If roadmap authoring
+   fails, the pre-plan must still be where `/sequence` left it so a retry finds it.
+
+Then add the `pre-plan/` row to `<roadmap_dir>/index.md` (standing rule 7) and re-run
+`bastion validate-brain --links` and `--structure`: a move relocates every relative markdown link
+and every index row at once, so these are the two flags that catch a half-done move. Verified on
+`clean-slate-sandbox` 2026-09-03 — after the move both flags reported **0** references to it.
+
 ## Step 8 — Verify before handing over
 
 ```bash

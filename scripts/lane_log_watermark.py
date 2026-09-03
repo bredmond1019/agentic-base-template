@@ -97,16 +97,43 @@ def sha(line: str) -> str:
     return hashlib.sha256(line.encode("utf-8")).hexdigest()
 
 
+def is_roadmap_dir(d: Path) -> bool:
+    """True when `d` is a ROADMAP directory rather than pre-plan residue.
+
+    A roadmap is identified by the two artifacts only `/generate-roadmap` (or a legacy
+    hand-authored roadmap) ever writes: `lane-log.jsonl` and `roadmap.md`. The pre-plan trio
+    writes `assessment.md`, `verification.md`, `seams.md`, `sequence.md`, `evidence/` and an
+    `index.md`, and never either of these -- which is what makes this distinction mechanical
+    rather than a guess.
+    """
+    return (d / "lane-log.jsonl").is_file() or (d / "roadmap.md").is_file()
+
+
 def roadmap_dir(root: Path, slug: str) -> Path | None:
     """`planning/roadmaps/<slug>/` first, then the legacy `planning/<slug>/`.
 
-    Both existing is an error, not a silent preference -- the same rule /begin-orchestration and
-    /consolidate-run resolve with. Returning the wrong one would consolidate a different run.
+    Both existing is an error ONLY when the legacy path is itself a roadmap -- the same rule
+    /begin-orchestration Step 1C resolves with. Returning the wrong one would consolidate a
+    different run.
+
+    A `planning/<slug>/` is a legacy ROADMAP only if it holds `lane-log.jsonl` or `roadmap.md`.
+    Anything else there is PRE-PLAN RESIDUE: `/assess`, `/seams` and `/sequence` all write to
+    `planning/<slug>/`, and which successor consumes them is not known until `/sequence` counts the
+    repos in its cut -- one repo goes to `/plan`, which stays in that same directory, while several
+    go to `/generate-roadmap`, which writes `planning/roadmaps/<slug>/`. So the same slug in both
+    places is the NORMAL end state of the multi-repo path, not an ambiguity, and erroring on it
+    wedges every consolidation in the fleet on a directory nobody is confused about.
+
+    Measured 2026-09-03: 0 of 31 roadmap directories and 0 directories under `planning/` carried a
+    `lane-log.jsonl` or `roadmap.md` -- the legacy migration is complete, so this rule's
+    true-positive population was empty and it fired only on pre-plan residue. Kept rather than
+    deleted so a genuine legacy roadmap reappearing is still caught.
     """
     a = root / "planning" / "roadmaps" / slug
     b = root / "planning" / slug
-    if a.is_dir() and b.is_dir():
-        raise SystemExit(f"ERROR: `{slug}` exists in BOTH planning/roadmaps/ and planning/ — "
+    if a.is_dir() and b.is_dir() and is_roadmap_dir(b):
+        raise SystemExit(f"ERROR: `{slug}` exists in BOTH planning/roadmaps/ and planning/, and the "
+                         f"legacy path is itself a roadmap (it holds lane-log.jsonl or roadmap.md) — "
                          f"resolve the ambiguity before consolidating")
     if a.is_dir():
         return a
