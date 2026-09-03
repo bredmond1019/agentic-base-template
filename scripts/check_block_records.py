@@ -10,6 +10,23 @@ It is the interim gate until mev's W_BLOCK_* checks ship
 (MV.ticket.block-record-validation), and it stays useful afterwards as base-template's
 own local check.
 
+The planning/-path rule (BT.ticket.spec-files-under-planning-cannot-compile-in-ci) flags a
+files[] path under planning/ as an ERROR, because planning/ is a symlink into the private HQ
+vault (base-template/.gitignore:20) and code referencing such a path -- include_str!, a
+fixture path, a test data file -- compiles on every developer machine and on no CI runner:
+CI checkout cannot see the private vault. It is DELIBERATELY narrowed to build-input paths
+only. A first, unnarrowed version flagged every files[] path under planning/ and produced 31
+failures across this repo's 74 live block records, none of which are the failure mode this
+rule is about -- every one was an AUTHORED PLANNING ARTIFACT (an ADR, harness.json,
+status.md, a tasks.json) that is edited and never compiled, not a build input. So the
+following are excluded, as authored planning artifacts rather than build inputs:
+  - any `*.md` anywhere under planning/ (ADRs, status, notes, reports);
+  - `planning/harness.json` and `planning/state.json` (config the harness reads at gate
+    time, not a build input);
+  - any `tasks.json` (a spec's task list, read by the engines, not compiled);
+  - anything under a `planning/*/sdlc/` directory (engine run state).
+Everything else under planning/ stays an ERROR.
+
 Usage:
     check_block_records.py [--planning DIR] [--fleet] [--quiet]
 
@@ -55,6 +72,33 @@ REQUIRED = ["id", "repo", "kind", "title", "description", "what", "why",
 # back with fabrication. Same reasoning as mev's W_BLOCK_* codes shipping warning-first.
 WARN_IF_MISSING = ["files", "validation_commands"]
 KINDS = {"block", "ticket", "chore"}
+
+
+def is_planning_authoring_artifact(fpath):
+    """True when `fpath` (a files[] path already known to be under planning/) is an
+    AUTHORED PLANNING ARTIFACT -- edited and never compiled -- rather than a build input.
+
+    Scoped exactly to the class named in the planning/-path rule's docstring: any `*.md`
+    under planning/, `planning/harness.json`, `planning/state.json`, any `tasks.json`, and
+    anything under a `planning/*/sdlc/` directory. Everything else under planning/ is
+    assumed to be a build input (a fixture, a test data file, a path a program reads at
+    compile/run time) and stays flagged.
+    """
+    norm = fpath.replace(os.sep, "/")
+    if norm.endswith(".md"):
+        return True
+    if norm in ("planning/harness.json", "planning/state.json"):
+        return True
+    if os.path.basename(norm) == "tasks.json":
+        return True
+    parts = norm.split("/")
+    if "planning" in parts and "sdlc" in parts:
+        pi = parts.index("planning")
+        si = parts.index("sdlc")
+        if si > pi:
+            return True
+    return False
+
 WORKFLOWS = {"none", "patch", "task", "run", "flow"}
 MODELS = {"sonnet", "gemini-pro", "gemini-flash", "either"}
 
@@ -216,7 +260,8 @@ def check(path, planning_root="planning"):
                     bad(f"files.{key}[{i}] needs both `path` and `{req}`")
                 fpath = isinstance(f, dict) and f.get("path")
                 if isinstance(fpath, str) and (
-                        fpath == "planning" or fpath.startswith("planning/")):
+                        fpath == "planning" or fpath.startswith("planning/")) and \
+                        not is_planning_authoring_artifact(fpath):
                     # `planning/` is a symlink into the private HQ vault, excluded from this
                     # repo's git by base-template/.gitignore:20 (the bare rule `/planning`).
                     # Code referencing such a path -- include_str!, a fixture path, a test

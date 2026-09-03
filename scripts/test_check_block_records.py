@@ -213,6 +213,27 @@ def planning_path_checks():
     check("a files.modified path under planning/ is an ERROR too", len(modified_positive) == 1,
           f"errors: {errs}")
 
+    # --- EXCLUSION controls: authored planning artifacts are NOT flagged --------------------
+    # The rule is narrowed to build-input paths only (2026-09-03, after run wf_8c8b3ca0-6ee
+    # measured a first, unnarrowed version at 31 false positives / 0 true positives across
+    # this repo's 74 live block records). These are the exclusions and their reasoning.
+    for label, path in (
+        ("planning/harness.json is NOT flagged (config, not a build input)",
+         "planning/harness.json"),
+        ("planning/state.json is NOT flagged (config, not a build input)",
+         "planning/state.json"),
+        ("a *.md under planning/ is NOT flagged (an authored ADR/status/notes doc)",
+         "planning/decisions/D71-example.md"),
+        ("a tasks.json under planning/ is NOT flagged (a spec's task list, not compiled)",
+         "planning/HQ.9.A/tasks.json"),
+        ("a path under planning/*/sdlc/ is NOT flagged (engine run state)",
+         "planning/HQ.9.A/sdlc/reports/gate-baseline.md"),
+    ):
+        errs, warns = run("planning/HQ.9.A/",
+                           files={"new": [{"path": path, "purpose": "test data"}]})
+        flagged = [m for m in errs if path in m]
+        check(label, len(flagged) == 0, f"errors: {errs}")
+
     # --- NON-PROMOTION control, load-bearing: no files[] at all must stay a WARNING ---------
     # check_block_records.py:56 lists `files` in WARN_IF_MISSING deliberately -- the new rule
     # must fire only on a files[] that IS present and names a planning/ path, never on a missing
