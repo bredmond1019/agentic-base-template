@@ -607,6 +607,10 @@ EOF
    Run: cd ${runRoot} && ${renderWorkAssertion('git', taskNum, tasksJsonFile)}
    If this prints WORK_ASSERTION_ABORT, the commit failed the check — treat this as a task failure
    (investigate, fix, and re-commit) before proceeding; do NOT report success with a failing assertion.
+   Capture the outcome as a STRUCTURED field, not only prose: this command's FINAL run this attempt
+   (after any fix + re-commit) must print no WORK_ASSERTION_ABORT line and exit 0 for
+   workAssertionPassed to be true. The terminal write recipe refuses to record this task done/passed
+   without a positive workAssertionPassed — never omit or fabricate this field.
 ${vault.vaulted ? `
 7b. planning/ is a vaulted symlink (D46) — its bytes live at ${vault.planningPath}, a DIFFERENT git
     repo, invisible to the commit you just made in step 7. If this attempt created or edited ANY file
@@ -638,6 +642,8 @@ Return via StructuredOutput:${extraReturnFields}
   decisions: any non-obvious choices (empty array if none)
   filesReadKb: telemetry — before returning, sum the byte size of every file you cat/Read this attempt
     (cd ${runRoot} && wc -c <each file>), divide the total by 1024, and report the number.
+  workAssertionPassed: true only if step 7a's FINAL run this attempt printed no WORK_ASSERTION_ABORT
+    and exited 0; false otherwise. Never omit this field.
   notes: one-line status${vault.vaulted ? ' — mention explicitly whether a vault commit (step 7b) happened and, if so, its outcome' : ''}`
 }
 // <</shared:renderImplementPrompt>>
