@@ -4,8 +4,11 @@
 WHY THIS EXISTS
 ---------------
 `/consolidate-run` already avoids re-proposing findings by stamping `lifecycle: consolidated` on
-each run record it consumed. That mechanism works and is not duplicated here -- 15 records on disk
-carry the stamp. But `lane-log.jsonl` has no frontmatter and therefore no stamp, and it is the only
+each run record it consumed. That mechanism works and is not duplicated here -- the count of
+records carrying the stamp changes every run; measure it yourself with
+`grep -rl 'lifecycle: consolidated' planning/roadmaps/*/  planning/*/*.md 2>/dev/null | wc -l`
+rather than trusting a number written here. But `lane-log.jsonl` has no frontmatter and therefore
+no stamp, and it is the only
 artifact carrying the per-block narrative of a run (`{ts, lane, repo, block, status, note}`). A
 fleet pass that wants "everything since last time, across several roadmaps, even if last time was
 days ago" has nothing to resume from. This is that missing half.
@@ -27,10 +30,13 @@ reported and BLOCKS an advance; it never silently re-bases. Recovery is the oper
 
 MALFORMED LINES ARE REPORTED, NEVER SKIPPED
 -------------------------------------------
-Measured 2026-09-02: 9 of the corpus's 421 lane-log lines do not parse -- all in `demand-ready`,
-each truncated mid-`note` at exactly 533 bytes by some writer or editor. A miner that skips them
-silently loses run data, which is the one thing this whole path exists to preserve. Every verb
-counts and names them; `--strict` turns them into a nonzero exit.
+Measured 2026-09-03 (`python3 scripts/lane_log_watermark.py status --json` over every discovered
+roadmap): 9 malformed lines out of 492 total, all in `demand-ready`, each truncated mid-`note` at
+exactly 533 bytes by some writer or editor. The 9 held steady between 2026-09-02 and 2026-09-03
+while the total line count moved (421 -> 492); do not treat either number as fixed -- re-run the
+command above rather than citing this docstring. A miner that skips malformed lines silently loses
+run data, which is the one thing this whole path exists to preserve. Every verb counts and names
+them; `--strict` turns them into a nonzero exit.
 
 TIMESTAMPS ARE NOT A CURSOR
 ---------------------------
@@ -39,15 +45,28 @@ three-hour misread from exactly that (I4, "the box is UTC-3"). Timestamps are ca
 watermark for human reading only. The cursor is the line number; the integrity check is the hash.
 
 Usage:
-    lane_log_watermark.py status  [--roadmap SLUG]... [--root DIR] [--json] [--strict]
-    lane_log_watermark.py pending [--roadmap SLUG]... [--root DIR] [--json] [--strict]
-    lane_log_watermark.py advance --roadmap SLUG [--to-line N] [--run-id ID] [--root DIR] [--json]
-    lane_log_watermark.py verify  [--roadmap SLUG]... [--root DIR] [--json]
+    lane_log_watermark.py status  [--roadmap SLUG]... [--root DIR] [--watermark-dir DIR] [--json] [--strict]
+    lane_log_watermark.py pending [--roadmap SLUG]... [--root DIR] [--watermark-dir DIR] [--json] [--strict]
+    lane_log_watermark.py advance --roadmap SLUG [--to-line N] [--run-id ID] [--root DIR] [--watermark-dir DIR] [--json]
+    lane_log_watermark.py verify  [--roadmap SLUG]... [--root DIR] [--watermark-dir DIR] [--json]
 
     status   what the watermark says, per roadmap, with how many lines are new since
     pending  print the unread lines themselves (the consolidation's actual input)
     advance  move a roadmap's watermark to --to-line (default: the file's current last line)
     verify   re-check every stored hash against disk; nonzero if any roadmap drifted
+
+    --watermark-dir DIR   point directly at the directory holding (or that should hold)
+                           `consolidation-watermark.json`, overriding the default
+                           `<root>/planning/open-work/orchestration-runs` location -- the same
+                           point-at-the-object convention as `check_lane_agents.py --lock-dir` and
+                           `check_escalations.py --roadmaps-dir`. Chiefly for tests: it makes the
+                           "no watermark file exists yet" case exercisable without also having to
+                           fabricate a fixture `--root` with a full `planning/` layout.
+
+verify's two "nothing is wrong" shapes read differently on purpose: no watermark file (or a file
+with no entries) for the selected roadmaps prints a sentence saying so; one or more watermarks
+present with no drift prints the `<N> watermark(s) checked, 0 drifted` count line, unchanged from
+before this flag existed. A real drift is reported identically either way.
 
 Exit codes: 0 ok · 1 usage/IO error · 2 integrity drift (verify, or advance over a drifted mark)
             3 malformed lines present and --strict was passed
@@ -130,24 +149,30 @@ def read_lines(path: Path) -> tuple[list[str], list[int]]:
     return lines, bad
 
 
-def load_watermarks(root: Path) -> dict:
-    p = root / WATERMARK_REL
-    if not p.is_file():
+def resolve_watermark_path(root: Path, explicit: str | None) -> Path:
+    """Resolve the `consolidation-watermark.json` path. Precedence: explicit `--watermark-dir`
+    (the file lives directly inside it), else the default `<root>/WATERMARK_REL` location."""
+    if explicit:
+        return Path(explicit).resolve() / "consolidation-watermark.json"
+    return root / WATERMARK_REL
+
+
+def load_watermarks(path: Path) -> dict:
+    if not path.is_file():
         return {"version": SCHEMA_VERSION, "roadmaps": {}}
     try:
-        data = json.loads(p.read_text())
+        data = json.loads(path.read_text())
     except Exception as exc:                       # noqa: BLE001
-        raise SystemExit(f"ERROR: {p} does not parse: {exc}")
+        raise SystemExit(f"ERROR: {path} does not parse: {exc}")
     if not isinstance(data, dict) or not isinstance(data.get("roadmaps"), dict):
-        raise SystemExit(f"ERROR: {p} is not a watermark file (no `roadmaps` object)")
+        raise SystemExit(f"ERROR: {path} is not a watermark file (no `roadmaps` object)")
     return data
 
 
-def save_watermarks(root: Path, data: dict) -> Path:
-    p = root / WATERMARK_REL
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-    return p
+def save_watermarks(path: Path, data: dict) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return path
 
 
 def state_for(root: Path, slug: str, marks: dict) -> dict:
@@ -240,7 +265,7 @@ def cmd_pending(root: Path, slugs, marks, as_json, strict) -> int:
     return 0
 
 
-def cmd_advance(root: Path, slug, to_line, run_id, marks, as_json) -> int:
+def cmd_advance(root: Path, slug, to_line, run_id, marks, as_json, watermark_path: Path) -> int:
     st = state_for(root, slug, marks)
     if st.get("error"):
         print(f"ERROR: {slug}: {st['error']}", file=sys.stderr)
@@ -275,9 +300,13 @@ def cmd_advance(root: Path, slug, to_line, run_id, marks, as_json) -> int:
     }
     marks["roadmaps"][slug] = entry
     marks["version"] = SCHEMA_VERSION
-    path = save_watermarks(root, marks)
+    path = save_watermarks(watermark_path, marks)
+    try:
+        watermark_file = str(path.relative_to(root))
+    except ValueError:
+        watermark_file = str(path)
     result = {"roadmap": slug, "advanced_from": st["watermark_line"], "advanced_to": target,
-              "consumed": target - st["watermark_line"], "watermark_file": str(path.relative_to(root)),
+              "consumed": target - st["watermark_line"], "watermark_file": watermark_file,
               "malformed_lines": bad}
     print(json.dumps(result, indent=2, ensure_ascii=False) if as_json
           else f"{slug}: {st['watermark_line']} -> {target} ({target - st['watermark_line']} lines consumed)"
@@ -288,12 +317,19 @@ def cmd_advance(root: Path, slug, to_line, run_id, marks, as_json) -> int:
 def cmd_verify(root: Path, slugs, marks, as_json) -> int:
     rows = [state_for(root, s, marks) for s in slugs if (marks["roadmaps"].get(s))]
     bad = [r for r in rows if r.get("drift")]
+    none_recorded = len(rows) == 0
     if as_json:
-        print(json.dumps({"checked": len(rows), "drifted": bad}, indent=2, ensure_ascii=False))
+        print(json.dumps({"checked": len(rows), "drifted": bad, "none_recorded": none_recorded},
+                          indent=2, ensure_ascii=False))
     else:
         for r in bad:
             print(f"DRIFT {r['roadmap']}: {r['drift']}")
-        print(f"{len(rows)} watermark(s) checked, {len(bad)} drifted")
+        if none_recorded:
+            # Distinct from "N checked, 0 drifted" below on purpose -- "no watermark exists yet"
+            # and "we checked N and found nothing wrong" are different facts about the world.
+            print("no watermarks recorded yet -- nothing to verify")
+        else:
+            print(f"{len(rows)} watermark(s) checked, {len(bad)} drifted")
     return 2 if bad else 0
 
 
@@ -305,19 +341,25 @@ def main() -> int:
     ap.add_argument("--to-line", type=int, default=None)
     ap.add_argument("--run-id", default=None)
     ap.add_argument("--root", default=None)
+    ap.add_argument("--watermark-dir", default=None,
+                    help="point directly at the directory holding consolidation-watermark.json, "
+                         "overriding the default <root>/planning/open-work/orchestration-runs "
+                         "location (--lock-dir / --roadmaps-dir convention)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict", action="store_true",
                     help="exit 3 when any selected log has malformed lines")
     args = ap.parse_args()
 
     root = Path(args.root).resolve() if args.root else find_brain_root(Path.cwd())
-    marks = load_watermarks(root)
+    watermark_path = resolve_watermark_path(root, args.watermark_dir)
+    marks = load_watermarks(watermark_path)
 
     if args.verb == "advance":
         if not args.roadmaps or len(args.roadmaps) != 1:
             print("ERROR: advance takes exactly one --roadmap", file=sys.stderr)
             return 1
-        return cmd_advance(root, args.roadmaps[0], args.to_line, args.run_id, marks, args.json)
+        return cmd_advance(root, args.roadmaps[0], args.to_line, args.run_id, marks, args.json,
+                            watermark_path)
 
     slugs = selected(root, args.roadmaps)
     if not slugs:
