@@ -56,6 +56,41 @@ commits, so it plainly existed before this scan -- a deletion, not a future crea
 therefore also excludes any path that has ever been git-tracked, via `_ever_tracked()`, before
 concluding a later task "creates" it.
 
+RULE 3 -- a task that tightens a gating threshold, floor, or detector when a LATER task in
+the same tasks.json regenerates the artifact that detector reads. Neither RULE 1 nor RULE 2
+can see this shape: RULE 1 is path-existence and here the artifact's path already exists on
+disk at every boundary; RULE 2 keys on `planning/harness.json` registration and no gate is
+being newly registered here -- only the artifact's CONTENT is stale at the boundary. This is
+bella's real instance (BT.ticket.engines-cannot-express-a-red-green-task): its ticket bailed
+at task 3 twice identically because task 3 sharpened a `gates:true` MIN_PNG_BYTES floor in a
+detector script before task 4 re-captured the screenshot that same check reads -- no retry
+could ever clear it, because the gate that had to pass at task 3's own boundary was checking
+an artifact task 3 never touched.
+
+Detected structurally, from the repo's OWN `planning/harness.json` (not the fixture-only
+signal RULE 2 uses): for every check registered `gates:true` there, split its `command`
+string on whitespace and take the first `scripts/*.py`-shaped token as the detector it
+INVOKES and every other slash-containing token as a path it READS AS INPUT (e.g.
+`python3 scripts/check_screenshot_floor.py assets/screenshot.png` invokes
+`scripts/check_screenshot_floor.py` and reads `assets/screenshot.png`). Flag task N when its
+`files[]` contains that detector path and some later task M (task_id > N) has that same
+input path in its own `files[]` -- the detector changed before the artifact it grades did.
+
+RULE 3 is the most false-positive-prone rule in this file, more so than RULE 2: it fires on
+ANY edit to a detector script ahead of ANY later edit to an artifact it reads, with no way to
+tell from `tasks.json` alone whether the earlier edit actually tightened a threshold (as
+opposed to, say, a comment fix or a refactor that changes nothing observable) or whether the
+later edit actually regenerates the artifact's content (as opposed to touching unrelated
+bytes in the same file). It deliberately does NOT try to decide either of those -- exactly
+the class of prediction this file's opening paragraph already refuses, because a checker that
+guesses trains the reader to ignore it. Two things keep it narrow rather than noisy: it only
+fires on paths that a REGISTERED `gates:true` check's own `command` names (never a path this
+checker invents), and the negative control below -- a detector-script edit with no later task
+touching the check's input path -- must NOT fire, so the rule cannot degenerate into "flag
+every detector edit." The merged-task shape (one task edits both the detector and the
+artifact together) also does not fire, since RULE 3 only ever compares a task to a STRICTLY
+LATER one; that is the fix RULE 3 is telling the author to make, so it has to stay reachable.
+
 A spec with no tasks.json, an empty array, or a task with no validation_commands is not a
 failure -- say nothing about it. Every subprocess call (none here) would check its own return
 code, and no check here is built on a shell pipeline.
@@ -82,6 +117,7 @@ SKIP_DIRS = {"node_modules", ".git", "archive", "target", ".fleet-locks", "sdlc"
 HARNESS_PATH = "planning/harness.json"
 
 _TRACKED_CACHE = {}
+_HARNESS_CHECKS_CACHE = {}
 
 
 def _ever_tracked(path, repo_root="."):
@@ -107,6 +143,55 @@ def _ever_tracked(path, repo_root="."):
         tracked = False
     _TRACKED_CACHE[key] = tracked
     return tracked
+
+
+def _load_harness_checks(repo_root="."):
+    """Return the RULE-3-relevant shape of every `gates:true` check registered in
+    `{repo_root}/planning/harness.json`: a list of {"name": str, "script": str,
+    "inputs": [str, ...]} dicts, one per check whose `command` names both a
+    `scripts/*.py` detector and at least one other slash-containing argument.
+
+    A check with no detector script, no other path argument, a malformed/missing
+    `command`, or an absent/unparseable `harness.json` contributes nothing -- this is a
+    RULE 3 input signal, not a harness-schema validator (that is a different check's
+    job). Cached per repo_root since the same harness.json is read once per task in a
+    spec's boundary scan.
+    """
+    key = os.path.abspath(repo_root)
+    if key in _HARNESS_CHECKS_CACHE:
+        return _HARNESS_CHECKS_CACHE[key]
+
+    out = []
+    path = os.path.join(repo_root, HARNESS_PATH)
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except Exception:  # noqa: BLE001 - a malformed harness.json is another check's job
+        data = None
+
+    if isinstance(data, dict):
+        checks = (data.get("validation") or {}).get("checks") or []
+        for c in checks:
+            if not isinstance(c, dict) or not c.get("gates"):
+                continue
+            command = c.get("command")
+            if not isinstance(command, str):
+                continue
+            script_path = None
+            input_paths = []
+            for tok in command.split():
+                if tok.startswith("-") or "/" not in tok:
+                    continue
+                if script_path is None and tok.startswith("scripts/") and tok.endswith(".py"):
+                    script_path = tok
+                elif tok != script_path:
+                    input_paths.append(tok)
+            if script_path and input_paths:
+                out.append({"name": c.get("name"), "script": script_path,
+                            "inputs": input_paths})
+
+    _HARNESS_CHECKS_CACHE[key] = out
+    return out
 
 
 def _load_tasks(path):
@@ -140,14 +225,15 @@ def _by_id(tasks):
 def check_spec(tasks, repo_root="."):
     """Return a list of finding dicts for one spec's already-loaded tasks list.
 
-    Each finding: {"rule": "R1"|"R2", "task_id": int, "path": str, "later_task_id": int,
-    "command": str|None}.
+    Each finding: {"rule": "R1"|"R2"|"R3", "task_id": int, "path": str, "later_task_id":
+    int, "command": str|None}.
     """
     findings = []
     by_id = _by_id(tasks)
     if not by_id:
         return findings
     ids_sorted = sorted(by_id)
+    harness_checks = _load_harness_checks(repo_root)
 
     for tid in ids_sorted:
         task = by_id[tid]
@@ -201,6 +287,25 @@ def check_spec(tasks, repo_root="."):
                     "later_task_id": creator_tid, "command": None,
                 })
 
+        # -- RULE 3: a registered gates:true check's detector is tightened here while a --
+        #            LATER task regenerates the artifact that same check reads as input --
+        task_files = _files_of(task)
+        for hc in harness_checks:
+            if hc["script"] not in task_files:
+                continue
+            for tid2 in ids_sorted:
+                if tid2 <= tid:
+                    continue
+                matched = sorted(_files_of(by_id[tid2]) & set(hc["inputs"]))
+                if not matched:
+                    continue
+                for p in matched:
+                    findings.append({
+                        "rule": "R3", "task_id": tid, "path": p,
+                        "later_task_id": tid2, "command": hc["name"],
+                    })
+                break  # earliest later task that regenerates any input is enough to flag
+
     return findings
 
 
@@ -212,6 +317,11 @@ def _format_finding(spec_file, finding):
         return (f"FAIL {spec_file} task {task_id}: validation_commands references "
                 f"{path!r}, which does not exist at this boundary -- created only by "
                 f"task {later}. command: {finding['command']!r}")
+    if finding["rule"] == "R3":
+        return (f"FAIL {spec_file} task {task_id}: tightens the detector for gates:true "
+                f"check {finding['command']!r} while the artifact it reads, {path!r}, is "
+                f"not regenerated until later task {later} -- the gate cannot pass at "
+                f"this boundary")
     return (f"FAIL {spec_file} task {task_id}: registers planning/harness.json (a gate) "
             f"while {path!r} is created only by later task {later} -- the gate cannot "
             f"pass at this boundary")
