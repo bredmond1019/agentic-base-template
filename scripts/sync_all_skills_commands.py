@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 import re
@@ -11,7 +12,24 @@ def find_workspace_root():
         cwd = os.path.dirname(cwd)
     return None
 
+DRY_RUN = False
+
+
 def run_cmd(cmd, cwd=None):
+    """Run a command, honouring DRY_RUN.
+
+    For rsync invocations --dry-run is translated into rsync's own -n, so the output is a real
+    per-file report of what would transfer or be deleted rather than an echo of the command.
+    For the python sub-scripts it is forwarded as --dry-run, which they implement natively.
+    """
+    if DRY_RUN:
+        if isinstance(cmd, list):
+            cmd = cmd + ["--dry-run"]
+        elif cmd.startswith("rsync -av"):
+            cmd = cmd.replace("rsync -av", "rsync -avn", 1)
+        else:
+            print(f"[dry-run] would run: {cmd}")
+            return True
     print(f"Running: {' '.join(cmd) if isinstance(cmd, list) else cmd}")
     res = subprocess.run(cmd, shell=not isinstance(cmd, list), cwd=cwd, capture_output=True, text=True)
     if res.returncode != 0:
@@ -21,6 +39,29 @@ def run_cmd(cmd, cwd=None):
     return True
 
 def main():
+    global DRY_RUN
+    parser = argparse.ArgumentParser(
+        description=(
+            "Sync base-template's commands and skills to the global installs and every "
+            "sub-brain tier."
+        ),
+        epilog=(
+            "This script had NO argument parsing at all until 2026-09-03. Any flag - including "
+            "--help - was ignored and the script ran a full fleet sync: on 2026-09-02 that "
+            "produced 1,329 unreviewed insertions across base-template, HQ and five tiers, all "
+            "reverted by hand. An unrecognised flag now exits 2 without touching anything."
+        ),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report everything that would change; write nothing",
+    )
+    args = parser.parse_args()
+    DRY_RUN = args.dry_run
+    if DRY_RUN:
+        print("=== DRY RUN — nothing will be written ===")
+
     root = find_workspace_root()
     if not root:
         print("ERROR: brain.toml not found. Must run from within the agentic-portfolio workspace.")
@@ -66,7 +107,8 @@ def main():
             
         print(f"=== Syncing brain commands for tier: {tier} ===")
         # Ensure destination folder exists
-        os.makedirs(f"{tier}/.claude/commands", exist_ok=True)
+        if not DRY_RUN:
+            os.makedirs(f"{tier}/.claude/commands", exist_ok=True)
         tier_commands_cmd = (
             f"rsync -av --delete "
             f"--include='archive.md' --include='capture.md' --include='commit.md' "
@@ -93,7 +135,10 @@ def main():
     if not run_cmd([sys.executable, sync_skills_script]):
         sys.exit(1)
 
-    print("\nAll syncs completed successfully!")
+    if DRY_RUN:
+        print("\nDry run complete. Nothing was written.")
+    else:
+        print("\nAll syncs completed successfully!")
 
 if __name__ == "__main__":
     main()

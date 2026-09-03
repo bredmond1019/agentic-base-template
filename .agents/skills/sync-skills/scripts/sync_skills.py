@@ -1,3 +1,5 @@
+import argparse
+import filecmp
 import os
 import shutil
 import re
@@ -69,6 +71,49 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
    - Update the status and log.
    - Create a pull request (PR) using git CLI or GitHub CLI (unless `--no-pr` is specified).
 """
+
+
+# Set by main() from --dry-run. When true, nothing is written or deleted; every would-be change is
+# reported instead. This exists because the script's only "inspect" mode used to be running it:
+# invoking it with an unrecognised flag (e.g. --help) silently ran a full fleet sync, which on
+# 2026-09-02 produced 1,329 unreviewed insertions across base-template, HQ and five tiers.
+DRY_RUN = False
+_CHANGES = []
+
+
+def _write_text(path, content):
+    """Write `content` to `path` unless DRY_RUN, reporting whether it is a real change."""
+    existing = None
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            existing = f.read()
+    if existing == content:
+        return False
+    _CHANGES.append(("create" if existing is None else "modify", path))
+    if DRY_RUN:
+        print(f"  [dry-run] would {'create' if existing is None else 'modify'}: {path}")
+        return True
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return True
+
+
+
+def _dirs_match(a, b):
+    """True if two skill folders hold the same file names and byte-identical contents."""
+    cmp = filecmp.dircmp(a, b)
+    if cmp.left_only or cmp.right_only or cmp.funny_files:
+        return False
+    match, mismatch, errors = filecmp.cmpfiles(a, b, cmp.common_files, shallow=False)
+    if mismatch or errors:
+        return False
+    return all(_dirs_match(os.path.join(a, d), os.path.join(b, d)) for d in cmp.common_dirs)
+
+def _makedirs(path):
+    if DRY_RUN:
+        return
+    os.makedirs(path, exist_ok=True)
 
 def extract_js_header(filepath):
     header_lines = []
@@ -149,8 +194,7 @@ def get_skill_frontmatter(skill_name, existing_skill_path, command_filepath=None
 
 def sync_command_skills(skills_dir, commands_dir):
     print(f"Syncing command skills from {commands_dir} to {skills_dir}...")
-    if not os.path.exists(skills_dir):
-        os.makedirs(skills_dir)
+    _makedirs(skills_dir)
         
     for filename in os.listdir(commands_dir):
         if not filename.endswith(".md") or filename == "README.md" or filename == "e2e-templates-README.md" or filename.startswith("test_"):
@@ -162,8 +206,8 @@ def sync_command_skills(skills_dir, commands_dir):
         skill_file = os.path.join(skill_folder, "SKILL.md")
         
         if not os.path.exists(skill_folder):
-            os.makedirs(skill_folder)
-            print(f"  Created new skill folder: {skill_name}")
+            _makedirs(skill_folder)
+            print(f"  {'[dry-run] would create' if DRY_RUN else 'Created'} skill folder: {skill_name}")
             
         frontmatter = get_skill_frontmatter(skill_name, skill_file, command_path)
         
@@ -173,15 +217,12 @@ def sync_command_skills(skills_dir, commands_dir):
         # Strip frontmatter from command file if present
         _, body = parse_frontmatter(command_content)
         
-        # Write skill file
-        with open(skill_file, "w", encoding="utf-8") as f:
-            f.write(frontmatter + body + "\n")
-        print(f"  Updated skill: {skill_name}")
+        if _write_text(skill_file, frontmatter + body + "\n") and not DRY_RUN:
+            print(f"  Updated skill: {skill_name}")
 
 def sync_workflow_skills(skills_dir, workflows_dir):
     print(f"Syncing workflow skills from {workflows_dir} to {skills_dir}...")
-    if not os.path.exists(skills_dir):
-        os.makedirs(skills_dir)
+    _makedirs(skills_dir)
         
     workflows = ["sdlc-block", "sdlc-run", "sdlc-task", "sdlc-flow"]
     
@@ -195,8 +236,8 @@ def sync_workflow_skills(skills_dir, workflows_dir):
         skill_file = os.path.join(skill_folder, "SKILL.md")
         
         if not os.path.exists(skill_folder):
-            os.makedirs(skill_folder)
-            print(f"  Created new workflow skill folder: {wf}")
+            _makedirs(skill_folder)
+            print(f"  {'[dry-run] would create' if DRY_RUN else 'Created'} workflow skill folder: {wf}")
             
         # 1. Get frontmatter
         frontmatter = get_skill_frontmatter(wf, skill_file)
@@ -213,35 +254,85 @@ def sync_workflow_skills(skills_dir, workflows_dir):
             # Find the guide section
             idx = content.find("## Antigravity Execution Guide")
             if idx != -1:
-                guide = "\n" + content[idx:]
+                # rstrip() is load-bearing for IDEMPOTENCY, not cosmetic. The guide is read back
+                # out of the file this function itself wrote, so any trailing newlines it carries
+                # are re-emitted alongside the "\n" suffix below - and grow by one on every run.
+                # Before this, each sync appended blank lines to sdlc-task/SKILL.md and
+                # sdlc-flow/SKILL.md forever, leaving both permanently dirty after a "successful"
+                # sync. That also blocked any freshness check being built on this script: a check
+                # would report drift immediately after a clean sync, which is the fastest way to
+                # make a check ignored.
+                guide = "\n" + content[idx:].rstrip()
         
         # If no guide was found and it's sdlc-flow, use our defined one
         if not guide and wf == "sdlc-flow":
-            guide = SDLC_FLOW_GUIDE
+            guide = SDLC_FLOW_GUIDE.rstrip()
             
-        # Write skill file
-        with open(skill_file, "w", encoding="utf-8") as f:
-            f.write(frontmatter + js_header + "\n" + guide + "\n")
-        print(f"  Updated workflow skill: {wf}")
+        if _write_text(skill_file, frontmatter + js_header + "\n" + guide + "\n") and not DRY_RUN:
+            print(f"  Updated workflow skill: {wf}")
 
-def copy_to_global(skills_dir, global_skills_dir):
-    print(f"Copying skills from {skills_dir} to global directory {global_skills_dir}...")
-    if not os.path.exists(global_skills_dir):
-        os.makedirs(global_skills_dir)
-        
-    for folder in os.listdir(skills_dir):
+def copy_hand_authored_skills(skills_dir, dest_skills_dir, authored_dir):
+    """Copy ONLY the hand-authored skills into `dest_skills_dir`.
+
+    `authored_dir` is base-template/.claude/skills - the source of truth for what is a real,
+    hand-written skill as opposed to a mirror this script generated from a command. The slug
+    list is derived from that directory rather than hardcoded, so a new skill needs no edit here.
+
+    Why the filter is load-bearing: this function rmtree+copytree's each slug, and `skills_dir`
+    (.agents/skills) holds ~50 command mirrors alongside the hand-authored skills. Copying all of
+    them into the HQ brain root would overwrite HQ's OWN command mirrors with base-template's -
+    HQ's /prime mirror replaced by base-template's - which is exactly the overwrite
+    sync_downstream_harness.py's `engines_only` flag exists to prevent (D54). HQ authors its own
+    brain-specific commands and main() already regenerates its mirrors from them.
+    """
+    if not os.path.isdir(authored_dir):
+        print(f"  Authored-skill source {authored_dir} not found; copying nothing.")
+        return
+
+    authored = sorted(
+        d for d in os.listdir(authored_dir)
+        if os.path.isdir(os.path.join(authored_dir, d))
+    )
+    print(f"Copying {len(authored)} hand-authored skills from {skills_dir} to {dest_skills_dir}...")
+    _makedirs(dest_skills_dir)
+
+    for folder in authored:
         src_folder = os.path.join(skills_dir, folder)
         if not os.path.isdir(src_folder):
+            print(f"  Skipping {folder}: no .agents mirror exists yet")
             continue
-            
-        dest_folder = os.path.join(global_skills_dir, folder)
+
+        dest_folder = os.path.join(dest_skills_dir, folder)
+        # Compare before reporting: an unconditional "would replace" makes --dry-run useless,
+        # since it reports every slug on every invocation whether or not anything differs.
+        identical = os.path.isdir(dest_folder) and not filecmp.dircmp(
+            src_folder, dest_folder
+        ).diff_files and _dirs_match(src_folder, dest_folder)
+        if identical:
+            continue
+        if DRY_RUN:
+            print(f"  [dry-run] would replace: {dest_folder}")
+            _CHANGES.append(("replace", dest_folder))
+            continue
         if os.path.exists(dest_folder):
             shutil.rmtree(dest_folder)
-            
+
         shutil.copytree(src_folder, dest_folder)
-        print(f"  Copied {folder} -> global")
+        print(f"  Copied {folder}")
 
 def main():
+    global DRY_RUN
+    parser = argparse.ArgumentParser(
+        description="Generate .agents/skills mirrors from .claude/commands and .claude/workflows."
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report every file that would be created or modified; write nothing",
+    )
+    args = parser.parse_args()
+    DRY_RUN = args.dry_run
+
     os.chdir(os.path.expanduser("~/Dev/agentic-portfolio"))
     
     # 1. Base template
@@ -258,9 +349,13 @@ def main():
     
     sync_command_skills(root_skills, root_commands)
     
-    # 3. Copy base-template skills to global config
-    global_skills = os.path.expanduser("~/agentic-portfolio")
-    copy_to_global(base_skills, global_skills)
+    # 3. Copy base-template's hand-authored skills into the HQ brain root's .agents/skills.
+    #    NOT ~/agentic-portfolio, which is a bare home directory nothing reads: that was the
+    #    original target and it accumulated 66 orphaned skill folders before being caught. An
+    #    earlier variant of the same bug never expanduser'd the string at all and wrote 65 files
+    #    to a literal ./~ directory at the HQ root, invisible to every git-based check because
+    #    .gitignore's `*~` rule matches it (HQ.7.B, scripts/check_no_stray_tilde.sh).
+    copy_hand_authored_skills(base_skills, root_skills, "base-template/.claude/skills")
     
     # 4. Sub-brain tiers (core, portfolio, side, client)
     tiers = set()
@@ -279,7 +374,10 @@ def main():
         if os.path.exists(tier_commands):
             sync_command_skills(tier_skills, tier_commands)
             
-    print("\nSync and migration complete!")
+    if DRY_RUN:
+        print(f"\n[dry-run] {len(_CHANGES)} path(s) would change. Nothing was written.")
+    else:
+        print(f"\nSync and migration complete! {len(_CHANGES)} path(s) changed.")
 
 if __name__ == "__main__":
     main()

@@ -19,6 +19,14 @@ automates the second. It **calls** `/consolidate-run` for the first rather than 
 corpus in view; that is the job. Extraction fans out to Sonnet subagents (Step 3) — the synthesis in
 Step 4 does not.
 
+
+**Before writing down anything that is wrong, follow
+[`.claude/workflows/finding-discipline.md`](../workflows/finding-discipline.md).** Evidence travels
+with the finding or the finding does not exist; one occurrence is an instance, not a pattern; and an
+odd-but-unexplained thing is recorded as an **observation** rather than inflated into a defect. The
+cut list is part of the report — a pass that files everything it noticed has not filtered. Measured:
+three independent audits found 32%/32%/26% of filed carryover already dead.
+
 ## Not these
 
 - **Not `/consolidate-run`** — that is one roadmap, and its output is proposed `carryover[]` entries.
