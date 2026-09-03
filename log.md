@@ -3,7 +3,48 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-02
+**Last updated:** 2026-09-03
+
+---
+## 2026-09-03 — engine terminal writes now assert their own evidence, not narrate it
+
+- **What:** closed `BT.ticket.engine-terminal-state-needs-evidence` (5/5 tasks, PASS, `1f06446`
+  `a88786a` `8a4c8dc` `e2fdb61` `f1d6a35` `3d225dc`). Task 1 added
+  `scripts/test_terminal_state_evidence.py` (assertions A–E) over both engines' terminal-write
+  paths and observed genuinely RED against the unfixed engines (A and C failing on both), per the
+  D68 observed-red contract. Task 2 made `emitStateRan` — previously declared, gated, and logged
+  at up to eleven sites per engine but present as a key in 0 of the corpus's 150
+  `sdlc-*-state.json` files — an actual write onto the in-memory state object each engine
+  serializes to disk, in both `sdlc-task.js` and `sdlc-flow.js`. Task 3 threaded
+  `renderWorkAssertion`'s existing files[]-vs-diff result into a structured `workAssertionPassed`
+  field that gates the per-task loop itself (triage/bail on absent-or-false, not just
+  agent-instructed prose in the implement prompt) in both engines. Task 4 re-picked and re-stamped
+  all 5 sync-manifest anchors that tasks 2/3 shifted (verified byte-identical content via git-show
+  diff, no SKILL.md/docs prose changes needed). Task 5 registered `terminal-state-evidence`
+  (`gates:true`) in `planning/harness.json` citing task 1's own red-then-green history as evidence,
+  fixed a shared-library drift in `.claude/workflows/prompts/shared.js` that the full gating sweep
+  surfaced (tasks 2/3 had edited both engines identically but never propagated the change into the
+  shared master), and confirmed all 65 gated checks plus all four `bastion validate-brain` flags
+  pass with 0 errors. The operator-attributed-verdict path named in the spec's `why` was confirmed
+  absent from both engines during task 5's premise re-derivation — AC4 was amended in place from a
+  removal to a regression guard once the source was actually read, per D18.
+- **Why:** `pattern-analysis-2026-09-02` M2 — three separate incidents (a bookkeep close on an
+  unmerged PR, a fabricated operator sign-off, a green branch recording `tasks_passed: 0`) shared
+  one root cause: none were caught by a gate, all were caught by looking at the artifact itself. The
+  engine's own terminal write is now the thing doing that looking.
+- **Refs:** `planning/BT.ticket.engine-terminal-state-needs-evidence/`;
+  `planning/orchestration-run/runs-that-can-be-believed/notes.md`; D68, D18.
+
+```
+3d225dc docs: update docs for BT.ticket.engine-terminal-state-needs-evidence
+f1d6a35 feat: implement BT.ticket.engine-terminal-state-needs-evidence-task5
+e2fdb61 feat: implement BT.ticket.engine-terminal-state-needs-evidence-task4
+8a4c8dc feat: implement BT.ticket.engine-terminal-state-needs-evidence-task3
+a88786a feat: implement BT.ticket.engine-terminal-state-needs-evidence-task2
+1f06446 feat: implement BT.ticket.engine-terminal-state-needs-evidence-task1
+2f5be18 feat: implement BT.ticket.gates-must-be-observed-red-task2
+b586df7 feat: implement BT.ticket.gates-must-be-observed-red-task1
+```
 
 ---
 ## 2026-09-02 — exclusive-lease steps corrected; a gate found red on main; the escalations gate found mis-scoped
