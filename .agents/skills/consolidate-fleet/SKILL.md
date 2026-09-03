@@ -244,25 +244,61 @@ exists to fix, one level up. This file is also the port surface: when disposal m
 
 ```json
 {"analysis": "<path to the .md>", "generated": "<ISO8601>", "roadmaps": ["..."],
+ "backfilled": false,
+ "conventions": {"ungrounded_excludes": ["id","title","description","why","created","updated"]},
  "rows": [
    {"finding_id": "gates-that-cannot-fail", "mechanism": "M1",
     "route": "block|chore|carryover|operator|none",
     "owner_repo": "base-template", "needs": "code|docs|state|operator|dedupe",
     "severity": "P0", "breadth": {"repos": 7, "instances": 17},
-    "evidence": ["<record path>:<line>", "..."],
+    "evidence": ["<analysis>.md:<line of the mechanism section>", "<record path>[:<line>]", "..."],
     "payload": {},
-    "ungrounded": ["files", "acceptance_criteria"],
+    "ungrounded": ["files.new", "acceptance_criteria"],
     "rationale": "one line: why this route"}
  ]}
 ```
 
 - **`payload`** carries only fields the analysis can GROUND against `block.schema.json`. Leave a
-  field out rather than inventing it.
+  field out rather than inventing it. **Set `payload.origin` to
+  `{"type": "mechanism", "slug": "<this row's finding_id>"}` on every `route: "block"` row.**
 - **`ungrounded[]` is required and is the point.** It names every required field the evidence does
   not support, so the filing agent knows exactly what to ask rather than guessing. A row with an
   empty `payload` and an honest `ungrounded[]` is more useful than a full one that guesses.
 - **`route: "none"` is a real value.** A mechanism the analysis decided to file nothing for says so
   here, so the filer reports it as a decision rather than an omission.
+
+**Five rules the first hand-written `disposal.json` needed and this shape did not give it** (all
+measured on the 2026-09-02 backfill, `retros/disposal-2026-09-02.json` — 11 rows, 10 with a
+non-empty `ungrounded[]`):
+
+1. **`ungrounded[]` needs a stated exclusion set, or it becomes a constant.** Six required fields —
+   `id`, `title`, `description`, `why`, `created`, `updated` — are mechanically derivable from the
+   mechanism itself and were underived on *every* row. Listing them eleven times destroys the
+   signal the field exists to carry. Declare them once in `conventions.ungrounded_excludes` and omit
+   them from rows. **`spec_dir` is NOT excluded**: it is conventional but it encodes a directory the
+   filer chooses, and it was chosen wrong once.
+2. **`needs` is a single enum and analyses propose pairs.** Two of eleven rows were proposed as
+   "docs + code". Record the dominant value and name the other half in `rationale`; never invent an
+   array the consumer will not read.
+3. **`evidence[]`'s first element is the analysis section anchor**, `<analysis>.md:<line>`. The
+   `path:line` form is right for a record the row can point at precisely, but a mechanism spans many
+   records and the per-finding line refs die with the extraction agents' returns. **A bare record
+   path is a valid element** — it is honest, and a fabricated line number is not.
+4. **`payload` is route-shaped, not always block-shaped.** `route: "carryover"` carries the carryover
+   entry's fields (`container`, `repo`, `slug`, `finding_id`, `kind`, `needs`) — note that a
+   carryover entry *does* carry `finding_id` and `needs`, unlike a block. `route: "operator"` and
+   `route: "none"` carry `{}`, and their `ungrounded[]` says why: an adjudication has no filable
+   payload.
+5. **`breadth.instances` is `null` when the mechanism heading gives repos only** — five of eleven
+   did. Null is the honest value; a guess here is exactly the self-report error the analysis's own
+   recount section exists to catch.
+
+**`ungrounded[]` entries may be finer or coarser than a schema field.** `files.new` (the modified
+paths were readable, the new ones invented) and free text naming a gap the schema has no field for
+("the third of the three counts — the analysis names two") were both more useful than `files`.
+
+**A backfilled file must say so.** Set `"backfilled": true` and a `backfill_note` giving the reason
+and the date, so a reader takes the payloads as *what was filed* rather than as current proposals.
 
 **A block carries neither `finding_id` nor `needs`, and that is correct — do not try.**
 `block.schema.json` is `additionalProperties: false` and declares neither; `mev create-block`'s
@@ -329,7 +365,8 @@ is invisible. Under `--dry-run`, advance nothing.
 
 **No `state.json`, in any repo.** One command writing state across a dozen repos is the contention
 pattern that has cost real runs (CLAUDE.md standing rule 10). This command writes exactly three
-things: the analysis at `--out`, its `index.md` row, and the watermark file. The
+things: the analysis at `--out`, `disposal.json` beside it, their `index.md` rows, and the
+watermark file. The
 `lifecycle: consolidated` stamps are `/consolidate-run`'s writes, made by that command.
 
 ## Traps
@@ -357,5 +394,9 @@ things: the analysis at `--out`, its `index.md` row, and the watermark file. The
 <n> roadmaps, <r> records, <l> lane-log lines -> <m> mechanisms (<k> new, <j> known)
 - <the highest-breadth mechanism, one line>
 - <anything skipped, and why>
-Analysis: <path>. Watermarks advanced: <slugs>. No state.json written.
+Analysis: <path>. Disposal: <path> (<u> of <m> rows carry a non-empty ungrounded[]).
+Watermarks advanced: <slugs>. No state.json written.
 ```
+
+**Report the `ungrounded[]` count, not just the file.** It is the one number that says how much of
+the disposal a filing agent will have to invent, and it is the cheapest signal in the artifact.
