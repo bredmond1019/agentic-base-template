@@ -1,5 +1,10 @@
 # GEMINI.md — working on `base-template`
 
+> **GENERATED FILE — do not edit by hand.**
+> Everything above the Fleet & Core Skills table is copied verbatim from `AGENTS.md`; only that
+> table and anything after it is Antigravity-specific. A hand edit here is silently overwritten on
+> the next sync. Edit `AGENTS.md` instead, or the tail below.
+
 This repo is the **software-factory source**: the curated harness + tokenized document
 scaffold that `/new-project` clones. You are not building a product here — you are curating the
 thing every new project starts from. Read `README.md` first for the layout and the
@@ -23,7 +28,7 @@ generation flow.
 |---|---|---|---|
 | **Harness** | `.claude/` + `.agents/` | The SDLC pipeline (commands, engines, and skills) — ships *mechanism* only | Yes — copied as-is |
 | **Scaffold** | `scaffold/` | Tokenized project docs (CLAUDE, GEMINI, AGENT, README, log, planning/ incl. `harness.json` stub) | Yes — copied + token-substituted |
-| **Template meta** | `GEMINI.md`, `CLAUDE.md`, `AGENT.md`, `README.md`, `log.md`, `planning/`, `docs/` | The template's *own* docs, change history, and pipeline config | **No** — never copied into a project |
+| **Template meta** | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md`, `log.md`, `planning/`, `docs/` | The template's *own* docs, change history, and pipeline config | **No** — never copied into a project |
 
 A new project must start with a **clean** log and a `D1-initial-okf` decision — so the template's
 own `log.md` / `planning/` (this repo's harness history, decisions, and `harness.json`) stay at
@@ -90,23 +95,37 @@ script never commits for you) — but it is no longer a fully manual copy-paste;
 harness` does steps 5's mechanical part. Repos still diverge by design after the pull (their own
 customizations are never touched) — keep changes here additive and well-documented.
 
-## Fleet & Core Skills
+## Where the tool-specific half lives
 
-The harness carries specialized skills in `.agents/skills/` (and `.claude/skills/`). Always consult
-the corresponding skill before executing high-stakes fleet operations:
+This file is **surface-neutral**: everything in it is true whichever agent is reading it. Anything
+that names a particular tool's directories or affordances lives in that tool's own file instead:
 
-| Skill | Primary Focus | When to consult |
+| File | Holds | How it loads |
 |---|---|---|
-| **`commit-in-this-fleet`** | Safe git operations across multi-repo & vault symlinks | BEFORE any `git add`, `commit`, `stash`, `reset`, or `mv` |
-| **`derive-state-safely`** | Authored vs derived state and writer execution | BEFORE running `mev emit-state --write`, `set-block-status`, or other state writers |
-| **`edit-state-json`** | Canonical `planning/state.json` schema & graph edges | BEFORE hand-editing `state.json` or authoring `depends_on`/`carryover` |
-| **`notify-operator`** | Operator alerting discipline via `bastion notify` | BEFORE sending notifications or deciding a lane is blocked |
-| **`ping-agent`** | Cross-lane messaging envelopes & registry protocol | BEFORE sending or triaging cross-lane messages |
-| **`report-to-the-operator`** | Concise operator reporting ceiling & format | When drafting chat replies, turn outputs, and run reports |
-| **`run-the-gates`** | Fleet validation suite & gate diagnostics | BEFORE running `validate-brain` or `harness.json` checks |
-| **`stop-or-continue`** | Session restart vs continuation correctness criteria | When an underlying binary/engine changes; never restart for token budget |
-| **`write-okf-markdown`** | OKF YAML frontmatter & index.md row maintenance | BEFORE creating or editing any `.md` under `docs/` or `planning/` |
-| **`write-repo-doc`** | Reader-first internal documentation standards | BEFORE writing or restructuring docs under `docs/` or guides |
+| `AGENTS.md` (this file) | architecture, conventions, standing rules, the update loop | imported by the others |
+| `CLAUDE.md` | the Fleet & Core Skills table for `.claude/skills/`, Claude-specific notes | Claude Code reads it, and it imports this file with `@AGENTS.md` |
+| `GEMINI.md` | the same table for `.agents/skills/`, Antigravity-specific notes | **generated** from this file plus that tail |
+
+**Do not add tool-specific paths or nouns here**, and do not edit `GEMINI.md` by hand — it is
+generated, so a hand edit is overwritten on the next sync. Edit this file, or `CLAUDE.md`'s tail.
+
+## Recording what you find
+
+Measured 2026-09-03: **no file in this fleet carried any instruction about this**, which is why
+every `## Known bugs` section still reads "None known at initialization." Route a finding by asking
+who needs it, in this order:
+
+| The finding is | Goes to | Because |
+|---|---|---|
+| Something that must be **tracked, scheduled or gated** | `planning/state.json` | Prose gates nothing, sorts nowhere, and shows up on no board. See standing rule 9 and `.claude/workflows/block-registration.md`. |
+| True for **any agent** working here — a build trap, a repo convention, a gotcha | **`AGENTS.md`** | Both surfaces read it. |
+| True only for **one tool** — a Claude Code permission quirk, an Antigravity resolution behaviour | that tool's own file | Never duplicate it into the other; that is how the two drifted in the first place. |
+
+**When: at the moment of discovery, not at handoff.** A finding you intend to write up later is a
+finding you will describe from memory, less precisely, if at all.
+
+**A finding written only into a markdown file is documentation, not work.** If something has to
+*happen*, it needs a `state.json` entry as well — the doc explains it, the graph carries it.
 
 ## Standing rules
 
@@ -303,3 +322,22 @@ Whenever you do hand off, write the entry point first — `status.md`, `handoff.
 of from your memory.
 <!-- END:session-continuity -->
 
+## Fleet & Core Skills
+
+The harness carries specialized skills in `.agents/skills/` (and `.claude/skills/`). Always consult
+the corresponding skill before executing high-stakes fleet operations:
+
+| Skill | Primary Focus | When to consult |
+|---|---|---|
+| **`commit-in-this-fleet`** | Safe git operations across multi-repo & vault symlinks | BEFORE any `git add`, `commit`, `stash`, `reset`, or `mv` |
+| **`derive-state-safely`** | Authored vs derived state and writer execution | BEFORE running `mev emit-state --write`, `set-block-status`, or other state writers |
+| **`edit-state-json`** | Canonical `planning/state.json` schema & graph edges | BEFORE hand-editing `state.json` or authoring `depends_on`/`carryover` |
+| **`notify-operator`** | Operator alerting discipline via `bastion notify` | BEFORE sending notifications or deciding a lane is blocked |
+| **`ping-agent`** | Cross-lane messaging envelopes & registry protocol | BEFORE sending or triaging cross-lane messages |
+| **`report-to-the-operator`** | Concise operator reporting ceiling & format | When drafting chat replies, turn outputs, and run reports |
+| **`run-the-gates`** | Fleet validation suite & gate diagnostics | BEFORE running `validate-brain` or `harness.json` checks |
+| **`stop-or-continue`** | Session restart vs continuation correctness criteria | When an underlying binary/engine changes; never restart for token budget |
+| **`write-okf-markdown`** | OKF YAML frontmatter & index.md row maintenance | BEFORE creating or editing any `.md` under `docs/` or `planning/` |
+| **`write-repo-doc`** | Reader-first internal documentation standards | BEFORE writing or restructuring docs under `docs/` or guides |
+| **`fleet-push-discipline`** | Cross-repo push ordering, CI-blocked gates, disabled pre-push hooks | BEFORE running `scripts/git_push.sh`, pushing any `core/*` repo directly, or debugging a push/CI failure unrelated to your change |
+| **`stamp-workflow-run-id`** | Recording the Workflow run id into an engine's state file for exact cost telemetry | AFTER any `Workflow({name:'sdlc-task'\|'sdlc-flow', ...})` call |
