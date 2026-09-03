@@ -82,24 +82,13 @@ adding value here.
    `constraint` and `known_issue` are **retired** (HQ D72) — okf-core preserves them only through its
    `Unknown(String)` fallback so legacy entries still round-trip. Do not mint new entries with either.
 
-   **Route at write time — three destinations, not two.** Ask both questions before appending:
+   **Route at write time — load the `edit-state-json` skill's Step 1 before appending.** This
+   command has no operator-work step of its own, so the skill (not `/handoff`'s step 2d) is the
+   routing authority here. It covers the operator-edge vs. `reference[]` vs. `carryover[]`
+   question in full, including the measured 30-of-202 fleet-wide misfiling rate for operator work
+   parked in `carryover[]` by mistake — do not re-derive the routing rule here.
 
-   1. **Can only a human do this?** A decision only the operator can make, a credential only they
-      hold, a judgement call, a thing they must look at — that is **not** a `carryover[]` entry. File
-      it as a `{"type":"operator", slug, exit, start, what?}` edge on the block it gates — the entry
-      form is in `docs/state/state-schema.md`; `/handoff` step 2d carries the full rule. This command
-      has no operator-work step of its own, which is exactly why the routing question belongs here.
-      **Why it matters:** a carryover entry gates nothing, so operator work parked in it is never
-      forced; an operator edge blocks the work standing behind it, which is what gets it done.
-      Measured 2026-08-19 — **30 of the fleet's 202 `carryover[]` entries are operator work misfiled
-      this way**, filed as `defect` or `deferred` because the table above offers no row meaning
-      "not an agent's to do."
-   2. **Is it permanently true?** A gotcha still true next month, a deliberate non-fix nobody intends to
-      reverse, a load-bearing measured number someone will need again — that belongs in `reference[]`.
-      A fact with no `clears_when` because nothing will ever make it stop being true is the signal.
-      See `docs/state/reference-container-schema.md` for its field table and kind vocabulary.
-
-   Only what survives both questions is a `carryover[]` entry: work-class findings that eventually
+   Only what survives both of its questions is a `carryover[]` entry: work-class findings that eventually
    clear — an unticketed defect, a deferred follow-on, a drifted surface, a transient env caveat.
 
    **Run `mev validate-state planning/state.json` immediately after any write this step makes
@@ -130,10 +119,16 @@ adding value here.
 
 ### Step 3 — Regenerate derived surfaces (`mev emit-state --write`)
 
-9. Shell out to `mev emit-state --write` (it walks up from the current directory to find
-   `brain.toml` itself — no need to `cd` to `BRAIN_ROOT` first). This is the **single derivation
-   engine** and it regenerates, in place, every generated surface from the `tracks[]` you just
-   authored in Step 2:
+9. **If `$BRAIN_ROOT/scripts/sync/emit_state_write.sh` exists, run it instead of the bare command
+   below.** Some brains wrap `emit-state --write` in a script that adds content-loss guards and
+   commits what it wrote — **locally only**, never pushing on its own (that class of wrapper is
+   opt-in to push, gated behind an env var only a nightly cron sets). This repo's harness stays
+   project-agnostic, so it never assumes that script exists — it only checks for it. If it's
+   absent, shell out to `mev emit-state --write` directly (it walks up from the current directory
+   to find `brain.toml` itself — no need to `cd` to `BRAIN_ROOT` first), and leave the resulting
+   changes uncommitted for `/commit`, `/wrap-up`, or `/handoff` to pick up — never commit them here
+   yourself with a broad `git add`. Either way, this step regenerates, in place, every generated
+   surface from the `tracks[]` you just authored in Step 2:
    - this repo's leaf `state.json` focus fields (`now` / `next` / `blocked`);
    - the brain `state.json`'s `repos[]` / `cross_repo[]` rollup and its own `focus`;
    - the per-project cache doc's focus headline + `synced_from` watermark

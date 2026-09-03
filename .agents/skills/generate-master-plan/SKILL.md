@@ -47,10 +47,7 @@ lives in an initiative's `planning/<slug>/plan.md`, authored by `/plan`.
 - **The registration steps** (block ID, `state.json` creation and registration, the cross-repo
   edge prompt, `mev emit-state --write`) are `.claude/workflows/block-registration.md` — one copy,
   shared by every producer. Four drifted copies existed before D65; only one of them created a
-  missing `state.json`, which is how at least one repo's block graph went dark. **`sdlc_workflow`
-  is required at registration** — a block with no value cannot be resolved to an engine and
-  silently drops out of any chain that names it; a pre-existing gap elsewhere in the corpus is
-  reported, not blocking.
+  missing `state.json`, which is how at least one repo's block graph went dark.
 - **The wave-table sentinel** is unchanged: `mev emit-state --write` fills
   `<!-- BEGIN generated:wave-table -->`. A file missing the sentinel pair is silently skipped
   (`W_EMIT_NO_SENTINEL`).

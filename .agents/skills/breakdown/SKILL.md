@@ -266,3 +266,4 @@ Run `mev emit-state --write` to update the brain's focus derivation and state ba
 The block in step 9 — the path, what was decomposed and what was skipped, the symbol-verification
 result, and any `tasks.json` edits. The `tasks.json` line is the one that matters most: it is the
 only part of this command's output an engine will act on.
+

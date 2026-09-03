@@ -6,7 +6,7 @@ description: >
 
 # Close Out — Verify test coverage, patch docs, and hand off cleanly.
 
-Run this after `/sdlc-run`, `/sdlc-flow`, or any implementation session to close the
+Run this after `/sdlc-flow` or any implementation session to close the
 quality loop before handing off: run the full test suite, fill coverage gaps, patch stale
 docs, then produce a clean `/handoff`.
 
@@ -14,10 +14,10 @@ docs, then produce a clean `/handoff`.
 
 $ARGUMENTS — optional. Parsed left to right:
   - `--gap-check-only` — run Steps 1–3 only (validation + coverage + docs); skip Step 4
-    (`/handoff`). Designed for automated per-block close-out from `/sdlc-block` where
-    handing off mid-run makes no sense. Preserves all gating and coverage logic.
+    (`/handoff`). Designed for automated per-block close-out from a roadmap orchestration run
+    where handing off mid-run makes no sense. Preserves all gating and coverage logic.
   - `--skip-coverage` — skip Step 2 (coverage scan + gap fill); use when coverage is
-    already known good or was verified by a prior `/review-task`.
+    already known good or was verified by a prior `/sdlc-flow` end review.
   - `--clean-worktree` — run Step 5 (clean-worktree) at the very end to merge a **worktree** branch
     into `main` and remove the worktree. Default is false (do not clean) to protect the "never
     auto-merge" rule.
@@ -44,7 +44,7 @@ Examples:
 
 ## Execution Model
 
-Run inline — do NOT spawn a subagent. `/update-docs`, `/handoff`, and `/clean-worktree` are
+Run inline — do NOT spawn a subagent. `/update-docs`, `write-repo-doc`, `/handoff`, and `/clean-worktree` are
 invoked as Skill tool calls or commands from the main agent context; they have their own confirmation gates.
 
 ## Instructions
@@ -122,23 +122,65 @@ if [ "$CURRENT_BRANCH" = "$RESOLVED_BASE" ]; then
   else
     # /sdlc-task in its default in-place mode commits straight onto the current (often base)
     # branch — no merge commit to scope from. It persists its own pre-task HEAD as `base_sha` in
-    # planning/<spec>/sdlc/sdlc-task-state.json for exactly this case. Recover the most recently
-    # updated one for this branch before giving up.
+    # planning/<spec>/sdlc/sdlc-task-state.json for exactly this case.
+    #
+    # Take the EARLIEST base of the current run, not the most recent. An /orchestrate chain runs
+    # several blocks in place on one branch, each writing its own state file whose `base_sha` is
+    # the HEAD it started from — so the newest file's base_sha is the last BLOCK's base, and
+    # scoping to it silently drops every earlier block in the chain from the emoji gate and the
+    # coverage sweep. Measured 2026-08-28: a three-block chain resolved to block 3's base and would
+    # have reviewed one block of three while reporting a clean close-out.
+    #
+    # "Of the current run" is bounded two ways, because the oldest base_sha on disk is often a
+    # months-old spec that would over-scope just as badly:
+    #   - the candidate must still be an ancestor of HEAD (a stale or abandoned base is not), and
+    #   - it must belong to the same run, approximated as within RUN_WINDOW_HOURS of the newest
+    #     candidate's timestamp.
+    # Among what survives, pick the base furthest back — the most commits between it and HEAD.
     TASK_BASE=$(python3 -c "
-import glob, json
-best_sha, best_ts = '', ''
+import glob, json, subprocess
+from datetime import datetime, timedelta
+
+RUN_WINDOW_HOURS = 24
+
+def parse(ts):
+    try:
+        return datetime.fromisoformat(ts.replace('Z', '+00:00'))
+    except Exception:
+        return None
+
+def is_ancestor(sha):
+    return subprocess.run(['git', 'merge-base', '--is-ancestor', sha, 'HEAD'],
+                          capture_output=True).returncode == 0
+
+def distance(sha):
+    r = subprocess.run(['git', 'rev-list', '--count', sha + '..HEAD'],
+                       capture_output=True, text=True)
+    return int(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip() else -1
+
+cands = []
 for f in glob.glob('planning/*/sdlc/sdlc-task-state.json'):
     try:
         d = json.load(open(f))
     except Exception:
         continue
-    if d.get('branch') != '$CURRENT_BRANCH' or not d.get('base_sha'):
+    sha = d.get('base_sha')
+    if d.get('branch') != '$CURRENT_BRANCH' or not sha:
         continue
-    ts = d.get('updated_at') or d.get('started_at') or ''
-    if ts >= best_ts:
-        best_ts, best_sha = ts, d['base_sha']
-print(best_sha)
-")
+    ts = parse(d.get('updated_at') or d.get('started_at') or '')
+    if ts is None or not is_ancestor(sha):
+        continue
+    dist = distance(sha)
+    if dist <= 0:          # base_sha == HEAD, or unreadable: nothing to scope
+        continue
+    cands.append((ts, dist, sha))
+
+print('')
+if cands:
+    newest = max(c[0] for c in cands)
+    window = [c for c in cands if newest - c[0] <= timedelta(hours=RUN_WINDOW_HOURS)]
+    print(max(window, key=lambda c: c[1])[2])
+" | tail -1)
     if [ -n "$TASK_BASE" ] && git rev-parse --verify -q "$TASK_BASE" >/dev/null 2>&1 && [ "$(git rev-parse "$TASK_BASE")" != "$(git rev-parse HEAD)" ]; then
       RANGE="${TASK_BASE}..HEAD"
       echo "CLOSE-OUT: HEAD is base '$RESOLVED_BASE' with no merge commit — recovered base_sha=$TASK_BASE from an /sdlc-task run's state file: $RANGE"
@@ -162,11 +204,7 @@ verbatim — it already states what to do (pass `--base <ref>`, or run from the 
 
 Read `planning/harness.json`. Run every check listed in `validation.checks[]` in order
 (lint, type, test, build). Then always run the universal emoji gate last, scoped to the range
-resolved in Step 0.5. This site stays on the **base-ref range** by design, not the run-state-scoped
-commit-SHA form used by `sdlc-task.js`/`sdlc-flow.js`: `/close-out` runs after the SDLC run has
-already finished, against a feature branch cut from the base (or the in-place `base_sha` fallback),
-with no live run-state and no shared-branch concurrent-session window to be exposed to
-(BT.ticket.emoji-gate-diff-window-concurrent-sessions):
+resolved in Step 0.5:
 
 ```bash
 python3 - "$(cat .git/CLOSE_OUT_RANGE)" <<'PYEOF'
@@ -201,8 +239,9 @@ PYEOF
 If any **gating** check (`gates: true`) fails, or the emoji gate fails:
 - Surface the failure with the exact command and relevant output.
 - **Stop. Do not proceed to Steps 2–4.**
-- Tell the user: which check failed and what it produced; suggest `/fix <spec>` if a
-  spec is in flight, or direct the failing command at the problem.
+- Tell the user: which check failed and what it produced; suggest re-running the spec through
+  `/sdlc-task <spec>` (or `/sdlc-flow <spec>`) if a spec is in flight, or direct the failing
+  command at the problem.
 - Do NOT attempt to fix failures here — this command closes out done work, not in-flight work.
 
 If all gating checks pass (non-gating failures are surfaced but don't block): proceed.
@@ -254,7 +293,49 @@ Record non-blocking gaps for the handoff note (Step 4).
 
 ### Step 3 — Patch documentation
 
-Invoke the `/update-docs --patch` skill. Wait for it to complete.
+Invoke the `/update-docs --patch` skill. Wait for it to complete. This run's check 5 sweeps
+`planning/context.md` (or the project's orientation-router equivalent) for staleness against what
+this session actually changed — a new decision, a new `docs/` page, a structural change — and
+patches it surgically when it drifts; nothing else in the harness keeps that file current, so this
+is the one reliable place it gets fixed. If `/update-docs` reports it `NEEDS_REVIEW` (a genuine
+rewrite, not a surgical patch), route it through Step 3b's size table below like any other doc.
+
+#### 3b — Bring every doc you touched up to the current standard
+
+**Governed by D73** (`base-template/planning/decisions/D73-docs-upgrade-incrementally-through-close-out.md`);
+the standard itself is D72.
+
+**Load the `write-repo-doc` skill and apply it to each doc this run created or edited.** Most docs
+in this fleet predate that standard: they open with prose instead of a quickstart, use vocabulary
+they never define, and name commands and scripts without linking them. `/close-out` runs on
+virtually every piece of work, which makes it the one reliable place these get fixed — a doc that is
+never touched stays as it is, and that is fine.
+
+**Scope, so this does not become a rewrite of the whole repo:** only docs in this run's
+`changed`/`created` set. Never sweep `docs/` looking for work.
+
+Judge each one against the skill's checklist. The common gaps:
+
+- No quickstart — the reader must skim prose to find the first command.
+- A command or script named but not linked, or named without saying **where it is typed** (a Claude
+  Code slash command and a shell command look identical on the page).
+- Vocabulary used confidently and defined nowhere.
+- A section that opens in jargon with no plain-English sentence first.
+
+**Then route by size — do not start a large rewrite inside a close-out:**
+
+| Situation | Do this |
+|---|---|
+| Small gaps (a quickstart, a few links, a sentence per section) | **Fix it now**, in this commit. |
+| A genuine rewrite, **and this repo is running a roadmap** | File a `/ticket` against that roadmap. Say which doc and which gaps. |
+| A genuine rewrite, **and there is no active roadmap** | Add a **`carryover[]` entry** (`kind: drift`) to `planning/state.json`. |
+| It blocks something | Only then consider an edge. **This is the last resort, not the default.** |
+
+**Why a carryover rather than a backlog ticket when there is no roadmap:** carryover surfaces on the
+Attention board on its own. A backlog ticket with no roadmap driving it has no command that calls it
+back up, so it sits unread. Prefer the container that resurfaces itself.
+
+Record what you did either way — fixed in place, ticketed, or carried over — in the Step 4 report.
 
 ### Step 4 — Hand off
 
@@ -316,14 +397,32 @@ If `--merge-branch` was passed:
      step 5 or 6. (The branch-mode `/sdlc-flow` wrap-up already committed status.md / log.md / the
      amendment log on the branch, so a successful merge carries them onto the base automatically — no
      separate task-log application is needed.)
-5. **Regenerate derived surfaces (`mev emit-state --write`):** the merged branch carries an authored
-   `planning/state.json` block-status flip to `"closed"` (the branch-mode wrap-up deferred emit-state
-   because it ran on the feature branch, not the base). Now that it has landed on `<base>`, regenerate
-   every derived surface from the authored graph — the one-way derivation (`focus`, rollups, cache
-   `synced_from` watermarks, tier tables, the HQ Operating Board, `master-plan.md` wave tables):
+5. **Regenerate derived surfaces.** The merged branch carries an authored `planning/state.json`
+   block-status flip to `"closed"` (the branch-mode wrap-up deferred emit-state because it ran on
+   the feature branch, not the base). Now that it has landed on `<base>`, regenerate every derived
+   surface from the authored graph — the one-way derivation (`focus`, rollups, cache `synced_from`
+   watermarks, tier tables, the HQ Operating Board, `master-plan.md` wave tables).
+
+   If `$BRAIN_ROOT/scripts/sync/emit_state_write.sh` exists (resolve `BRAIN_ROOT` the way `/log-work`
+   Step 0 does — walk up for `brain.toml`), run it instead of the bare command: it adds content-loss
+   guards and, on success, commits what it wrote **locally only** — push stays opt-in behind an env
+   var only a nightly cron sets, so this never pushes on its own. This harness stays project-agnostic,
+   so it only checks for the script; it never assumes one exists. Otherwise:
    ```bash
    mev emit-state --write --require-fresh
    ```
+   and then **commit the result yourself, locally, before deleting the branch** — this step used to
+   leave the regenerated surfaces uncommitted on `<base>` after emit-state ran, which is a real defect
+   fixed here: an emit-state run always changes something, and a merge that lands looking clean while
+   leaving derived files dirty in the working tree is worse than the merge failing outright.
+   ```bash
+   git add planning/state.json planning/status.md docs/projects/*.md  # only the surfaces emit-state touched — never `git add -A`
+   git commit -m "chore: regenerate derived state after merging <branch-name>"
+   ```
+   Scope the `git add` to whatever `emit-state`'s own output named as touched, per the
+   `commit-in-this-fleet` skill where this repo has one — never a broad `git add -A`/`git add .`.
+   **Never push** — this command does not push under any flag; pushing is a separate, explicit step.
+
    Run it from the base branch (never a linked worktree — `emit-state` refuses there). If `mev` or
    `brain.toml` is absent (a standalone repo), skip this silently — the authored flip already merged
    and still stands. Do NOT hand-reimplement any derived surface. If it reports a `W_EMIT_NO_SENTINEL`
@@ -332,7 +431,8 @@ If `--merge-branch` was passed:
    ```bash
    git branch -d <branch-name>
    ```
-   Report: "Branch '<branch-name>' merged into <base> and deleted; derived surfaces regenerated."
+   Report: "Branch '<branch-name>' merged into <base> and deleted; derived surfaces regenerated and
+   committed locally (not pushed)."
 
 ## Context / Files to Read
 
@@ -344,4 +444,17 @@ If `--merge-branch` was passed:
 - `.git/CLOSE_OUT_RANGE` — scratch file this run writes in Step 0.5 with the resolved diff range
   (e.g. `main...HEAD` or `HEAD^1..HEAD`); Steps 1 and 2a both read it so they can never diverge.
   Lives under `.git/`, so it is never tracked and needs no cleanup.
+
+## Report
+
+**<= 10 lines.** First line: outcome + whether it needs the operator. Then <= 6 one-line
+bullets. Link paths; never restate a file. See the `report-to-the-operator` skill.
+
+```
+<spec-slug> closed out — <gates>/<total> gates, coverage <ok | gap: ...>, docs <clean | patched: N>
+<doc standard: N upgraded | M ticketed | K carried over — omit the line entirely if nothing applied>
+- <anything that failed or was skipped, with the real error>
+Next: <command>
+```
+Never restate the doc sweep or the coverage table — say the verdict and link the file.
 

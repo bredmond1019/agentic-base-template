@@ -29,9 +29,11 @@ Usage: /begin-session <session-slug> [--roadmap <path>] [--dry-run]
 
 | Flag | Default | What it does |
 |---|---|---|
-| `<session-slug>` | **required** | e.g. `operator-developer-offer`. Kebab-case, prefixed `operator-`. |
+| `<session-slug>` | **required** | e.g. `operator-developer-offer`. Kebab-case, prefixed `operator-`. Also accepts the `OP.<slug>` citation form (D76) — strip the `OP.` prefix before resolving; the underlying join key is the bare slug, unchanged. A slug that already carries the redundant `operator-` prefix stutters as `OP.operator-<thing>` — that is expected, not a bug; do not rename the slug to fix it. Authority: `docs/state/state-schema.md`'s `OP.<slug>` section. |
 | `--roadmap <path>` | inferred | Where the session is defined, when it is not yet a graph edge. |
 | `--dry-run` | off | Print the resolved session, its exit artifact and gated blocks; change nothing. |
+
+The command's name and its argument are unchanged — this only widens what the argument accepts.
 
 Empty `$ARGUMENTS` → print usage, list every session you can resolve, and stop.
 
@@ -84,7 +86,8 @@ to make it cheap to give.
 A session ends **only** when its exit artifact exists. Then, in order:
 
 1. **Write the artifact**, at the path the session named. OKF frontmatter if it enters the corpus.
-2. **Clear the gate.** For an `operator` edge: `mev close-operator-gate <slug> --exit-verified`.
+2. **Clear the gate.** For an `operator` edge: `mev close-operator-gate <slug> --exit-verified` —
+   `<slug>` here is the bare slug (strip `OP.` if the session was addressed in that form).
    For a session still resolved from a roadmap's Wave 0 table (no edge yet), remove the session row
    and say what replaced it. `--exit-verified` is the operator asserting the artifact exists —
    **mev never infers it.**
@@ -115,3 +118,15 @@ never started: the gate is gone and the work is not.
 - **Do not let a session grow.** If it turns out to need work an agent could have done alone, file
   that as a block and keep the session to the decision. Sessions that absorb implementation stop
   being sittings and start being projects, and then they do not get run either.
+
+## Report
+
+**<= 10 lines.** First line: outcome + whether it needs the operator. Then <= 6 one-line
+bullets. Link paths; never restate a file. See the `report-to-the-operator` skill.
+
+```
+Session <slug>: <closed | still open>
+- Exit artifact: <path> (<exists | not yet>)
+- Gates it unblocks: <block ids>, effective priority <n>
+<Next: the one command, or the one decision still needed from you>
+```

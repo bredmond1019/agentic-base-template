@@ -24,8 +24,8 @@ $ARGUMENTS — optional flags, space-separated:
   and used as the commit subject under `--commit`. Default: `"harness pull"`. Use something
   specific (e.g. the decision id driving the pull).
 - `--commit` — after applying, commit each repo's own half and make one brain commit for all the
-  `planning/.template-version` stamps. **Requires `--apply`**; passing it alone is a usage error
-  and exits 2. See step 5.
+  `planning/.template-version` stamps. **Requires `--apply`** (a dry run writes nothing to commit;
+  passing `--commit` alone is a usage error and exits 2). See step 6.
 - `--commit-pending` — widen `--commit`'s pathspec to every base-template-**owned** path the repo
   has dirty, not only what this run wrote. **Requires `--commit`.** The catch-up case: an earlier
   `--apply` that was never committed leaves files that are current on disk and unrecorded in git,
@@ -42,7 +42,6 @@ $ARGUMENTS — optional flags, space-separated:
    ```bash
    test -f .claude/workflows/sdlc-flow.js && echo "Guard: OK — running from base-template root" || echo "ABORT: .claude/workflows/sdlc-flow.js not found. Run this command from the base-template root."
    ```
-   (This used to test for `sdlc-run.js`, which was retired — the guard aborted on every run.)
 
 2. **Dry run first, always** — even if `$ARGUMENTS` includes `--apply`, run once without it first
    so the report is visible before anything is written:
@@ -54,27 +53,34 @@ $ARGUMENTS — optional flags, space-separated:
    confirmed harmless in practice (D48's provenance) via `diff <target file> <base-template file>`
    showing the sync produces a byte-identical copy, not corruption. Flag it in the report either way.
 
-3. **Guard — check for a live orchestration lane before applying.** This overwrites
-   `.claude/workflows/*.js` in every synced repo. If a lane is mid-flight in one of them, its
-   engine file changes underneath the process already executing it — that has happened. If either
-   check shows a live lane in a repo this run would touch, **stop and do not pass `--apply`** until
-   it finishes or the operator confirms it is safe:
+   **Report this live-lane check too, before the destructive step is even considered** — see step 3.
+   Do not wait until `--apply` is requested to surface it; the whole point is to see the warning
+   while it's still cheap to back out.
+
+3. **Guard — check for a live orchestration lane before applying.** This command overwrites
+   `.claude/workflows/*.js` in every synced repo. If a lane is mid-flight in one of those repos,
+   its engine file changes underneath the process already executing it — a running lane has had
+   its engine swapped out from under it this way before. Check both of the following, and if either
+   shows a live lane in a repo this run would touch, **stop and do not pass `--apply`** until that
+   lane finishes or the operator confirms it's safe:
    ```bash
    python3 scripts/fleet_concurrency_check.py status
    grep -l 'lifecycle: active' planning/orchestration-run/*/notes.md 2>/dev/null
    ```
-   The first prints the registry as JSON — `active` lists registered lanes, `exclusive_leases` the
-   held repo locks (D61); both empty means nothing is live. The subcommand is `status`; there is no
-   `list`. Run the second inside each target repo too, not only here.
+   The first prints the registry as JSON — `active` lists every registered lane and
+   `exclusive_leases` every held repo lock (`scripts/fleet_concurrency_check.py`, D61). Both empty
+   means no lane is live. (The subcommand is `status`; there is no `list`.) The second finds any `planning/orchestration-run/<roadmap>/notes.md` whose frontmatter is
+   still `lifecycle: active` — run it inside each target repo, not just here, since a lane can be
+   live in a downstream repo this command is about to overwrite.
 
 4. **If `--apply` was requested, run it for real:**
    ```bash
    python3 scripts/sync_downstream_harness.py <$ARGUMENTS>
    ```
    This writes the changed files and updates each synced repo's `planning/.template-version`
-   (`commit:` + `synced:` fields). Without `--commit` it does **not** commit.
+   (`commit:` + `synced:` fields). Without `--commit` it does **not** commit — go to step 5.
 
-4b. **Per repo, before committing:** check for pre-existing unrelated dirty state so it doesn't get
+5. **Per repo, before committing:** check for pre-existing unrelated dirty state so it doesn't get
    swept into the harness-pull commit by accident:
    ```bash
    cd <repo_path> && git status --short | grep -v '\.claude/' | grep -v 'planning/\.template-version'
@@ -82,7 +88,7 @@ $ARGUMENTS — optional flags, space-separated:
    If that prints anything, it's unrelated in-progress work in that repo — leave it out of the
    commit (stage `.claude/` and `planning/.template-version` explicitly, never `git add -A`).
 
-5. **Commit.** Prefer `--commit`; the manual recipe below is the fallback and the explanation.
+6. **Commit.** Prefer `--commit`; the manual recipe below is the fallback and the explanation.
 
    **(0) The one-command path:**
    ```bash
@@ -90,14 +96,19 @@ $ARGUMENTS — optional flags, space-separated:
    ```
    It makes **N+1** commits: one per repo for that repo's own `.claude/`/`.agents/`/`scripts/`/
    `hooks/` half, then **one** brain commit carrying every `planning/.template-version` stamp. Each
-   pathspec is explicit and derived from what the run actually wrote; the script never runs
-   `git add -A`. A repo whose harness tree lives in the brain's own index (the `engines_only` brain
-   root) is folded into the brain commit rather than committed twice. Per repo it prints the short
-   sha, `nothing to commit`, or `COMMIT FAILED: <reason>`; any failure exits 1.
+   pathspec is explicit and derived from what that run actually wrote — the script never runs
+   `git add -A` (there is a test asserting that against its source). A repo whose harness tree
+   lives in the brain's own index (the `engines_only` brain root) is folded into the brain commit
+   rather than committed twice. **If a repo is already in limbo, add `--commit-pending`** — a repo carrying owned files from an earlier uncommitted `--apply` will otherwise stay in limbo, one file deeper each run, because `--commit` only ever stages its own output.
 
-   `--commit` does not relax step 4b — run that check first. The script stages only what it wrote,
-   so unrelated work is never swept in, but a repo with uncommitted edits to a file this sync
-   overwrites has already lost them by then.
+   Per repo it prints the short sha, `nothing to commit`, or
+   `COMMIT FAILED: <reason>`; any failure makes the whole run exit 1, so a red run is visible
+   rather than buried in the middle of a 19-repo report.
+
+   `--commit` does **not** relax step 5: run that dirty-state check first. The script only stages
+   the paths it wrote, so unrelated in-progress work is never swept in — but a repo carrying
+   uncommitted edits to a file this sync also overwrites will have those edits gone, and that is
+   step 5's job to catch, not the script's.
 
    **Doing it by hand** takes **two** commits, in different repos, because the synced files do not
    all belong to the same git repo:
@@ -125,7 +136,7 @@ $ARGUMENTS — optional flags, space-separated:
    those files locally (harmless), and only their `.agents/` mirrors are tracked. Don't force-add
    the rest.
 
-6. **Second consumers of the `tasks.json` contract.** `core/orchestrator` used to carry one — an
+7. **Second consumers of the `tasks.json` contract.** `core/orchestrator` used to carry one — an
    independent `SDLC_FLOW` workflow implementation. **It was retired**: `app/schemas/sdlc_schema.py`
    and `docs/sdlc-flow-workflow.md` were both deleted by orchestrator commit `75b6c8e`
    ("or-x2-sdlc-evals-retirement-task1"), and `SDLC_FLOW` now survives there only as a string in
@@ -135,14 +146,14 @@ $ARGUMENTS — optional flags, space-separated:
    of this step is that a contract with two implementations needs both checked, not that
    orchestrator specifically matters.
 
-7. **Sweep for already-broken specs** the fix should also repair: any repo's `planning/*/tasks.md`
+8. **Sweep for already-broken specs** the fix should also repair: any repo's `planning/*/tasks.md`
    still using the old `### <prefix>.<n>.<n>` heading pattern with `**Status:** Not started` can be
    converted cleanly (write its `tasks.json`, trim `tasks.md`'s Step-by-Step Tasks section to a
    pointer). A spec already `In progress` or `Done` needs no touching — leave it. See
    `core/bastion/planning/13.1-persistent-agent-panel/` for a worked example of this conversion.
 
-8. **Report:** which repos were synced, how many files each, which repos had nothing to sync, any
-   repo skipped (no `.claude/workflows/`, or gitignored), any spec found + fixed in step 7, and —
+9. **Report:** which repos were synced, how many files each, which repos had nothing to sync, any
+   repo skipped (no `.claude/workflows/`, or gitignored), any spec found + fixed in step 8, and —
    if `--commit` was used — the commit count and every `COMMIT FAILED` line, never summarised away.
 
 ## Notes
@@ -158,5 +169,6 @@ $ARGUMENTS — optional flags, space-separated:
   brain's `_planning/` vault, so `<repo>/planning/.template-version` is tracked by the brain, not by
   the repo. Staging both halves in one `git add` fails with `beyond a symbolic link` **and aborts
   the whole add** — committing nothing while appearing to run. The script stages the stamp through
-  its real vault path instead, and `scripts/test_sync_downstream_harness.py` carries a positive
-  control asserting that staging the symlinked face still fails.
+  its real vault path (`<tier>/_planning/<slug>/.template-version`) instead. There is a positive
+  control in `scripts/test_sync_downstream_harness.py` asserting that staging the symlinked face
+  still fails, so the split cannot quietly become superstition if git's behaviour ever changes.

@@ -10,13 +10,17 @@ Produces the two things `/begin-orchestration` consumes: a **roadmap document** 
 **`lane-<name>.json` chain record per lane**, authored against
 `.claude/workflows/lane.schema.json` (D71). It does not run anything.
 
-**A lane record carries no free text — it is data, not prose.** Every per-block briefing, hold,
-trap, blast radius and operator gate that used to live as a comment in the retired plain-text lane
-format routes to the container that actually owns it: a per-block briefing goes in that block's own
-record (`notes`/`why` — the field the SDLC engines actually read; neither engine has ever opened a
-lane file), a hold or intra-lane dependency goes in `state.json`'s `depends_on` on the block it
-gates, and an operator gate goes in an `operator` edge in `depends_on`, named in the roadmap's
-operator table. See "`planning/roadmaps/<slug>/lane-<name>.json`" below for the full routing table.
+**A lane record is data, not a place for per-block prose.** Every per-block briefing, trap, and
+blast radius that used to live as a comment in the retired plain-text lane format routes to the
+container that actually owns it — a per-block briefing goes in that block's own record (`notes`/
+`why` — the field the SDLC engines actually read; neither engine has ever opened a lane file), a
+hold goes in the lane record's own `held_until`, an intra-lane dependency goes in `state.json`'s
+`depends_on` on the block it gates, and an operator gate goes in an `operator` edge in
+`depends_on`, named in the roadmap's operator table and cited as `OP.<slug>` — the flat
+identifier derived from the edge's own `slug`, never a second stored field (see
+`docs/state/state-schema.md`'s `OP.<slug>` section, the authority for the form). The lane record's own top-level `notes` field
+is the one deliberate exception — lane-level constraints and context, never a per-block briefing.
+See "`planning/roadmaps/<slug>/lane-<name>.json`" below for the full routing table.
 
 **INSTALL-WINDOW WARNING:** a lane authored before mev's lane.json reader is installed fleet-wide
 (`HQ.8.A`) is fully drivable by `/orchestrate`, which reads the file directly — but it will **not**
@@ -258,14 +262,14 @@ later**, and the roadmap says so in the lane table. Do not simply hope the opera
 
 | Repo | Isolation | Why |
 |---|---|---|
-| `base-template` | **`--worktree` always** | It owns `.claude/workflows/sdlc-*.js`; a chain there edits the engines while they execute it. |
+| `base-template` | **`--no-worktree`** (default) | A worktree never protected a running chain from its own engine edits: the Workflow harness executes a launch-time COPY of the engine (702 snapshots measured), so a chain editing `.claude/workflows/sdlc-*.js` does not change the engine currently executing it in EITHER isolation mode. The residual exposure is between blocks in one chain, not within one; mitigate by sequencing engine edits to a chain boundary, not by isolation. `--worktree` was suspended fleet-wide by D81 from 2026-08-23 to 2026-08-28 and is available again (`BT.ticket.worktree-smoke-fixture` verified a real run end to end). |
 | the brain root (HQ) | **`--no-worktree` always** | `validate-brain` in a worktree resolves the gitignored sub-repos against the worktree's own `brain.toml` — measured 64 structure / 601 state errors versus 0/0 in the main tree. |
-| everything else | `--no-worktree` | Cheaper. Use `--worktree` when a change deserves quarantine. |
+| everything else | `--no-worktree` | Cheaper. Use `--worktree` when a change deserves quarantine — fleet-wide availability restored by the D81 lift, 2026-08-28. |
 
 **If `base-template` is in the roadmap, decide its propagation timing explicitly.** Its work must
 land early (every other lane runs on those engines) but `/sync-downstream-harness` must not run
 while any lane is live — a mid-flight sync has already swapped a running lane's engine underneath
-it. The resolution is always the same: **land in the worktree early, defer propagation to an
+it. The resolution is always the same: **land early on a plain branch, defer propagation to an
 operator gate at the end.** Record both halves where they belong — the early landing as an
 ordinary block in `base-template`'s lane record, the deferred `/sync-downstream-harness` step as
 an `operator` edge in `depends_on` on the last `base-template` block, gating every other lane that
@@ -298,7 +302,8 @@ operator speed.
 **Operator gates are edges too.** A block waiting on a DNS record or a human read-through is
 blocked exactly as hard as one waiting on a sibling repo, and the graph already models it — an
 `operator` edge in that block's own `depends_on`. Name every one in the operator table, with the
-block it gates; the lane record itself carries no gate prose, only the block ID, so `/orchestrate`
+block it gates, cited as `OP.<slug>` (`docs/state/state-schema.md`'s OP section is the authority
+for the form); the lane record itself carries no gate prose, only the block ID, so `/orchestrate`
 reads the hold from `state.json` where it actually lives. The two gates that will actually bite are
 worth calling out by name; in practice they are the ones that must happen mid-run and get deferred
 to deploy time instead.
@@ -327,9 +332,40 @@ sizing flag, or an ungrounded operator artifact. Its five checks (C1–C5) are t
 which any of those is cheap to fix; after Wave 0 closes, four concurrent lanes are running on them.
 Record its findings in Wave 0 — including "none".
 
+### Check the prefixes against the repos before you write Wave 0
+
+**Run this before a single Wave 0 row is written.** A block ID's prefix declares whose *namespace*
+the block lives in; the `repo` field declares who *owns the work*. They are different questions and
+a pre-plan document will conflate them. Measured 2026-09-01: `sequence.md` filed the
+unattended-migration-runner block as `EN.14.H` with repo `agentic-portfolio`, reasoning "filed under
+HQ because the files are HQ's" — sound reasoning about ownership, and wrong about identity. `EN` is
+engine-rs's prefix. An agent copying that Wave 0 row registers the block into HQ's graph under
+engine-rs's namespace, and the roadmap reads correctly the whole time.
+
+```bash
+python3 - <<'PY'
+import json, glob, tomllib
+pfx = {r['prefix']: r['slug'] for r in tomllib.load(open('brain.toml', 'rb'))['repos']}
+for f in sorted(glob.glob('planning/roadmaps/<slug>/lane-*.json')):
+    for b in json.load(open(f))['blocks']:
+        owner = pfx.get(b['id'].split('.')[0])
+        if owner != b['repo']:
+            print('PREFIX/REPO MISMATCH', b['id'], 'prefix->', owner, 'repo->', b['repo'])
+PY
+```
+
+Every hit is a defect: renumber the block under its owning repo's own prefix, or correct `repo`.
+`scripts/check_block_records.py` and `scripts/check_lane_records.py` both gate this too, so a hit
+here fails the gate anyway — running it now matters because it is free to fix before registration
+and expensive after four lanes have launched on it. Do **not** expect
+`scripts/check_block_naming.py` to catch it: it reads the same `[[repos]]` prefixes but validates
+spec *directory names*, so a `repo` field is out of its scope by construction.
+
 Wave 0 also carries:
 - Any **claim correction** from Step 2's re-verification, before a downstream lane cites it.
 - The **operator ratifications** that gate a lane's first block.
+- `mev conformance --check toolchain-freshness`, clean, **before** any `mev emit-state --write`
+  (Step 8) — a stale binary rewrites the derived boards in an old format.
 - `mev emit-state --write`, then commit every touched `state.json` with an explicit pathspec.
 
 A roadmap whose sequence table is empty before Wave 0 is correct and should say so. A *populated*
@@ -346,6 +382,23 @@ table is the signal the lanes may launch.
 > notes column, an operator paragraph, or a "still to decide" line is not scheduled, not sorted, and
 > not on any board — it is lost, not deferred. Where the two disagree, the graph wins.
 
+**A cut-list row that defers work to a future ticket is that same failure wearing a cut-list hat.**
+`block-registration.md`'s C6 accepts "a cut-list line with a reason" as a legitimate destination,
+and it is one — for work that is genuinely *dropped*. It is not one for work that is *postponed*.
+"Own /ticket" is a promise, and a promise nothing holds is lost exactly the way an `## Open
+questions` bullet is lost. Measured 2026-09-01: four cut rows on this run said "Own /ticket" and no
+ticket existed for any of them.
+
+So every cut row that names a future ticket, a follow-up, or a later phase must do one of two
+things, in the row itself:
+
+- **File it** — a `carryover[]` entry with kind `deferred`, or a `backlog[]` row in the HQ brain —
+  and cite the slug in the cut row; or
+- **Say it is unfiled** — verbatim, e.g. "unfiled; lost unless someone picks it up" — so the
+  operator reads a decision rather than a plan.
+
+A row that names a future ticket and does neither is a defect in the roadmap, not a deferral.
+
 ---
 
 ## Step 7 — Write the files
@@ -361,9 +414,10 @@ superseded roadmap). Then, in order:
 | The trade | Why this work, now. Lead with the finding that motivated it, with evidence |
 | The outcomes | Three to five, each an observable statement |
 | How to use this document | The generated table is authoritative; lane tables are execution order; `[*]` means filed in Wave 0 |
+| **Registration inputs** | **REQUIRED.** Per repo: block-ID prefix, wave convention, gating validation commands, and the standing rules a block must satisfy. See below |
 | Wave 0 | The gate. A table of registration, corrections and operator ratifications |
 | Dependency graph | ASCII lane chains, then the cross-lane edges |
-| The lanes | One table per lane: block, engine, and a **notes column that carries the evidence** — file:line, `AR-nn`/`SQ-nn`, the trap, the blast radius from `seams.md`, the thing the last run got wrong |
+| The lanes | One table per lane. **Required columns: Block · Repo · Engine (`task` or `flow`) · Notes.** The notes column **carries the evidence** — file:line, `AR-nn`/`SQ-nn`, the trap, the blast radius from `seams.md`, the thing the last run got wrong. The Engine column is not decoration — see below |
 | Isolation and CPU budget | The policy table plus the two-heavy rule |
 | Operator lane | Every gate, what it gates, and enough detail to act without re-reading a source doc |
 | Coverage crosswalk | **Required whenever `--from` includes a runbook or action register.** One row per source item → where it lands. See below |
@@ -371,6 +425,45 @@ superseded roadmap). Then, in order:
 | Definition of done | See below — this is the section that decides whether the roadmap worked |
 | Sequence | The generated region, between the markers |
 | Live board · Lane log | Pointers |
+
+#### Registration inputs — the section that makes the roadmap registerable
+
+**A roadmap is a good spec and a poor registration input, and the two are not the same document.**
+A roadmap says WHAT will be done and IN WHAT ORDER. Registering it needs three other things —
+**identity** (which namespace a block ID belongs to), **ordering keys** (what wave number is
+correct in *that* repo), and **per-repo mechanics** (what "passing" means there, and what house
+rules a block must satisfy). None of those live in the roadmap unless you put them there. They
+live in `brain.toml`, each repo's `state.json`, its `harness.json`, and its `CLAUDE.md`.
+
+Measured 2026-09-01 on the context-handling-between-nodes run — 12 blocks over three repos — **six
+separate facts had to be derived from outside the roadmap at Wave 0**, by an agent reading four
+other files under time pressure while the roadmap sat open and looked complete. That is the failure
+this section closes: the roadmap did not contain a wrong answer, it contained no answer, and the
+gap did not look like a gap.
+
+Write one row per repo this roadmap touches:
+
+| Repo | Prefix | Wave convention observed | Gating validation commands | Standing rules a block must satisfy |
+|---|---|---|---|---|
+| `<slug>` | `<PFX>`, from `brain.toml`'s `[[repos]]` table — never guessed from the repo name | The convention **actually observed** in that repo's `state.json`, with the phase and wave range you read (e.g. "phase 12 sits at waves 186–198; continue the run") — not the `10 * phase` default | The `gates: true` check commands from that repo's `planning/harness.json`, so a block's acceptance criteria can end in a real command | Anything in that repo's `CLAUDE.md` a block must satisfy — e.g. "never `git push` a `core/*` repo directly", "one `validate-brain` flag per invocation" |
+
+Each cell is **read**, not inferred, and the row says where it was read from. A prefix guessed from
+a repo name is exactly the `EN.14.H` defect above; a wave assumed from `10 * phase` is
+`block-registration.md` Step 5's collision case, which produced two real collisions on this run.
+
+#### The Engine column — `sdlc_workflow` is decided here, not at registration
+
+Every lane-table row names an engine: `task` or `flow`. This is not a formatting preference.
+`sdlc_workflow` is **required** at registration (`block-registration.md` Step 5): a block with no
+value cannot be resolved to an engine, so `/orchestrate` silently drops it from any chain that
+names it — the lane does not error, the block simply never runs.
+
+`sequence.md` never states an engine, so if the roadmap does not decide it, the agent doing Wave 0
+invents it — one row at a time, with no view of the initiative. **Decide it here, where the whole
+cut is visible.** The rule is `docs/workflows/index.md`'s ceremony ladder in one line: `task` for a
+single small tested change (a `/ticket` or `/chore`), `flow` for a spec with several moving parts
+that should terminate in a review and a PR. When a row's engine is genuinely uncertain, write
+`flow` — the extra ceremony is recoverable; a silently-dropped block is not.
 
 **The coverage crosswalk is not documentation — it is the check.** A roadmap built from an action
 register absorbs 30–60 discrete items and re-homes them into lanes. Items do not get dropped by
@@ -490,25 +583,37 @@ because a lane is not single-repo in this corpus).
 |---|---|
 | `repo` | An optional lane-level default repo, for a single-repo lane's own convenience. Carries no meaning for `blocks[]` — each entry still names its own `repo`. |
 | `budget` | `{"heavy": bool, "not_with": [repo, ...]}`. **Every lane authors `heavy`** — Step 4's "heavy budget is the real constraint" rule means every lane already has a real classification, so there is no "constraint absent" case here. Add `not_with` only when this lane's heavy budget collides with another repo's. |
-| `held_until` | A **calendar date** (`YYYY-MM-DD`) this lane may not start before. This is the *only* kind of hold authored in the lane record — a block-to-block or block-to-operator-gate hold is **not** repeated here; it already exists as a `depends_on` edge on that block's own `state.json` record, and `/orchestrate` reads it there. |
-| `isolation` | The isolation flag for this lane (e.g. `--worktree`). The *why* belongs in the roadmap's Isolation and CPU-budget table (Step 4), not in the lane record. |
+| `held_until` | What this lane is held until before it may start: a block ID (waits for that block to land) or an `operator-`-prefixed kebab-case slug (waits on that operator/approval edge). **RETYPED, not renamed** (D71 follow-on) — the retired `.txt` `# HELD-UNTIL:` directive never carried a calendar date in any of the 70 live files, so a date-typed field was latent drift rather than a live one; the name `held_until` already reads correctly for either referent. This is the *only* kind of hold authored in the lane record — a block-to-block or block-to-operator-gate hold is **not** duplicated anywhere else; it is this field, full stop, and `/orchestrate` reads it here. |
+| `notes` | **LANE-LEVEL** constraints and context only — the SPEC / RISK / EXCEPTION / MERGE-DO-NOT-INSTALL / TRAPS class of prose the retired `.txt` format carried as comments: cross-lane warnings, sequencing rationale, known traps, anything an operator or agent driving this whole lane needs before running it. Free text, no fixed structure. **Per-block briefings do NOT go here** — see the routing table below; a per-block `note` property is deliberately absent from `blocks[]` and always will be. |
+| `isolation` | The isolation flag for this lane (e.g. `--no-worktree` or `--worktree`). The *why* belongs in the roadmap's Isolation and CPU-budget table (Step 4), not in the lane record. |
 | `exclusive_repos` | Repos this lane claims exclusive write access to, beyond its own — the cross-tree-writer case below. |
 | `spec_source` | Where this lane's block specs were sourced from, when the whole lane shares one (e.g. a `sequence.md` path) and it is not master-plan slug mode. |
 | `cut_blocks` | Block IDs originally planned for this lane but cut — mirror the roadmap's own cut list, do not silently drop them from both places. |
 
+**MEV INSTALL-WINDOW CAVEAT for `notes`:** `core/mev`'s authored-record reader
+(`brain/lane_segments.rs`'s `LaneRecord`) deserializes with `#[serde(deny_unknown_fields)]` and, as
+of this writing, does not yet declare a `notes` field. `/orchestrate` reads the lane record
+directly and is unaffected, but until `mev` adds `notes` to `LaneRecord`, any lane record that
+carries it will fail `mev`'s own parse (`E_LANE_RECORD_MALFORMED`) and so will not appear in `mev
+lanes`, any derived artifact, or bastion-web — the same shape of gap as the broader
+INSTALL-WINDOW WARNING above, but scoped to this one field rather than the whole format. Track the
+`mev`-side fix separately; this command does not make cross-repo changes.
+
 ### Routing — where the old `.txt` prose now lives
 
-**A lane record carries no free text; every field above is data.** This table replaces the old
+**Almost every field above is data, not prose — `notes` is the one deliberate exception**, and it
+is scoped to lane-level constraints only, never per-block briefings. This table replaces the old
 comment blocks one-for-one so nothing that used to be said gets dropped, only relocated to the
 container that actually owns it:
 
 | What a `.txt` lane file used to say in a comment | Where it goes now |
 |---|---|
-| The per-block briefing (what the operator would read before driving a block) | That block's own record, `notes`/`why` — the field the SDLC engines actually read; neither engine has ever opened a lane file |
-| `# HELD-UNTIL: <block or operator-gate token>` | A `depends_on` edge (`block` or `operator` type) on the held block's own `state.json` record. The lane record's `held_until` field is unrelated — it is a calendar date only |
+| The per-block briefing (what the operator would read before driving a block) | That block's own record, `notes`/`why` — the field the SDLC engines actually read; neither engine has ever opened a lane file. **Not** the lane record's own `notes` field, which is lane-level only |
+| Lane-level constraints/context: `# SPEC:`, `# RISK:`, `# EXCEPTION:`, `MERGE-DO-NOT-INSTALL`-class warnings, cross-lane sequencing rationale | The lane record's own top-level `notes` field |
+| `# HELD-UNTIL: <block or operator-gate token>` | The lane record's own `held_until` field, which now accepts exactly that token (a block ID or `operator-` slug) — not a `state.json` edge, and not a calendar date |
 | `# BUDGET: HEAVY/LIGHT [NOT-WITH ...]` | `budget.heavy` / `budget.not_with` |
 | `# EXCLUSIVE-REPOS: <repo>[,...]` | `exclusive_repos` |
-| `# TRAP: ...` and any other trap cited from a real prior run | The relevant block's own record, `notes`/`why` |
+| `# TRAP: ...` and any other trap cited from a real prior run | The relevant block's own record, `notes`/`why` — a *fleet-wide* trap (not specific to one block) goes in the lane record's `notes` instead |
 | `seams.md` blast radius / single-named-writer callouts | The relevant block's own record, `notes`/`why`, plus the roadmap's lane-table notes column |
 | A non-master-plan spec source for one block | That block's own record, `notes`/`why`. `spec_source` at the lane level is for a lane-wide source only |
 | `# ORIGIN: <roadmap path>` above an adopted block | The adopted `blocks[]` entry's own `origin_roadmap` field — no comment needed or possible in JSON; see below |
@@ -535,7 +640,10 @@ an expected gap, not a bug to chase.
 from what a lane "feels like"), and which owns one file outside its own repo's tree. The
 block-to-block hold this same lane used to carry as `# HELD-UNTIL: MV.ticket....` is **not**
 repeated here — it lives on `BT.ticket.generate-roadmap-lane-directives`'s own `depends_on` edge in
-`base-template`'s `state.json`, exactly per the routing table above.
+`base-template`'s `state.json`, exactly per the routing table above. The lane-level `notes` value
+below carries the class of thing that used to be an untyped `# EXCLUSIVE-REPOS:`-adjacent comment —
+*why* the exclusivity was needed — which is lane-level context, not a per-block briefing (that
+still lives on the block's own record, as the paragraph above shows).
 
 <!-- WORKED-EXAMPLE:lane.json BEGIN -->
 ```json
@@ -553,8 +661,9 @@ repeated here — it lives on `BT.ticket.generate-roadmap-lane-directives`'s own
   "budget": {
     "heavy": false
   },
-  "isolation": "--worktree",
-  "exclusive_repos": ["mev"]
+  "isolation": "--no-worktree",
+  "exclusive_repos": ["mev"],
+  "notes": "Exclusive against mev because this block writes planning/harness.json outside its own repo's tree; a concurrent mev lane could observe or clobber a half-written file. See the block's own record for the full trap list and the depends_on hold."
 }
 ```
 <!-- WORKED-EXAMPLE:lane.json END -->
@@ -631,7 +740,7 @@ the reason.
 ## Step 8 — Verify before handing over
 
 ```bash
-bastion validate-brain --structure   # one invocation per flag; they do not compose
+bastion validate-brain --structure       # one invocation per flag; they do not compose
 bastion validate-brain --links
 bastion validate-brain --state
 ```
@@ -642,11 +751,26 @@ Then check by hand:
       check above. A `SQ-nn` ref, a slug or a title in that field makes the lane unrunnable,
       and both crosswalks pass anyway.
 - [ ] Every block ID in every lane record exists in a `state.json`, **or** is marked `[*]` and appears in Wave 0.
+- [ ] **Every block ID's prefix matches its repo, per `brain.toml`** — run Step 6's prefix/repo
+      script. A block filed under another repo's prefix registers into that repo's namespace, and
+      `check_block_naming.py` cannot see it (it validates directory names, not `repo` fields).
+- [ ] **Every lane-table row names an engine** — `task` or `flow`. A block registered with no
+      `sdlc_workflow` cannot be resolved to an engine, so `/orchestrate` drops it from any chain
+      that names it, silently.
+- [ ] **`mev conformance --check toolchain-freshness` is clean BEFORE any `mev emit-state --write`.**
+      A stale binary rewrites the derived boards in an old format. Redirect and check `$?` — a
+      piped exit code is the pipe's. If it is not clean, **skip the emit** and say so: leaving
+      `W_STATE_FOCUS_DRIFT` standing is the correct outcome, not a failure to fix. (This happened
+      on 2026-09-01: `mev` was built from `4c85fc0` against source at `96da193`.)
+- [ ] **Every cut row that names a future ticket either cites the `carryover[]`/`backlog[]` slug
+      that holds it, or says in the row that it is unfiled and will be lost.** "Own /ticket" with
+      no ticket is the "lost, not deferred" failure in a cut list's clothing.
 - [ ] No lane has more than one heavy repo live at a time, given the stated ordering.
 - [ ] Every cross-lane edge in the ASCII appears on the *waiting* lane's record (its `held_until` or
       the held block's own `depends_on` edge, per the routing table above).
 - [ ] Every operator gate names the block it gates, in the operator table and as an `operator` edge
-      on that block's own `state.json` record — never as lane-record prose.
+      on that block's own `state.json` record — never as lane-record prose. It is cited as
+      `OP.<slug>`, derived from the edge's own `slug` (`docs/state/state-schema.md`'s OP section).
 - [ ] **The crosswalk check above runs clean** — every ref in every `--from` source appears in the
       roadmap, or has a cut-list row.
 - [ ] **The reverse crosswalk check also runs clean** — every block ID named in a lane record

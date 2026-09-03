@@ -9,20 +9,20 @@ description: >
 Checks out the PR branch, runs the project's gating suite + emoji gate, reviews the
 diff against the block's Acceptance Criteria, and posts a verdict via `gh pr review`.
 
-Designed for PRs produced by `/sdlc-block` in default (PR) mode. Can also review any
-PR for a spec-based block by pointing at the spec manually.
+Designed for PRs produced by a roadmap orchestration run in default (PR) mode. Can also
+review any PR for a spec-based block by pointing at the spec manually.
 
 ## Variables
 
 $ARGUMENTS — `<PR#> [plan-slug]`
 - `<PR#>` — required. The GitHub PR number (integer).
-- `[plan-slug]` — optional. The plan slug (e.g. `sdlc-block-and-task-updates`) to scope
+- `[plan-slug]` — optional. The plan slug (e.g. `roadmap-and-task-updates`) to scope
   state lookup when multiple `block-orchestration-state.json` files exist.
 
 Examples:
 ```
 /review-PR 42
-/review-PR 42 sdlc-block-and-task-updates
+/review-PR 42 roadmap-and-task-updates
 ```
 
 ## Instructions
@@ -98,11 +98,7 @@ block can be found, do **not** silently APPROVE — run no gating checks, record
 found", and downgrade the verdict to COMMENT (never APPROVE) so a human runs the checks.
 
 Then always run the emoji gate last, diffing from the merge-base so only the PR's own
-changes are scanned. This site stays on the **base-ref (merge-base) range** by design, not the
-run-state-scoped commit-SHA form used by `sdlc-task.js`/`sdlc-flow.js`: `/review-PR` reviews a
-finished PR branch cut from `main`/`origin/main`, with no live run-state to scope by and no
-shared-branch concurrent-session window to be exposed to
-(BT.ticket.emoji-gate-diff-window-concurrent-sessions):
+changes are scanned:
 
 ```bash
 python3 - <<'PYEOF'
@@ -181,7 +177,7 @@ Build the review body:
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| 1 | <criterion text, ~80 chars> | MET / PARTIAL / NOT MET | file:line or test name |
+| 1 | <criterion text, ~80 chars> | MET / PARTIAL / NOT MET | symbol name or test name (line number optional, secondary) |
 
 ### Gating Results
 
@@ -213,7 +209,7 @@ Report to the user:
 - Gating summary (pass/fail counts).
 - If REQUEST_CHANGES: list the specific blocking items that must be fixed.
 - Next step:
-  - If APPROVE: "`/merge-train [plan-slug]` once all PRs in the train are approved."
+  - If APPROVE: "merge the PR, then `/clean-worktree <spec-slug>`."
   - If REQUEST_CHANGES: "Fix the blocking items on branch `<headRefName>`, push, and
     re-run `/review-PR <PR#>` to re-review."
 
@@ -226,9 +222,8 @@ Report to the user:
   so it covers only the PR's own changes, not the full branch history.
 - **Gating vs. non-gating checks.** Only checks with `gates: true` in `harness.json`
   are blocking. Non-gating failures are surfaced as informational findings in the review body.
-- **Fat PRs.** In default `/sdlc-block` mode, Phase-N PRs include ancestor block work
+- **Fat PRs.** In default roadmap-orchestration PR mode, Phase-N PRs include ancestor block work
   (the train branch is the common base). The AC review is still scoped to the target
   block's spec because `baseRefName` is the train branch from which this block forked.
-- **`/merge-train`** reads the orchestration state and merges all approved PRs bottom-up
   in dependency order. Run it after every PR in the train is approved.
 

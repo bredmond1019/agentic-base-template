@@ -233,21 +233,34 @@ per task. Determine whether this repo is heavy, and which category, mechanically
 
 **This is enforced, not prose-only.** If this repo is heavy, register before starting, passing the
 category from the `is-heavy` output:
-`python3 <path-to-base-template>/scripts/fleet_concurrency_check.py register --repo <this-repo-name> --category <category>`.
-Exit code `3` (`"allowed": false`) means that category's pool is already at capacity (2
-browser-automation lanes, or 4 native-build lanes) — stop and report rather than starting another;
-wait or swap in a cheap-gate block instead.
+`python3 <path-to-base-template>/scripts/fleet_concurrency_check.py register --repo <this-repo-name> --category <category> --agent <this lane's agent identity>`.
+Exit code `3` (`"allowed": false`) means either that category's pool is already at capacity (2
+browser-automation lanes, or 4 native-build lanes) **or** that a held exclusive lease is blocking
+this registration — the two are distinguishable from the JSON output's now-populated
+`exclusive_leases` array (non-empty means a lease, not capacity, is the cause) versus `active`.
+Either way: stop and report rather than starting another; wait or swap in a cheap-gate block
+instead.
 
 **Do not pass `--pid`.** The process running `register` is this short-lived command invocation —
 it exits as soon as this step returns, so its own pid is never a valid liveness signal for a later
 process to check. Leave `pid_source` at its default (`"self"`); the entry is then held by **TTL
-(90 minutes) plus explicit release only**, never by pid liveness. If this chain runs longer than
-that, **re-register periodically as a heartbeat** (repeat the same `register --repo <this-repo-name>
---category <category>` call) — it is idempotent-refresh, so it bumps `started_at` instead of
-consuming a second slot.
+(90 minutes) plus explicit release only**, never by pid liveness. **Pass `--agent <this lane's
+agent identity>`** on every `register` and `release` call — the entry is keyed on that identity,
+not on the caller's pid, which is what lets a `release` run from a different process than the one
+that registered actually free the slot. If this chain runs longer than that, re-register
+periodically as a heartbeat (repeat the same `register --repo <this-repo-name> --category
+<category> --agent <this lane's agent identity>` call): a repeat register for the SAME agent
+refreshes `started_at` on the existing entry in place rather than consuming a second slot.
+
+**The old release → register → re-take workaround is superseded by this heartbeat.** Before the entry
+was keyed on `--agent`, the only way to refresh a long-running heavy lane's slot was to `release`
+it and `register` again — which genuinely gave the slot up and let another lane claim it
+mid-chain. Do not do that any more: repeat the `register` in place. (The *repo lease*
+release/drain/re-take at the block boundary is a different mechanism and is still required.)
 
 **Release the slot when this repo's chain finishes — this is required, not optional:**
-`... release --repo <this-repo-name>`, on success, failure, or abandonment. A lane killed mid-run
+`... release --repo <this-repo-name> --agent <this lane's agent identity>`, on success, failure,
+or abandonment. A lane killed mid-run
 without releasing does not block the fleet forever — its entry expires automatically once it is
 past the TTL, or (for an entry with an *explicitly*-supplied `--pid`) once that pid has died — but
 that is the fallback, not a substitute for releasing on exit. If the lock store itself is
@@ -256,7 +269,13 @@ behavior this replaces, never a hard failure. Full design:
 `planning/decisions/D61-fleet-concurrency-enforcement.md` and
 `planning/decisions/D66-tiered-heavy-lane-concurrency.md` (in `base-template`).
 
-**Taking any exclusive lease quiesces this repo's `mev` write verbs for the length of the chain.** While a `kind: exclusive` lease is held — whether the ordinary per-lane lease Step 4 takes for every real lane, or an additional lease taken here for a repo named in `exclusive_repos` — every `mev` write verb for that leased repo (`set-block-status --write`, `emit-state --write`, and the other write verbs) is refused with `E_QUIESCE_LEASE_HELD`. This is a declared quiet window, distinct from `E_EMIT_LOCK_HELD` contention: do NOT retry — either wait for the lease to be released, or, if this lane is the holder, pass `--agent <this lane's agent identity>` as the self-exemption on the write verb — the same flag Step 4 uses to claim this lane's registry identity. The lease Step 4 makes this lane take is one of the leases this section's own `register` check consults — `--agent` is what lets the holder's own `register`/`release`/write calls through without being refused by its own lease. (The holder's own re-register is never refused: both `fleet_concurrency_check.py` and `mev` skip a lease whose `agent` matches the requester.)
+**At lane close, release both the repo lease and the registry claim taken in Step 4, alongside
+this fleet-concurrency slot release** — delete `<lock_dir>/leases/lease-<repo>.json` and
+`<lock_dir>/lane-agents/agent-<agent_name>.json`. All three releases happen together, on success,
+failure, or abandonment, so a reader looking for "what does this lane give back on exit" finds it
+in one place.
+
+**Taking any exclusive lease quiesces this repo's `mev` write verbs for the length of the chain.** While a `kind: exclusive` lease is held — whether the ordinary per-lane lease Step 4 takes for every real lane, or an additional lease taken here for a repo named in `exclusive_repos` — every `mev` write verb for that leased repo (`set-block-status --write`, `emit-state --write`, and the other write verbs) is refused with `E_QUIESCE_LEASE_HELD`. This is a declared quiet window, distinct from `E_EMIT_LOCK_HELD` contention: do NOT retry — either wait for the lease to be released, or, if this lane is the holder, pass `--agent <this lane's agent identity>` as the self-exemption on the write verb, exactly as `register`/`release` already require it above. The lease Step 4 makes this lane take is one of the leases this section's own `register` check consults — `--agent` is what lets the holder's own `register`/`release`/write calls through without being refused by its own lease. (The holder's own re-register is never refused: both `fleet_concurrency_check.py` and `mev` skip a lease whose `agent` matches the requester.)
 
 **Fleet-exclusive lanes (`exclusive_repos`).** If the lane record's `exclusive_repos` array is
 non-empty, before the first block starts, write an additional `kind: exclusive` lease at
@@ -284,20 +303,65 @@ Print, and stop for confirmation unless `--execute`:
 - **operator gates** — any block the roadmap marks as waiting on a human, with which item
 - the log path
 
-**Re-stamp both heartbeats at every block boundary, once `/orchestrate` is running.** The registry
-claim (`<lock_dir>/lane-agents/agent-<agent_name>.json`) and the repo lease
-(`<lock_dir>/leases/lease-<repo>.json`) each carry a `heartbeat` field. `/orchestrate`'s rule 10
-re-stamps both — the claim's `heartbeat` and the lease's `heartbeat` — each time it releases and
-re-takes the lease at a block boundary. **At that same re-stamp, if the claim carries the optional
-`current_block` and `block_started_at` fields, update them too** — `current_block` to the id of the
-block about to start, `block_started_at` to the current time, alongside the `heartbeat` write, not
-as a separate pass. Both fields are optional; a claim without them is unaffected. **Leave
-`started_at` (on the claim) and `acquired_at` (on
-the lease) alone at every re-stamp** — those are acquisition timestamps set once, at first claim;
-re-stamping them on a later heartbeat destroys the record of when the claim or lease was actually
-taken. **This is a different clock from Step 3's fleet-concurrency re-registration above** — that
-heartbeat refreshes the separate `<lock_dir>/fleet-concurrency/...` entry (a different file, on
-its own TTL clock) and does nothing to the claim's or lease's `heartbeat`; do not conflate them.
+**Before any block runs**, claim this lane's identity in the registry and take the repo lease:
+
+- Resolve `<lock_dir>` exactly as `scripts/check_lane_agents.py` does — `--lock-dir`, else
+  `FLEET_LOCK_DIR`, else a `brain.toml` walk-up joined with `.fleet-locks` — see that script for
+  the precedence rather than re-deriving it here.
+- Write a lane-agent registry record, per `.claude/workflows/lane-agent.schema.json`
+  (`agent_name`, `repo`, `lane`, `roadmap`, `started_at`, `heartbeat`), to
+  `<lock_dir>/lane-agents/agent-<agent_name>.json`.
+- Take the repo lease, per `.claude/workflows/lease.schema.json` (`repo`, `lane`, `agent`,
+  `acquired_at`, `heartbeat`, `kind`), at `<lock_dir>/leases/lease-<repo>.json`. `kind` is
+  `exclusive` for a lane that will commit — every real lane. `acquired_at` is IMMUTABLE, set once
+  here and never re-stamped; `heartbeat` is the field that gets re-stamped to prove liveness — a
+  lease written without it falls back to judging staleness on `acquired_at` and can never recover
+  once that ages past the threshold, however live its holder actually is.
+- Both writes happen before the first block launches. If either write fails, stop; do not start
+  the chain holding only one of the two.
+
+**Agent identity comes from the transport, never from self-report.** `agent_name` is the
+ListAgents nickname this session is currently reachable at, taken from the transport-stamped
+identity — never typed, assumed, or copied from a listing row. The reason is not that an agent
+cannot know its own name; that claim is false and a reviewer will disprove it in one tool call.
+The reason is that a **self-reported identity is unverifiable at the reader**: a lease whose
+primary key is supplied by its own holder is ambiguous by construction, regardless of whether the
+self-reporter happened to get it right. Two facts measured 2026-08-21, stronger one first:
+
+1. **The self-identity capability is not uniform across sessions.** `engine-rs-6d`'s `ListAgents`
+   output opens with a header naming the calling session ("This session is engine-rs-6d [871821]
+   ... it is not listed below"). The identical call in a base-template session that same evening,
+   checked three separate times, carries no such header — the output begins directly with "Peer
+   sessions (N):" and the caller never appears in it. A registry primary key must not depend on a
+   capability that some sessions have and others lack.
+2. A base-template session wrote "base-template-b6 here" into two consecutive cross-session
+   messages while the routing envelope carried "base-template-46" — it had read a `ListAgents`
+   listing and taken a neighbour's row.
+
+**If no transport-stamped identity is reachable at claim time, the claim fails loudly and the
+lane does not start.** Never record a guessed name.
+
+**What `check_lane_agents.py` does not do:** it cannot call `ListAgents`, so it can only report a
+claim's or lease's timestamp age and agent name. It never decides "abandoned" versus "merely
+slow" — joining staleness against live `ListAgents` output to make that call is the caller's job,
+not the checker's.
+
+No field is added to `.claude/workflows/lane.schema.json` by this claim — the registry and lease
+records are separate files, not lane-record fields.
+
+**Re-stamp both heartbeats at every block boundary, once `/orchestrate` is running.** The claim
+written here carries `heartbeat`; the lease written here does too. `/orchestrate` rule 10 re-stamps
+both — the claim's `heartbeat` and the lease's `heartbeat` — each time it releases and re-takes the
+lease at a block boundary (do not restate that mechanism here). **At that same re-stamp, if the
+claim carries the optional `current_block` and `block_started_at` fields, update them too** — set
+`current_block` to the id of the block about to start and `block_started_at` to the current time,
+alongside the `heartbeat` write, not as a separate pass. Both fields are optional; a claim without
+them is unaffected. **Leave `started_at` (on the claim) and `acquired_at` (on the lease) alone at
+every re-stamp** — those are acquisition timestamps set once, here, at first claim; re-stamping them
+on a later heartbeat destroys the record of when the claim or lease was actually taken. **This is a
+different clock from Step 3's fleet-concurrency re-registration above** — that heartbeat refreshes
+the separate `<lock_dir>/fleet-concurrency/...` entry (a different file, on its own TTL clock) and
+does nothing to the claim's or lease's `heartbeat`; the two must not be conflated.
 
 Then run `/orchestrate <chain> <isolation-flag> [--engine ...] [--continue-on-fail]`.
 
@@ -306,7 +370,7 @@ own standing rules, it adds to them.
 
 ---
 
-## The six rules
+## The seven rules
 
 Each has already cost a real run in this fleet.
 
@@ -356,6 +420,14 @@ Each has already cost a real run in this fleet.
    `planning/index.md` per standing rule 7). Then **append after every block** — never rewrite, and
    never let it become a second status.md. Give every item a status so it can be triaged later:
    `OPEN` · `DONE` · `HELD` · `WONTFIX`. Commit it with the lane-log line.
+
+   **Dual-write for anything that would qualify under Rule 6's "must not decide alone" list.** In
+   addition to the notes.md entry, append one line to `planning/roadmaps/<roadmap>/escalations.jsonl`
+   per `scripted-liaison-sweep-design` section 3, for every such item. Write **both**, never one
+   instead of the other: the notes.md prose carries the reasoning for a human or a fresh agent to
+   read; the `escalations.jsonl` line is what a script can diff without parsing prose. Dropping
+   either regresses to the failure mode this record exists to fix from the opposite direction —
+   losing either the reasoning trail or the machine-diffable signal.
 
    The lane log is the *cross-lane* channel and stays one line per block; this file is the *local*
    one and holds the detail. Anything that needs a ticket later, or that the next agent would
@@ -411,7 +483,34 @@ Each has already cost a real run in this fleet.
 
    What you still must **not** decide alone: an operator gate (below), a bailed block's fate, two
    blocks that genuinely disagree about the same behaviour, and anything that would edit another
-   lane's repo. Those stop and get reported.
+   lane's repo. Those stop and get reported. Each case here is also a `kind` value in the
+   escalation schema (`operator-gate`, `bail`, `disagreement`, `cross-repo-edit`) — write both the
+   notes.md entry and the `escalations.jsonl` line per Rule 5 above.
+
+7. **Urgent-item adoption.** Nothing before this rule let a P0 raised mid-run jump a chain — the
+   2026-08-21 empty-tree P0 was adopted into a live lane ad hoc, with no defined procedure, because
+   none existed. Adoption is three steps, always in this order, and never fewer:
+
+   1. **File the block.** A real block record plus a `state.json` entry — never prose in a message,
+      a note, or this session's transcript. An adopted item that only exists as a ping is lost the
+      moment the session that received the ping ends.
+   2. **Write the ledger row at adoption time, not at lane close**, with `origin_roadmap` set
+      **explicitly** to the roadmap the block was originally allocated under — this is not a new
+      rule, it is Rule 5's existing ledger contract (per
+      `planning/decisions/D57-orchestration-run-artifact-contract.md`) applied the moment adoption
+      happens rather than deferred to lane close. Do not re-derive the ledger schema here.
+   3. **Ping the owning lane**, via the `ping-agent` skill, and write the same item to its durable
+      home (the block record and ledger row from steps 1–2). The ping accelerates the durable
+      channel; it never replaces it — a ping with no durable write behind it disappears the moment
+      the receiving session clears.
+
+   **What adoption is not.** It is not a licence to reorder this chain for anything below P0.
+   Priority comes from `planning/decisions/D43-cross-domain-priority-graph.md`, cited by doc_id,
+   never from the sender's own claim of urgency — the Standing operator convention below already
+   states this for lingering items at lane close; adoption is the same rule applied mid-run. No
+   field was added to `.claude/workflows/lane.schema.json` for this, and no role enum was
+   introduced anywhere in this fleet — every lane agent does the same job in a different repo; the
+   only distinct role is the commander (`BT.6.D`).
 
 ## Operator gates
 
@@ -436,8 +535,18 @@ work that has to be redone.
 - A leading `_` excludes a file from the corpus, so `_zz_*.md` debug probes are invisible to
   `validate-brain`.
 - `timeout` does not exist on this macOS shell.
+- **Check `git status --short <file>` before acting on a corpus error.** A validation error on a
+  file that is *uncommitted or untracked* belongs to whoever is editing it right now — very likely a
+  concurrent lane, not you — and "fixing" it overwrites work in flight; leave it, and say in the
+  report which lane's file it was. A committed error belongs to nobody in particular and is yours to
+  fix if it blocks the gate. The two cases look identical in `validate-brain` output, so the git
+  check is the only thing separating them. Positive control: run the same `git status --short` on a
+  file you know you just edited, and confirm it prints a line.
 - Invoke `/sdlc-flow` and `/sdlc-task` from the **main session** — the `Workflow` runtime behind
   `.claude/workflows/` is unavailable to delegated subagents.
+- The `Workflow` tool **inherits the session cwd**, so an engine launched from the wrong tree runs
+  against another repo's `.claude/workflows/` without complaining. The tell is the script path in
+  the launch result — check it names the repo you meant to drive before letting the engine proceed.
 
 ## Before finishing
 
@@ -453,9 +562,14 @@ bastion validate-brain --links
 bastion validate-brain --structure
 ```
 
-`./scripts/validate_brain.sh` is **not** this check — on a `primary` host it ends in an
+`./scripts/sync/validate_brain.sh` is **not** this check — on a `primary` host it ends in an
 `emit-state --write`, a commit, and a `git push` (see `derive-state-safely`), so using it as a
 closing verification commits and pushes whatever the shared index holds, not just this lane's work.
+
+**Note the `sync/`.** There is no `./scripts/validate_brain.sh` — that path exits **127**, which
+reads as a failed corpus gate rather than a missing file, so a lane that copies it concludes the
+fleet is red. Measured 2026-08-28: four lanes hit this in one night, and one then reached for the
+path that does exist and ran the writer as its closing check.
 
 Concurrent lanes pushing into one corpus is the exact condition that accumulated 32
 `validate-brain` errors across four lanes and blocked pushes fleet-wide.

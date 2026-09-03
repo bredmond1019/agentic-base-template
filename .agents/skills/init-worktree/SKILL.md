@@ -54,7 +54,7 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
    ```
    A Rust repo whose manifest uses `path = "../<crate>"` needs its `trees/` sibling symlinks
    present before this worktree is usable — see
-   [`docs/workflows/worktrees-in-rust-repos.md`](../../../docs/workflows/worktrees-in-rust-repos.md)
+   [`docs/workflows/worktrees-in-rust-repos.md`](../../docs/workflows/worktrees-in-rust-repos.md)
    for why and how to check.
 
 7. **Create the worktree without checkout:**
@@ -136,7 +136,7 @@ The spec slug is the directory name under `planning/` (e.g. `<spec-slug>`,
     To run the SDLC pipeline in isolation:
       1. Open a new Claude Code session with working directory set to:
            <absolute-path-to-repo>/trees/<worktreeName>
-      2. Run: /sdlc-run <specSlug>[ <taskNum>]
+      2. Run: /sdlc-flow <specSlug>  (or /sdlc-task <specSlug> <taskNum> for a single task)
 
     Note: install the project's dependencies in the worktree before any build/test runs:
       cd trees/<worktreeName> && <install command per project>   (dependencies are NOT shared across worktrees)

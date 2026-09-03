@@ -70,22 +70,12 @@ table; this restates only what an agent needs inline while appending:
 `constraint` and `known_issue` are **retired** (HQ D72) — okf-core preserves them only through its
 `Unknown(String)` fallback so legacy entries still round-trip. Do not mint new entries with either.
 
-**Route at write time — three destinations, not two.** Ask both questions before appending:
+**Route at write time — load the `edit-state-json` skill's Step 1 before appending.** It covers
+the operator-edge vs. `reference[]` vs. `carryover[]` question in full, including the measured
+30-of-202 fleet-wide misfiling rate for operator work parked in `carryover[]` by mistake — do not
+re-derive the routing rule here.
 
-1. **Can only a human do this?** A decision only the operator can make, a credential only they
-   hold, a judgement call, a thing they must look at — that is **not** a `carryover[]` entry. File
-   it as a `{"type":"operator", slug, exit, start, what?}` edge on the block it gates, per the
-   operator-work rule below. **Why it matters here and not only there:** a carryover entry gates
-   nothing, so operator work parked in it is never forced; an operator edge blocks the work standing
-   behind it, which is what gets it done. Measured 2026-08-19 — **30 of the fleet's 202 `carryover[]`
-   entries are operator work misfiled this way**, filed as `defect` or `deferred` because the table
-   above offers no row meaning "not an agent's to do."
-2. **Is it permanently true?** A gotcha still true next month, a deliberate non-fix nobody intends to
-   reverse, a load-bearing measured number someone will need again — that belongs in `reference[]`.
-   A fact with no `clears_when` because nothing will ever make it stop being true is the signal.
-   See `docs/state/reference-container-schema.md` for its field table and kind vocabulary.
-
-Only what survives both questions is a `carryover[]` entry: work-class findings that eventually
+Only what survives both of its questions is a `carryover[]` entry: work-class findings that eventually
 clear — an unticketed defect, a deferred follow-on, a drifted surface, a transient env caveat.
 
 - `priority` (int, `0..=3`) — value if resolved, on the same rubric as `tracks[].blocks[]`.
@@ -184,9 +174,10 @@ created: YYYY-MM-DD
 would otherwise re-derive. Cite file paths and decision numbers.>
 
 ## Completed this session
-<Concrete things done — commits, files changed, decisions reached. "bumped harness-config
-loader to sonnet in all 3 engines (sdlc-block.js:473, sdlc-task.js:455, sdlc-run.js:326)",
-not "fixed engine".>
+<Concrete things done — commits, files changed, decisions reached. "bumped the harness-config
+loader to sonnet in both engines (`loadHarnessConfig` in sdlc-flow.js and sdlc-task.js)",
+not "fixed engine". Name the symbol, not a line number — it drifts the moment the file is
+next edited.>
 
 ## Remaining work
 <What's left, in priority order. Mark blockers explicitly.>
@@ -228,10 +219,16 @@ Bump `log.md`'s frontmatter `timestamp` to the current ISO-8601 time.
 hand-maintained prose (`## Momentum`, narrative callouts) that this session changed. Do **not**
 hand-write the focus line — Step 4c derives it. Never edit `master-plan.md` from this command.
 
-**4c — Run `mev emit-state --write`.** It walks up to find `brain.toml` itself; no `cd` needed.
-This regenerates every derived surface from the state you authored in Step 2a: leaf `state.json`
-focus fields, the brain rollup, the per-project cache doc + `synced_from` watermark, tier
-rollups, the HQ Operating Board, and `master-plan.md`'s wave tables.
+**4c — Regenerate derived surfaces.** If `$BRAIN_ROOT/scripts/sync/emit_state_write.sh` exists,
+run it instead of the bare command — some brains wrap `emit-state --write` in a script that adds
+content-loss guards and commits what it wrote **locally only** (push stays opt-in behind an env
+var only a nightly cron sets, never something this session's use triggers). This harness stays
+project-agnostic, so it only checks for the script; it never assumes one exists. Otherwise run
+`mev emit-state --write` directly — it walks up to find `brain.toml` itself; no `cd` needed —
+and let Step 4d's commit below pick up the result. This regenerates every derived surface from
+the state you authored in Step 2a: leaf `state.json` focus fields, the brain rollup, the
+per-project cache doc + `synced_from` watermark, tier rollups, the HQ Operating Board, and
+`master-plan.md`'s wave tables.
 
 Do not reimplement any of that by hand. If the run reports `W_EMIT_NO_SENTINEL` against a
 target this repo feeds, report it rather than inventing the missing sentinel pair.
@@ -250,6 +247,9 @@ create one.** `/handoff` is called at the end of finished work, which is normall
 unless asked.
 
 ### Step 5 — Report
+
+**<= 10 lines.** First line: outcome + whether it needs the operator. Then <= 6 one-line
+bullets. Link paths; never restate a file. See the `report-to-the-operator` skill.
 
 - `planning/handoff.md` written (or updated)
 - Blocks flipped to `closed`; `carryover[]` slugs added or cleared

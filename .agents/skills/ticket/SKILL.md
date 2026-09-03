@@ -74,14 +74,13 @@ downstream block waiting on its code, so there is nothing to defer (D65).
    - Every task in `tasks.json` must name ≥1 concrete file in `files[]` (the Validate task is
      exempt).
    - **Compilable task boundaries (outranks the file-based split when the two conflict).**
-     `/ticket` only ever feeds `/sdlc-task` or `/sdlc-flow` — never `/sdlc-block`'s parallel-merge
-     model — and both run every task **sequentially on one branch/worktree with no inter-task
-     merge step**, gating the project's checks after **every single task**. A single breaking
-     public-surface change (a renamed public type, a struct's changed fields, an altered
-     trait/interface signature, and every call site each touches) must never be split across tasks
-     such that an intermediate task leaves the repository non-compiling — put the whole change in
-     **one** task, even if it then touches more files than usual. **Unconditional here**, with no
-     `/sdlc-block` carve-out: `/ticket` never produces a spec `/sdlc-block` decomposes in parallel.
+     `/ticket` only ever feeds `/sdlc-task` or `/sdlc-flow`, and both run every task
+     **sequentially on one branch/worktree with no inter-task merge step**, gating the project's
+     checks after **every single task**. A single breaking public-surface change (a renamed public
+     type, a struct's changed fields, an altered trait/interface signature, and every call site
+     each touches) must never be split across tasks such that an intermediate task leaves the
+     repository non-compiling — put the whole change in **one** task, even if it then touches more
+     files than usual. Unconditional: both engines are sequential.
 
 5. **Un-gateable acceptance criteria must be declared, not just written down (D64).** This repo's
    checks are in-repo and in-language, and structurally cannot observe evidence outside that
@@ -117,16 +116,21 @@ downstream block waiting on its code, so there is nothing to defer (D65).
    `bastion`, or similar): state explicitly whether it checks **source** or **installed**
    behaviour. The two diverge, and the divergence is invisible unless named.
 
+5b. **Never name a `files[]` path under `planning/` (same shape of problem as 5).** `planning/` is
+   a symlink into the private HQ vault, excluded from this repo's git by
+   `base-template/.gitignore:20` (the bare rule `/planning`). Code that references such a path — an
+   `include_str!`, a fixture path, a test data file — compiles on every developer machine, because
+   the vault checkout is present locally. **A CI checkout cannot see the private vault**, so the
+   build fails only in CI: every local gate passes and nothing reachable from the developer's
+   machine could have caught it. Put fixtures and test data under `tests/` instead.
+
 6. Choose a short descriptive slug (e.g. `fix-null-deref`, `add-rate-limit`). The Block ID is
    `<Prefix>.ticket.<slug>`, and the spec directory equals it exactly.
 
 7. **Write the block record and register it.** Read and follow
    `.claude/workflows/block-registration.md` — the canonical procedure for the block ID, the
    operator and cross-repo edge questions, the carryover read, the block record itself, and
-   `state.json` registration. Do not restate it here or invent a variant. **`sdlc_workflow` is
-   required at registration** — a block with no value cannot be resolved to an engine and
-   silently drops out of any chain that names it; a pre-existing gap elsewhere in the corpus is
-   reported, not blocking.
+   `state.json` registration. Do not restate it here or invent a variant.
 
 8. **Write `planning/<BlockID>/tasks.json`** — a **bare array** matching the `SDLCTask` shape plus
    the two additive fields this template's tooling uses:
@@ -142,13 +146,7 @@ downstream block waiting on its code, so there is nothing to defer (D65).
    `acceptance_criteria` and 53% with empty `validation_commands` because the template's empty
    array was read as a default.
 
-9. **Render the spec view:** `python3 scripts/render_spec.py <BlockID>`. This writes
-   `planning/<BlockID>/tasks.md` from the block record — the SDLC engines read it as the spec
-   document (`sdlc-task.js` sets `specFile = <blockDir>/tasks.md`). It is **generated**: never
-   hand-edit it, edit the block record and re-render. Until D65 stage 2 lands, this step is not
-   optional — an engine run against a missing `tasks.md` has no spec to read.
-
-10. **Property self-check.** Re-read what you wrote and **revise in place** until every property
+9. **Property self-check.** Re-read what you wrote and **revise in place** until every property
     holds, then re-check:
     - **`tasks.json` must be read BACK off disk and parsed** — a verification you *perform*, not
       an assertion you write. Run it:
@@ -178,9 +176,8 @@ downstream block waiting on its code, so there is nothing to defer (D65).
     - **The gate is shown capable of failing** — a task orders the test before the fix, or names
       the fixture standing in for that.
     - **Nothing this ticket depends on is unclassified** as built / half-built / absent.
-    - **`tasks.md` was rendered** and matches: `python3 scripts/render_spec.py <BlockID> --check`.
 
-11. Report the paths and next step.
+10. Report the paths and next step.
 
 ## Session boundary
 
@@ -227,7 +224,6 @@ ticket ships with tests.
 ```
 planning/blocks/<BlockID>.json     (block record)
 planning/<BlockID>/tasks.json      (<N> tasks)
-planning/<BlockID>/tasks.md        (generated view)
 state.json: <created | already existed>, block registered
 
 Next (implement + test loop):

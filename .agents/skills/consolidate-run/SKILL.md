@@ -41,6 +41,16 @@ Empty `$ARGUMENTS` → print usage and stop.
 
 ---
 
+## Not this: several roadmaps at once
+
+This command is **one roadmap**, and its output is proposed `carryover[]` entries for it. To mine
+several runs together for the mechanisms behind them — engine defects, orchestration friction,
+carryover shapes that recur across repos — use [`/consolidate-fleet`](consolidate-fleet.md), which
+invokes this command per roadmap and adds a cross-run pass on top. It also carries the
+`lane-log.jsonl` watermark (`scripts/lane_log_watermark.py`), which is what lets a later run resume
+from where the last one stopped reading. This command's own resume mechanism is the
+`lifecycle: consolidated` stamp of Step 6 and is unchanged.
+
 ## Step 1 — Resolve scope
 
 Walk up from cwd for `brain.toml` to find `BRAIN_ROOT`. Resolve `<roadmap-slug>` to `roadmap_dir` via
@@ -172,3 +182,14 @@ The **only** write this command makes is stamping `lifecycle: consolidated` on t
 consumed, so a re-run does not re-propose the same findings. It does not touch `carryover[]`,
 `tracks[]`, or any other `state.json` field in any repo — those writes belong to whatever consumes
 `consolidated-review.md`.
+
+## Report
+
+**<= 10 lines.** First line: outcome + whether it needs the operator. Then <= 6 one-line
+bullets. Link paths; never restate a file. See the `report-to-the-operator` skill.
+
+```
+<roadmap>: <n> records across <m> repos — <k> carryover entries proposed
+- <the one selection surprise, if any (a block whose origin_roadmap disagreed with its ledger)>
+Proposed entries written to: <path>. No state.json was written.
+```
