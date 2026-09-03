@@ -16,6 +16,33 @@ The question that matters is "does this point at a real spec", not "is the name 
     canonical     + resolves    -> ok
 
 Dependency-free, same discipline as the module it tests.
+
+--- D68 observed-RED record (task 1, BT.ticket.spec-files-under-planning-cannot-compile-in-ci) ---
+2026-09-03: `planning_path_checks()` below was added BEFORE the planning/-path rule existed in
+check_block_records.py. Captured verbatim:
+
+    [FAIL] a files.new path under planning/ is an ERROR -- errors: ['required field `model` is
+    missing or empty', 'required field `out_of_scope` is missing or empty', "model `None` not one
+    of ['either', 'gemini-flash', 'gemini-pro', 'sonnet']"]
+    [FAIL] a files.modified path under planning/ is an ERROR too -- errors: ['required field
+    `model` is missing or empty', 'required field `out_of_scope` is missing or empty', "model
+    `None` not one of ['either', 'gemini-flash', 'gemini-pro', 'sonnet']"]
+
+    2 check(s) failed:
+      - a files.new path under planning/ is an ERROR
+      - a files.modified path under planning/ is an ERROR too
+
+    (exit code 1)
+
+The `model`/`out_of_scope` entries above are pre-existing noise from the fixture helper's
+`record()` (it never sets those two REQUIRED fields) -- present on every case in this suite,
+irrelevant to the planning/-path rule, and NOT what the two failing checks assert on. The checks
+assert only on messages containing the literal fixture path, and none does yet.
+
+The negative control (tests/fixtures/x.json, not flagged) and the non-promotion control (no
+files[] at all still only warns) both PASS already today -- they assert the ABSENCE of a rule
+that does not yet exist, and missing-files[] was already warn-only before this task. Only the
+two POSITIVE cases are red, which is the scope task 2 must close.
 """
 
 from __future__ import annotations
@@ -156,6 +183,48 @@ def prefix_and_operator_checks():
     check("a non-kebab slug is still an error", len(op_msgs(errs)) == 1, f"errors: {errs}")
 
 
+def planning_path_checks():
+    """The planning/-path rule (BT.ticket.spec-files-under-planning-cannot-compile-in-ci, task 1).
+
+    A `files[]` path under `planning/` names a symlink into the private HQ vault, excluded from
+    this repo's git by base-template/.gitignore:20. Code referencing such a path (include_str!,
+    a fixture path, a test data file) compiles on every developer machine and on no CI runner.
+    These cases are written BEFORE the rule exists (D68) and are expected to fail red until task
+    2 implements it; task 2 must not promote a record with no `files[]` at all to an error either
+    -- `files` stays in WARN_IF_MISSING on purpose (many blocks predate D65).
+    """
+
+    # --- POSITIVE: files.new path under planning/ -------------------------------------------
+    errs, warns = run("planning/HQ.9.A/",
+                       files={"new": [{"path": "planning/fixtures/x.json", "purpose": "test data"}]})
+    positive = [m for m in errs if "planning/fixtures/x.json" in m]
+    check("a files.new path under planning/ is an ERROR", len(positive) == 1, f"errors: {errs}")
+
+    # --- NEGATIVE control: the identical shape under tests/ must NOT be flagged -------------
+    errs, warns = run("planning/HQ.9.A/",
+                       files={"new": [{"path": "tests/fixtures/x.json", "purpose": "test data"}]})
+    negative = [m for m in errs if "tests/fixtures/x.json" in m]
+    check("a files.new path under tests/ is NOT flagged", len(negative) == 0, f"errors: {errs}")
+
+    # --- MODIFIED-side positive: files.modified under planning/ is flagged too --------------
+    errs, warns = run("planning/HQ.9.A/",
+                       files={"modified": [{"path": "planning/fixtures/y.json", "change": "edit"}]})
+    modified_positive = [m for m in errs if "planning/fixtures/y.json" in m]
+    check("a files.modified path under planning/ is an ERROR too", len(modified_positive) == 1,
+          f"errors: {errs}")
+
+    # --- NON-PROMOTION control, load-bearing: no files[] at all must stay a WARNING ---------
+    # check_block_records.py:56 lists `files` in WARN_IF_MISSING deliberately -- the new rule
+    # must fire only on a files[] that IS present and names a planning/ path, never on a missing
+    # files[]. This must hold both before and after task 2's implementation.
+    errs, warns = run("planning/HQ.9.A/")
+    check("a record with no files[] at all is never promoted to an error",
+          not [m for m in errs if "files" in m],
+          f"errors: {errs}")
+    check("a record with no files[] at all still warns",
+          any("files" in m for m in warns), f"warnings: {warns}")
+
+
 def main():
     # 1. The HQ.9.A case: legacy name, directory really exists.
     errs, warns = run("planning/chore-fleet-parking-pass/", ("chore-fleet-parking-pass",))
@@ -188,6 +257,7 @@ def main():
         print("[skip] real HQ.9.A record not present from this checkout")
 
     prefix_and_operator_checks()
+    planning_path_checks()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed:")
