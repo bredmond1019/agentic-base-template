@@ -453,6 +453,14 @@ rendered snippet in agreement, reproduces the EN.11.O fixture to show it now fai
 while still passing the old one unchanged, and is registered as the gating `work-assertion-tests`
 check in `planning/harness.json`.
 
+`renderWorkAssertion`'s abort is not the only channel its outcome reaches: the implement/fix stage
+also returns a structured `workAssertionPassed` field, and the per-task loop refuses to mark a
+task `passed` — routing it through triage's fix-pass/bail path instead — whenever that field is
+absent or `false`. This closes the gap where the check otherwise lived only as prose an agent could
+skip in the implement step; the terminal wrap-up write also references `workAssertionPassed` so
+that a block/spec can never close without the per-task gate having already run
+(`BT.ticket.engine-terminal-state-needs-evidence`).
+
 Separately, every executable `git` invocation in this engine's recipes — setup/worktree/branch,
 the D16 derive commit, per-task + vault commits, review diff reads, the docs commit, the wrap-up
 commit + vault commit, and auto-merge cleanup — is routed through a shared `GIT` prefix constant:
