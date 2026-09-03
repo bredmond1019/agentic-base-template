@@ -4212,3 +4212,22 @@ hand-maintained across ~24 repos — which is how a rule lands in some of them a
 script is idempotent, dry-run by default, skips `/trees/` worktree copies and nested checkouts, and
 with `--require-anchor` skips any file carrying neither the block nor its anchor (`example-repo/qm`
 and `learn-ai/lib` surface that way — neither carries the response-style convention either).
+
+## 2026-09-03 — Pre-propagation baselines captured for the run-trust downstream sync
+
+`BT.chore.propagate-the-run-trust-contracts` task 1. Dry-run only — nothing applied to any
+downstream repo. Captured, in
+`planning/orchestration-run/runs-that-can-be-believed/notes.md`, the three baselines task 2's
+`--apply --commit` run and its acceptance criteria compare against: the
+`sync_downstream_harness.py` dry-run report (19 repos, 205 files targeted; HQ receives only the 7
+engine files, confirming the D54 `engines_only` boundary), the `mev conformance --check
+toolchain-freshness` baseline (already `DRIFT`, exit 1, on binary-vs-source staleness unrelated to
+propagation — self `44870a7a` -> `1a87ea70`, bastion `8a0849d2` -> `1bda49da`), and
+`fleet_concurrency_check.py status` (no active lane anywhere in the fleet; the sole exclusive lease
+listed is this task's own running lane on `base-template`).
+
+About to be propagated (once the operator gate `OP.sync-downstream-after-run-trust` is satisfied):
+the seven `lane factory` engine/command changes — `sdlc-task.js`, `sdlc-flow.js`,
+`begin-orchestration.md`, `consolidate-fleet` (script/skill support), `ticket.md`, `chore.md`,
+`generate-tasks.md` — plus `harness.schema.json`'s `observed_red` field, into all 18 downstream
+repos and HQ's engines-only slice.
