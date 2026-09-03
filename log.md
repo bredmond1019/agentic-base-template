@@ -4231,3 +4231,26 @@ the seven `lane factory` engine/command changes — `sdlc-task.js`, `sdlc-flow.j
 `begin-orchestration.md`, `consolidate-fleet` (script/skill support), `ticket.md`, `chore.md`,
 `generate-tasks.md` — plus `harness.schema.json`'s `observed_red` field, into all 18 downstream
 repos and HQ's engines-only slice.
+
+## 2026-09-03 — Applied and committed the run-trust downstream sync
+
+`BT.chore.propagate-the-run-trust-contracts` task 2, gated on the (now-closed) operator edge
+`OP.sync-downstream-after-run-trust`. Ran `python3 scripts/sync_downstream_harness.py --apply
+--commit`; verified every claimed commit exists by `git log` in each repo rather than trusting the
+script's own report. Result: 18 downstream repos each got their own commit carrying
+`sdlc-flow.js`, `sdlc-task.js`, `harness.schema.json`, `prompts/shared.js`,
+`check_block_records.py`, both `SKILL.md` guides, and (for non-HQ repos) 4 commands
+(`begin-orchestration.md`, `generate-tasks.md`, `ticket.md`, `chore.md`); the brain got one
+`.template-version`-stamp commit (`312d18607`), confirmed to carry zero `.claude/commands/*.md`
+changes — HQ's D54 `engines_only` boundary held.
+
+`cargo check` passed clean in `core/mev` and `core/engine-rs` against the propagated
+`harness.schema.json` — `observed_red` is additive and inert for both readers, per
+`core/mev/src/brain/availability.rs:366` ("Unknown fields are tolerated"), confirmed by compiling
+rather than by re-reading the comment. `mev conformance --check toolchain-freshness` re-run after
+propagation: still `DRIFT` (exit 1, as expected — HQ registers this `gates:false`) but with fewer
+drifting writers than task 1's baseline (`self` cleared; only `bastion` remains, pointing at its own
+fresh sync commit) — no new drift class introduced. All five task-2 validation commands passed.
+
+Full evidence (dry-run report, both conformance captures, per-repo commit hashes, cargo check
+output): `planning/orchestration-run/runs-that-can-be-believed/notes.md`.
