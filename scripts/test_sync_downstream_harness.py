@@ -82,10 +82,20 @@ class EnginesOnlyGuard(unittest.TestCase):
             self.bt / ".claude" / "skills" / "edit-state-json" / "SKILL.md",
             "state.json authoring guide\n",
         )
-        # Not in CLAUDE_SKILL_SLUGS — a factory-only skill must never fan out.
+        # Not in CLAUDE_SKILL_SLUGS — a factory-only skill must never fan out. Since
+        # BT.chore.skills-go-global nothing under .claude/skills fans out, so this case is
+        # now subsumed by test_no_claude_skills_sync_per_repo; kept because it is the
+        # narrower, more legible statement of the same rule.
         _write(
             self.bt / ".claude" / "skills" / "factory-only" / "SKILL.md",
             "base-template internal\n",
+        )
+        # The .agents mirrors ARE still distributed per-repo. One registered slug, so the
+        # nesting regression (skills/<slug>/SKILL.md, never a flattened .agents/SKILL.md)
+        # still has something to assert against after the .claude half stopped syncing.
+        _write(
+            self.bt / ".agents" / "skills" / sync.AGENT_SKILL_SLUGS[0] / "SKILL.md",
+            "agent-surface guide\n",
         )
 
         # HQ (brain root) — has workflows, and its OWN commands that differ.
@@ -136,21 +146,47 @@ class EnginesOnlyGuard(unittest.TestCase):
         names = {p.name for p in sync.harness_files(self.bt)}
         self.assertIn("prime.md", names)
 
-    def test_allowlisted_skills_sync_to_every_target_including_engines_only(self):
-        """.claude/skills/<slug>/SKILL.md describe fleet-wide authoring mechanism, identical in
-        every repo. D54's engines_only exclusion is for commands that DIVERGE per repo; skills do
-        not, and the brain root needs them as much as any leaf."""
-        rels = {
-            str(p.relative_to(self.bt / ".claude"))
-            for p in sync.harness_files(self.bt, engines_only=True)
-        }
-        self.assertIn("skills/write-okf-markdown/SKILL.md", rels)
-        self.assertIn("skills/edit-state-json/SKILL.md", rels)
+    def test_no_claude_skills_sync_per_repo(self):
+        """INVERTED by BT.chore.skills-go-global (2026-09-03).
 
-    def test_allowlisted_skills_sync_to_a_normal_repo_too(self):
-        rels = {str(p.relative_to(self.bt / ".claude")) for p in sync.harness_files(self.bt)}
-        self.assertIn("skills/write-okf-markdown/SKILL.md", rels)
-        self.assertIn("skills/edit-state-json/SKILL.md", rels)
+        These used to assert that .claude/skills/<slug>/SKILL.md reached every target. The 17
+        fleet-mechanism skills now install ONCE into ~/.claude/skills/ instead, so NOTHING under
+        .claude/skills/ may be distributed per-repo. CLAUDE_SKILL_SLUGS is deliberately empty.
+
+        Why the old model had to go, beyond the 323 duplicate files: skills offer no picker, and
+        a same-named repo-local skill LOSES to the global one - measured by body, not by listing.
+        Per-repo copies were therefore unreachable once a global install existed, so they bought
+        staleness and nothing else. The freshness of the one remaining surface is watched by the
+        non-gating `global-skills-fresh` check.
+        """
+        for engines_only in (True, False):
+            rels = {
+                str(p.relative_to(self.bt / ".claude"))
+                for p in sync.harness_files(self.bt, engines_only=engines_only)
+            }
+            leaked = sorted(r for r in rels if r.startswith("skills/"))
+            self.assertEqual(
+                leaked,
+                [],
+                "nothing under .claude/skills/ may sync per-repo any more - these install "
+                "globally to ~/.claude/skills/. If you are re-adding per-repo distribution, "
+                "restore CLAUDE_SKILL_SLUGS deliberately and update this test.",
+            )
+
+    def test_claude_skill_slugs_is_empty_by_design(self):
+        """Positive control for the test above: it would also pass if harness_files() were
+        broken and returned nothing at all. Pin the actual cause."""
+        self.assertEqual(
+            list(sync.CLAUDE_SKILL_SLUGS),
+            [],
+            "CLAUDE_SKILL_SLUGS must stay empty - .claude/skills installs globally",
+        )
+        self.assertTrue(
+            sync.AGENT_SKILL_SLUGS,
+            "AGENT_SKILL_SLUGS must NOT be empty - the Antigravity mirrors are still "
+            "distributed per-repo, and an empty list here would mean the sync stopped "
+            "shipping them without anyone noticing",
+        )
 
     def test_non_allowlisted_skill_never_syncs(self):
         """The allowlist is the whole point: a skill added to base-template for factory-internal
@@ -162,15 +198,21 @@ class EnginesOnlyGuard(unittest.TestCase):
             }
             self.assertNotIn("skills/factory-only/SKILL.md", rels)
 
-    def test_skills_land_under_dot_claude_with_their_slug_directory(self):
+    def test_agent_skills_land_under_dot_agents_with_their_slug_directory(self):
         """Regression: the destination must keep the skills/<slug>/ nesting. A flattened copy
-        lands at .claude/SKILL.md and Claude Code never discovers it."""
+        lands at .agents/SKILL.md and is never discovered.
+
+        Re-pointed from .claude to .agents by BT.chore.skills-go-global: .claude/skills no longer
+        syncs per-repo at all, but the .agents mirrors still do and the nesting rule is the same.
+        """
         report = sync.diff_repo(self.bt.resolve(), self.brain.resolve(), self._targets()["leaf"])
+        slug = sync.AGENT_SKILL_SLUGS[0]
         entry = next(
-            d for d in report.diffs if d.rel_path.endswith("write-okf-markdown/SKILL.md")
+            d for d in report.diffs
+            if d.dest_prefix == ".agents" and d.rel_path == f"skills/{slug}/SKILL.md"
         )
-        self.assertEqual(entry.dest_prefix, ".claude")
-        self.assertEqual(entry.rel_path, "skills/write-okf-markdown/SKILL.md")
+        self.assertEqual(entry.dest_prefix, ".agents")
+        self.assertEqual(entry.rel_path, f"skills/{slug}/SKILL.md")
         self.assertEqual(entry.status, "new")
 
     def test_workflows_md_syncs_to_every_target_including_engines_only(self):
@@ -329,9 +371,17 @@ class SkillSlugRegistrationGuard(unittest.TestCase):
         commands_dir = self.root / ".claude" / "commands"
         return {p.stem for p in commands_dir.rglob("*.md")}
 
-    def test_notify_operator_is_registered_in_both_lists(self):
-        """Case A."""
-        self.assertIn("notify-operator", sync.CLAUDE_SKILL_SLUGS)
+    def test_notify_operator_reaches_both_surfaces(self):
+        """Case A, restated for the post-2026-09-03 model.
+
+        The Claude surface is now the GLOBAL install, so the invariant is that the skill is
+        authored in .claude/skills/ (whence /sync-global-skills installs it), not that it is
+        listed for per-repo distribution. The Antigravity surface is still per-repo.
+        """
+        self.assertTrue(
+            (self.root / ".claude" / "skills" / "notify-operator" / "SKILL.md").is_file(),
+            "notify-operator must exist in .claude/skills/ to reach ~/.claude/skills/",
+        )
         self.assertIn("notify-operator", sync.AGENT_SKILL_SLUGS)
 
     def test_every_registered_slug_has_its_file(self):
@@ -355,15 +405,18 @@ class SkillSlugRegistrationGuard(unittest.TestCase):
         command mirror populated by the separate sync_skills.py process, nor named in the
         explicit UNDISTRIBUTED_AGENT_SKILL_DIRS allowlist is exactly the "authored but
         undistributed" failure this block exists to prevent."""
+        # .claude/skills is no longer distributed per-repo (BT.chore.skills-go-global), so the
+        # "authored but undistributed" failure this guards moved: a skill authored here reaches
+        # every session via ~/.claude/skills/, and the thing that can now go wrong is a directory
+        # with no SKILL.md, which installs as an empty skill and resolves to nothing.
         claude_skills_dir = self.root / ".claude" / "skills"
         for entry in sorted(claude_skills_dir.iterdir()):
             if not entry.is_dir():
                 continue
-            self.assertIn(
-                entry.name,
-                sync.CLAUDE_SKILL_SLUGS,
-                f".claude/skills/{entry.name}/ exists but is not in CLAUDE_SKILL_SLUGS — "
-                "register it or add it to an explicit allowlist",
+            self.assertTrue(
+                (entry / "SKILL.md").is_file(),
+                f".claude/skills/{entry.name}/ exists but has no SKILL.md — it would install "
+                "to ~/.claude/skills/ as an empty skill and resolve to nothing",
             )
 
         agent_skills_dir = self.root / ".agents" / "skills"
@@ -391,7 +444,16 @@ class SkillSlugRegistrationGuard(unittest.TestCase):
         instead of MirroredSkillBodiesMatch's hardcoded MIRRORED constant, so a newly-registered
         mirrored slug (notify-operator, absent from that constant) is covered without a second
         manual edit."""
-        mirrored = sorted(set(sync.CLAUDE_SKILL_SLUGS) & set(sync.AGENT_SKILL_SLUGS))
+        # Derived from what is on disk in BOTH trees, not from the two lists: CLAUDE_SKILL_SLUGS
+        # is empty since the global-install move, so intersecting the lists now yields nothing
+        # and the case would silently stop testing anything.
+        mirrored = sorted(
+            d.name
+            for d in (self.root / ".claude" / "skills").iterdir()
+            if d.is_dir()
+            and (d / "SKILL.md").is_file()
+            and (self.root / ".agents" / "skills" / d.name / "SKILL.md").is_file()
+        )
         self.assertTrue(mirrored, "expected at least one slug registered in both lists")
         checked = 0
         for slug in mirrored:
