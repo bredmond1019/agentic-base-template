@@ -6,6 +6,44 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-03
 
 ---
+## 2026-09-03 — pre-plan residue is not an ambiguous roadmap
+
+- **What:** narrowed the both-locations rule that had been hard-blocking every consolidation in the
+  fleet. `roadmap_dir()` in `scripts/lane_log_watermark.py` treated a slug present in both
+  `planning/roadmaps/<slug>/` and `planning/<slug>/` as an unconditional error; it now errors only
+  when the legacy path is *itself* a roadmap, identified mechanically as holding `lane-log.jsonl` or
+  `roadmap.md` (new `is_roadmap_dir()`). Mirrored the rule into `/begin-orchestration` Step 1C and
+  its `.agents/` replication copy. Added `/generate-roadmap` **Step 7b**, which relocates the
+  pre-plan folder to `planning/roadmaps/<slug>/pre-plan/` after the roadmap is written — the pattern
+  the `clean-slate-sandbox` lane invented and the operator asked to standardise. Stated the branch
+  predicate in `/sequence` (count the distinct **Repo** values in the block table: `== 1` -> `/plan`,
+  `> 1` -> `/generate-roadmap`) and the matching invariant in `/plan` (it writes in place, on
+  purpose). New gate `roadmap-dir-resolution` + `scripts/test_roadmap_dir_resolution.py`, 11 cases
+  asserting **both** directions, registered `gates:true` with an `observed_red` record. Also repaired
+  four dangling index rows another lane left behind when it moved `coordination-layer-port`'s
+  pre-plan without updating `planning/index.md` / `planning/roadmaps/index.md`.
+- **Why:** `/consolidate-fleet` could not start. `/assess`, `/seams` and `/sequence` all write to
+  `planning/<slug>/`, and which successor consumes them is unknown until `/sequence` counts the repos
+  in its cut — one repo goes to `/plan`, which authors into that same directory, several go to
+  `/generate-roadmap`, which writes `planning/roadmaps/<slug>/`. So on the multi-repo path the slug
+  ends up in both places **every time, by design**, and the rule fired on normal operation. It was
+  written for the legacy roadmap migration, and that migration is finished: measured 0 of 31 roadmap
+  directories and 0 directories under `planning/` carried a `lane-log.jsonl` or `roadmap.md`, so its
+  true-positive population was empty. Proven systemic rather than a one-off — nothing was fixed, and
+  when another session resolved `clean-slate-sandbox` the identical error immediately reappeared on
+  `coordination-layer-port`. Same shape as two dead rules found earlier the same day
+  (`BT.ticket.engines-cannot-express-a-red-green-task`'s RULE 3, inert at 0 of 67 checks, and block 7's
+  first planning/-path rule at 31 false positives and 0 true). The operator's framing is what ruled out
+  the obvious fix: pre-plan location cannot be decided up front, so the resolver has to tolerate the
+  residue rather than authors avoid creating it. Both halves shipped because they are not redundant —
+  Step 7b means the collision never exists; the narrowing means a lane that skips it does not wedge the
+  fleet. Shaped tightly for the pending port of this pipeline into `engine-rs` as a sequential
+  workflow: stages 1–3 are linear and fail closed on a missing input, and the single conditional edge
+  is a count over structured data rather than a model judgement.
+- **Refs:** `scripts/test_roadmap_dir_resolution.py`, `/generate-roadmap` Step 7b,
+  `/begin-orchestration` Step 1C, commits `dbea482` `b111e5e22` `5cb6e0cea`
+
+---
 ## 2026-09-03 — engine terminal writes now assert their own evidence, not narrate it
 
 - **What:** closed `BT.ticket.engine-terminal-state-needs-evidence` (5/5 tasks, PASS, `1f06446`
