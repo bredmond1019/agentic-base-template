@@ -157,7 +157,12 @@ def resolve_watermark_path(root: Path, explicit: str | None) -> Path:
     return root / WATERMARK_REL
 
 
-def load_watermarks(path: Path) -> dict:
+def load_watermarks(root: Path, watermark_path: Path | None = None) -> dict:
+    """Load the watermark file. `root` alone resolves to the default
+    `<root>/WATERMARK_REL` location (back-compat with callers that predate the
+    `--watermark-dir` seam); pass `watermark_path` to point at an explicitly-resolved
+    location instead (what `main()` does after calling `resolve_watermark_path`)."""
+    path = watermark_path if watermark_path is not None else root / WATERMARK_REL
     if not path.is_file():
         return {"version": SCHEMA_VERSION, "roadmaps": {}}
     try:
@@ -169,7 +174,10 @@ def load_watermarks(path: Path) -> dict:
     return data
 
 
-def save_watermarks(path: Path, data: dict) -> Path:
+def save_watermarks(root: Path, data: dict, watermark_path: Path | None = None) -> Path:
+    """Save the watermark file. Same `root`-alone-vs-explicit-`watermark_path` precedence
+    as `load_watermarks`."""
+    path = watermark_path if watermark_path is not None else root / WATERMARK_REL
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     return path
@@ -300,7 +308,7 @@ def cmd_advance(root: Path, slug, to_line, run_id, marks, as_json, watermark_pat
     }
     marks["roadmaps"][slug] = entry
     marks["version"] = SCHEMA_VERSION
-    path = save_watermarks(watermark_path, marks)
+    path = save_watermarks(root, marks, watermark_path)
     try:
         watermark_file = str(path.relative_to(root))
     except ValueError:
@@ -352,7 +360,7 @@ def main() -> int:
 
     root = Path(args.root).resolve() if args.root else find_brain_root(Path.cwd())
     watermark_path = resolve_watermark_path(root, args.watermark_dir)
-    marks = load_watermarks(watermark_path)
+    marks = load_watermarks(root, watermark_path)
 
     if args.verb == "advance":
         if not args.roadmaps or len(args.roadmaps) != 1:
