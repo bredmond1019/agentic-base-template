@@ -385,6 +385,13 @@ AGENT_SKILL_SLUGS: list[str] = [
     "notify-operator",
     "check-blast-radius",
     "pick-the-next-block",
+    # Added by BT.chore.skills-go-global §4a (2026-09-03). Both had a .claude/skills entry but
+    # NO .agents mirror at all, so they could not be listed here and reached no Antigravity
+    # surface anywhere - the push-discipline skill in particular had never been available on
+    # that side. Nothing syncs .claude/skills -> .agents/skills; the other 14 were mirrored by
+    # hand and these two were simply missed.
+    "fleet-push-discipline",
+    "stamp-workflow-run-id",
 ]
 
 
