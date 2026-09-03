@@ -276,6 +276,23 @@ b586df7 feat: implement BT.ticket.gates-must-be-observed-red-task1
   delegate.
 - **HQ-only.** Added to `EXCLUDED_COMMAND_FILENAMES` — it reads every repo's records from the brain
   root and has nothing to consolidate inside a leaf repo, the same reasoning as `/generate-roadmap`.
+- **`/dispose-run` — the disposal half, built from that run rather than before it.** `/consolidate-fleet`
+  proposed and nothing disposed, so the first disposal was driven by a hand-written prompt. Every
+  rule in the new command is a thing that prompt got wrong or that the filing agent refused
+  correctly, which is why it was worth building second:
+  - A block carries neither `finding_id` nor `needs` — provenance is `origin.type: "mechanism"`.
+  - An operator edge must gate a block; **zero filed can be the right answer**, and was (two of
+    four proposed already existed, two gated nothing).
+  - A `carryover[]` predicate is proven UNMET before commit, positive-controlled.
+  - Freshness is checked **immediately before** the first write, because `create-block --write`
+    chains `emit-state --write` unconditionally — "file but do not emit" is unobeyable.
+  - The epic is reconciled: nine blocks landed in `fleet-integrity`, whose status is `complete`.
+  - Every stated total is recounted ("8 blocks — 6 + 3" is nine).
+  - **The report's deliverable is the WITHHELD list, not the filed count** — a disposal that files
+    everything it was handed has checked nothing.
+  It files rows and stops. Authoring a roadmap stays `/generate-roadmap --from`; running both would
+  put two schedulers over one body of findings, the same error as `--also-per-roadmap`. HQ-only,
+  like `/consolidate-fleet`.
 - **First DISPOSAL run, and it found four defects in the instructions it was given — three mine.**
   All eleven rows filed (9 blocks + 1 chore + 1 carryover, M1/M2 first, commits `6ec3ea38b`,
   `7e92ef80a`), and the filing agent's refusals were worth more than the count:
