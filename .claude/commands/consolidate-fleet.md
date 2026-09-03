@@ -164,8 +164,11 @@ Tell every agent, verbatim, all five:
 4. **`provenance` is not optional.** `verified` = the record shows the command and its output;
    `relayed` = another lane told this one; `assumed` = the record asserts it. The prior analysis was
    useful precisely because every claim carried this tag.
-5. **No finding in this corpus has a `finding_id`.** Do not invent one. Minting them is Step 4's job,
-   after clustering — an id assigned per-record cannot cluster anything.
+5. **Do not invent a `finding_id` at extraction time.** Some carryover entries in the corpus already
+   carry one (run `mev carryover --json --allow-exec` and check the `finding_id` field to see how
+   many, as of when you run it) — but a raw extraction record is not a carryover entry, and minting
+   an id per-record here, before clustering, cannot cluster anything. Minting is Step 4's job, after
+   clustering.
 6. **`needs` answers "what kind of work closes this", not "why does it exist".** `kind` (defect ·
    deferred · drift · env) already carries the why; `needs` (code · docs · state · operator ·
    dedupe, okf-core's field) is what lets the analysis route findings by executor instead of by
@@ -184,12 +187,17 @@ the number of independent repos or lanes that hit it, counted from the extractio
 **Mint one `finding_id` per mechanism** and attach it to every contributing finding. This is what
 `mev`'s `cluster_by_finding_id` groups on.
 
-**The gap is cross-repo, not absence — measured 2026-09-02, correcting this file's first draft.**
-30 of 268 carryover entries carry a `finding_id` and 29 clusters render, so the ids exist and the
-mechanism works. What does not exist is a single **cross-repo** cluster, against **100 cross-repo
-similarity suggestions**: every id in the fleet was minted inside one repo, by an author who could
-not see the other repo saying the same thing. That is the gap this command's vantage point closes,
-and it is a stronger argument than "nothing writes them" — which was false.
+**The gap is cross-repo, not absence — this file's first draft claimed the latter and was wrong.**
+Run `mev carryover --json --allow-exec` and look at `total`, the count of entries with a
+`finding_id`, `clusters`, and `suggestions`: the ids exist, clusters render, and the mechanism
+works — do not re-derive that from a frozen count here, because it will already have moved by the
+time you read this. The load-bearing question is narrower than "do ids exist": **how many of the
+rendered `clusters` span more than one `repo` among their members?** Count it fresh each run — as
+of 2026-09-03 it was 3, against dozens of `single_repo_finding_ids` and a much larger set of
+`suggestions` that never got confirmed across a repo boundary. Every id in the fleet is minted
+inside one repo, by an author who cannot see another repo saying the same thing — that structural
+fact, not any specific count, is the gap this command's vantage point closes, and it is a stronger
+argument than "nothing writes them," which was false.
 
 Cross-check against `mev carryover`'s `suggestions`, and **never auto-merge**. A false merge
 destroys durable knowledge exactly the way a false `cleared` does. Two entries join only when a
