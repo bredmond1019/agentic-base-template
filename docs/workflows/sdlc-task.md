@@ -425,6 +425,17 @@ instance, which is exactly the shape that shipped as a green PASS in EN.11.O (44
 complement: it runs immediately *after* the per-task work commit in both engines' per-task loop
 (never before — it inspects the commit it is checking via `git diff --name-status HEAD~1 HEAD`),
 reading `tasksJsonPath` at run time to get task `taskNum`'s declared `files[]`, and aborts
+
+ VAULT-ONLY TASKS (D46): if EVERY path in the task's declared files[] begins with `planning/`,
+ the work landed in the VAULT repo, not this one, and this repo's history structurally cannot
+ contain it — the assertion aborts on condition 1 (empty diff) forever and no retry clears it.
+ That is a false negative, not missing work. In that case only, run the same diff against the
+ vault repo (`git -C <vault.planningPath> diff --name-status HEAD~1 HEAD`) and confirm the
+ changed paths correspond to the declared files[] with the leading `planning/` replaced by this
+ repo's subdirectory name in the vault; set workAssertionPassed=true only if that vault-side
+ diff is non-empty AND corresponds. A task with a MIX of vaulted and non-vaulted files is NOT
+ this case and must still pass the ordinary assertion.
+
 (`WORK_ASSERTION_ABORT`, nonzero exit) when: (1) the commit's diff is empty; (2) no changed path
 intersects the declared `files[]`; (3) the commit **deletes** a path that is *not* declared — the
 EN.11.O shape. Deleting a file the task *did* declare passes cleanly; deletion is not itself the
