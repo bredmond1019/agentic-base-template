@@ -118,6 +118,7 @@ artifact from producing a confident, silent false pass.
 | `command-hazards` | Two command shapes that silently false-pass here: a negated invocation of a non-POSIX tool, and its siblings. | `python3 scripts/check_command_hazards.py --quiet` |
 | `command-docs-no-write-path` | No command or skill instructs an agent to run the write-and-push wrappers directly. | `python3 scripts/check_command_docs_no_write_path.py --quiet` |
 | `command-docs-no-write-path-tests` | Fixtures for that checker, including the real regression it was written for. | `python3 scripts/test_check_command_docs_no_write_path.py` |
+| `lease-steps-contract` | Steps 3/4 of `/begin-orchestration` (both copies) name the E_QUIESCE_LEASE_HELD quiesce consequence, `--agent` as the holder's self-exemption, and the absent-scope-means-repo rule — not the false "refuses every other agent" claim. | `python3 scripts/test_lease_steps_contract.py` |
 | `ungateable-criteria-rule-tests` | The un-gateable-acceptance-criteria rule in `/ticket` and `/generate-tasks` still fires on undeclared external evidence. | `python3 scripts/test_ungateable_criteria_rule.py` |
 | `extraction-port-gate-rule-tests` | The extraction/port-block authoring rule in `block-registration.md`. | `python3 scripts/test_extraction_port_gate_rule.py` |
 | `emoji-gate-diff-scoped-tests` | The emoji gate stays scoped to the diff, not the whole tree. | `python3 scripts/test_emoji_gate_diff_scoped.py` |
