@@ -1332,6 +1332,13 @@ const state = {
   worktree_path: '',
   status: 'running',
   current_task: null,
+  // Resolved by BT.ticket.engine-terminal-state-needs-evidence task 2: emitStateRan was declared,
+  // instructed, gated and logged in six sites but never persisted to disk (a key in 0 of 150
+  // corpus state files). Written here, once, from bookkeepResult.emitStateRan just before the
+  // final writeTaskState() call below — null until the bookkeep stage runs or is skipped
+  // (bailed/reconcile_failed), matching every other field this object carries only from the
+  // point its stage actually resolves it.
+  emitStateRan: null,
   // DELIBERATE (ticket-sdlc-task-resume-truncates-run-state): tasks_run stays PER-INVOCATION
   // telemetry — "what did THIS invocation run" — and is never unioned across a resume, because
   // doing so would erase the record of which run did what. `tasks` below is the opposite: it is
@@ -2712,6 +2719,12 @@ Return via StructuredOutput: statusUpdated, tasksMarked, blockStatusFlipped, emi
       : `postEmitCommitCommand ran (planning/harness.json).`)
   }
 }
+
+// Fold bookkeep's emitStateRan into the in-memory state so the final write below persists it —
+// the first site in this file where the field actually reaches disk (see the `state` declaration
+// above). `false` (not left null) when bookkeep ran but the agent omitted the field; stays null
+// only when bookkeep itself was skipped (bailed / reconcile_failed).
+if (bookkeepResult) state.emitStateRan = bookkeepResult.emitStateRan ?? false
 
 // Final run-state write — disk-only, never committed (see writeTaskState). Captures the final
 // token roll-up after the bookkeep close-out ran.

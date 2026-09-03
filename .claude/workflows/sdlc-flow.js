@@ -1418,6 +1418,13 @@ const state = {
   worktree_path: '',
   status: 'running',
   current_task: null,
+  // Resolved by BT.ticket.engine-terminal-state-needs-evidence task 2: emitStateRan was declared,
+  // instructed, gated and logged across eleven sites but never persisted to disk (a key in 0 of
+  // 150 corpus state files). Written here, once wrap-up's step 2c has determined it — either via
+  // the folded write's STEP W2 insertion (renderWrapupStateWriteRecipe) or the dedicated
+  // writeFlowState() fallback just before it runs. Stays null until wrap-up actually reaches step
+  // 2c (never on a bail that skips wrap-up entirely).
+  emitStateRan: null,
   tasks: {},        // "N": { status, attempts, summary, issues, fixes, decisions, files_changed, commit, validated }
   review: { verdict: null, findings: [], attempts: 0 },
   docs: { changed: [], created: [] },
@@ -2832,10 +2839,12 @@ STEP W1 — run this as ONE Bash call, exactly as written. Do not split it into 
   when there is none. If that file exists and has a "started_at" value, REUSE it verbatim for
   started_at below. Otherwise started_at = NOW.
 
-STEP W2 — write ${onDone.stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
-  "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch". Valid
+STEP W2 — write ${onDone.stateFile} with EXACTLY this JSON, but inserting three extra top-level
+  keys: "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch",
+  AND setting the existing "emitStateRan" key (currently null in the object below) to the SAME
+  true/false value you determined in step 2c above — never leave it null on this write. Valid
   JSON only (double quotes, no trailing commas, no markdown fences). The object to write (verbatim
-  except for adding those two timestamp keys):
+  except for adding those two timestamp keys and resolving emitStateRan):
 ${onDone.stateJson}
 
 STEP W3 — append to ${onDone.worklogFile}. If the file does not exist, first write a header line
@@ -3170,6 +3179,9 @@ if (wrapupResult?.postEmitHookRan) {
 if (wrapupResult && wrapupResult.stateWritten) {
   log('Wrap-up: state write folded into the wrap-up agent\'s own turn — skipped the dedicated state-writer call.')
 } else {
+  // Not folded — the dedicated writer below serializes `state` fresh, so fold emitStateRan into
+  // it here (mirrors sdlc-task.js's terminal-write treatment of the same field).
+  state.emitStateRan = wrapupResult?.emitStateRan ?? false
   await writeFlowState(`wrap-up (${finalVerdict})`, `## Wrap-up — ${finalVerdict}\nNext: ${wrapupResult?.nextFocus || '(see status.md)'}`, { cwd: worktreePath })
 }
 
