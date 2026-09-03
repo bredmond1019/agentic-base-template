@@ -214,6 +214,22 @@ def check(path, planning_root="planning"):
             for i, f in enumerate(files.get(key) or []):
                 if not isinstance(f, dict) or not f.get("path") or not f.get(req):
                     bad(f"files.{key}[{i}] needs both `path` and `{req}`")
+                fpath = isinstance(f, dict) and f.get("path")
+                if isinstance(fpath, str) and (
+                        fpath == "planning" or fpath.startswith("planning/")):
+                    # `planning/` is a symlink into the private HQ vault, excluded from this
+                    # repo's git by base-template/.gitignore:20 (the bare rule `/planning`).
+                    # Code referencing such a path -- include_str!, a fixture path, a test
+                    # data file -- compiles on every developer machine and on NO CI runner:
+                    # local gates all pass and the build fails only in CI, where nothing
+                    # reachable from the developer's machine could have caught it. Put the
+                    # fixture or test data under tests/ instead.
+                    bad(f"files.{key}[{i}] path `{fpath}` is under planning/ -- planning/ is a "
+                        f"symlink into the private HQ vault, excluded from this repo's git by "
+                        f"base-template/.gitignore:20 (`/planning`). Code referencing this path "
+                        f"compiles on every developer machine and on no CI runner -- CI checkout "
+                        f"cannot see the private vault, so every local gate passes and the build "
+                        f"fails only in CI. Put the fixture or test data under tests/ instead")
     elif files is not None:
         bad("files must be an object with `new` / `modified`")
 
