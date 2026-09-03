@@ -1,5 +1,10 @@
 # GEMINI.md — {{PROJECT_NAME}}
 
+> **GENERATED FILE — do not edit by hand.**
+> Everything above the Fleet & Core Skills table is copied verbatim from `AGENTS.md`; only that
+> table and anything after it is Antigravity-specific. A hand edit here is silently overwritten on
+> the next sync. Edit `AGENTS.md` instead, or the tail below.
+
 {{DESCRIPTION}}
 
 ## Before you start
@@ -7,28 +12,10 @@
 - **Strategic context:** `planning/context.md` (read first) → `planning/status.md` (current state)
 - **Symlink warning:** the `planning/` directory is actually a local symlink pointing to the company brain repo's `_planning/` vault (e.g. `<tier>/_planning/<slug>/`). The brain repo is responsible for tracking all planning files under Git. Do not track `planning/` in this project's public Git repository (it is gitignored).
 - **Plan:** `planning/master-plan.md` — the phase/block sequence
-- **Pipeline config:** `planning/harness.json` — the validation skills + UI-test config the
+- **Pipeline config:** `planning/harness.json` — the validation commands + UI-test config the
   SDLC engines run (see `planning/harness.examples.md` for ready-made stack profiles)
 - **Decisions log:** `planning/decisions/` (start at `planning/decisions/index.md`) — check
   before relitigating any settled choice
-
-## Fleet & Core Skills
-
-The harness carries specialized skills in `.claude/skills/` (and `.agents/skills/`). Always consult
-the corresponding skill before executing high-stakes fleet operations:
-
-| Skill | Primary Focus | When to consult |
-|---|---|---|
-| **`commit-in-this-fleet`** | Safe git operations across multi-repo & vault symlinks | BEFORE any `git add`, `commit`, `stash`, `reset`, or `mv` |
-| **`derive-state-safely`** | Authored vs derived state and writer execution | BEFORE running `mev emit-state --write`, `set-block-status`, or other state writers |
-| **`edit-state-json`** | Canonical `planning/state.json` schema & graph edges | BEFORE hand-editing `state.json` or authoring `depends_on`/`carryover` |
-| **`notify-operator`** | Operator alerting discipline via `bastion notify` | BEFORE sending notifications or deciding a lane is blocked |
-| **`ping-agent`** | Cross-lane messaging envelopes & registry protocol | BEFORE sending or triaging cross-lane messages |
-| **`report-to-the-operator`** | Concise operator reporting ceiling & format | When drafting chat replies, turn outputs, and run reports |
-| **`run-the-gates`** | Fleet validation suite & gate diagnostics | BEFORE running `validate-brain` or `harness.json` checks |
-| **`stop-or-continue`** | Session restart vs continuation correctness criteria | When an underlying binary/engine changes; never restart for token budget |
-| **`write-okf-markdown`** | OKF YAML frontmatter & index.md row maintenance | BEFORE creating or editing any `.md` under `docs/` or `planning/` |
-| **`write-repo-doc`** | Reader-first internal documentation standards | BEFORE writing or restructuring docs under `docs/` or guides |
 
 ## Standing rules
 
@@ -68,14 +55,14 @@ None known at initialization.
 ```
 
 > The SDLC pipeline reads its validation suite from `planning/harness.json` (not from this
-> block). Keep the `<test>`/`<build>` skills here in sync with that file's
+> block). Keep the `<test>`/`<build>` commands here in sync with that file's
 > `validation.checks[]` so humans and the pipeline run the same thing.
 
 ## Directory map
 
 ```
 {{SLUG}}/
-├── .claude/        ← Gemini skills + SDLC workflow engines
+├── .claude/        ← Claude Code commands + SDLC workflow engines
 ├── planning/       ← context, status (+Momentum/Metrics), master-plan, knowledge, memory,
 │                     artifacts/, harness.json, decisions/, <concept>/
 └── <source dirs>   ← add as the project grows
@@ -87,15 +74,16 @@ None known at initialization.
 
 ---
 
-## Available Skills
+## Available Commands
 
-All harness skills are installed globally in `~/.agents/skills/` via `/sync-global-commands`
-(run from base-template). Invoke them with `/<name>` directly. Project-specific skills (if any)
-live in `.agents/skills/` and take precedence over global skills on name conflict.
+All harness commands are installed globally via `/sync-global-commands` (run from base-template).
+Invoke them with `/<name>` directly. Project-specific commands (if any) live in this repo's own
+command directory and take precedence over global commands on name conflict. The global install
+directory is surface-specific — see "Command install location" in `CLAUDE.md` / `GEMINI.md`.
 
 ### Session
 
-| Skill/Command | What it does |
+| Command | What it does |
 |---|---|
 | `/prime` (global) | Deep session start — reads key docs and summarizes state |
 | `/session-recap` (global) | Start-of-session briefing: recent log, current focus, next action |
@@ -108,7 +96,7 @@ live in `.agents/skills/` and take precedence over global skills on name conflic
 
 ### Planning
 
-| Skill/Command | What it does |
+| Command | What it does |
 |---|---|
 | `/plan` (global) | Author a mini-roadmap (phases/blocks) into planning/plan-<slug>/plan.md |
 | `/ticket` (global) | Single-block behavior-change spec with observable AC + testing strategy |
@@ -119,7 +107,7 @@ live in `.agents/skills/` and take precedence over global skills on name conflic
 
 ### SDLC
 
-| Skill/Command | What it does |
+| Command | What it does |
 |---|---|
 | `/implement` (global) | Execute a plan file against the codebase |
 | `/test` (global) | Application validation test suite |
@@ -136,7 +124,7 @@ live in `.agents/skills/` and take precedence over global skills on name conflic
 
 ### Git
 
-| Skill/Command | What it does |
+| Command | What it does |
 |---|---|
 | `/commit` (global) | Stage and commit changes with a conventional message |
 | `/init-worktree` (global) | Initialize a new git worktree for isolated work |
@@ -146,13 +134,13 @@ live in `.agents/skills/` and take precedence over global skills on name conflic
 
 ### State
 
-| Skill/Command | What it does |
+| Command | What it does |
 |---|---|
 | `/update-state` (global) | Safely edit this repo's `planning/state.json` per the canonical schema |
 
 ### Orchestration
 
-| Skill/Command | What it does |
+| Command | What it does |
 |---|---|
 | `/orchestrate` (global) | Drive an ordered chain of blocks through the SDLC engines in one session |
 | `/begin-orchestration` (global) | Brief a lane agent from a roadmap + lane file, then drive `/orchestrate` under the concurrency/isolation/operator-gate rules |
@@ -162,7 +150,7 @@ live in `.agents/skills/` and take precedence over global skills on name conflic
 
 ### Backlog
 
-| Skill/Command | What it does |
+| Command | What it does |
 |---|---|
 | `/backlog-ticket` (global) | Capture a queued idea into `planning/backlog.md` with uniform tags |
 | `/initial-research` (global) | Conduct reconnaissance on a topic and report back |
@@ -170,7 +158,7 @@ live in `.agents/skills/` and take precedence over global skills on name conflic
 
 ### E2E
 
-| Skill/Command | What it does |
+| Command | What it does |
 |---|---|
 | `/test_auth_gate` (global) | E2E test template: authentication gate |
 | `/test_crud_api` (global) | E2E test template: CRUD API |
@@ -178,7 +166,7 @@ live in `.agents/skills/` and take precedence over global skills on name conflic
 | `/test_ui_form` (global) | E2E test template: UI form |
 
 > `/sync-global-commands` (global) is available in base-template only — it syncs
-> these commands to `~/.agents/skills/` and aborts if run outside the base-template root.
+> these commands to the global install directory and aborts if run outside the base-template root.
 
 ## SDLC pipeline
 
@@ -187,7 +175,7 @@ structured work through:
 `/generate-tasks → /implement → /test → /review-task → /document → /log-work`.
 
 > **Stack note:** the SDLC engines carry no stack defaults. Point them at this project's stack
-> by filling `planning/harness.json` (validation skills + optional UI-test config). Copy a
+> by filling `planning/harness.json` (validation commands + optional UI-test config). Copy a
 > ready-made profile from `planning/harness.examples.md` (Rust / Python / Next.js). Do **not**
 > edit the `workflows/*.js` engines for stack reasons — that's what `harness.json` is for.
 
@@ -223,8 +211,8 @@ context genuinely runs out, the harness summarizes and you keep going — that i
 
 There is exactly **one** reason to end a session early, and it is about correctness, not cost:
 **something the running session depends on changed underneath it** — an engine, command file,
-installed binary (`mev`, `bastion`), hook or `settings.json` edited this session, or a `GEMINI.md` / `CLAUDE.md`
-you already read. The running session is a launch-time snapshot (base-template standing rule 10), so
+installed binary (`mev`, `bastion`), hook or `settings.json` edited this session, or an `AGENTS.md` /
+`CLAUDE.md` / `GEMINI.md` you already read. The running session is a launch-time snapshot (base-template standing rule 10), so
 it keeps producing pre-change results, which read as an unreliable agent rather than a stale
 snapshot. **Name the trigger, finish the unit of work in flight, and say plainly that a fresh
 session is needed.** Do not present it as a context-budget decision, and do not go looking for the
@@ -234,3 +222,29 @@ Whenever you do hand off, write the entry point first — `status.md`, `handoff.
 `tasks.json`, or an orchestration-run `notes.md` — so the next agent starts from an artifact instead
 of from your memory.
 <!-- END:session-continuity -->
+## Fleet & Core Skills
+
+The harness carries specialized skills in `.agents/skills/` (and `.claude/skills/`). Always consult
+the corresponding skill before executing high-stakes fleet operations:
+
+| Skill | Primary Focus | When to consult |
+|---|---|---|
+| **`commit-in-this-fleet`** | Safe git operations across multi-repo & vault symlinks | BEFORE any `git add`, `commit`, `stash`, `reset`, or `mv` |
+| **`derive-state-safely`** | Authored vs derived state and writer execution | BEFORE running `mev emit-state --write`, `set-block-status`, or other state writers |
+| **`edit-state-json`** | Canonical `planning/state.json` schema & graph edges | BEFORE hand-editing `state.json` or authoring `depends_on`/`carryover` |
+| **`notify-operator`** | Operator alerting discipline via `bastion notify` | BEFORE sending notifications or deciding a lane is blocked |
+| **`ping-agent`** | Cross-lane messaging envelopes & registry protocol | BEFORE sending or triaging cross-lane messages |
+| **`report-to-the-operator`** | Concise operator reporting ceiling & format | When drafting chat replies, turn outputs, and run reports |
+| **`run-the-gates`** | Fleet validation suite & gate diagnostics | BEFORE running `validate-brain` or `harness.json` checks |
+| **`stop-or-continue`** | Session restart vs continuation correctness criteria | When an underlying binary/engine changes; never restart for token budget |
+| **`write-okf-markdown`** | OKF YAML frontmatter & index.md row maintenance | BEFORE creating or editing any `.md` under `docs/` or `planning/` |
+| **`write-repo-doc`** | Reader-first internal documentation standards | BEFORE writing or restructuring docs under `docs/` or guides |
+
+## Command install location
+
+All harness skills are installed globally in `~/.agents/skills/` via `/sync-global-commands`
+(run from base-template). Invoke them with `/<name>` directly. Project-specific skills (if any)
+live in `.agents/skills/` and take precedence over global skills on name conflict.
+
+> `/sync-global-commands` (global) is available in base-template only — it syncs
+> these commands to `~/.agents/skills/` and aborts if run outside the base-template root.

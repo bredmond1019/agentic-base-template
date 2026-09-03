@@ -27,7 +27,7 @@ generation flow.
 | Half | Path | Purpose | Goes into new projects? |
 |---|---|---|---|
 | **Harness** | `.claude/` + `.agents/` | The SDLC pipeline (commands, engines, and skills) — ships *mechanism* only | Yes — copied as-is |
-| **Scaffold** | `scaffold/` | Tokenized project docs (CLAUDE, GEMINI, AGENT, README, log, planning/ incl. `harness.json` stub) | Yes — copied + token-substituted |
+| **Scaffold** | `scaffold/` | Tokenized project docs (AGENTS, CLAUDE, GEMINI, README, log, planning/ incl. `harness.json` stub) | Yes — copied + token-substituted |
 | **Template meta** | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md`, `log.md`, `planning/`, `docs/` | The template's *own* docs, change history, and pipeline config | **No** — never copied into a project |
 
 A new project must start with a **clean** log and a `D1-initial-okf` decision — so the template's

@@ -59,6 +59,11 @@ ALLOWED_SURFACE_MENTIONS = {
     ".agents/skills/sdlc-task/SKILL.md":
         "the update loop's step 6 tells whoever edits an engine to review the replication "
         "guides; both readers must know they exist and do not auto-sync",
+    ".agents/skills/README.md":
+        "learn-ai's AGENTS.md points at BOTH catalogs symmetrically in one sentence - "
+        "'.claude/commands/README.md for the full command catalog and .agents/skills/README.md "
+        "for the Antigravity skill twins'. Naming both surfaces at once is a fact about the "
+        "repo's layout; splitting it would leave each reader with half a sentence",
     "~/.claude/projects/":
         "standing rule 10's engine-snapshot path. It is Claude Code's Workflow harness, but "
         "the rule is quoted with exact md5 commands and is load-bearing for anyone debugging "
