@@ -7,7 +7,7 @@ detail)`, PASS/FAIL lines, exit 1 on any failure.
 THE CONTRACT THIS PINS:
 
   check_spec(tasks: list[dict], repo_root: str = ".") -> list[dict]
-      Each finding is {"rule": "R1"|"R2", "task_id": int, "path": str,
+      Each finding is {"rule": "R1"|"R2"|"R3", "task_id": int, "path": str,
       "later_task_id": int, "command": str|None}. Empty list = clean.
 
       RULE 1: task N's validation_commands reference a path in UNSEEN(N) = (union of
@@ -18,6 +18,29 @@ THE CONTRACT THIS PINS:
       creates a new scripts/*.py file not already created by task N or earlier, not
       already on disk, and never previously git-tracked (a deletion of a pre-existing
       script is not a first-time creation, even once it is gone from the working tree).
+
+      RULE 3 (NOT YET IMPLEMENTED as of this file's task 1 -- expected RED, D68): task N
+      modifies a file that some registered gates:true check (read from repo_root's
+      planning/harness.json) INVOKES as its detector script, while a later task M (task_id
+      > N) modifies a file that the SAME check reads as input (a non-script path also
+      named in that check's `command`). Neither RULE 1 nor RULE 2 can see this shape --
+      the artifact's path already exists and no gate is being registered; only the
+      artifact's CONTENT is stale at the boundary. Fixture below mirrors bella's real
+      instance: a check whose command is
+      "python3 scripts/check_screenshot_floor.py assets/screenshot.png" -- task 3
+      tightens the floor in the script, task 4 regenerates the screenshot.
+
+      OBSERVED RED (D68), 2026-09-03, `python3 scripts/test_check_task_gate_boundaries.py`,
+      exit code 1 -- captured verbatim (RULE 1/RULE 2 cases still PASS in this same run;
+      the failure is scoped to the new RULE 3 positive case, which cannot pass until
+      check_task_gate_boundaries.py implements RULE 3 in task 2):
+
+          [FAIL] RULE 3 flags a detector-tightening task ahead of the task that
+          regenerates the artifact it reads (bella's case) -- got []
+
+          1 check(s) failed:
+            - RULE 3 flags a detector-tightening task ahead of the task that regenerates
+              the artifact it reads (bella's case)
 
   find_tasks_json(planning_root) -> generator of paths
       Walks planning_root (following symlinks) yielding every .../tasks.json, skipping
@@ -219,6 +242,100 @@ def main():
         findings = ctgb.check_spec(deletion_tasks, repo_root=str(git_root))
         check("Rule 2 does not fire when the later path is a git-tracked deletion, not a "
               "first-time creation", by_rule(findings, "R2") == [], f"got {findings}")
+
+        # -- (7c) RULE 3 (NOT YET IMPLEMENTED -- expected RED, D68): a task that tightens a
+        #    gating threshold/floor/detector in a script a gates:true check INVOKES, while a
+        #    LATER task regenerates the artifact that same check READS AS INPUT. Neither RULE
+        #    1 (path-existence) nor RULE 2 (harness.json registration) can see this shape --
+        #    the artifact's path already exists here and no gate is being newly registered;
+        #    only the artifact's CONTENT is stale at the boundary. This is bella's real
+        #    instance: its ticket bailed at task 3 twice identically because task 3 sharpened
+        #    a gates:true MIN_PNG_BYTES floor before task 4 re-captured the screenshot the
+        #    same check reads.
+        #
+        #    Fixture shape: planning/harness.json registers one gates:true check whose
+        #    `command` names BOTH a detector script (scripts/*.py) and a non-script artifact
+        #    path (e.g. assets/screenshot.png) as arguments -- mirroring a real check command
+        #    like `python3 scripts/check_screenshot_floor.py assets/screenshot.png`.
+        rule3_root = root / "rule3_fixtures"
+        (rule3_root / "planning").mkdir(parents=True)
+        (rule3_root / "planning" / "harness.json").write_text(json.dumps({
+            "validation": {
+                "checks": [
+                    {
+                        "name": "screenshot-floor",
+                        "gates": True,
+                        "command": ("python3 scripts/check_screenshot_floor.py "
+                                    "assets/screenshot.png"),
+                    }
+                ]
+            }
+        }, indent=2))
+        (rule3_root / "scripts").mkdir()
+        (rule3_root / "scripts" / "check_screenshot_floor.py").write_text(
+            "MIN_PNG_BYTES = 100\n")
+        (rule3_root / "assets").mkdir()
+        (rule3_root / "assets" / "screenshot.png").write_bytes(b"stub-png-bytes")
+
+        # POSITIVE (bella's real instance): task 3 tightens the floor in the detector
+        # script; task 4 regenerates the artifact the same check reads. Must be FLAGGED.
+        rule3_positive_tasks = [
+            {"task_id": 3, "files": ["scripts/check_screenshot_floor.py"],
+             "validation_commands": []},
+            {"task_id": 4, "files": ["assets/screenshot.png"], "validation_commands": []},
+        ]
+        findings = ctgb.check_spec(rule3_positive_tasks, repo_root=str(rule3_root))
+        r3 = by_rule(findings, "R3")
+        check("RULE 3 flags a detector-tightening task ahead of the task that regenerates "
+              "the artifact it reads (bella's case)", len(r3) == 1, f"got {findings}")
+        if r3:
+            check("RULE 3 diagnostic names the detector-tightening task",
+                  r3[0]["task_id"] == 3, f"got {r3[0]}")
+            check("RULE 3 diagnostic names the artifact path",
+                  r3[0]["path"] == "assets/screenshot.png", f"got {r3[0]}")
+            check("RULE 3 diagnostic names the later task that regenerates the artifact",
+                  r3[0]["later_task_id"] == 4, f"got {r3[0]}")
+
+        # MERGED control: the same two edits done in ONE task. Must NOT be flagged -- this
+        # is what RULE 3 is telling the author to do, so it has to be reachable.
+        rule3_merged_tasks = [
+            {"task_id": 1,
+             "files": ["scripts/check_screenshot_floor.py", "assets/screenshot.png"],
+             "validation_commands": []},
+        ]
+        findings = ctgb.check_spec(rule3_merged_tasks, repo_root=str(rule3_root))
+        check("RULE 3 does not fire when the detector and the artifact are fixed in the "
+              "same task (merged control)", by_rule(findings, "R3") == [], f"got {findings}")
+
+        # NEGATIVE control (load-bearing, not optional): a threshold changes with NO later
+        # artifact-regenerating task. Must NOT be flagged -- RULE 3 is the most
+        # false-positive-prone rule in the file and a checker that guesses is noise the
+        # reader learns to ignore.
+        rule3_negative_tasks = [
+            {"task_id": 1, "files": ["scripts/check_screenshot_floor.py"],
+             "validation_commands": []},
+            {"task_id": 2, "files": ["scripts/unrelated_other_thing.py"],
+             "validation_commands": []},
+        ]
+        findings = ctgb.check_spec(rule3_negative_tasks, repo_root=str(rule3_root))
+        check("RULE 3 does not fire on a threshold change with no later "
+              "artifact-regenerating task (negative control)",
+              by_rule(findings, "R3") == [], f"got {findings}")
+
+        # NON-INTERFERENCE: an existing RULE 2 fixture (harness.json edited + a later task
+        # creates a brand-new script) still produces exactly its RULE 2 finding, not a
+        # duplicate RULE 3 finding on the same task -- even against a repo_root whose
+        # planning/harness.json carries a real gates:true check (rule3_root above).
+        rule3_noninterference_tasks = [
+            {"task_id": 1, "files": ["planning/harness.json"], "validation_commands": []},
+            {"task_id": 2, "files": ["scripts/new_checker.py"], "validation_commands": []},
+        ]
+        findings = ctgb.check_spec(rule3_noninterference_tasks, repo_root=str(rule3_root))
+        r2_ni = by_rule(findings, "R2")
+        r3_ni = by_rule(findings, "R3")
+        check("RULE 2's own fixture still fires exactly once and produces no duplicate "
+              "RULE 3 finding on the same task (non-interference)",
+              len(r2_ni) == 1 and r3_ni == [], f"got {findings}")
 
         # -- (8) tasks.json discovery walks planning/ (symlink-following) and skips noise ---
         planning = root / "discovery_planning"
