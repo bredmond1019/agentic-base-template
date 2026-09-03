@@ -276,6 +276,31 @@ b586df7 feat: implement BT.ticket.gates-must-be-observed-red-task1
   delegate.
 - **HQ-only.** Added to `EXCLUDED_COMMAND_FILENAMES` — it reads every repo's records from the brain
   root and has nothing to consolidate inside a leaf repo, the same reasoning as `/generate-roadmap`.
+- **`finding-discipline.md` — the filter moved to where the evidence still is.** The operator's
+  framing, and it is the right end of the pipe: a disposal filter only decides what to do with
+  findings that already exist, and by then the evidence for them is in a session that has ended.
+  New shared reference in `.claude/workflows/`, pointed at by `/orchestrate`,
+  `/begin-orchestration`, `/orchestration-commander`, `/consolidate-run` and `/consolidate-fleet` —
+  one copy, the `block-registration.md` pattern, because four near-duplicate copies of a shared
+  procedure is exactly how D65 came about.
+  - **Evidence travels with the finding or the finding did not happen.** `path:line`, a command AND
+    its output, a sha, a run id, a count with the command that produced it. A bare adjective is the
+    failure mode — `escalations.jsonl`'s schema already rejects `verified_by` values that are not
+    command-plus-output, and 18 of 25 live records still fail it.
+  - **Provenance is a required tag**: `verified` · `relayed` · `assumed` · `operator-stated`. The
+    last one exists because a commander hardened an operator statement into a diagnosis and the
+    lane disputed it with evidence.
+  - **One occurrence is an instance; a pattern is a counted set**, and the count is a field.
+    Uncounted breadth is how a small thing becomes a program.
+  - **The unexplained observation is a first-class category.** Without somewhere honest to put
+    "odd, real, I don't know why", the only way to write it down is to dress it as a defect — which
+    mints an owner, a predicate and a repo that were all invented. Make the honest record cheap and
+    the dishonest one unnecessary.
+  - **A block whose `files[]` and `acceptance_criteria` must be invented is not a block yet.**
+    Measured on the first disposal: 10 of 11 rows could not ground them from the analysis.
+  - **The cut is part of the output** — a pass that files everything it noticed has not filtered.
+  Motivating numbers, all measured: three carryover audits found 32%/32%/26% already dead, and one
+  two-day triage took the pool from ~450 to ~200.
 - **`/dispose-run` — the disposal half, built from that run rather than before it.** `/consolidate-fleet`
   proposed and nothing disposed, so the first disposal was driven by a hand-written prompt. Every
   rule in the new command is a thing that prompt got wrong or that the filing agent refused
