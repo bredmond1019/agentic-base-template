@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: The gates — every check base-template runs on itself
-description: 54 of base-template's gated checks in planning/harness.json, what each one protects, and how to run one on its own. The harness itself carries 62 as of 2026-09-02 — see the drift note below.
+description: 54 of base-template's gated checks in planning/harness.json, what each one protects, and how to run one on its own. The harness itself carries 71 gating of 73 as of 2026-09-03 — see the drift note below.
 doc_id: base-template-gates
 layer: [factory]
 project: base-template
@@ -13,11 +13,18 @@ related: [base-template-capabilities, harness-json, base-template-docs-index, ha
 # The gates
 
 What "passing" means in this repo. This page lists 54 checks, all of them gating — one red check
-fails the run. `planning/harness.json` itself carries 62 as of 2026-09-02 (`python3 -c
-"import json;print(sum(1 for c in json.load(open('planning/harness.json'))['validation']['checks']
-if c.get('gates')))"`); this page has drifted 8 checks behind and needs a full catch-up pass, tracked
-as a `carryover[]` entry rather than fixed here (out of scope for a surgical `/close-out` patch — see
+fails the run. `planning/harness.json` itself carries **71 gating of 73 total as of 2026-09-03**
+(`python3 -c "import json;print(sum(1 for c in
+json.load(open('planning/harness.json'))['validation']['checks'] if c.get('gates')))"`); this page
+has drifted **17** checks behind and needs a full catch-up pass, tracked as a `carryover[]` entry
+rather than fixed here (out of scope for a surgical `/close-out` patch — see
 [harness-json.md](harness-json.md) for the schema and how to configure your own).
+
+Four of the newest are from `BT.chore.harness-*` / `BT.chore.agents-md-is-canonical` (2026-09-03):
+`sync-skills-tests`, `agent-docs`, `agent-docs-tests` (all gating) and `global-skills-fresh`
+(**non-gating**, because a global install is per-machine and a CI checkout has none — the same
+reason `toolchain-freshness` does not gate). Note this page's "all of them gating" line is now
+false for that one: run the command above rather than trusting the sentence.
 
 ## What this page is for
 

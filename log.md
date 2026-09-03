@@ -6,6 +6,45 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-03
 
 ---
+## 2026-09-03 — harness propagation: five paths, one gate, and an AGENTS.md split
+
+- **What:** closed `BT.chore.harness-propagation-has-no-gate` and the three chores it split into.
+  **Sharp edges:** `core/mev/CLAUDE.md` carried a superseded stopping rule telling agents the
+  *opposite* of the fleet's; `scaffold/` shipped a drifted `response-style`, so every new repo was
+  born wrong (`core/jynx` proved it); `sync_skills.py`'s `copy_to_global` wrote 66 skill folders to
+  `~/agentic-portfolio`, a bare home dir nothing reads — repointed to the HQ brain root and
+  *filtered to hand-authored skills only*, because the unfiltered copy would have overwritten HQ's
+  own command mirrors (the D54 overwrite); `run_syncs.sh` was a fourth syncer contradicting
+  `sync_all_skills_commands.py` on the tier command list and the tier-skills source, now a wrapper;
+  neither sync script parsed argv, so `--help` ran a full fleet sync (1,329 unreviewed insertions on
+  2026-09-02); and `sync_workflow_skills` read its own output back, growing two `SKILL.md` files by
+  two blank lines every run. **Skills go global:** the 17 fleet skills now install once at
+  `~/.claude/skills/` instead of 323 byte-identical copies across 19 repos; `CLAUDE_SKILL_SLUGS` is
+  deliberately empty and six guard tests were *inverted* rather than deleted. **AGENTS.md:**
+  canonical and surface-neutral in all 26 targets, `CLAUDE.md` thin with an `@AGENTS.md` import,
+  `GEMINI.md` generated with a do-not-edit banner, all 16 `AGENT.md` (singular) retired. Four new
+  checks: `sync-skills-tests`, `agent-docs`, `agent-docs-tests` (gating) and `global-skills-fresh`
+  (non-gating — a CI checkout has no global install, the same reason `toolchain-freshness` does not
+  gate). Fan-out done by six agents over 25 targets, every one verified line by line.
+- **Why:** an agent noticed `/consolidate-fleet`'s `disposal.json` spec missing from the copy HQ
+  runs. It was not missing — it had never propagated. Five paths carried the harness and only
+  `/sync-downstream-harness` had any freshness mechanism, so the other four drifted silently and the
+  symptom was indistinguishable from "the feature was never written". The fix is not one gate but a
+  split: per-repo surfaces exist in every clone and can gate; per-machine global installs cannot, so
+  they get a report instead.
+- **Measured, and worth keeping:** the spike settled how these files actually load — Claude Code
+  does **not** read a bare `AGENTS.md`, so the `@` import is required, and an import pointing at a
+  **missing** file fails *silently*, which is what `agent-docs` exists to catch. Two long-standing
+  claims turned out false: project-specific commands do **not** take precedence over global ones
+  (both register; the picker lists `(user)` first, and for skills only the global copy registers at
+  all), and `D4-drop-agents-twin.md` still says `.agents/` was removed while it holds 70 skills and
+  distributes 18 to every repo. Every `GEMINI.md` in the fleet was a stale Aug-26 sed-translation
+  carrying visible damage ("validation skills", "runs Antigravity as a subprocess"), so all six
+  agents built from `CLAUDE.md` instead — following the recipe literally would have reverted months
+  of work across 19 repos.
+- **Refs:** `planning/BT.chore.harness-propagation-has-no-gate/analysis.md`,
+  `planning/BT.chore.agents-md-is-canonical/analysis.md`, `planning/handoff.md`.
+
 ## 2026-09-03 — pre-plan residue is not an ambiguous roadmap
 
 - **What:** narrowed the both-locations rule that had been hard-blocking every consolidation in the
