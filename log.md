@@ -6,6 +6,35 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-02
 
 ---
+## 2026-09-02 — exclusive-lease steps corrected; a gate found red on main; the escalations gate found mis-scoped
+
+- **What:** closed `BT.ticket.begin-orchestration-lease-steps-are-wrong` (5/5 tasks, `b9a8f32`
+  `f757ece` `4ce9092` `254d721`). `/begin-orchestration` Steps 3 and 4 now state the three things
+  they had wrong about the exclusive lease: that holding one refuses that repo's `mev` write verbs
+  with `E_QUIESCE_LEASE_HELD` for the length of the chain (previously unmentioned anywhere), that
+  `--agent` is the holder's self-exemption and must be passed on every write verb, and that an
+  absent `scope` key means `repo` — only `scope: fleet` quiesces the fleet, where the text had
+  claimed any exclusive lease refuses every other agent's `register`. Corrected in both copies and
+  pinned by a new `gates:true` fixture, `scripts/test_lease_steps_contract.py`, whose docstring
+  carries a verbatim `E_QUIESCE_LEASE_HELD` refusal observed from the installed `mev` binary
+  against a disposable lock dir (the D64 un-gateable criterion). Down-synced to 18 repos.
+  Two things surfaced in passing. `test_step2_reverify_rules.py` was **already red on `main`** —
+  commit `21d12f7` added a fourth Step 2 isolation row without updating the fixture's row count or
+  mirroring the row into the `.agents/` copy, so the guard that exists to catch that exact drift
+  was itself failing; repaired as task 1. And `escalations-schema` was blocking this repo's whole
+  chain on 18 legacy records authored by eight *other* repos: it reads the whole corpus but is
+  registered `gates:true` in base-template alone, so the lanes that write those records never see
+  the check and base-template is the only downstream victim. Un-gated at the operator's direction
+  (`672e4b46d`) and ticketed as `BT.ticket.escalations-gate-attributes-foreign-records`, which adds
+  `--repo` attribution and turns it back on.
+- **Why:** the roadmap's own source run recorded a lane that followed `/begin-orchestration`
+  literally, took the lease it was told to take, and thereby blocked every sibling's state write
+  for the length of its chain while being told nothing about it. A command that instructs lanes to
+  take a fleet-wide lock must document what the lock does.
+- **Refs:** `planning/roadmaps/runs-that-can-be-believed/` (HQ);
+  `planning/orchestration-run/runs-that-can-be-believed/{notes.md,review.md}`; D64, D68, D18.
+
+---
 ## 2026-09-02 — cli-surface-to-skills lane driven end-to-end: 6 blocks, no D65 records existed for any
 
 - **What:** ran `/begin-orchestration`+`/orchestrate` over the `cli-surface-to-skills` roadmap's
