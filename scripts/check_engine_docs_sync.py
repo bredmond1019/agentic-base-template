@@ -72,9 +72,9 @@ ANCHORS = [
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
     # taxonomy it exists to guard. Two entries because both docs pages describe it.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 440, 488,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 535, 583,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 440, 488,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 535, 583,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
     (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2864, 2891,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
