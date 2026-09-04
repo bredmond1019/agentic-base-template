@@ -82,7 +82,13 @@ All 57 are flat — invoke as `/<name>` in Claude Code. Full parameter reference
 ### Before you plan (Phase 0)
 
 Use this ladder when the work sits on an existing system and the right cut is not obvious.
-Each stage feeds the next: `/assess` → `/seams` → `/sequence` → `/plan`.
+Each stage feeds the next: `/assess` → `/seams` → `/sequence` → **`/plan` or
+`/generate-roadmap`**. All three pre-plan stages write `planning/<slug>/`; which successor consumes
+them is a **count**, not a judgement — the distinct repos in `sequence.md`'s block table. One repo
+goes to `/plan`, which authors into that same directory. Several go to `/generate-roadmap`, which
+writes `planning/roadmaps/<slug>/` and relocates the pre-plan to
+`planning/roadmaps/<slug>/pre-plan/` (its Step 7b). The invariant: `planning/<slug>/` and
+`planning/roadmaps/<slug>/` are **never both populated**.
 
 | Command | What it does |
 |---|---|

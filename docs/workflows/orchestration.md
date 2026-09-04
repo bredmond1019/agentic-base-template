@@ -49,11 +49,12 @@ on purpose: a lane driven against the wrong roadmap is the hardest mistake here 
 
 ## The run at a glance
 
-Six phases. You only act in one of them.
+Seven phases. You only act in one of them.
 
 | # | Phase | In plain English | Who acts | Detail |
 |---|---|---|---|---|
 | 1 | Resolve | Work out which repo, which roadmap, and which blocks | command | [↓](#1-resolve) |
+| 1b | Premise re-derivation | Re-measure each block record's facts before building from them | command | [↓](#1b-premise-re-derivation) |
 | 2 | Isolation | Decide whether to work in a separate copy of the repo | command | [↓](#2-isolation) |
 | 3 | Concurrency | Take a slot, so too many expensive lanes don't run at once | command | [↓](#3-concurrency) |
 | 4 | Confirm | **Show you the plan and wait** | **you** | [↓](#4-confirm) |
@@ -79,6 +80,35 @@ It resolves in this order: `BRAIN_ROOT` → repo → roadmap → `run_record_dir
   verbatim.
 - **Cross-check:** the lane record's own `roadmap` field must match the resolved roadmap. A
   mismatch stops the run.
+
+## 1b. Premise re-derivation
+
+**A block record's facts rot faster than the block runs.** Before generating tasks, for each block
+about to run: extract every quantitative claim (counts, line numbers, "N of M", "three sites") and
+every named live artifact (a file, symbol, command, registered check) from its `description`,
+`what`, `why` and `acceptance_criteria`, then **run one command per claim**.
+
+- **Re-reading the record is not re-derivation.** The record is the thing under test.
+- **Amend in place** (D18) with the re-measured value and the date, and record what moved in the run
+  record. A block record cannot carry an `amendments` array — `block.schema.json` sets
+  `additionalProperties: false` — so the log goes in the record's existing `notes` field.
+- **A criterion whose premise moved is rewritten to measure at run time**, not to compare against a
+  newly-frozen number. Otherwise this step just resets a clock that will rot again.
+- **A premise that survives is a result, not a no-op.** Say so, or a lane that finds nothing
+  concludes the step is ceremony and quietly drops it.
+
+Gated by `premise-rederivation`, whose fixture asserts the step exists in both copies of the
+command, sits before the `/orchestrate` handoff *by document order*, and — the load-bearing case —
+that the weaker "re-read the record" wording does **not** satisfy it.
+
+**Earned by measurement, not by principle.** On the run that shipped this step, 6 of 7 block records
+needed amendment before they could be executed — 15 premises in total. Two would have caused real
+damage: one told the lane to extend a checker with a "RULE 2" that already existed and was a
+different rule, and one cited the wrong file *and* the wrong line for a `.gitignore` entry. The one
+record that survived unamended is the control that stops this reading as a formality.
+
+Not to be confused with Step 2's isolation re-verification, which re-checks the *isolation caveat*.
+Different question, different step.
 
 ## 2. Isolation
 

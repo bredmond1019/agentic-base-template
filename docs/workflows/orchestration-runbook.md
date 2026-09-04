@@ -120,8 +120,11 @@ or, for a `/plan`-authored initiative (no lane file — see the gap above):
 
 `--roadmap` is **required and never guessed** — a lane driven against the wrong roadmap is the
 hardest mistake here to notice, so the command refuses to infer it. Full flag reference and the
-six-phase lifecycle (resolve → isolation → concurrency → confirm → per-block → lane close):
-[`orchestration.md`](orchestration.md).
+seven-phase lifecycle (resolve → **premise re-derivation** → isolation → concurrency → confirm →
+per-block → lane close): [`orchestration.md`](orchestration.md). The second phase is Step 1B, added
+2026-09-03: before task generation the lane re-derives every quantitative claim in each block record
+by **running a command per claim**, and amends the record in place with the re-measured value and
+the date. Re-reading a record is not re-derivation — the record is the thing under test.
 
 ## How to run several lanes at once
 
