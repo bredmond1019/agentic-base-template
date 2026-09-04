@@ -2670,7 +2670,7 @@ Target:
      updated" field this step touches. The YAML FRONTMATTER block at the top of status.md (the
      \`timestamp:\` field, an RFC3339 value) is NOT bookkeep's to write — no field in that frontmatter
      block is — because \`mev emit-state --write\` regenerates the whole frontmatter block later in
-     this same stage (step 4 below). Hand-editing \`timestamp\` here and then having emit-state
+     this same stage (step 5 below). Hand-editing \`timestamp\` here and then having emit-state
      rewrite it afterward is how the two go out of step with the HQ cache doc's \`synced_from\`
      (E_SYNC_DRIFT) — never touch \`timestamp\` in this step.
 
