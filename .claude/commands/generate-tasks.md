@@ -350,6 +350,133 @@ $ARGUMENTS — one of two input modes:
      resulting sub-spec, not this spec directly.>
     ```
 
+## Measured pitfalls — every one of these cost real time in a real run
+
+From the `clean-slate-sandbox` build lane, 2026-09-03/04: **16 engine launches for 9 blocks (a 1.8x
+relaunch multiplier), and roughly a third of the total ~11 hours went to spec defects the authoring
+agent introduced and then had to diagnose.** Each item below is one of those defects, with what it
+cost. They are ordered by cost.
+
+### 1. Never put `expect_red` on a command that is a `gates: true` harness row — 40 min, circular
+
+`expect_red` inverts only the command *the task* declared. The **harness** copy of the same command
+is not inverted, so a test file already gated in `planning/harness.json` goes red on committed code,
+and then **every later task's gating check fails — including the task whose fix would turn it
+green.** The block cannot proceed and a retry cannot help.
+
+Measured: `test_build_v2.sh` was gated in one block, then a later block put `expect_red` on it. Cost
+was two relaunches plus a manual un-gate/re-gate cycle.
+
+**Rule: once a test file is gated, you can never again pin a NEW red case in that same file.** Stage
+new red cases in a separate, ungated file and gate it only after it is green. Better still, prefer
+the runtime inversion in item 6.
+
+### 2. Read every acceptance criterion against the others before committing the spec — 77 min
+
+The most expensive single defect in the run was two criteria in one block that **could not both
+hold**: one demanded zero pruned decision-citations; the block's own `out_of_scope` and a ratified
+decision *accepted* pruning an ~45-slug tail, which is decision-citations. No implementation
+satisfies both, so the engine burned a full cycle proving the code was right and the spec was wrong.
+
+A second instance in the same run: a control matrix planted a banned term, ran a full build, and
+asserted the *scan* reported it — but sanitize runs before scan and shares the term list, so correct
+code redacts the term and the scan correctly finds nothing.
+
+**Rule: before committing, read the criteria as a set and ask which PAIR cannot both be true.** This
+is a two-minute check that has twice cost over an hour when skipped.
+
+### 3. Never freeze a count in a criterion — 3 instances in one run
+
+"Exactly 8 items", "all 30 links", "the 11 slugs" all rot on the same clock as the thing they count.
+Measured: a seed set that a prose table put at 11 measured **2** on the live tree; a spike's
+"30 markdown links, 7 file URIs" was stale; a `public repos walked (8 items)` assertion breaks the
+moment a repo is added.
+
+**Rule: assert a DERIVED value — "N == the manifest's repo count" — never a literal.** The test that
+proves a derivation is real: add an entry to the config alone, with zero code edits, and observe the
+behaviour change. A literal that happens to be right today passes every other test.
+
+### 4. A final validation-only task (`files: []`) cannot satisfy the work-assertion gate — 9 of 10 blocks
+
+A task that declares `files: []` changes nothing, so it produces no commit, and the terminal write
+recipe requires a positive commit-derived `workAssertionPassed`. **The block reports `bailed: true`
+with every substantive task passed.** Cost was ~5 min of engine time per block plus a manual gate
+run, on nine of ten blocks — and any consumer counting bails from these records over-counts by one
+per block.
+
+**Until the engine accepts non-commit evidence, expect this and plan for it:** either fold the final
+validation into the last task that produces a diff, or accept that the driving agent runs the gates
+by hand and closes the block on the measured result.
+
+### 5. A task whose files are gitignored also produces no diff — 1 block
+
+Same gate, different cause, and it is not obvious: a task that moves or edits paths **outside this
+repo's git index** (a gitignored sub-repo, a relocation to another directory) does real work that
+git cannot see. It bails identically.
+
+**Rule: merge such a task into one that touches a tracked file**, so there is a real diff to assert
+on. In the measured case, merging the move into the config edit that accompanied it produced the
+run's only `bailed: false` completion.
+
+### 6. Prefer a RUNTIME inversion over a committed red baseline
+
+D68 asks that a case be shown failing before its fix lands. A committed red case does that but
+leaves the suite red at that commit — which is item 1's whole problem. A runtime inversion proves
+more and costs nothing: **inside the test, break the precondition, assert the failure, restore it,
+assert the pass.**
+
+Measured example: to prove a pruner runs *after* an assertion, the test deletes a seed source,
+asserts the build stops **and that the pruner was provably never invoked**, then restores it. That
+also demonstrates the second rule of ordering tests — **observe whether the later step was CALLED,
+not what the tree looks like afterwards.** A final-state check passes against the broken order,
+because a pruned tree and a correct tree both validate clean.
+
+### 7. Write the fleet's git prohibitions into the TASK, not only into `CLAUDE.md`
+
+An engine subagent works from the task spec. A rule that lives only in `AGENTS.md` is a rule the
+actor never reads.
+
+Measured: a subagent ran a bare `git stash` to set aside ONE file. `git stash` takes no pathspec in
+that form, so it swept **16 files across three other lanes' uncommitted work.** Its follow-up
+`git stash pop` would have restored a *different session's* stash into the tree.
+
+**Rule: in any repo where one git index owns multiple projects' `planning/` directories, put
+"never `git stash` / `git add -A` / `git add .` / `git reset`" in the task description**, with the
+positive alternative: build a fixture tree under `mktemp -d`; never hide a real file.
+
+### 8. Anchor every grep in a criterion, and positive-control every empty result
+
+Three separate false results in one run:
+
+- **Unanchored substring match.** `grep -c 'doc_id' README.md | grep -q '^0$'` was meant as "no
+  `doc_id` frontmatter field", but matched a prose comment explaining why the file has no `doc_id`.
+  The file could never satisfy it. Use `! grep -q '^doc_id:'`.
+- **An empty grep over a deleted directory.** Once a path is removed, grepping it for a pattern
+  returns empty *for the wrong reason* — indistinguishable from a successful rewrite. **Assert the
+  directory is absent (`test ! -d`), not that a grep came back clean.**
+- **A broken instrument.** On macOS BSD grep, `grep -rln 'pattern' --include='*.yml' .` returned
+  **0** while a direct grep on one of those exact files returned the line. Use
+  `find . -name '*.yml' | xargs grep -l`.
+
+**Rule: any criterion asserting an ABSENCE must carry a positive control that HITS** — the identical
+command, run where a match is known to exist. And the control must contain the thing being searched
+for; an empty control and an empty claim look identical.
+
+### 9. Fewer, larger tasks — each task is a fresh agent with no memory of the last
+
+Measured file-read volume per block: **605 KB to 1.3 MB**, spread over 5-10 tasks, with individual
+mid-chain tasks reading up to **434 KB**. The final validation tasks read almost nothing (0.4-18 KB)
+— so the cost is *not* at the end of the chain, it is in the middle.
+
+The cause is structural: **every task is a fresh subagent, so task 5 re-reads whatever tasks 1-4
+wrote.** In a six-task block the same files can be read five times.
+
+**Rule: do not split a block finer than the gating boundary requires.** Every extra task is another
+full re-read of the accumulated work. Split when an intermediate state would fail the gates (item:
+compilable task boundaries above), and not otherwise. Make each `description` self-contained —
+naming the symbols, line numbers and prior decisions the task needs — so the agent does not have to
+re-read the tree to orient itself.
+
 ## Session boundary
 
 **`/breakdown` runs in this session** if you flagged a task for it — it reads the same spec and the
