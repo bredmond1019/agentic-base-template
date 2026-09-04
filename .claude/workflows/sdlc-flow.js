@@ -3084,7 +3084,13 @@ Target:
        new line under "Current focus" (or replace this spec's own prior line, per the exception
        above): "${blockId} — BLOCKED: ${bailReason}" — do not touch any other existing line.`
      : `- ${selectedTasks ? `Tasks ${taskList.join(', ')} of "${blockId}" are done.` : `Full spec "${blockId}" is done.`} ${selectedTasks ? 'If tasks remain, keep status "In progress" and add a new line under Current focus pointing at the next task; if this was the last, flip to "Done".' : 'Flip its Status to "Done".'} Add ONE new line under "Current focus" recording this outcome (or replace this spec's own prior line, per the exception above) — do not touch any other existing line.`}
-   - Update "Last updated" — run: date +%Y-%m-%d
+   - Update the BODY line \`**Last updated:**\` — run: date +%Y-%m-%d. This is the only "Last
+     updated" field this step touches. The YAML FRONTMATTER block at the top of status.md (the
+     \`timestamp:\` field, an RFC3339 value) is NOT bookkeep's to write — no field in that frontmatter
+     block is — because \`mev emit-state --write\` regenerates the whole frontmatter block later in
+     this same stage. Hand-editing \`timestamp\` here and then having emit-state rewrite it afterward
+     is how the two go out of step with the HQ cache doc's \`synced_from\` (E_SYNC_DRIFT) — never
+     touch \`timestamp\` in this step.
 
 2b. Flip the block's AUTHORED status in planning/state.json (skip this entire step silently if the
     repo has no planning/state.json). state.json is the authoritative block graph — leaving it stale

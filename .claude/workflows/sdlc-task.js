@@ -2666,7 +2666,13 @@ Target:
      : `- Keep the spec "In progress" (a task subset ran). Add ONE new line under "Current focus"
    pointing at the next task if helpful, citing the cumulative count from step 2 — do not touch any
    other existing line.`}
-   - Update "Last updated" — run: date +%Y-%m-%d
+   - Update the BODY line \`**Last updated:**\` — run: date +%Y-%m-%d. This is the only "Last
+     updated" field this step touches. The YAML FRONTMATTER block at the top of status.md (the
+     \`timestamp:\` field, an RFC3339 value) is NOT bookkeep's to write — no field in that frontmatter
+     block is — because \`mev emit-state --write\` regenerates the whole frontmatter block later in
+     this same stage (step 4 below). Hand-editing \`timestamp\` here and then having emit-state
+     rewrite it afterward is how the two go out of step with the HQ cache doc's \`synced_from\`
+     (E_SYNC_DRIFT) — never touch \`timestamp\` in this step.
 
 4. Flip the block's AUTHORED status in planning/state.json (skip this entire step silently if the repo
    has no planning/state.json, OR if "Block done" above is "no"). state.json is the authoritative block
