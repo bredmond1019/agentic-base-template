@@ -16,6 +16,59 @@ predictably-named reports alongside it.
 
 ---
 
+## Which command do I want?
+
+Start from your situation, not from the catalog. **Each row is where to begin** — the deeper docs
+are linked from there.
+
+| Your situation | Reach for | Then |
+|---|---|---|
+| "I know exactly what to change, it's one file" | [`/patch`](patch.md) | done — no review, no PR |
+| "One small tested change" | [`/ticket`](ticket.md) or [`/chore`](chore.md) to spec it | [`/sdlc-task <slug>`](../workflows/sdlc-task.js) runs it |
+| "A feature with several moving parts" | [`/ticket`](ticket.md) → [`/generate-tasks`](generate-tasks.md) | `/sdlc-flow <slug>` — ends in a PR |
+| "Several blocks, one repo, in order" | [`/plan <slug>`](plan.md) | [`/orchestrate <ids…>`](orchestrate.md) |
+| "Work spanning several repos" | [`/generate-roadmap`](generate-roadmap.md) | [`/begin-orchestration`](begin-orchestration.md), one session per repo |
+| **"I don't know how to cut this yet"** | [`/assess`](assess.md) → [`/seams`](seams.md) → [`/sequence`](sequence.md) | feed `sequence.md` to `/generate-roadmap` |
+| "Where is my multi-repo run right now?" | [`/roadmap-status --roadmap <slug>`](roadmap-status.md) | read-only, writes nothing |
+| "Lanes are running and something has piled up" | [`/orchestration-commander`](orchestration-commander.md) | drains the queue, reports what needs you |
+| **"The run just ended"** | [`/commander-retro`](commander-retro.md) → [`/consolidate-fleet`](consolidate-fleet.md) → [`/dispose-run`](dispose-run.md) | see below |
+| "A block needs a human decision" | [`/begin-session <slug>`](begin-session.md) | closes when the named artifact exists |
+
+### The escalating-ceremony ladder
+
+Pick the **cheapest rung that fits**. Every rung above adds a stage and a cost.
+
+```
+/patch          implement -> validate -> commit                     one file, low risk
+/sdlc-task      implement -> test -> fix -> commit                  one tested change
+/sdlc-flow      every task -> one review -> docs -> PR              a whole spec
+/orchestrate    a chain of blocks, one repo, one session            several blocks
+/begin-orchestration   a lane per repo, coordinated                 several repos
+```
+
+### After a run ends — the harvest
+
+Four commands, in order, each stopping where the next begins:
+
+1. **[`/commander-retro`](commander-retro.md)** — the commander reconstructs its own run from disk
+   (it is stateless and has no memory) and reports what it was **blind to**. Files nothing.
+2. **[`/consolidate-fleet`](consolidate-fleet.md)** — mines every lane's records across several
+   roadmaps for **mechanisms**, each with a counted breadth. Emits `disposal.json`. Writes no
+   `state.json`.
+3. **[`/dispose-run`](dispose-run.md)** — files those rows as blocks, `carryover[]` entries or
+   operator edges, and stops.
+4. **[`/generate-roadmap --from <analysis>`](generate-roadmap.md)** — only if the filed blocks need
+   lanes. Usually they do not.
+
+**Why four and not one:** a retro that also files is two jobs and the filing half never gets
+reviewed; consolidation proposes so a human can check before anything is written; disposal files
+rows so scheduling stays a separate decision. What a lane writes down in the first place is governed
+by [`finding-discipline.md`](../workflows/finding-discipline.md).
+
+**Full walkthrough with the diagram:** `docs/workflows/orchestration-runbook.md`.
+
+---
+
 - [Slash Commands](#slash-commands)
   - [Directory Layout](#directory-layout)
     - [Command Summary](#command-summary)

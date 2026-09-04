@@ -490,6 +490,22 @@ b586df7 feat: implement BT.ticket.gates-must-be-observed-red-task1
   delegate.
 - **HQ-only.** Added to `EXCLUDED_COMMAND_FILENAMES` — it reads every repo's records from the brain
   root and has nothing to consolidate inside a leaf repo, the same reasoning as `/generate-roadmap`.
+- **The runbook gained the altitude it was missing.** It began at `/generate-roadmap` and ended at
+  the commander — no pre-plan, no harvest. New **full lifecycle** section: a four-phase diagram
+  (pre-plan -> plan -> run -> harvest, closing back on plan), the same thing in numbered sentences,
+  a phase table saying *when to use each* with links down, and the line that matters most —
+  **most work does not start at phase 1.** Pre-plan is for when the cut is not obvious; a ticket you
+  already understand goes straight to phase 2 or straight to an engine. The existing diagram is now
+  labelled as phase 3 in detail rather than as the whole system.
+- **`commands/README.md` gained a situation-first entry point.** It was a catalog with no way in.
+  New "Which command do I want?" table starts from the reader's situation rather than the command
+  list, plus the **escalating-ceremony ladder** rendered as five rungs with the rule that matters:
+  pick the cheapest rung that fits. The harvest chain is spelled out with *why it is four commands
+  and not one*.
+- **Conformance pass against `write-repo-doc` on all four workflow docs:** `roadmap-sweep.md`
+  carried 9 keywords against the 3-7 standard (now 7), and `orchestration.md`'s first mention of
+  `/consolidate-fleet` was bare where rule 5 requires a link on first use. All three
+  `validate-brain` flags clean.
 - **`/commander-retro`, and the post-run chain finally documented.** The only retro prompt in
   existence was a hand-written one-off from 2026-08-23, pinned to one roadmap with six hardcoded
   events. Generalised into a command: the run's events are **derived from its own artifacts** rather

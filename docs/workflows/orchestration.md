@@ -222,7 +222,7 @@ unreleased lock blocks the next lane, and an unrecorded loose end is simply lost
 
 ## Artifacts
 
-> **These are read again after the run.** `/consolidate-fleet` harvests every `notes.md` and
+> **These are read again after the run.** [`/consolidate-fleet`](../../.claude/commands/consolidate-fleet.md) harvests every `notes.md` and
 > `review.md` across every repo for the roadmap, mines them for mechanisms, and stamps
 > `lifecycle: consolidated` so a later pass does not re-propose the same findings. What you write
 > here is the input to that — follow

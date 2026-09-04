@@ -6,7 +6,7 @@ doc_id: base-template-roadmap-sweep-guide
 layer: [factory]
 project: base-template
 status: active
-keywords: [roadmap sweep, liaison, escalation, snapshot, diff, commander, dry-run, lock, cron]
+keywords: [roadmap sweep, liaison, escalation, snapshot, dry-run, lock, cron]
 related: [base-template-workflows-index, base-template-orchestration-guide, base-template-lane-coordination-guide]
 ---
 

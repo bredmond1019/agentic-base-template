@@ -43,7 +43,70 @@ prompt; step 4 is a **shell** command in a terminal.
 
 Anything that needs you surfaces through the sweep or a notification. Detail on each step is below.
 
+## The full lifecycle — pre-plan to harvest
+
+**Plain English:** work here moves through four phases. You figure out what to build, you write it
+down as blocks, agents run those blocks, and then you mine what happened for what to fix next. The
+fourth phase feeds the second, which is why this is a loop and not a line.
+
+**Most work does not start at phase 1.** Pre-plan exists for when the cut is not obvious — new work
+on an existing system. A ticket you already understand goes straight to phase 2, or straight to an
+engine.
+
+```mermaid
+flowchart TD
+    P1["PRE-PLAN\n/assess -> /seams -> /sequence"] --> P2["PLAN\n/generate-roadmap or /plan"]
+    P2 --> W0["Wave 0\nregister every block in state.json"]
+    W0 --> P3["RUN\n/begin-orchestration per repo\n-> /orchestrate -> the engines"]
+    P3 <--> CO["WATCH\nroadmap_sweep.py\n-> /orchestration-commander"]
+    P3 --> R1["/commander-retro\nwhat the drain was blind to"]
+    P3 --> R2["/consolidate-fleet\nmechanisms + disposal.json"]
+    R1 --> R2
+    R2 --> R3["/dispose-run\nfile blocks, carryover, edges"]
+    R3 -->|"enough for lanes?"| P2
+    R3 -->|"usually not"| P3
+```
+
+**In words:**
+
+1. **Pre-plan** turns an unclear ask into a verified cut: [`/assess`](../../.claude/commands/assess.md)
+   gathers evidence, [`/seams`](../../.claude/commands/seams.md) finds where new work attaches, and
+   [`/sequence`](../../.claude/commands/sequence.md) cuts it into ordered blocks. Skip all three when
+   the work is already understood.
+2. **Plan** writes the blocks down — [`/generate-roadmap`](../../.claude/commands/generate-roadmap.md)
+   for many repos, [`/plan`](../../.claude/commands/plan.md) for one.
+3. **Wave 0** registers every block in `state.json`. This is a hard gate, not bookkeeping:
+   `/orchestrate` resolves block IDs from the graph, so a lane naming an unregistered ID stops or
+   improvises a spec.
+4. **Run** — one Claude Code session per repo, each becoming a lane.
+5. **Watch**, while they run — the sweep decides whether anything needs waking; the commander drains
+   what has piled up.
+6. **Harvest**, once they end — the retro, then consolidation, then disposal.
+7. **The loop closes** at phase 2 or 3: disposal usually produces a handful of blocks that want an
+   `/orchestrate` chain, not a whole roadmap.
+
+**What you personally do:** decide phase 1 is needed, approve the plan, open the sessions, answer
+what the run surfaces, and make the calls disposal cannot make for you. Everything else runs
+unattended once started.
+
+### The four phases at a glance
+
+| Phase | Use it when | Commands | Deeper doc |
+|---|---|---|---|
+| **1. Pre-plan** | New work on an existing system and the cut is **not** obvious | `/assess` · `/seams` · `/sequence` | `agentic-portfolio/docs/how-to-plan-with-agents.md` |
+| **2. Plan** | You know what to build and need it as blocks | [`/generate-roadmap`](../../.claude/commands/generate-roadmap.md) · [`/plan`](../../.claude/commands/plan.md) · [`/ticket`](../../.claude/commands/ticket.md) · [`/chore`](../../.claude/commands/chore.md) | [What you can orchestrate](#what-you-can-orchestrate) |
+| **3. Run** | Blocks are registered and you want them done | [`/begin-orchestration`](../../.claude/commands/begin-orchestration.md) · [`/orchestrate`](../../.claude/commands/orchestrate.md) · [`/roadmap-status`](../../.claude/commands/roadmap-status.md) · [`/orchestration-commander`](../../.claude/commands/orchestration-commander.md) | [`orchestration.md`](orchestration.md) · [`lane-coordination.md`](lane-coordination.md) · [`roadmap-sweep.md`](roadmap-sweep.md) |
+| **4. Harvest** | The run has ended | [`/commander-retro`](../../.claude/commands/commander-retro.md) · [`/consolidate-fleet`](../../.claude/commands/consolidate-fleet.md) · [`/dispose-run`](../../.claude/commands/dispose-run.md) | [After the run](#after-the-run--the-harvest) |
+
+**Two words you will meet in phases 3 and 4.** A **block** is one unit of work with an ID
+(`BT.ticket.fix-the-thing`); a **lane** is one repo, one Claude Code session, one ordered chain of
+blocks. Full vocabulary: [`index.md`](index.md#vocabulary).
+
 ## The whole system, in one picture
+
+*This diagram is phase 3 in detail — the run itself. For the four phases around it, see
+[the full lifecycle](#the-full-lifecycle--pre-plan-to-harvest) above.*
+
 
 ```mermaid
 flowchart TD
