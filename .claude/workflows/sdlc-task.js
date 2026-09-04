@@ -2653,7 +2653,13 @@ Target:
      (e.g. "2026-01-01 — tasks ${taskList.join(', ')} passed"). If the spec carries no such stub,
      do nothing — never invent one.
 
-3. Update planning/status.md (Edit tool, surgical). "Current focus" is APPEND-ONLY narrative — never
+3. Before editing planning/status.md, load the \`write-okf-markdown\` skill — this step edits an
+   EXISTING file's YAML frontmatter, and the skill carries the frontmatter-must-start-at-line-1 rule
+   and the insert-point trap (a row inserted after the OPENING \`---\` instead of the CLOSING one
+   destroys the block, per E_SYNC_WATERMARK_MALFORMED). HQ standing rule 6 and base-template standing
+   rule 11 both require this before writing or editing any \`.md\`; this stage is one of the fleet's
+   two highest-volume \`.md\` writers.
+   Update planning/status.md (Edit tool, surgical). "Current focus" is APPEND-ONLY narrative — never
    delete or rewrite any existing line under it; a prior block's narrative must survive this edit
    VERBATIM. The one exception: if an existing line already refers to THIS spec ("${blockId}") by name
    (e.g. from an earlier partial run), you may replace only that one line — never the whole section —
