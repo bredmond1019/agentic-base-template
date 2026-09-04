@@ -76,7 +76,7 @@ ANCHORS = [
      "docs/workflows/sdlc-task.md", "## Pipeline"),
     (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 440, 488,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2735, 2762,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2741, 2768,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 702, 719,
      "docs/workflows/sdlc-flow.md", "## Usage"),
@@ -84,7 +84,7 @@ ANCHORS = [
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1598, 1720,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3177, 3212,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3183, 3218,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

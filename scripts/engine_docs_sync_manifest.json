@@ -31,7 +31,7 @@
   },
   ".claude/workflows/sdlc-task.js::bookkeep-vault-commit": {
     "hash": "39f41cf1c318b2930fcdc5ba8cb71563142d98202f325c7a4f951dbbff97b9e3",
-    "lines": "2735-2762",
+    "lines": "2741-2768",
     "docs_md": "docs/workflows/sdlc-task.md",
     "section": "## Vaulted `planning/` writes in the per-task loop"
   },
@@ -55,7 +55,7 @@
   },
   ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
     "hash": "29346d214e6e205545b2de1786a602806430ef6635f442c23323ba023d331ddd",
-    "lines": "3177-3212",
+    "lines": "3183-3218",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Vaulted planning directories (D46)"
   }
