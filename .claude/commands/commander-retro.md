@@ -1,7 +1,7 @@
 ---
 type: Command
 title: commander-retro — what the drain saw, what it was blind to, and where its instructions failed it
-description: Run at the end of a multi-lane run. The commander reconstructs its own run from disk (it has no memory), tags every claim OBSERVED/INFERRED/UNKNOWN, and reports the holes in what a drain can see. Read-only except for the retro file.
+description: Run at the end of a multi-lane run, in the commander's own session. Reconstructs the run from disk for what a drain could see, uses the session's memory only for what no artifact records, tags every claim OBSERVED/INFERRED/UNKNOWN. Read-only except for the retro file.
 doc_id: commander-retro
 layer: [factory]
 project: base-template
@@ -31,10 +31,27 @@ Usage: /commander-retro <roadmap-slug>... [--since <YYYY-MM-DD>] [--out <path>]
 | `--since <date>` | — | Select by drain/lane-log activity instead of by slug — a roadmap is not a run. |
 | `--out <path>` | `planning/open-work/orchestration-runs/retros/commander-retro-<YYYY-MM-DD>.md` | Where the retro lands. |
 
-## Step 1 — You have no memory. Reconstruct from disk, and label every answer
+## Step 0 — Run this in the commander's own session
 
-**A drain is stateless by design, so you do not remember your own run.** Reconstructing it from
-recollection is the one failure this command cannot tolerate. Tag every claim with exactly one of:
+**Run it in the session that drove the drains, not a fresh one.** Two of the sections below —
+*where this session was wrong* and *where the instructions failed you* — have no source other than
+the agent that lived the run, and no fresh reader can reconstruct them from disk. The 2026-09-02
+retro's most credible section was exactly that one, and it exists only because the session wrote it.
+
+## Step 1 — Memory is required for some sections and forbidden for others
+
+**A DRAIN is stateless; the SESSION is not.** Each drain's instructions carry nothing forward, but
+the `/loop` session that ran 26 of them accumulated all 26 in context. That distinction decides
+where recollection is evidence and where it is contamination:
+
+| Section | Source | Why |
+|---|---|---|
+| A (what the drains did), B (`processing/`), C (blindness) | **Disk only** | The question *is* what a drain can see. Filling a gap from memory answers a different question and hides the hole |
+| D (instrument failures), *where this session was wrong* | **Memory, with disk to check it** | No artifact records a judgement call, or a wrong claim you later withdrew |
+| E (where the instructions failed you) | **Memory** | Only the reader who followed them knows where they misled |
+
+**"I remember it" is never `OBSERVED`.** In sections A–C, a thing you recall but cannot cite is an
+`UNKNOWN` — that is precisely the finding. Tag every claim with exactly one of:
 
 - **`OBSERVED:`** — you are looking at the artifact now. Cite it: path, line, sha, or command **and
   its output**.
@@ -42,7 +59,8 @@ recollection is the one failure this command cannot tolerate. Tag every claim wi
   artifact and the gap.
 - **`UNKNOWN:`** — no artifact on disk answers this. **This is the most valuable answer in the
   exercise.** An `UNKNOWN` is a hole in what a drain can see, which is the entire point. Never guess
-  to avoid one; never soften one into an `INFERRED`.
+  to avoid one; never soften one into an `INFERRED` — and **never resolve one from memory**, which
+  is the specific way this command fails when run in the right session.
 
 A retro that reads well and cites nothing is worse than three honest `UNKNOWN`s.
 
