@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: The gates — every check base-template runs on itself
-description: 54 of base-template's gated checks in planning/harness.json, what each one protects, and how to run one on its own. The harness itself carries 71 gating of 73 as of 2026-09-03 — see the drift note below.
+description: 54 of base-template's gated checks in planning/harness.json, what each one protects, and how to run one on its own. The harness itself carries 74 gating of 76 as of 2026-09-04 — see the drift note below.
 doc_id: base-template-gates
 layer: [factory]
 project: base-template
@@ -13,12 +13,20 @@ related: [base-template-capabilities, harness-json, base-template-docs-index, ha
 # The gates
 
 What "passing" means in this repo. This page lists 54 checks, all of them gating — one red check
-fails the run. `planning/harness.json` itself carries **71 gating of 73 total as of 2026-09-03**
+fails the run. `planning/harness.json` itself carries **74 gating of 76 total as of 2026-09-04**
 (`python3 -c "import json;print(sum(1 for c in
 json.load(open('planning/harness.json'))['validation']['checks'] if c.get('gates')))"`); this page
-has drifted **17** checks behind and needs a full catch-up pass, tracked as a `carryover[]` entry
+has drifted **20** checks behind and needs a full catch-up pass, tracked as a `carryover[]` entry
 rather than fixed here (out of scope for a surgical `/close-out` patch — see
 [harness-json.md](harness-json.md) for the schema and how to configure your own).
+
+Three more arrived 2026-09-04 from the `runs-that-can-be-believed` factory lane, all gating:
+`engines-pass-agent` (both engines pass `--agent` on every `emit-state --write`),
+`bookkeep-status-write` (the bookkeep stage validates its own `status.md` write, delta-attributed),
+and `lane-log-watermark-since` (`--since` selects roadmaps by lane-log date). The same lane extended
+two existing gated checks rather than adding new ones: `observed-red` now also warns when a gated
+check's trigger set is empty, and `orchestration-run-contract-tests` now checks the
+notes.md/review.md pair for lifecycle agreement and consolidation-stamp atomicity.
 
 Four of the newest are from `BT.chore.harness-*` / `BT.chore.agents-md-is-canonical` (2026-09-03):
 `sync-skills-tests`, `agent-docs`, `agent-docs-tests` (all gating) and `global-skills-fresh`
