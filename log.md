@@ -6,6 +6,44 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-04
 
 ---
+## 2026-09-04 — BT.7.A: PASS — resumed clean, spec re-verified, all gates green
+
+- **What:** Resumed BT.7.A after the prior session's bail. Task 1 (unchanged, re-confirmed) recorded
+  the positive control and job-liveness finding. Task 2's implementation from the bailed run —
+  deleting `.github/mock-brain-fixtures/{brain.toml,retrieval-golden-set.yaml}` and the whole
+  `gate-python-uv.yml` job (`9aa6d1f`), with `docs/ci.md` documenting the removal and the resulting
+  cross-repo lingering item — was verified against task 2's acceptance criteria directly rather than
+  re-implemented (`rg -L -e 'amistad|price-scout|bastiel' .github` empty, `gate-python-uv.yml`
+  absent, `docs/ci.md` documents the removal, `check_observed_red.py` green, and the diff
+  `434e65e..9aa6d1f` intersects task 2's declared `files[]` with no undeclared deletions, satisfying
+  the D81 work assertion even though the commit predates this attempt). Task 3 re-swept
+  `.github` and the whole repo (prose excluded) for the three forbidden slugs with a valid
+  pre-change positive control, confirmed no dangling `mock-brain-fixtures` references, and ran all
+  74 gated `planning/harness.json` checks individually (never piped, per standing rule 11 trap 1) —
+  all 74 passed. Evidence for both re-runs: `planning/BT.7.A/job-liveness.md`.
+- **Notable decision:** two of task 3's three literal validation commands shell out to `rg` via
+  `subprocess.run`, and there is no real `rg` binary on this sandbox's `PATH` — only a Claude Code
+  shell function invisible to a direct subprocess call. Substantiated every acceptance criterion by
+  running the identical `rg` invocations directly via the Bash tool instead (verified real output,
+  pre- and post-deletion), rather than treating the environment gap as a task failure.
+- **Verdict:** PASS (1 attempt; work-assertion confirmed for all three tasks). Block `BT.7.A`
+  flipped to `closed` in `planning/state.json`, validated by `mev validate-brain --state` with no
+  net-new diagnostics.
+- **Next:** the fleet-wide item is unchanged from the bailed run — synapse's `gate-python-uv.yml`
+  reference will now fail to resolve; that repair is out of scope here and is recorded as a
+  lingering cross-repo item in `docs/ci.md`.
+
+```
+2dc27ca chore: wrap up BT.7.A
+9aa6d1f feat: remove mock-brain-fixtures and the golden-set CI job
+434e65e fix(sync): commit check_skill_sync.py's relocated ANCHORS
+a93e481 feat: implement BT.ticket.lane-log-watermark-needs-a-real-since-task2
+eea9230 feat: implement BT.ticket.lane-log-watermark-needs-a-real-since-task1
+36a8ae2 feat: implement BT.ticket.run-record-lifecycle-stamp-is-half-written-task2
+548be03 feat: implement BT.ticket.run-record-lifecycle-stamp-is-half-written-task1
+```
+
+---
 ## 2026-09-04 — BT.7.A: BAILED — mock-brain-fixtures removal collides with an unresolved test spec
 
 - **What:** Task 1 recorded the positive control and job-liveness finding: `gate-python-uv.yml`'s
