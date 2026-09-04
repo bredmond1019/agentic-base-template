@@ -375,22 +375,26 @@ either mode), and the brain root is **`--no-worktree`, always** (corpus gates ca
 worktree — measured 64 structure / 601 state errors versus 0/0 in the main tree) — before handing
 off. `--roadmap` is **required and never inferred**. Also enforces the
 heavy-gate concurrency cap, operator gates, and the same notes-file and decision-recording rules.
-**Step 1B — premise re-derivation.** Before task generation, for each block about to run: extract
-every quantitative claim and named live artifact from its record, **run one command per claim**, and
-amend the record in place with the re-measured value and the date (D18). Re-*reading* the record is
-not re-derivation — the record is the thing under test — and a premise that survives unchanged is a
-**result, not a no-op**. Gated by `premise-rederivation`, whose fixture includes a self-test that the
-weaker "re-read the record" wording is rejected. Earned by measurement: on the run that shipped it,
-**6 of 7 block records were wrong**, 15 premises in total, including one whose central instruction
-would have collided with working code.
+**Step 1B — premise re-derivation.** A block record's facts go stale between authoring and
+execution, and a task built on a stale fact ships working code doing the wrong thing. So before task
+generation, for each block: pull every number and named artifact out of the record and **run one
+command per claim**, then amend the record in place with the new value and the date
+([D18, base-template](../../planning/decisions/D18-living-artifact-specs.md)).
+
+- Re-*reading* the record is not re-derivation — the record is the thing under test.
+- A premise that survives unchanged is a **result, not a no-op**.
+- Gated by `premise-rederivation`, whose fixture rejects the weaker "re-read the record" wording.
+- **Measured:** on the run that shipped it, **6 of 7 block records were wrong** — 15 premises, one of
+  which would have collided with working code. Detail: [`orchestration.md` § 1b](../../docs/workflows/orchestration.md#1b-premise-re-derivation).
 
 **Step 1C — roadmap resolution.** `planning/roadmaps/<slug>/` first, then legacy `planning/<slug>/`.
 A slug in **both** is an error **only when the legacy path is itself a roadmap** — it holds
 `lane-log.jsonl` or `roadmap.md`. Otherwise it is pre-plan residue and resolution proceeds silently.
-The unnarrowed rule fired on normal operation (the pre-plan trio writes `planning/<slug>/` on every
-multi-repo path) and hard-exited the fleet's watermark table; measured 0 of 31 roadmaps and 0
-directories under `planning/` held either marker, so its true-positive population was empty. Gated
-by `roadmap-dir-resolution`, which asserts both directions.
+
+- **Why narrowed:** the pre-plan stages write `planning/<slug>/` on every multi-repo path, so the
+  unnarrowed rule fired on normal operation and hard-exited the fleet's watermark table.
+- **Measured:** 0 of 31 roadmaps and 0 directories under `planning/` held either marker — the rule's
+  true-positive population was empty. Gated by `roadmap-dir-resolution`, asserting both directions.
 
 At lane close it routes every still-`OPEN` lingering item to one of **three** homes rather than
 sweeping them all into `carryover[]`: operator-only work becomes an `operator` edge on the block it
@@ -621,20 +625,20 @@ whichever agent hits it first.
 break in the chain: a fresh session reading only `sequence.md` *is* the handoff test, performed
 rather than imagined. **Model:** Opus, Opus red team.
 
-**Which successor consumes it is a COUNT, not a judgement call** — count the distinct values in the
-block table's **Repo** column. `== 1` -> `/plan`, which authors `plan.md` into `planning/<slug>/`
-alongside `sequence.md` and leaves the pre-plan where it is. `> 1` -> `/generate-roadmap`, which
-writes `planning/roadmaps/<slug>/` and, in its **Step 7b**, moves the pre-plan folder to
-`planning/roadmaps/<slug>/pre-plan/`. `/sequence` states the count in its closing report so the
-caller does not re-derive it, and so this stage can be a deterministic node in a sequential
-workflow.
+**Which successor runs next is a count, not a judgement** — the distinct repos in the block table's
+**Repo** column. `/sequence` states it in its closing report, so the caller does not re-derive it.
 
-**The invariant both successors maintain:** `planning/<slug>/` and `planning/roadmaps/<slug>/` are
-**never both populated**. `/plan` satisfies it by staying put; `/generate-roadmap` satisfies it by
-taking the pre-plan with it. This matters because the pre-plan trio all write `planning/<slug>/`
-while the successor is not yet known, so on the multi-repo path the slug would otherwise end up in
-both places every time — which used to hard-exit `lane_log_watermark.py` and wedge every
-consolidation in the fleet. See `/generate-roadmap` Step 7b and `/begin-orchestration` Step 1C.
+| Repos | Successor | Writes to | Pre-plan folder |
+|---|---|---|---|
+| **one** | [`/plan`](plan.md) | `planning/<slug>/` | stays put, beside `sequence.md` |
+| **several** | [`/generate-roadmap`](generate-roadmap.md) | `planning/roadmaps/<slug>/` | **moved** to `planning/roadmaps/<slug>/pre-plan/` (Step 7b) |
+
+**The invariant:** `planning/<slug>/` and `planning/roadmaps/<slug>/` are **never both populated**.
+The pre-plan stages all write `planning/<slug>/` before the successor is known, so without Step 7b
+the multi-repo path leaves the slug in two places every time — which used to hard-exit
+[`scripts/lane_log_watermark.py`](../../scripts/lane_log_watermark.py) and wedge every consolidation
+in the fleet. See [`/generate-roadmap`](generate-roadmap.md) Step 7b and
+[`/begin-orchestration`](begin-orchestration.md) Step 1C.
 
 ### `/define-design-system` — greenfield UI
 For a UI that **does not exist yet**: a new client project, a new side project, a new app. Emits the
@@ -712,14 +716,16 @@ may not be silently re-decided. What this command still owns: lane assignment, t
 isolation, Wave 0 mechanics and both crosswalks — `/sequence` decides *what* and *in what order*,
 this decides *who runs it concurrently without colliding*.
 
-**Step 7b — relocate the pre-plan.** When `--from` named a `sequence.md`, move
-`planning/<slug>/`'s contents to `planning/roadmaps/<slug>/pre-plan/` **after** the roadmap files are
-written and verified, so a failed authoring run leaves the pre-plan where `/sequence` left it. Move,
-never copy or delete — `evidence/` is the audit trail the roadmap cites — and move through the **real
-vault path** (`core/_planning/<repo>/<slug>/`), never the `planning/` symlink face, where `git mv`
-fails with "source directory is empty" and silently does nothing. Add the `pre-plan/` row to the
-roadmap's `index.md` and re-run `validate-brain --links` and `--structure`: a move relocates every
-relative link and index row at once, so those two flags are what catch a half-done move.
+**Step 7b — relocate the pre-plan.** When `--from` named a `sequence.md`, move `planning/<slug>/`'s
+contents to `planning/roadmaps/<slug>/pre-plan/`, so the slug lives in one place. Four rules:
+
+- **After** the roadmap files are written and verified — a failed run must leave the pre-plan where
+  [`/sequence`](sequence.md) left it.
+- **Move, never copy or delete.** `evidence/` is the audit trail the roadmap cites.
+- **Through the real vault path** (`core/_planning/<repo>/<slug>/`), never the `planning/` symlink
+  face — `git mv` there fails with "source directory is empty" and silently does nothing.
+- **Then update the roadmap's `index.md` and re-run `--links` and `--structure`.** A move relocates
+  every relative link and index row at once, so those two flags are what catch a half-done move.
 
 **Session:** fresh (reading only `sequence.md`), and it ends without running anything. Each lane is
 then **one fresh Opus session per repo, held open for that lane's whole chain** — the lane agent is

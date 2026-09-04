@@ -82,13 +82,18 @@ All 57 are flat — invoke as `/<name>` in Claude Code. Full parameter reference
 ### Before you plan (Phase 0)
 
 Use this ladder when the work sits on an existing system and the right cut is not obvious.
-Each stage feeds the next: `/assess` → `/seams` → `/sequence` → **`/plan` or
-`/generate-roadmap`**. All three pre-plan stages write `planning/<slug>/`; which successor consumes
-them is a **count**, not a judgement — the distinct repos in `sequence.md`'s block table. One repo
-goes to `/plan`, which authors into that same directory. Several go to `/generate-roadmap`, which
-writes `planning/roadmaps/<slug>/` and relocates the pre-plan to
-`planning/roadmaps/<slug>/pre-plan/` (its Step 7b). The invariant: `planning/<slug>/` and
-`planning/roadmaps/<slug>/` are **never both populated**.
+Each stage feeds the next: `/assess` → `/seams` → `/sequence`, all three writing to
+`planning/<slug>/`. Then the chain **forks**, and which way is a **count, not a judgement** — the
+distinct repos in `sequence.md`'s block table:
+
+| Repos in the cut | Successor | Writes to | Does with the pre-plan |
+|---|---|---|---|
+| **one** | [`/plan`](../.claude/commands/plan.md) | `planning/<slug>/` | leaves it in place, beside `plan.md` |
+| **several** | [`/generate-roadmap`](../.claude/commands/generate-roadmap.md) | `planning/roadmaps/<slug>/` | **moves** it to `planning/roadmaps/<slug>/pre-plan/` (Step 7b) |
+
+**The invariant both maintain:** `planning/<slug>/` and `planning/roadmaps/<slug>/` are **never both
+populated**. It matters because the pre-plan stages run before the successor is known, so without
+Step 7b the multi-repo path would leave the same slug in two places every time.
 
 | Command | What it does |
 |---|---|

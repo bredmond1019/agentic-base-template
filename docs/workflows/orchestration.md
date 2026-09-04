@@ -83,32 +83,46 @@ It resolves in this order: `BRAIN_ROOT` → repo → roadmap → `run_record_dir
 
 ## 1b. Premise re-derivation
 
-**A block record's facts rot faster than the block runs.** Before generating tasks, for each block
-about to run: extract every quantitative claim (counts, line numbers, "N of M", "three sites") and
-every named live artifact (a file, symbol, command, registered check) from its `description`,
-`what`, `why` and `acceptance_criteria`, then **run one command per claim**.
+Every block carries a **block record** — a JSON file at
+[`planning/blocks/<BlockID>.json`](../../planning/blocks/) describing what the block must do and
+why. Records are written days or weeks before the block runs, and they state facts about the code:
+counts, line numbers, "three sites", "this script does not exist yet". **Those facts go stale, and
+a task generated from a stale fact ships working code doing the wrong thing.** This phase re-checks
+them first.
 
-- **Re-reading the record is not re-derivation.** The record is the thing under test.
-- **Amend in place** (D18) with the re-measured value and the date, and record what moved in the run
-  record. A block record cannot carry an `amendments` array — `block.schema.json` sets
-  `additionalProperties: false` — so the log goes in the record's existing `notes` field.
-- **A criterion whose premise moved is rewritten to measure at run time**, not to compare against a
-  newly-frozen number. Otherwise this step just resets a clock that will rot again.
-- **A premise that survives is a result, not a no-op.** Say so, or a lane that finds nothing
-  concludes the step is ceremony and quietly drops it.
+**What the command does.** For each block about to run, it pulls every number and every named thing
+(a file, a symbol, a command, a registered check) out of the record's `description`, `what`, `why`
+and `acceptance_criteria` — then **runs one command per claim** to see if it is still true.
 
-Gated by `premise-rederivation`, whose fixture asserts the step exists in both copies of the
-command, sits before the `/orchestrate` handoff *by document order*, and — the load-bearing case —
-that the weaker "re-read the record" wording does **not** satisfy it.
+| Rule | Why |
+|---|---|
+| **Running a command, not re-reading the record** | The record is the thing under test. Re-reading it only confirms what it says. |
+| **Amend the record in place**, with the new value and today's date | The correction belongs where the next reader looks. Per [D18 (base-template)](../../planning/decisions/D18-living-artifact-specs.md) — a spec is a living artifact, not a frozen one. |
+| **Rewrite a moved criterion to measure at run time** | Freezing a newer number just resets a clock that rots again. |
+| **A premise that survives is a result** | Say so explicitly, or a lane that finds nothing concludes the step is ceremony and drops it. |
 
-**Earned by measurement, not by principle.** On the run that shipped this step, 6 of 7 block records
-needed amendment before they could be executed — 15 premises in total. Two would have caused real
-damage: one told the lane to extend a checker with a "RULE 2" that already existed and was a
-different rule, and one cited the wrong file *and* the wrong line for a `.gitignore` entry. The one
-record that survived unamended is the control that stops this reading as a formality.
+**Where the amendment log goes.** Not in an `amendments` array — a block record cannot have one,
+because [`block.schema.json`](../../.claude/workflows/block.schema.json) sets
+`additionalProperties: false`. Put it in the record's existing `notes` field, with the evidence in
+the run's `notes.md`.
 
-Not to be confused with Step 2's isolation re-verification, which re-checks the *isolation caveat*.
-Different question, different step.
+**Gated by** `premise-rederivation` in [`planning/harness.json`](../../planning/harness.json),
+running [`scripts/test_premise_rederivation.py`](../../scripts/test_premise_rederivation.py). Its
+fixture asserts the step exists in **both** copies of the command
+([`/begin-orchestration`](../../.claude/commands/begin-orchestration.md) and its `.agents/`
+replication copy), sits before the [`/orchestrate`](../../.claude/commands/orchestrate.md) handoff
+*by document order*, and — the case that makes it a contract rather than a heading grep — that the
+weaker wording "re-read the record" does **not** satisfy it.
+
+**Why it exists, measured rather than argued.** On the run that shipped this step, **6 of 7 block
+records needed amendment** before they could be executed — 15 wrong premises in total. Two would
+have caused real damage: one instructed the lane to add a "RULE 2" to a checker that already had a
+different RULE 2, and one cited the wrong file *and* the wrong line for a `.gitignore` entry. The
+one record that survived unamended is the control that stops this reading as a formality.
+
+> **Not the same as [Step 2](#2-isolation)'s re-verification.** That one re-checks the *isolation*
+> caveat — whether a worktree is safe here. This one re-checks a *block record's* facts. Different
+> question, different step, and folding them together loses both.
 
 ## 2. Isolation
 
