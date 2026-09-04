@@ -45,8 +45,8 @@ three-hour misread from exactly that (I4, "the box is UTC-3"). Timestamps are ca
 watermark for human reading only. The cursor is the line number; the integrity check is the hash.
 
 Usage:
-    lane_log_watermark.py status  [--roadmap SLUG]... [--root DIR] [--watermark-dir DIR] [--json] [--strict]
-    lane_log_watermark.py pending [--roadmap SLUG]... [--root DIR] [--watermark-dir DIR] [--json] [--strict]
+    lane_log_watermark.py status  [--roadmap SLUG]... [--root DIR] [--watermark-dir DIR] [--json] [--strict] [--since YYYY-MM-DD]
+    lane_log_watermark.py pending [--roadmap SLUG]... [--root DIR] [--watermark-dir DIR] [--json] [--strict] [--since YYYY-MM-DD]
     lane_log_watermark.py advance --roadmap SLUG [--to-line N] [--run-id ID] [--root DIR] [--watermark-dir DIR] [--json]
     lane_log_watermark.py verify  [--roadmap SLUG]... [--root DIR] [--watermark-dir DIR] [--json]
 
@@ -54,6 +54,15 @@ Usage:
     pending  print the unread lines themselves (the consolidation's actual input)
     advance  move a roadmap's watermark to --to-line (default: the file's current last line)
     verify   re-check every stored hash against disk; nonzero if any roadmap drifted
+
+    --since YYYY-MM-DD   select (status/pending) only roadmaps with at least one PARSEABLE
+                          lane-log line whose `ts` is at or after this date, compared as an
+                          INSTANT (not a string prefix) so mixed `Z` and numeric-offset
+                          timestamps select identically. A roadmap whose only candidate lines
+                          are malformed is never excluded on that basis -- a parse failure must
+                          never silently shrink the input -- and is INCLUDED with its malformed
+                          count still reported. Excluded roadmaps are named in the output, not
+                          silently dropped. Without --since, output is unchanged.
 
     --watermark-dir DIR   point directly at the directory holding (or that should hold)
                            `consolidation-watermark.json`, overriding the default
@@ -247,10 +256,71 @@ def selected(root: Path, wanted: list[str] | None) -> list[str]:
     return wanted if wanted else discover_roadmaps(root)
 
 
-def cmd_status(root: Path, slugs, marks, as_json, strict) -> int:
+def parse_ts(ts) -> datetime | None:
+    """Parse a lane-log `ts` value into an aware UTC-comparable datetime, or None if it does not
+    parse. Accepts both corpus shapes: a trailing `Z` and a numeric offset (`-03:00`). A naive
+    result (no offset at all) is assumed UTC rather than rejected, since that is the only
+    plausible reading for this corpus and rejecting it would just re-create the malformed-lines
+    problem for a value that DID parse."""
+    if not isinstance(ts, str):
+        return None
+    s = ts.strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+    except Exception:                                  # noqa: BLE001
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def since_filter(root: Path, slugs: list[str], since_dt: datetime) -> tuple[list[str], list[str]]:
+    """Split `slugs` into (included, excluded) against `since_dt`, an aware UTC instant.
+
+    A roadmap is INCLUDED when at least one of its lines is either (a) parseable JSON with a `ts`
+    that parses to an instant at/after `since_dt`, or (b) malformed -- a malformed line's true
+    timestamp is unknown, and treating "unknown" as "before the cutoff" is exactly the silent
+    data loss this tool exists to prevent, so any malformed line forces inclusion. A roadmap is
+    EXCLUDED only when every line is both parseable and confirmed strictly before `since_dt`.
+    A roadmap this repo cannot even find a directory for is left INCLUDED so its normal
+    `error` reporting still fires downstream, rather than being silently dropped here.
+    """
+    included, excluded = [], []
+    for s in slugs:
+        d = roadmap_dir(root, s)
+        if d is None:
+            included.append(s)
+            continue
+        lines, bad = read_lines(d / "lane-log.jsonl")
+        bad_set = set(bad)
+        has_recent = False
+        for i, ln in enumerate(lines, start=1):
+            if i in bad_set:
+                continue
+            try:
+                obj = json.loads(ln)
+            except Exception:                          # noqa: BLE001
+                continue
+            dt = parse_ts(obj.get("ts"))
+            if dt is not None and dt >= since_dt:
+                has_recent = True
+                break
+        if has_recent or bad:
+            included.append(s)
+        else:
+            excluded.append(s)
+    return included, excluded
+
+
+def cmd_status(root: Path, slugs, marks, as_json, strict, excluded: list[str] | None = None) -> int:
     rows = [state_for(root, s, marks) for s in slugs]
     if as_json:
-        print(json.dumps({"roadmaps": rows}, indent=2, ensure_ascii=False))
+        payload = {"roadmaps": rows}
+        if excluded is not None:
+            payload["excluded"] = excluded
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
         for r in rows:
             if r.get("error"):
@@ -263,6 +333,8 @@ def cmd_status(root: Path, slugs, marks, as_json, strict) -> int:
                 print(f"    DRIFT: {r['drift']}")
             if r["malformed_lines"]:
                 print(f"    MALFORMED lines (reported, not skipped): {r['malformed_lines']}")
+        if excluded:
+            print(f"excluded (--since, no line at/after threshold): {excluded}")
     if any(r.get("drift") for r in rows):
         return 2
     if strict and any(r.get("malformed_lines") for r in rows):
@@ -270,7 +342,7 @@ def cmd_status(root: Path, slugs, marks, as_json, strict) -> int:
     return 0
 
 
-def cmd_pending(root: Path, slugs, marks, as_json, strict) -> int:
+def cmd_pending(root: Path, slugs, marks, as_json, strict, excluded: list[str] | None = None) -> int:
     out, drifted, malformed = [], False, False
     for s in slugs:
         st = state_for(root, s, marks)
@@ -289,10 +361,15 @@ def cmd_pending(root: Path, slugs, marks, as_json, strict) -> int:
         for idx in range(st["watermark_line"], len(lines)):
             out.append({"roadmap": s, "line": idx + 1, "raw": lines[idx]})
     if as_json:
-        print(json.dumps({"pending": out}, indent=2, ensure_ascii=False))
+        payload = {"pending": out}
+        if excluded is not None:
+            payload["excluded"] = excluded
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
         for row in out:
             print(f"{row['roadmap']}:{row['line']}\t{row['raw']}")
+        if excluded:
+            print(f"# excluded (--since, no line at/after threshold): {excluded}", file=sys.stderr)
     if drifted:
         return 2
     if strict and malformed:
@@ -383,6 +460,9 @@ def main() -> int:
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict", action="store_true",
                     help="exit 3 when any selected log has malformed lines")
+    ap.add_argument("--since", default=None, metavar="YYYY-MM-DD",
+                    help="status/pending only: select roadmaps with at least one parseable "
+                         "lane-log line at/after this date (instant compare, not string prefix)")
     args = ap.parse_args()
 
     root = Path(args.root).resolve() if args.root else find_brain_root(Path.cwd())
@@ -396,14 +476,30 @@ def main() -> int:
         return cmd_advance(root, args.roadmaps[0], args.to_line, args.run_id, marks, args.json,
                             watermark_path)
 
+    since_dt = None
+    if args.since is not None:
+        if args.verb not in ("status", "pending"):
+            print("ERROR: --since only applies to status/pending", file=sys.stderr)
+            return 1
+        try:
+            since_dt = datetime.strptime(args.since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            print(f"ERROR: --since expects YYYY-MM-DD, got {args.since!r}", file=sys.stderr)
+            return 1
+
     slugs = selected(root, args.roadmaps)
     if not slugs:
         print("no roadmaps with a lane-log.jsonl found (not a failure)")
         return 0
+
+    excluded = None
+    if since_dt is not None:
+        slugs, excluded = since_filter(root, slugs, since_dt)
+
     if args.verb == "status":
-        return cmd_status(root, slugs, marks, args.json, args.strict)
+        return cmd_status(root, slugs, marks, args.json, args.strict, excluded)
     if args.verb == "pending":
-        return cmd_pending(root, slugs, marks, args.json, args.strict)
+        return cmd_pending(root, slugs, marks, args.json, args.strict, excluded)
     return cmd_verify(root, slugs, marks, args.json)
 
 
