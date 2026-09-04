@@ -238,7 +238,7 @@ class RepoReport:
 # consolidate-fleet reads every repo's run records, the commander's retros and the fleet-wide
 # carryover sweep from the brain root; inside a single leaf repo there is nothing for it to
 # consolidate. Same reasoning as generate-roadmap: HQ-only by nature, not by target.
-EXCLUDED_COMMAND_FILENAMES: set[str] = {"generate-roadmap.md", "consolidate-fleet.md", "dispose-run.md"}
+EXCLUDED_COMMAND_FILENAMES: set[str] = {"generate-roadmap.md", "consolidate-fleet.md", "dispose-run.md", "commander-retro.md"}
 
 
 def harness_files(root: Path, engines_only: bool = False) -> list[Path]:

@@ -279,6 +279,10 @@ floor under event-driven waking, not a replacement for it.
 
 ## See also
 
+- [`orchestration-runbook.md`](orchestration-runbook.md) § After the run — the sweep wakes a drain
+  *during* a run; the retro/consolidate/dispose chain is what happens once it ends.
+
+
 - [`index.md`](index.md) — vocabulary and the whole-system diagram.
 - [`orchestration.md`](orchestration.md) — the lane lifecycle this sweep watches over.
 - [`lane-coordination.md`](lane-coordination.md) — the registry, leases, and message queue the

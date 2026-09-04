@@ -192,6 +192,42 @@ against a persistent tmux session. The script itself is `agentic-portfolio/scrip
 — it lives in the **HQ repo**, not here. Full runbook, flags, and the routing table:
 [`roadmap-sweep.md`](roadmap-sweep.md).
 
+## After the run — the harvest
+
+The run ending is not the end of the work. Four steps, in order, each with a different job. **Run
+them from a fresh session at the brain root**, not from a lane.
+
+| Step | Command | Produces | Writes state? |
+|---|---|---|---|
+| 1 | [`/commander-retro <slug>...`](../../.claude/commands/commander-retro.md) | `retros/commander-retro-<date>.md` — what the drain saw, what it was blind to, and the instrument failures | no |
+| 2 | [`/consolidate-fleet --since-watermark`](../../.claude/commands/consolidate-fleet.md) | `retros/pattern-analysis-<date>.md` + **`disposal-<date>.json`** — named mechanisms with counted breadth | stamps `lifecycle: consolidated` |
+| 3 | [`/dispose-run <analysis>`](../../.claude/commands/dispose-run.md) | blocks, `carryover[]` entries, operator edges — or explicitly nothing | yes, via `mev create-block` |
+| 4 | [`/generate-roadmap --from <analysis>`](../../.claude/commands/generate-roadmap.md) | a roadmap, **only if** the filed blocks need lanes | yes |
+
+**Why four commands and not one.** Each stops where the next begins, and the boundaries are load-bearing:
+
+- **The retro does not file.** A retro that also files is two jobs, and the filing half never gets
+  reviewed.
+- **`/consolidate-fleet` proposes; it never writes `state.json`.** Its `disposal.json` is the
+  machine-readable handoff — a downstream parser reading the prose table by heading breaks on the
+  first differently-worded analysis.
+- **`/dispose-run` files rows and stops.** Authoring a roadmap is step 4; running both puts two
+  schedulers over one body of findings.
+- **Step 4 is often skipped.** Nine blocks across two repos usually want two `/orchestrate` chains,
+  not a roadmap.
+
+**Resume across days.** `/consolidate-fleet` carries a per-roadmap watermark into `lane-log.jsonl`
+(`scripts/lane_log_watermark.py`), so a later run reads only what is new. A rewritten or truncated
+log is reported as `DRIFTED` and **refuses** to advance rather than silently re-basing — a broken
+cursor otherwise resumes at the wrong offset and reports a clean pass over data it never read.
+`lifecycle: consolidated` on a run record is the same mechanism for the records themselves.
+
+**What a lane writes down is governed by [`finding-discipline.md`](../../.claude/workflows/finding-discipline.md).**
+Evidence travels with the finding, one occurrence is an instance rather than a pattern, and an odd
+but unexplained thing is recorded as an **observation** instead of being inflated into a defect.
+That rule is what keeps the harvest from producing a backlog nobody can audit — three carryover
+audits measured 32%/32%/26% of filed entries already dead.
+
 ## Things that happen → what they trigger
 
 | It happens | What the system does | What you do |

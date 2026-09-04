@@ -208,6 +208,16 @@ unreleased lock blocks the next lane, and an unrecorded loose end is simply lost
 
 ## Artifacts
 
+> **These are read again after the run.** `/consolidate-fleet` harvests every `notes.md` and
+> `review.md` across every repo for the roadmap, mines them for mechanisms, and stamps
+> `lifecycle: consolidated` so a later pass does not re-propose the same findings. What you write
+> here is the input to that — follow
+> [`finding-discipline.md`](../../.claude/workflows/finding-discipline.md): evidence travels with
+> the finding, a pattern is a counted set, and an unexplained thing is an **observation**, not a
+> defect. Measured over nine records: nine different section sets and six status vocabularies, which
+> is why the extraction is model-driven and why absent evidence cannot be recovered later.
+
+
 A lane leaves three files behind. They have different jobs, and the difference matters — the first
 is how *other lanes* find out what happened, the second and third are for *you*.
 

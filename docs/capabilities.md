@@ -142,6 +142,7 @@ writes `planning/roadmaps/<slug>/` and relocates the pre-plan to
 | [`/roadmap-status`](../.claude/commands/roadmap-status.md) | Read-only mid-run view of one roadmap's lanes across every repo. Writes nothing. |
 | [`/consolidate-run`](../.claude/commands/consolidate-run.md) | Gathers findings across the fleet for one roadmap and proposes `carryover[]` entries. Writes no `state.json`. |
 | [`/consolidate-fleet`](../.claude/commands/consolidate-fleet.md) | Mines several runs at once — lane logs, run records, commander retros, carryover triage — for the mechanisms behind them; emits one pattern analysis and advances a per-roadmap lane-log watermark. HQ-only. Writes no `state.json`. |
+| [`/commander-retro`](../.claude/commands/commander-retro.md) | End-of-run retrospective the commander writes about itself from disk, tagging every claim OBSERVED/INFERRED/UNKNOWN. Files nothing. HQ-only. |
 | [`/dispose-run`](../.claude/commands/dispose-run.md) | Files a consolidation's mechanisms into the graph as blocks, carryover entries or operator edges; reports what it withheld for want of evidence. Files rows and stops — never authors a roadmap. HQ-only. |
 | [`/begin-session`](../.claude/commands/begin-session.md) | Drives one **operator session** — work an agent cannot do alone (a decision, a credential, a judgement call). |
 

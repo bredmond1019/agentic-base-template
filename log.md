@@ -490,6 +490,28 @@ b586df7 feat: implement BT.ticket.gates-must-be-observed-red-task1
   delegate.
 - **HQ-only.** Added to `EXCLUDED_COMMAND_FILENAMES` — it reads every repo's records from the brain
   root and has nothing to consolidate inside a leaf repo, the same reasoning as `/generate-roadmap`.
+- **`/commander-retro`, and the post-run chain finally documented.** The only retro prompt in
+  existence was a hand-written one-off from 2026-08-23, pinned to one roadmap with six hardcoded
+  events. Generalised into a command: the run's events are **derived from its own artifacts** rather
+  than handed in, and the `OBSERVED` / `INFERRED` / **`UNKNOWN`** tagging is kept verbatim because
+  the `UNKNOWN`s are the deliverable — each is a hole in what a drain can see. Two sections the real
+  2026-09-02 retro proved worth having are now required: **instrument failures** (every command that
+  returned a plausible, confidently wrong answer — the part that transfers between runs) and
+  **where this session was wrong**, which is what makes the rest credible. It files nothing: a retro
+  that also files is two jobs and the filing half never gets reviewed.
+  - Both open questions the original left for a reviewer are resolved: it writes one file (the
+    deliverable), and an absent drain log is a true `UNKNOWN` meaning the wrapper never fired, not
+    evasion.
+- **The four workflow docs knew none of this.** `consolidate-fleet`, `dispose-run`,
+  `finding-discipline` and `lane_log_watermark` appeared in **0 of 4** of them. The runbook — the
+  "start here" hub — gains an **After the run** section carrying the whole chain
+  (`/commander-retro` -> `/consolidate-fleet` -> `/dispose-run` -> optionally
+  `/generate-roadmap --from`), each step's write boundary, and *why it is four commands and not one*:
+  the retro does not file, consolidation proposes without touching `state.json`, disposal files rows
+  and stops, and roadmap authoring is usually skipped entirely. `orchestration.md`'s Artifacts
+  section now says the records are harvested later and points at the finding discipline that governs
+  what goes in them; `lane-coordination.md` gains the end-of-run retro step; `roadmap-sweep.md`
+  distinguishes waking a drain DURING a run from the chain that runs once it ends.
 - **`finding-discipline.md` — the filter moved to where the evidence still is.** The operator's
   framing, and it is the right end of the pipe: a disposal filter only decides what to do with
   findings that already exist, and by then the evidence for them is in a session that has ended.

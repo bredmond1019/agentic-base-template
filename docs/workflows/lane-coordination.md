@@ -226,6 +226,15 @@ Full runbook, flags, and the escalation-routing table: [`roadmap-sweep.md`](road
 
 ---
 
+### At the end of the run
+
+Hand the commander [`/commander-retro <slug>...`](../../.claude/commands/commander-retro.md). It is
+**not** a drain: the commander is stateless per drain and has no memory of its own run, so the retro
+reconstructs it from the queue, the heartbeats, the lease records and the drain log, tagging every
+claim `OBSERVED` / `INFERRED` / **`UNKNOWN`**. The `UNKNOWN`s are the point — each one is a hole in
+what a drain can see. Its instrument-failure section (every command that returned a plausible,
+confidently wrong answer) is the part that transfers to the next run.
+
 ## 6. Troubleshooting
 
 Start from the symptom you can see.

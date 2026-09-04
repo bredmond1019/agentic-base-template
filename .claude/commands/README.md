@@ -36,6 +36,7 @@ predictably-named reports alongside it.
     - [`/consolidate-run <roadmap-slug> [--repo <slug>]`](#consolidate-run-roadmap-slug---repo-slug)
     - [`/consolidate-fleet [<roadmap-slug>...] [--since-watermark]`](#consolidate-fleet-roadmap-slug---since-watermark)
     - [`/dispose-run <analysis-path>`](#dispose-run-analysis-path)
+    - [`/commander-retro <roadmap-slug>...`](#commander-retro-roadmap-slug)
     - [`/roadmap-status --roadmap <slug>`](#roadmap-status---roadmap-slug)
   - [Session Orientation](#session-orientation)
     - [`/wrap-up [note]`](#wrap-up-note)
@@ -116,7 +117,7 @@ All commands live directly in `.claude/commands/` — no subdirectories (except 
 | Planning | `/generate-roadmap`, `/generate-tasks`, `/plan`, `/ticket`, `/chore`, `/breakdown` (`/generate-master-plan` is superseded by `/plan --founding`, D65) |
 | SDLC | `/patch`, `/update-docs`, `/update-task`, `/review-PR`, `/close-out` |
 | Git | `/commit`, `/init-worktree`, `/clean-worktree`, `/start-block` |
-| Orchestration | `/orchestrate`, `/begin-orchestration`, `/begin-session`, `/consolidate-run`, `/consolidate-fleet`, `/dispose-run`, `/roadmap-status` |
+| Orchestration | `/orchestrate`, `/begin-orchestration`, `/begin-session`, `/consolidate-run`, `/consolidate-fleet`, `/dispose-run`, `/commander-retro`, `/roadmap-status` |
 | E2E | `/test_auth_gate`, `/test_crud_api`, `/test_error_handling`, `/test_ui_form` |
 | Backlog | `/backlog-ticket`, `/initial-research` |
 | Distribution | `/sync-downstream-harness`, `/sync-all`, `/sync-global-commands`, `/sync-global-skills`, `/sync-brain-skills` |
@@ -441,6 +442,15 @@ on a block (the schema drops them silently — provenance goes in `origin.type: 
 an operator edge that gates nothing, and requires a `carryover[]` predicate proven unmet before
 commit. Checks `toolchain-freshness` immediately before writing, because `create-block --write`
 chains `emit-state --write` unconditionally. **HQ-only.**
+
+### `/commander-retro <roadmap-slug>... [--since <date>]`
+Run once after a multi-lane run ends. **Not a drain** — the commander is stateless per drain and has
+no memory of its own run, so this reconstructs it from the drain log, queue receipts, heartbeats and
+lease records, tagging every claim `OBSERVED` / `INFERRED` / **`UNKNOWN`**. The `UNKNOWN`s are the
+deliverable: each is a hole in what a drain can see. Also carries an **instrument-failures** section
+(every command that returned a plausible, confidently wrong answer) and a "where this session was
+wrong" section, which is what makes the rest credible. Files nothing and edits no lane record — if
+it surfaces work, `/consolidate-fleet` routes it. **HQ-only.**
 
 ### `/roadmap-status --roadmap <slug>`
 Read-only, mid-run view of one roadmap's live lanes across every repo — joins the roadmap's
