@@ -114,7 +114,12 @@ def main():
             f"--include='archive.md' --include='capture.md' --include='commit.md' "
             f"--include='handoff.md' --include='log-work.md' --include='prime.md' "
             f"--include='session-recap.md' --include='wrap-up.md' "
-            f"--include='backlog-ticket.md' --include='generate-master-plan.md' "
+            # generate-master-plan.md deliberately NOT included: retired by D65 in favour of
+            # /plan --founding. base-template's flat copy is a 53-line tombstone pointing at the
+            # replacement; the 281-line original was still being distributed to all five tiers
+            # from commands/brain/ until 2026-09-04, so the retirement had never reached the
+            # brain level at all. Re-adding this include resurrects a retired command.
+            f"--include='backlog-ticket.md' "
             f"--include='log-decision.md' --include='sync-status.md' --include='update-progress.md' "
             f"--include='update-state.md' --include='attention.md' --include='snooze.md' --include='next.md' "
             f"--exclude='*' "
