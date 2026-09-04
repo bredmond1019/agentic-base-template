@@ -181,7 +181,14 @@ stops `rg` from honoring `.gitignore`, and this fleet's own repos carry **~43GB 
 dirs** (`engine-rs` 16G, `bastion` 13G, `mev` 7.4G, others) plus `node_modules` — normally invisible
 to `rg` via `.gitignore`, but nothing filters them out once `-uu` is set. Measured 2026-09-03: an
 `rg -L -uu --no-messages` corpus sweep with no excludes pegged 350–500% CPU for 3+ minutes walking
-those directories, read from outside as a runaway/hung process. The safe form:
+those directories, read from outside as a runaway/hung process. **From inside the session running
+it, this looks different and easier to misdiagnose: the command hits the Bash tool's timeout and
+returns exit 143, or never returns.** That reads as "no matches" or a hung tool, not as a slow
+search — one session nearly logged it as a clean negative on a dangling-reference check (standing
+rule 11's exact failure mode, arriving through a performance path instead of a flag-parsing one).
+If a `-uu` sweep times out or returns suspiciously fast-empty, suspect this before trusting the
+result — fall back to a targeted `grep -rl` over the specific directories in question plus a
+positive control on a value known to exist. The safe form:
 
 ```bash
 rg -L -uu --no-messages \

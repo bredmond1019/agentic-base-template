@@ -895,6 +895,9 @@ I have not run anything. This command authors; /begin-orchestration executes.
 - A piped command's exit code is the **pipe's**, not the command's. Redirect, then check `$?`.
 - `rg`/`find` are symlink-blind and every `planning/` is a symlink into a `_planning/` vault — pass
   `-L`, and `-uu` to reach gitignored sub-repos. An inventory sweep without them is not trustworthy.
+  **With `-uu`, also add `--glob '!**/target/**' --glob '!**/node_modules/**' --glob '!**/.git/**'`**
+  — `-uu` disables `.gitignore`, and this fleet's ~43GB of Rust `target/` dirs will otherwise get
+  walked, pegging 350–500% CPU or hitting a Bash timeout that reads as a hang, not a slow search.
 - `planning/state.json` round-trips with `json.dump(..., indent=2, ensure_ascii=False)` plus a
   trailing newline. The default escapes every em dash and turns a small edit into ~130 lines of churn.
 - **HQ commits need an explicit pathspec** — `git commit -o <paths>`. Every repo's `planning/` is a

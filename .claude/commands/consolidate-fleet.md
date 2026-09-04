@@ -387,7 +387,10 @@ watermark file. The
 
 - **A piped command's exit code is the pipe's.** Redirect to a file, then check `$?`.
 - **`rg`/`find` are symlink-blind and every `planning/` is a symlink** — pass `-L`, and `-uu` to
-  reach gitignored sub-repos.
+  reach gitignored sub-repos. **With `-uu`, also add
+  `--glob '!**/target/**' --glob '!**/node_modules/**' --glob '!**/.git/**'`** — `-uu` disables
+  `.gitignore`, and this fleet's ~43GB of Rust `target/` dirs will otherwise get walked, pegging
+  350–500% CPU or hitting a Bash timeout that reads as a hang, not a slow search.
 - **`find -newermt` with a relative time errors under bfs**, and `2>/dev/null` eats it, leaving an
   empty result that reads as "nothing changed". Use `-mmin -N`. Filed fleet-wide as
   `find-newermt-relative-time-errors-on-bfs` (P1).
