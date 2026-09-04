@@ -580,9 +580,31 @@ plus two additive fields (`files`, `dependsOn`) orchestrator ignores harmlessly:
 [
   { "task_id": 1, "title": "<Foundational step>", "description": "<bulleted actions, one string>", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": ["<path/to/file>"], "dependsOn": [] },
   { "task_id": 2, "title": "<Next step>", "description": "<bulleted actions, one string>", "acceptance_criteria": [], "validation_commands": [], "max_attempts": 3, "files": ["<path/to/file>"], "dependsOn": [1] },
-  { "task_id": "N", "title": "Validate", "description": "Run the FULL validation suite and confirm all pass: <one line per `validation.checks[]` entry using its authoritative `command` — NEVER `fastCommand` — this is the one task in the spec that owns the real, unscoped gate>.", "acceptance_criteria": [], "validation_commands": ["<full `command` per validation.checks[] entry, in order>"], "max_attempts": 3, "files": [], "dependsOn": [1, 2] }
+  { "task_id": "N", "title": "<Last real change> — and Validate", "description": "<the last substantive change>, then run the FULL validation suite and confirm all pass: <one line per `validation.checks[]` entry using its authoritative `command` — NEVER `fastCommand` — this task owns the real, unscoped gate>.", "acceptance_criteria": [], "validation_commands": ["<full `command` per validation.checks[] entry, in order>"], "max_attempts": 3, "files": ["<path/to/the/last/real/change>"], "dependsOn": [1, 2] }
 ]
 ```
+**NEVER give the final task `files: []`.** This template used to, and the engines refuse it: the
+terminal write recipe's `renderWorkAssertion` (`.claude/workflows/sdlc-task.js:409`) requires a
+positive, **commit-derived** `workAssertionPassed` before it will write `done`/`passed` — and a task
+that changes nothing produces no commit. The block then reports `bailed: true` **with every
+substantive task passed**, which also means any consumer counting bails from these records
+over-counts by one per block.
+
+Measured on the `clean-slate-sandbox` run, 2026-09-03/04: **10 of 11 blocks bailed this way.** The
+two that did not were the two whose final task also touched a file.
+
+**Pair the validation with the last real change**, as the template above now shows. It is not a
+workaround — the gate genuinely belongs with the change it is gating, and folding it there removed
+the bail on every block that tried it.
+
+**This applies to `/plan`-derived and `/generate-roadmap`-derived blocks identically.** `/plan` does
+not write `tasks.json` (`plan.md:35`); both paths reach the engines through *this* command's
+template, so the shape is decided here, once, for both.
+
+The same failure has a second cause worth knowing: a task whose files are **gitignored** — moving a
+sub-repo, relocating a directory outside this repo's index — also produces no diff, and bails
+identically despite doing real work. Merge it into a task that touches a tracked file.
+
 `task_id` — 1-indexed integers, dependency-ordered, no gaps (the `"N"` above is illustrative — use
 the real next integer). `title`/`description` — required; `description` holds what a `### N.`
 heading's bullets used to hold (bulleted lines in one string are fine). `acceptance_criteria` /
