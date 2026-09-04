@@ -40,18 +40,31 @@ gh run view --log-failed                    # if hosted still fails, pull just t
 macOS-only tooling) may still first go green only on a real run. When a check could not be
 verified locally, record it in the [Deviations](#deviations) table rather than assuming.
 
-## The four reusable workflows
+## The three reusable workflows
 
-All four live in `base-template/.github/workflows/`, declare `on: workflow_call`, and mirror the
+All three live in `base-template/.github/workflows/`, declare `on: workflow_call`, and mirror the
 target stack's `harness.json` gates in declared order. They take repo-specific knobs as inputs
 rather than hardcoding them, so one workflow file serves every repo on that stack.
 
 | Workflow | Stack | Gates run (in order) | Key inputs |
 |---|---|---|---|
 | `gate-rust.yml` | Rust | `cargo fmt --check`, `cargo clippy`, test (`cargo test` or `cargo nextest run --workspace`), `cargo build --release` | `runs-on` (default `ubuntu-latest`), `clippy-args` (default `-- -D warnings`), `needs-nextest` (default `false`), `test-command`, `sibling-repos` |
-| `gate-python-uv.yml` | Python (uv) | the two `database` import probes, `ruff`, `pylint`, `pytest --collect-only`, `pytest` | `runs-on` (default `ubuntu-latest`) |
 | `gate-flutter.yml` | Flutter | `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, `flutter test --exclude-tags e2e` | `runs-on` (default `ubuntu-latest`) |
 | `gate-node-docs.yml` | Node/docs (base-template itself) | `node --check` sweep over the four SDLC engines, `python3 scripts/test_sync_downstream_harness.py` | `runs-on` (default `ubuntu-latest`) |
+
+**`gate-python-uv.yml` (Python/uv) was removed 2026-09-04 (BT.7.A).** It covered the two
+`database` import probes, `ruff`, `pylint`, `pytest --collect-only` and `pytest` for `core/synapse`
+(the only caller), fed by a `.github/mock-brain-fixtures/` pair that carried the real fleet's
+topology and client repo slugs under a directory named "mock" — unsuitable for a template meant to
+be shared. It could not be replaced with a synthetic fixture: `synapse`'s own
+`tests/brain/test_golden_set_schema.py::test_archive_cases_preserve_original_query_text` hardcodes
+a verbatim query, `"What is amistad and what stage is it in?"`, that this block's own acceptance
+criteria (`rg -e 'amistad|price-scout|bastiel'` must return empty) forbid `.github` from
+containing — and that test lives in `synapse`, out of reach of a base-template-only change. `synapse`'s
+`.github/workflows/ci.yml` still references this file (`uses:
+bredmond1019/agentic-base-template/.github/workflows/gate-python-uv.yml@main`) and will fail to
+resolve it; updating that caller is a `synapse`-side change this lane may not make and is recorded
+as a lingering item instead.
 
 `gate-rust.yml`'s `clippy-args` and `needs-nextest` exist because two repos deviate from the
 default: `bella` needs `--all-targets` clippy, and `engine-rs` needs `cargo nextest run
