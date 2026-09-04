@@ -6,6 +6,45 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-04
 
 ---
+## 2026-09-04 — Factory lane complete: 6 blocks, 18 capabilities, none self-certified
+
+### runs-that-can-be-believed — base-template factory lane, closed
+- **What:** Drove the lane to completion. Six blocks closed: `engines-must-pass-agent-to-mev`,
+  `bookkeep-writes-invalid-status-frontmatter`, `a-gated-check-with-an-empty-trigger-set-must-warn`,
+  `run-record-lifecycle-stamp-is-half-written`, `lane-log-watermark-needs-a-real-since`, and `BT.7.A`
+  (the last two adopted mid-run at the operator's request). Both JS engines now pass `--agent` on
+  every `emit-state --write`; the bookkeep stage loads `write-okf-markdown` and validates its own
+  status.md write with delta attribution; a gated check that matched nothing is now reported as
+  proving nothing; the D57 checker compares run-record pairs; `lane_log_watermark.py` has a real
+  `--since`; and base-template no longer ships the real fleet topology under `.github/`.
+  74 of 74 gated checks pass.
+- **Why:** The roadmap's question is *"does the fleet's output get believed, and when?"* Every block
+  here closes a way the harness reported success without having established it — a lane quiescing its
+  own bookkeep, a generator never checking what it wrote, a check that cannot fail, a half-written
+  consolidation stamp, a selection that could not be re-run, and a "mock" fixture carrying the real
+  client list.
+- **Refs:** `planning/orchestration-run/runs-that-can-be-believed/` — `notes.md` (the full record,
+  19 findings), `review.md` (every recipe executed before it was written, plus an explicit
+  not-proven section), `verification-ledger.json` (32 entries, all `untested`),
+  `verify-on-disk.md`. Handoff at `planning/handoff.md`.
+
+### What this lane got wrong, recorded rather than smoothed over
+- **What:** Four corrections to my own claims, each fixed in place with the correction left visible:
+  a fabricated `verified_by` (control counts of 14 and 2 that were never run; real values 1 and 1);
+  "zero disagreeing pairs" from a scan too narrow to see them, falsified by the very checker this
+  lane shipped; asserting standing rule 10's engine-snapshot behaviour from memory before measuring
+  it; and reporting a gated suite green when it was green on the working tree rather than the commit.
+  `BT.7.A` also bailed on four spec defects I authored, three of them validation commands.
+- **Why:** A lane whose subject is unverified output cannot exempt its own reporting from the same
+  standard. The pattern behind three of the four bail causes is now filed: Step 1B re-derives a block
+  record's prose claims and never its `validation_commands`.
+- **Refs:** `carryover[]` — `step-1b-re-derivation-skips-validation-commands`,
+  `bookkeep-reports-emitstateran-without-reading-the-exit-code`,
+  `pytest-scripts-aborts-at-collection-on-a-module-level-sys-exit`,
+  `engine-docs-sync-lacks-the-relocate-its-sibling-has`,
+  `close-out-merge-commit-base-underscopes-a-multi-block-run`.
+
+---
 ## 2026-09-04 — BT.7.A: PASS — resumed clean, spec re-verified, all gates green
 
 - **What:** Resumed BT.7.A after the prior session's bail. Task 1 (unchanged, re-confirmed) recorded
