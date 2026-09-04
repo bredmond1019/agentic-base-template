@@ -120,6 +120,29 @@ eea9230 feat: implement BT.ticket.lane-log-watermark-needs-a-real-since-task1
 ```
 
 ---
+## 2026-09-04 — /close-out stopped before the log entry and the commit
+
+- **What:** fixed three structural causes in `.claude/commands/close-out.md` and `handoff.md`
+  (`e17ff0a`). (1) The only mention of `log-work` anywhere in the chain was a **prohibition** in
+  handoff's Execution Model — so an agent met the token exactly once, attached to "do NOT", and
+  then listed it as outstanding work. Reworded to lead with what Step 4 produces, plus an explicit
+  "never report `/log-work` or `/commit` as outstanding". (2) `/close-out` invokes two nested
+  skills, and `/update-docs`'s Phase 5 is literally titled **Report** — a terminal shape an agent
+  emits and does not climb back out of, which is exactly where the log entry and commit live. Step
+  4 now tables the three artifacts `/handoff` produces and states that `/close-out` is not complete
+  until all three exist. (3) The Report template named gates, coverage and docs but **not** the log
+  or the commit, so a run that stopped at Step 3 was indistinguishable from a finished one. Added a
+  mandatory `Logged + committed:` line that must carry a real entry title and a real commit sha.
+  Synced to 18 repos and the global install.
+- **Why:** the operator reported it directly — "often when I run close-out, the agents never
+  actually call log-work, they stop before it and say that it still remains." Diagnosed by reading
+  the chain rather than guessing: `grep -n "log-work" close-out.md` returns **zero** functional
+  mentions, and handoff's single mention is the prohibition. Fix 3 is the load-bearing one: the
+  other two are instructions an agent can misread, but that one makes an incomplete run impossible
+  to report as clean.
+- **Refs:** carryover `close-out-log-and-commit-fix-is-unverified-in-a-live-run` — command files
+  load at session launch (standing rule 10), so the session that wrote this fix cannot exercise it.
+
 ## 2026-09-03 — harness propagation: five paths, one gate, and an AGENTS.md split
 
 - **What:** closed `BT.chore.harness-propagation-has-no-gate` and the three chores it split into.
