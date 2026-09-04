@@ -462,20 +462,40 @@ Three separate false results in one run:
 command, run where a match is known to exist. And the control must contain the thing being searched
 for; an empty control and an empty claim look identical.
 
-### 9. Fewer, larger tasks — each task is a fresh agent with no memory of the last
+### 9. Tasks are INDEPENDENT by design — pay the re-read, shrink it, never remove it
 
 Measured file-read volume per block: **605 KB to 1.3 MB**, spread over 5-10 tasks, with individual
-mid-chain tasks reading up to **434 KB**. The final validation tasks read almost nothing (0.4-18 KB)
-— so the cost is *not* at the end of the chain, it is in the middle.
+mid-chain tasks reading up to **434 KB**. The final validation tasks read almost nothing
+(0.4-18 KB), so the cost is *not* at the end of the chain — it is in the middle, and it is
+re-reading.
 
-The cause is structural: **every task is a fresh subagent, so task 5 re-reads whatever tasks 1-4
-wrote.** In a six-task block the same files can be read five times.
+The cause is structural and **deliberate**: every task is a fresh subagent with no memory of the
+previous one, so task 5 re-reads whatever tasks 1-4 wrote. In a six-task block the same files can be
+read five times.
 
-**Rule: do not split a block finer than the gating boundary requires.** Every extra task is another
-full re-read of the accumulated work. Split when an intermediate state would fail the gates (item:
-compilable task boundaries above), and not otherwise. Make each `description` self-contained —
-naming the symbols, line numbers and prior decisions the task needs — so the agent does not have to
-re-read the tree to orient itself.
+**Do not "fix" this by consolidating tasks, and do not reintroduce inter-task reports.** Both are
+tempting and both are wrong:
+
+- **Independence is the property being bought.** A task that depends on another task's in-context
+  knowledge cannot be resumed alone, cannot be re-run after a bail, and hides coupling the per-task
+  gate is supposed to expose. The re-read is what makes every task independently executable.
+- **Hand-off reports were tried in this harness and removed.** They cost a large number of extra
+  tokens on every task and were only sometimes read by the task that received them — so they were
+  paid for unconditionally and used occasionally. Do not propose them again.
+
+**So the lever is precision, not consolidation.** Make each task's read small and targeted:
+
+- **`files[]` is a reading list, so make it exact.** Every path the task must open, and none it does
+  not. A vague or over-broad `files[]` is a direct instruction to read more than necessary.
+- **Name symbols and line numbers in the `description`**, so the agent opens the right file at the
+  right place instead of grepping to orient. `apply_scan (build-v2.sh:809)` costs one read;
+  "the scan step" costs a search.
+- **Carry forward the decisions, not the context.** If task 5 needs to know why task 2 chose
+  something, put that conclusion in task 5's description. One sentence in the spec replaces a file
+  read, and unlike a hand-off report it is written once and always present.
+- **Split on the gating boundary, never finer.** Add a task when an intermediate state would fail
+  the gates (see compilable task boundaries above). Splitting beyond that adds a full re-read and
+  buys nothing.
 
 ## Session boundary
 
