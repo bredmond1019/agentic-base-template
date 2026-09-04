@@ -18,6 +18,15 @@ Cases (per the block's task-2 description):
   (f) the detector flags its own inline known-bad self-probe
   (g) POSITIVE CONTROL: a fixture that MUST go red does go red (subprocess/CLI exit-code path),
       so an all-green run can never be mistaken for a suite that cannot fail.
+  (h) BT.ticket.a-gated-check-with-an-empty-trigger-set-must-warn's companion verdict:
+      classify_empty_trigger_set() reports "empty" for a known-empty-by-construction fixture
+      corpus and "non-empty" for a known-non-empty one (its own self-probe pair, mirrored here);
+      an unrecognized check name gets no verdict at all (None), never a false "clean"; a check
+      named in UNDECIDABLE_TRIGGER_SET_CHECKS is neither empty nor non-empty -- it is out of
+      reach and must say so; and the CLI prints a WARN line for the empty case while the exit
+      code stays whatever the observed_red verdicts alone determine (warning-first, asserted via
+      the real live-corpus run in this repo's own harness.json, where task-gate-boundaries is
+      known-empty today).
 
 TRAP (re-confirmed twice in this ticket's source run): a piped command's exit code is the
 pipe's, not the subprocess's. Every subprocess call here reads `proc.returncode` directly --
@@ -192,6 +201,80 @@ def main() -> int:
             "mixed harness (gates:false check has no observed_red) still exits 0",
             proc_mixed.returncode == 0,
             f"returncode={proc_mixed.returncode} stdout={proc_mixed.stdout!r}",
+        )
+
+    # (h) empty-trigger-set companion verdict.
+    empty_probe = check_observed_red.classify_empty_trigger_set(
+        check_observed_red.SELF_PROBE_TRIGGER_CHECK,
+        check_observed_red.SELF_PROBE_EMPTY_TRIGGER_CORPUS,
+    )
+    check(
+        "(h) known-empty-by-construction fixture corpus classifies as empty",
+        empty_probe is not None and empty_probe[0] == "empty" and empty_probe[1] == 0,
+        str(empty_probe),
+    )
+
+    nonempty_probe = check_observed_red.classify_empty_trigger_set(
+        check_observed_red.SELF_PROBE_TRIGGER_CHECK,
+        check_observed_red.SELF_PROBE_NONEMPTY_TRIGGER_CORPUS,
+    )
+    check(
+        "(h) POSITIVE CONTROL: known-non-empty fixture corpus is NOT flagged empty",
+        nonempty_probe is not None and nonempty_probe[0] == "non-empty" and nonempty_probe[1] == 1,
+        str(nonempty_probe),
+    )
+
+    unrecognized_probe = check_observed_red.classify_empty_trigger_set(
+        {"name": "some-unrelated-check", "command": "python3 scripts/foo.py --quiet", "gates": True},
+        [{"name": "some-unrelated-check", "command": "python3 scripts/foo.py --quiet", "gates": True}],
+    )
+    check(
+        "(h) an unrecognized check name gets no verdict (None), never a false 'clean'",
+        unrecognized_probe is None,
+        str(unrecognized_probe),
+    )
+
+    check(
+        "(h) engines-parse is registered as undecidable (out of reach), not silently clean",
+        "engines-parse" in check_observed_red.UNDECIDABLE_TRIGGER_SET_CHECKS,
+    )
+
+    with tempfile.TemporaryDirectory() as tmp2:
+        tmp2_path = Path(tmp2)
+        # Live-shaped fixture: task-gate-boundaries with an empty trigger set (no other check
+        # declares a path argument) alongside a conforming observed_red, run through the real
+        # CLI. Must print a WARN line and still exit 0.
+        trigger_harness = _write_harness(tmp2_path, [
+            _gated_check("task-gate-boundaries", observed_red=_valid_observed_red()),
+            _gated_check("other-check", observed_red=_valid_observed_red()),
+        ])
+        proc_trigger = _run_cli(trigger_harness, quiet=False)
+        check(
+            "(h) WARN line printed for task-gate-boundaries' empty trigger set via CLI",
+            "WARN task-gate-boundaries" in proc_trigger.stdout
+            and "trigger set is empty" in proc_trigger.stdout,
+            proc_trigger.stdout,
+        )
+        check(
+            "(h) warning-first: exit code unaffected by the empty-trigger-set WARN",
+            proc_trigger.returncode == 0,
+            f"returncode={proc_trigger.returncode} stdout={proc_trigger.stdout!r}",
+        )
+
+        # NOTE line for a known-undecidable check (engines-parse), run through the real CLI.
+        note_harness = _write_harness(tmp2_path, [
+            _gated_check("engines-parse", observed_red=_valid_observed_red()),
+        ])
+        proc_note = _run_cli(note_harness, quiet=False)
+        check(
+            "(h) NOTE line printed for engines-parse's out-of-reach class via CLI",
+            "NOTE engines-parse" in proc_note.stdout and "OUT OF REACH" in proc_note.stdout,
+            proc_note.stdout,
+        )
+        check(
+            "(h) NOTE line does not affect the exit code either",
+            proc_note.returncode == 0,
+            f"returncode={proc_note.returncode} stdout={proc_note.stdout!r}",
         )
 
     if FAILURES:

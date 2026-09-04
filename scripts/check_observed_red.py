@@ -23,6 +23,32 @@ must be present with:
 
 A `gates: false` check is never required to carry one.
 
+EMPTY-TRIGGER-SET VERDICT (BT.ticket.a-gated-check-with-an-empty-trigger-set-must-warn)
+-----------------------------------------------------------------------------------------
+`observed_red` proves a check WAS seen red once, against a fixture. It says nothing about
+whether the check CAN go red against today's live corpus -- a check whose trigger set is empty
+(it runs, exits 0, and matches nothing real) is indistinguishable, on any board, from a check
+that is genuinely passing. This script attaches a COMPANION verdict to the same per-check walk,
+for the classes task 1 of this ticket found decidable from `harness.json` plus the live corpus
+alone (see `planning/BT.ticket.a-gated-check-with-an-empty-trigger-set-must-warn/
+trigger-set-classes.md`):
+
+  - `task-gate-boundaries` (class 1, argument-shape): RULE 3 inside
+    `check_task_gate_boundaries.py` only has candidate input when some OTHER `gates:true` check's
+    `command` names both a `scripts/*.py` detector and a separate path argument. This script
+    reproduces that exact shape test against the live corpus and reports "empty" when zero
+    checks qualify.
+
+A check named in `UNDECIDABLE_TRIGGER_SET_CHECKS` (e.g. `engines-parse`, a parser blind spot --
+class 2) is NOT silently treated as clean; it gets an explicit `NOTE` line saying the verdict is
+out of reach for that class. Every other check gets no trigger-set verdict at all -- silence is
+honest here, since this script has no mechanism to decide their class.
+
+THIS VERDICT IS WARNING-FIRST: it is printed as `WARN`/`NOTE`, never `FAIL`, and never changes
+`run()`'s exit code. A check can be legitimately inert in one repo (this factory) and load-bearing
+downstream (the 18 repos scaffolded from it whose checks DO carry path arguments) -- making this
+an error would red-gate the factory for behaving correctly.
+
 SELF-PROBE (the same discipline as check_failure_output_shape.py's SELF_TEST_PROBE)
 -------------------------------------------------------------------------------------
 Before judging the real target file, this script evaluates a fabricated in-memory check --
@@ -31,6 +57,11 @@ used on real checks. If that fabricated, deliberately-bad check is reported as C
 detector itself is broken and this script aborts with a distinct `GATE BUG:` message rather than
 silently agreeing with whatever the real file happens to contain. A checker whose only evidence
 is "good input passes" proves nothing -- this is what the block record calls out by name.
+
+A second, analogous self-probe pair does the same for the empty-trigger-set verdict: a
+known-empty-by-construction fixture corpus (proving `classify_empty_trigger_set()` CAN report
+"empty") and a known-non-empty one (proving it does not just always say "empty"). Both run
+through the same `classify_empty_trigger_set()` function used on the real file.
 
 FAIL LINE FORMAT
 -----------------
@@ -79,6 +110,108 @@ SELF_PROBE_CHECK = {
     "purpose": "inline known-bad fixture for check_observed_red.py's own self-probe; never a real check",
     "gates": True,
 }
+
+# Named registry of checks this script knows how to classify for an empty trigger set, per
+# trigger-set-classes.md's decidable classes only (class 1, argument-shape). A check name absent
+# from BOTH this dict and UNDECIDABLE_TRIGGER_SET_CHECKS below gets no verdict at all -- this
+# script has no mechanism to decide its class, and reporting "clean" would recreate the exact
+# bug this ticket exists to catch, one level up.
+#
+# Class 3 (escalations-schema, foreign-path emptiness) is also decidable per trigger-set-classes.md,
+# but escalations-schema is registered `gates: false` in this repo's live harness.json (it was
+# already ungated for an unrelated reason), so it never reaches this script's gates:true walk --
+# there is nothing to classify today. If it is ever re-gated, add its registry entry here.
+
+# Checks whose emptiness class task 1 explicitly found NOT decidable from harness.json plus the
+# live corpus alone -- named so the output can say "out of reach" instead of staying silent, per
+# trigger-set-classes.md's warning that silent coverage of only SOME classes recreates this bug.
+UNDECIDABLE_TRIGGER_SET_CHECKS = {
+    "engines-parse": (
+        "class 2, parser blind spot: node --check exits 0 on a syntax error placed after a "
+        "file's first top-level export in this repo's Node runtime, so whether that blind spot "
+        "is active is a fact about the Node parser, not about the shape of harness.json or the "
+        "corpus text -- see trigger-set-classes.md class 2"
+    ),
+}
+
+
+def _argument_shape(command: str) -> tuple[Optional[str], list[str]]:
+    """Reproduce check_task_gate_boundaries.py's RULE 3 argument-shape parse verbatim: split
+    `command` on whitespace and return (the first `scripts/*.py`-shaped token, every OTHER
+    slash-containing token). A check whose command names no detector script, or names one but no
+    separate path argument, has an empty result in the second element."""
+    script_path: Optional[str] = None
+    input_paths: list[str] = []
+    for tok in command.split():
+        if tok.startswith("-") or "/" not in tok:
+            continue
+        if script_path is None and tok.startswith("scripts/") and tok.endswith(".py"):
+            script_path = tok
+        elif tok != script_path:
+            input_paths.append(tok)
+    return script_path, input_paths
+
+
+def classify_empty_trigger_set(
+    check: dict, all_checks: list[dict],
+) -> Optional[tuple[str, int, int, str]]:
+    """Return (verdict, matched, total, detail) for a `gates:true` check this script knows how
+    to classify, or None if `check`'s name is outside every class task 1 found decidable.
+
+    `verdict` is "empty" (the check ran, matched nothing, and therefore proved nothing) or
+    "non-empty" (real input was matched). `matched`/`total` are populated in BOTH cases so an
+    empty result can be told apart, in the output, from a check that never ran at all.
+    """
+    name = check.get("name")
+    if name == "task-gate-boundaries":
+        # Class 1 (argument-shape): count how many gates:true checks in `all_checks` name both a
+        # scripts/*.py detector and a separate path argument -- the exact shape RULE 3 (inside
+        # check_task_gate_boundaries.py) needs in order to have anything to examine at all.
+        total = sum(1 for c in all_checks if isinstance(c, dict) and c.get("gates"))
+        matched = 0
+        for c in all_checks:
+            if not isinstance(c, dict) or not c.get("gates"):
+                continue
+            command = c.get("command")
+            if not isinstance(command, str):
+                continue
+            script_path, input_paths = _argument_shape(command)
+            if script_path and input_paths:
+                matched += 1
+        verdict = "empty" if matched == 0 else "non-empty"
+        detail = (
+            f"argument-shape (RULE 3 in check_task_gate_boundaries.py): {matched} of {total} "
+            f"gates:true check(s) name both a detector script and a separate path argument"
+        )
+        return verdict, matched, total, detail
+    return None
+
+
+# Self-probes for the empty-trigger-set verdict: a fabricated `task-gate-boundaries`-named check
+# judged against two fabricated fixture corpora, never the real harness.json. Neither is a real
+# registered check -- each exists only to prove classify_empty_trigger_set() is CAPABLE of
+# reporting both verdicts, not merely capable of agreeing with whatever the real file contains.
+SELF_PROBE_TRIGGER_CHECK = {
+    "name": "task-gate-boundaries",
+    "command": "python3 scripts/check_task_gate_boundaries.py",
+    "purpose": "inline fixture for check_observed_red.py's empty-trigger-set self-probe; never a real check",
+    "gates": True,
+}
+# Known-empty-by-construction: no check in this fabricated corpus names a separate path argument.
+SELF_PROBE_EMPTY_TRIGGER_CORPUS = [
+    SELF_PROBE_TRIGGER_CHECK,
+    {"name": "self-probe-other", "command": "python3 scripts/self_probe_other.py --quiet", "gates": True},
+]
+# Known-non-empty-by-construction: one check in this fabricated corpus DOES name a separate path
+# argument, so the same detector logic must report "non-empty" here, not just "empty" always.
+SELF_PROBE_NONEMPTY_TRIGGER_CORPUS = [
+    SELF_PROBE_TRIGGER_CHECK,
+    {
+        "name": "self-probe-with-input",
+        "command": "python3 scripts/self_probe_other.py fixtures/self_probe_input.png",
+        "gates": True,
+    },
+]
 
 
 def evaluate_check(check: dict) -> Optional[str]:
@@ -132,6 +265,33 @@ def run(harness_path: Path, quiet: bool) -> int:
     if not quiet:
         print(f"ok   self-probe: correctly detected as non-conforming ({self_probe_detail})")
 
+    # Empty-trigger-set self-probes, same discipline: prove classify_empty_trigger_set() can
+    # report BOTH verdicts before trusting it to judge the real file. A verdict function that
+    # always says "empty" (or always says "non-empty") would pass a single-sided self-probe.
+    empty_probe = classify_empty_trigger_set(SELF_PROBE_TRIGGER_CHECK, SELF_PROBE_EMPTY_TRIGGER_CORPUS)
+    if empty_probe is None or empty_probe[0] != "empty":
+        print(
+            "GATE BUG: self-probe-known-empty-trigger-set was not reported as empty against its "
+            f"known-empty-by-construction fixture corpus (got {empty_probe!r}) -- the "
+            "empty-trigger-set verdict cannot be trusted",
+        )
+        return 1
+    nonempty_probe = classify_empty_trigger_set(
+        SELF_PROBE_TRIGGER_CHECK, SELF_PROBE_NONEMPTY_TRIGGER_CORPUS,
+    )
+    if nonempty_probe is None or nonempty_probe[0] != "non-empty":
+        print(
+            "GATE BUG: self-probe-known-non-empty-trigger-set was not reported as non-empty "
+            f"against its known-non-empty-by-construction fixture corpus (got {nonempty_probe!r}) "
+            "-- the empty-trigger-set verdict always says \"empty\" and cannot be trusted",
+        )
+        return 1
+    if not quiet:
+        print(
+            "ok   self-probe: empty-trigger-set verdict correctly reports both empty "
+            f"({empty_probe[3]}) and non-empty ({nonempty_probe[3]}) on fabricated fixtures",
+        )
+
     try:
         data = json.loads(harness_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -149,6 +309,30 @@ def run(harness_path: Path, quiet: bool) -> int:
         else:
             print(f"FAIL {harness_path} {detail}")
             failures.append(detail)
+
+        # Companion empty-trigger-set verdict -- warning-first, never affects `failures`/exit
+        # code. Runs for every gates:true check regardless of its observed_red verdict above:
+        # the two questions ("was this ever seen red on a fixture" and "can this fire on today's
+        # real corpus") are independent, per this ticket's `why`.
+        if check.get("gates"):
+            trigger = classify_empty_trigger_set(check, checks)
+            if trigger is not None:
+                verdict, matched, total, tdetail = trigger
+                if verdict == "empty":
+                    print(
+                        f"WARN {name}: gates:true check ran and matched {matched} of {total} -- "
+                        f"trigger set is empty, it proved nothing this run ({tdetail})",
+                    )
+                elif not quiet:
+                    print(
+                        f"ok   {name}: trigger set non-empty (matched {matched} of {total}) -- "
+                        f"{tdetail}",
+                    )
+            elif name in UNDECIDABLE_TRIGGER_SET_CHECKS:
+                print(
+                    f"NOTE {name}: empty-trigger-set verdict is OUT OF REACH for this check -- "
+                    f"{UNDECIDABLE_TRIGGER_SET_CHECKS[name]}",
+                )
 
     gated_count = sum(1 for c in checks if c.get("gates"))
     if failures:
