@@ -65,9 +65,9 @@ ANCHORS = [
     # have left this tripwire hashing a one-line function CALL: green forever, blind to every change
     # in the text it exists to guard. Two entries because both replication guides describe the
     # taxonomy and each must be re-verified when it moves.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 440, 488,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 535, 583,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 440, 488,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 535, 583,
      ".agents/skills/sdlc-flow/SKILL.md"),
     (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2864, 2891,
      ".agents/skills/sdlc-task/SKILL.md"),
