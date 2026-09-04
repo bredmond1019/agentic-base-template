@@ -123,6 +123,7 @@ class Record:
     frontmatter_roadmap: Optional[str]
     doc_id: Optional[str]
     lifecycle: Optional[str]
+    consolidated_by: Optional[str]
 
     @property
     def expected_doc_id(self) -> str:
@@ -218,6 +219,7 @@ def record_from_content(path: Path, text: str) -> Optional[Record]:
         frontmatter_roadmap=fm.get("roadmap"),
         doc_id=fm.get("doc_id"),
         lifecycle=fm.get("lifecycle"),
+        consolidated_by=fm.get("consolidated_by"),
     )
 
 
@@ -238,7 +240,25 @@ def load_record(path: Path) -> Optional[Record]:
 
 
 def check_records(records: list[Record]) -> list[str]:
-    """Apply the four D57 rules across a set of records; return violation strings (empty = pass)."""
+    """Apply the D57 rules across a set of records; return violation strings (empty = pass).
+
+    Two rules added for BT.ticket.run-record-lifecycle-stamp-is-half-written (task 2):
+
+    RULE A -- PAIR AGREEMENT: notes.md and review.md of one record must carry the SAME
+    `lifecycle`. Pairing reuses `expected_doc_id`'s own resolution -- `(repo_slug,
+    dir_roadmap_slug)` is exactly the pair the `-review` suffix is derived from -- rather than
+    re-globbing the directory, so the two notions of "the pair" cannot drift apart later.
+
+    RULE B -- STAMP ATOMICITY, with an explicit carve-out decided in task 2: `lifecycle:
+    consolidated` with no `consolidated_by` IS flagged -- that is a record claiming a completed
+    consolidation with no attribution, the half-stamp this ticket exists to catch. The other
+    direction -- `consolidated_by` present while `lifecycle` reads something other than
+    `consolidated` -- is DELIBERATELY NOT flagged: D57 has no vocabulary for "a consolidation
+    read this record, then the lane kept running" (base-template's own run record is in exactly
+    that state, honestly), and a rule that forces that truthful record to claim `consolidated`
+    (a lie) would be worse than no rule. Only the direction that asserts a false completion is a
+    contract violation.
+    """
     violations: list[str] = []
 
     # `mev validate-brain --graph` indexes per FILE, so notes.md and review.md must carry
@@ -247,6 +267,10 @@ def check_records(records: list[Record]) -> list[str]:
     # names) claiming the same doc_id are caught -- e.g. two roadmaps under the same repo whose
     # slugs happened to collide.
     doc_id_owners: dict[str, set[Path]] = {}
+
+    # RULE A pairing: group by the same (repo_slug, dir_roadmap_slug) key `expected_doc_id`
+    # derives its base from -- notes.md and review.md of one record share this key.
+    pair_groups: dict[tuple[str, str], dict[str, Record]] = {}
 
     for rec in records:
         loc = str(rec.path)
@@ -268,14 +292,37 @@ def check_records(records: list[Record]) -> list[str]:
                 f"{loc}: lifecycle {rec.lifecycle!r} is not one of {sorted(VALID_LIFECYCLES)}"
             )
 
+        # RULE B -- only the "claims consolidated with no attribution" direction is a violation;
+        # see the carve-out rationale in this function's docstring.
+        if rec.lifecycle == "consolidated" and not rec.consolidated_by:
+            violations.append(
+                f"{loc}: lifecycle: consolidated with no consolidated_by -- the consolidation "
+                f"stamp is half-written"
+            )
+
         if rec.doc_id:
             doc_id_owners.setdefault(rec.doc_id, set()).add(rec.path)
+
+        role = "review" if rec.path.name == "review.md" else "notes"
+        pair_groups.setdefault((rec.repo_slug, rec.dir_roadmap_slug), {})[role] = rec
 
     for doc_id, owner_paths in doc_id_owners.items():
         if len(owner_paths) > 1:
             paths = ", ".join(str(p) for p in sorted(owner_paths))
             violations.append(
                 f"doc_id {doc_id!r} is shared by {len(owner_paths)} files: {paths}"
+            )
+
+    # RULE A -- pair agreement: only meaningful when both halves of the pair are present.
+    for (repo_slug, roadmap_slug), roles in pair_groups.items():
+        notes_rec = roles.get("notes")
+        review_rec = roles.get("review")
+        if notes_rec is None or review_rec is None:
+            continue
+        if notes_rec.lifecycle != review_rec.lifecycle:
+            violations.append(
+                f"{notes_rec.path} / {review_rec.path}: lifecycle disagree between pair "
+                f"({notes_rec.lifecycle!r} vs {review_rec.lifecycle!r})"
             )
 
     return violations
@@ -875,6 +922,7 @@ def self_test() -> int:
             {
                 "roadmap": "roadmap-y", "lane": "C2", "run_started": "2026-08-11",
                 "run_ended": "2026-08-11", "lifecycle": "consolidated",
+                "consolidated_by": "pattern-analysis-2026-09-03.md",
                 "doc_id": "repo-b-orchestration-run-roadmap-y",
             },
         )
@@ -1085,6 +1133,14 @@ def self_test() -> int:
     #   3 self-test case(s) failed: [the three names above]
     # (the two controls below -- agreeing pair, clean full stamp -- passed in that same run, as
     # expected of a control)
+    #
+    # TASK 2 DECISION (recorded here, not just in the task summary): Rule B is asymmetric.
+    # `lifecycle: consolidated` with no `consolidated_by` IS a violation (a false completion
+    # claim). `consolidated_by` present while `lifecycle` reads something else is NOT a
+    # violation -- it is the honest "consolidated once, then reopened" state D57 has no other
+    # vocabulary for, and base-template's own run record is in exactly that state. So the third
+    # fixture above is no longer a RED case turned GREEN unchanged -- its assertion was replaced
+    # with the carve-out (see that fixture's own comment).
     # -------------------------------------------------------------------------------------------
 
     # Control: agreeing pair, full stamp on both files -> passes now and after task 2.
@@ -1145,11 +1201,13 @@ def self_test() -> int:
             any("consolidated_by" in v for v in violations),
         )
 
-    # RULE B, non-control (other direction): consolidated_by with no lifecycle: consolidated ->
-    # must be rejected, SUBJECT to task 2's explicit decision on the "consolidated once, then
-    # reopened" carve-out (see this ticket's task 2 description) -- this fixture pins the
-    # unimplemented-today RED state; task 2 either turns it GREEN or replaces its assertion with
-    # the carve-out it decides on, explicitly.
+    # RULE B, CARVE-OUT decided in task 2: consolidated_by with no lifecycle: consolidated is
+    # NOT flagged. This is the "a consolidation read this record, then the lane kept running"
+    # state -- D57 has no vocabulary for it, base-template's own run record is honestly in
+    # exactly this state as of this ticket, and forcing it to claim `lifecycle: consolidated`
+    # (a lie) to silence the rule would be worse than no rule at all. Only the other direction
+    # (`lifecycle: consolidated` claimed with no `consolidated_by`) is a real half-stamp and is
+    # asserted as a violation above. This fixture is the carve-out's control, not new coverage.
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
         path = _write_record(
@@ -1160,9 +1218,9 @@ def self_test() -> int:
         assert rec is not None
         violations = check_records([rec])
         check(
-            "(o) consolidated_by with no lifecycle: consolidated is rejected -- RULE B, "
-            "unimplemented as of task 1 (watched RED; task 2 makes this GREEN)",
-            any("consolidated_by" in v for v in violations),
+            "(o) consolidated_by with no lifecycle: consolidated is a legitimate "
+            "'consolidated once, then reopened' state and is NOT flagged -- RULE B carve-out",
+            violations == [],
         )
 
     # Control: clean full stamp (single record) -> passes now and after task 2.
