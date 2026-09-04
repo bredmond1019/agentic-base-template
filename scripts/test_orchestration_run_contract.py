@@ -696,6 +696,15 @@ def _bad_lifecycle_fm() -> dict:
     return fm
 
 
+# A record carrying the FULL consolidation stamp (both halves together) -- the positive control
+# for the stamp-atomicity rule (BT.ticket.run-record-lifecycle-stamp-is-half-written).
+_CONSOLIDATED_FULL_STAMP_FM = {
+    **_WELL_FORMED_FM,
+    "lifecycle": "consolidated",
+    "consolidated_by": "pattern-analysis-2026-09-03.md",
+}
+
+
 def self_test() -> int:
     print("test_orchestration_run_contract.py --self-test")
 
@@ -1048,6 +1057,124 @@ def self_test() -> int:
     case_roadmap_location_checks_discriminate()
     case_writer_emits_new_roadmap_location()
     case_readers_resolve_roadmap_location()
+
+    # (o) Pair-agreement + stamp-atomicity fixtures (BT.ticket.run-record-lifecycle-stamp-is-
+    # half-written task 1). TWO NEW RULES the checker does not implement yet -- that is task 2's
+    # job, not this one:
+    #
+    #   RULE A -- PAIR AGREEMENT: notes.md and review.md of one record must carry the SAME
+    #   `lifecycle`.
+    #   RULE B -- STAMP ATOMICITY: `lifecycle: consolidated` and `consolidated_by` are present
+    #   together or not at all.
+    #
+    # The three non-control cases below assert the rules' DESIRED end-state behavior against
+    # `check_records`/`Record` as they exist TODAY (unfixed): `Record` has no `consolidated_by`
+    # field at all and `check_records` only ever looks at one record at a time, so none of these
+    # three can pass yet. That failure is DELIBERATE -- it is the RED half of this ticket's
+    # red/green split across task 1 and task 2, and these fixtures turn GREEN in task 2 with no
+    # further change to them. The two control cases (agreeing pair, clean full stamp) pass both
+    # before and after -- they prove the new rules don't fire on already-correct records, and are
+    # not new coverage.
+    #
+    # OBSERVED RED (captured verbatim 2026-09-04 running
+    # `python3 scripts/test_orchestration_run_contract.py --self-test` against this file BEFORE
+    # task 2's fix landed):
+    #   FAIL (o) disagreeing pair (notes: active, review: consolidated) is rejected -- RULE A, unimplemented as of task 1 (watched RED; task 2 makes this GREEN)
+    #   FAIL (o) lifecycle: consolidated with no consolidated_by is rejected -- RULE B, unimplemented as of task 1 (watched RED; task 2 makes this GREEN)
+    #   FAIL (o) consolidated_by with no lifecycle: consolidated is rejected -- RULE B, unimplemented as of task 1 (watched RED; task 2 makes this GREEN)
+    #   3 self-test case(s) failed: [the three names above]
+    # (the two controls below -- agreeing pair, clean full stamp -- passed in that same run, as
+    # expected of a control)
+    # -------------------------------------------------------------------------------------------
+
+    # Control: agreeing pair, full stamp on both files -> passes now and after task 2.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        notes_path = _write_record(
+            base, "demo-repo", "demo-roadmap", "notes.md",
+            {**_WELL_FORMED_FM, "lifecycle": "consolidated",
+             "consolidated_by": "pattern-analysis-2026-09-03.md"},
+        )
+        review_path = _write_record(
+            base, "demo-repo", "demo-roadmap", "review.md",
+            {**_WELL_FORMED_FM, "lifecycle": "consolidated",
+             "consolidated_by": "pattern-analysis-2026-09-03.md",
+             "doc_id": "demo-repo-orchestration-run-demo-roadmap-review"},
+        )
+        notes_rec = load_record(notes_path)
+        review_rec = load_record(review_path)
+        assert notes_rec is not None and review_rec is not None
+        violations = check_records([notes_rec, review_rec])
+        check("(o) agreeing pair with full stamp passes with no violations (control)", violations == [])
+
+    # RULE A, non-control: notes.md and review.md disagree on lifecycle -> must be rejected.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        notes_path = _write_record(
+            base, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM),  # lifecycle: active
+        )
+        review_path = _write_record(
+            base, "demo-repo", "demo-roadmap", "review.md",
+            {**_WELL_FORMED_FM, "lifecycle": "consolidated",
+             "consolidated_by": "pattern-analysis-2026-09-03.md",
+             "doc_id": "demo-repo-orchestration-run-demo-roadmap-review"},
+        )
+        notes_rec = load_record(notes_path)
+        review_rec = load_record(review_path)
+        assert notes_rec is not None and review_rec is not None
+        violations = check_records([notes_rec, review_rec])
+        check(
+            "(o) disagreeing pair (notes: active, review: consolidated) is rejected -- RULE A, "
+            "unimplemented as of task 1 (watched RED; task 2 makes this GREEN)",
+            any("lifecycle" in v and "disagree" in v for v in violations),
+        )
+
+    # RULE B, non-control: lifecycle: consolidated with no consolidated_by -> must be rejected.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        path = _write_record(
+            base, "demo-repo", "demo-roadmap", "notes.md",
+            {**_WELL_FORMED_FM, "lifecycle": "consolidated"},  # no consolidated_by
+        )
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check(
+            "(o) lifecycle: consolidated with no consolidated_by is rejected -- RULE B, "
+            "unimplemented as of task 1 (watched RED; task 2 makes this GREEN)",
+            any("consolidated_by" in v for v in violations),
+        )
+
+    # RULE B, non-control (other direction): consolidated_by with no lifecycle: consolidated ->
+    # must be rejected, SUBJECT to task 2's explicit decision on the "consolidated once, then
+    # reopened" carve-out (see this ticket's task 2 description) -- this fixture pins the
+    # unimplemented-today RED state; task 2 either turns it GREEN or replaces its assertion with
+    # the carve-out it decides on, explicitly.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        path = _write_record(
+            base, "demo-repo", "demo-roadmap", "notes.md",
+            {**_WELL_FORMED_FM, "consolidated_by": "pattern-analysis-2026-09-03.md"},  # lifecycle stays "active"
+        )
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check(
+            "(o) consolidated_by with no lifecycle: consolidated is rejected -- RULE B, "
+            "unimplemented as of task 1 (watched RED; task 2 makes this GREEN)",
+            any("consolidated_by" in v for v in violations),
+        )
+
+    # Control: clean full stamp (single record) -> passes now and after task 2.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        path = _write_record(
+            base, "demo-repo", "demo-roadmap", "notes.md", dict(_CONSOLIDATED_FULL_STAMP_FM),
+        )
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check("(o) clean full stamp (consolidated + consolidated_by) passes (control)", violations == [])
 
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")
