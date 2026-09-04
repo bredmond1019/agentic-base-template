@@ -129,8 +129,10 @@ def check(repo, quiet=False):
             if g_norm.strip() != a_shared.strip():
                 problems.append(
                     f"{gemini}: its shared region has drifted from AGENTS.md. GEMINI.md is "
-                    f"GENERATED — regenerate it rather than editing it, and put the change in "
-                    f"AGENTS.md."
+                    f"GENERATED — put the change in AGENTS.md, then run:\n"
+                    f"      python3 base-template/scripts/regenerate_gemini.py --repo {repo}\n"
+                    f"    (the Antigravity tail below '## Fleet & Core Skills' is preserved "
+                    f"byte-for-byte)."
                 )
 
     # 4 — the retired file
