@@ -153,6 +153,15 @@ def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, st
 
     Returns (result_or_None, stderr_or_diagnostic). A real subprocess, not a Python
     re-implementation, so this exercises the actual JS the engines will run.
+
+    Run with `cwd` set to a hermetic scratch directory with no `brain.toml` anywhere in its
+    ancestry (never this repo's own cwd). `renderAgentFlag()`'s no-FLEET_LANE_AGENT fallback
+    walks up from cwd looking for a lease this caller might already hold -- exactly the
+    self-exemption this suite's own repo is running under whenever this suite runs inside a
+    live `/sdlc-task` lane (this block's own subject: a lane holding its own exclusive lease).
+    Leaving cwd at the real repo root would make the '' (no-identity) assertion depend on
+    whether THIS run happens to hold a fleet lease at the moment the suite executes, which is
+    not what "no identity available" is supposed to test.
     """
     import os
 
@@ -160,13 +169,14 @@ def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, st
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
         f.write(script)
         tmp_path = f.name
+    scratch_dir = tempfile.mkdtemp(prefix="render-agent-flag-eval-")
     try:
         env = dict(os.environ)
         env.pop("FLEET_LANE_AGENT", None)
         env.pop("FLEET_LOCK_DIR", None)
         env.update(env_overrides)
         proc = subprocess.run(
-            ["node", tmp_path], capture_output=True, text=True, timeout=15, env=env
+            ["node", tmp_path], capture_output=True, text=True, timeout=15, env=env, cwd=scratch_dir
         )
         if proc.returncode != 0:
             return None, f"node exited {proc.returncode}: {proc.stderr.strip()}"
@@ -182,6 +192,10 @@ def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, st
         return None, "node eval timed out"
     finally:
         Path(tmp_path).unlink(missing_ok=True)
+        try:
+            os.rmdir(scratch_dir)
+        except OSError:
+            pass
 
 
 def main() -> int:
