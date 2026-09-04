@@ -546,7 +546,7 @@ print('FLIPPED:' + bid)
 // identically. `indent` exists only because the two prompts nest it at different depths.
 function renderStatusWriteScript({ runRoot, indent }) {
   return `${indent}cd ${runRoot} && python3 -c "
-import re, subprocess, sys, shutil
+import subprocess, sys, shutil
 
 path = 'planning/status.md'
 recent_work_line = sys.argv[1]
@@ -559,13 +559,16 @@ text = pre_bytes.decode('utf-8')
 lines = text.splitlines()
 
 fence_idx = [i for i, l in enumerate(lines) if l.strip() == '---']
-closing_fence = fence_idx[1] if len(fence_idx) >= 2 else -1
+# A frontmatter block exists only when the OPENING fence is line 1 (write-okf-markdown). Without
+# anchoring on that, a body horizontal-rule pair reads as frontmatter and every guard below is
+# computed from the wrong offset -- skipping real body lines and inserting after the wrong fence.
+closing_fence = fence_idx[1] if (len(fence_idx) >= 2 and fence_idx[0] == 0) else -1
 
 # Never touch the YAML frontmatter block (every line at or before the closing fence) -- 'timestamp'
 # in there is derived by mev emit-state, not this stage's to write.
 for i in range(closing_fence + 1, len(lines)):
     if lines[i].startswith('**Last updated:**'):
-        lines[i] = re.sub(r'^\\*\\*Last updated:\\*\\*.*', '**Last updated:** ' + last_updated_date, lines[i])
+        lines[i] = '**Last updated:** ' + last_updated_date
         break
 
 # recent_work_line already carries the CALLER's own append-vs-replace decision baked in (the

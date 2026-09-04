@@ -69,7 +69,7 @@ ENGINE_FILES = ["sdlc-task.js", "sdlc-flow.js"]
 # Markers the embedded status-write mutation script (added by tasks 2-4, function
 # `renderStatusWriteScript`) is expected to carry. Content-anchored, not a line number or a
 # hand-copy, so this suite tests the SAME bytes the agent would actually run.
-SCRIPT_START_MARKER = "import re, subprocess, sys, shutil"
+SCRIPT_START_MARKER = "import subprocess, sys, shutil"
 SCRIPT_END_MARKER = "print('STATUS_WRITE:' + outcome)"
 
 
@@ -390,6 +390,49 @@ class Case4DeltaAttributionNegative(unittest.TestCase):
                     self.assertNotIn("STATUS_REJECTED", result.stdout)
 
                     written = (run_dir / "planning" / "status.md").read_text(encoding="utf-8")
+                    self.assertIn("fixture row", written)
+
+
+NO_FRONTMATTER_STATUS_MD = """# STATUS
+
+**Last updated:** 2026-09-01 (nothing yet)
+
+---
+
+## Current focus
+
+- 2026-09-01: initial fixture line
+"""
+
+
+class Case5BodyHorizontalRuleIsNotFrontmatter(unittest.TestCase):
+    """A status.md with NO frontmatter but a body horizontal rule must not have that rule mistaken
+    for a closing frontmatter fence. Frontmatter exists only when the OPENING fence is line 1
+    (write-okf-markdown); anchoring on that is what keeps every offset below it correct. Without
+    the anchor, the first two body `---` lines are read as the block, the `**Last updated:**`
+    line above them is skipped as "inside the frontmatter", and the new row lands relative to the
+    wrong fence."""
+
+    def test_last_updated_above_a_body_rule_is_still_refreshed(self):
+        for engine in ENGINE_FILES:
+            with self.subTest(engine=engine):
+                with tempfile.TemporaryDirectory() as td:
+                    run_dir = make_run_dir(td, status_md=NO_FRONTMATTER_STATUS_MD)
+                    bin_dir = Path(td) / "bin"
+                    bin_dir.mkdir()
+                    write_fake_mev(bin_dir, before_error="", after_error="")
+
+                    result = run_status_write_script(
+                        engine, run_dir, "- 2026-09-02: fixture row", "2026-09-02",
+                        mev_bin_dir=bin_dir,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    written = (run_dir / "planning" / "status.md").read_text(encoding="utf-8")
+                    self.assertIn(
+                        "**Last updated:** 2026-09-02", written,
+                        f"{engine}: the body horizontal rule was treated as a closing frontmatter "
+                        f"fence, so the Last updated line above it was skipped:\n{written}",
+                    )
                     self.assertIn("fixture row", written)
 
 
