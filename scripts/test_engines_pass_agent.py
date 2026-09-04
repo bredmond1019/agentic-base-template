@@ -105,11 +105,11 @@ STANDALONE_SITE_RE = re.compile(
 # from git history.
 FROZEN_BASELINE = {
     str(TASK_JS): {
-        2725: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
+        2851: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
     },
     str(FLOW_JS): {
-        3153: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
-        3438: "   mev emit-state --write",
+        3281: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
+        3570: "   mev emit-state --write",
     },
 }
 
