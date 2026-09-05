@@ -23,8 +23,12 @@ that every project repo is scaffolded from. This page is the index of *capabilit
 things you can actually invoke. It is derived from the files on disk, not from doc titles, so
 a capability missing here means it is missing from the repo.
 
-Counts, as of the last regeneration: **57 commands**, **2 engines**, **11 skills**,
-**52 gated checks**. If you add one and don't add a row here, this page is wrong.
+Counts drift, so ask the disk rather than trusting this sentence — `ls .claude/commands/*.md | wc -l`
+for commands, and the one-liner in [gates.md](gates.md) for checks. At the last regeneration:
+**57 commands**, **2 engines**, **11 skills**, **52 gated checks**; measured 2026-09-05 the repo
+carried 53 commands and 78 gating of 80 total. If you add one and don't add a row here, this page is
+wrong — and a frozen count here is wrong the week after it is written, which is why the commands
+above are the real answer.
 
 ## Quickstart
 
@@ -226,8 +230,11 @@ Everything under `scripts/` named `check_*.py` or `test_*.py` is a gate — see
 
 ## Gates
 
-52 checks in `planning/harness.json`, all of them gating. They are what "passing" means in this
-repo, and both the engines' Test stage and the push gate read the same file.
+The checks in `planning/harness.json` are what "passing" means in this repo, and both the engines'
+Test stage and the push gate read the same file. **Most gate; a couple deliberately do not** — an
+install-state check like `global-skills-fresh` or `global-commands-fresh` would go red on any
+machine that has not run the installer, so each carries a `gates_reason` instead. For the current
+counts run the one-liner in [gates.md](gates.md); measured 2026-09-05 it was 78 gating of 80.
 
 ```
 # terminal, repo root — run one check

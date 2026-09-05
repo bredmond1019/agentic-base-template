@@ -39,7 +39,7 @@ read `README.md` and `CLAUDE.md` instead.
 | Page | Covers |
 |---|---|
 | [harness-json.md](harness-json.md) | `planning/harness.json` — validation commands, the UI-test stage, all three stack profiles |
-| [gates.md](gates.md) | The 52 checks base-template runs on itself, and what each protects |
+| [gates.md](gates.md) | The checks base-template runs on itself, what each protects, and how to ask `harness.json` for the current count |
 | [harness.md](harness.md) | Writing a check over fleet-shared data: scan wide, report wide, fail narrow |
 | [ci.md](ci.md) | Hosted CI for public repos — the four reusable workflows and the `actionlint` → `act` → push loop |
 | [rust-sdlc-iteration-speed.md](rust-sdlc-iteration-speed.md) | A Rust pipeline gone slow: measure the link/test ratio, then four fixes |

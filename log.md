@@ -3,7 +3,41 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-05
+
+---
+## 2026-09-05 — Escalations lane: 3 blocks closed, a 4th found already done
+
+### escalations-and-command-sync — base-template factory lane, closed
+- **What:** Drove an inline three-block chain to completion, and closed a fourth as a verified
+  duplicate. `BT.ticket.escalations-gate-attributes-foreign-records` added `--repo <slug>` to
+  `check_escalations.py` so a repo gates only on its own records while still reporting every one,
+  and re-gated `escalations-schema`. `BT.chore.consolidate-fleet-not-globally-installed` shipped
+  `scripts/check_global_commands_fresh.py` (registered non-gating, with a gating fixture suite) and
+  recorded in both command files that `/sync-global-commands` is the sole delivery path for the four
+  `EXCLUDED_COMMAND_FILENAMES` commands. `BT.ticket.escalation-writer-emits-the-pre-schema-shape`
+  put the full eleven-field record template into `/begin-orchestration` Rule 5 and its SKILL.md
+  mirror, pinned by a fixture that extracts the template from the markdown at runtime, then
+  dispositioned the backlog: 38 pre-schema records archived, none deleted, 16 live and all
+  conforming. `BT.8.C` — an independently-authored duplicate from the `coordination-layer-port`
+  roadmap — was closed without being run, every acceptance criterion re-verified by hand against a
+  real positive control first.
+- **Why:** The escalation gate had been red across seven roadmaps and un-gated on 2026-09-02 so a
+  blocked lane could finish, so nothing was watching it. The cause was producer/consumer drift
+  base-template owned both halves of: the schema was tightened by three closed tickets and the
+  writer instruction was never updated, still pointing at a design doc that is itself a required
+  field behind. Separately, `/consolidate-fleet` had sat uninstalled for a day with nothing able to
+  notice — skills had a freshness check and commands had none.
+- **Also:** The run measured a third instance of the engine being unable to execute a D68 red-first
+  task, and this one had teeth: `expect_red` inverts only the task's own copy of a command, so
+  committing the red cases turned a `gates: true` harness check red on `main` for every concurrent
+  lane. Both remaining blocks were re-specced to drop `expect_red` and prove the same property by
+  runtime inversion inside the test; both then ran clean. Evidence added to
+  `BT.ticket.engines-cannot-express-a-red-green-task`. Two new findings filed as blocks at wave 610:
+  a lane's heartbeat going stale mid-block red-gates its own repo, and an exclusive repo lease stops
+  nobody — a concurrent session committed nine files through one.
+- **Refs:** `planning/orchestration-run/escalations-and-command-sync/{notes.md,review.md,verification-ledger.json}`,
+  `planning/handoff.md`
 
 ---
 ## 2026-09-04 — Factory lane complete: 6 blocks, 18 capabilities, none self-certified

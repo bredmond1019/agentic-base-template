@@ -12,13 +12,23 @@ related: [base-template-capabilities, harness-json, base-template-docs-index, ha
 
 # The gates
 
-What "passing" means in this repo. This page lists 54 checks, all of them gating — one red check
-fails the run. `planning/harness.json` itself carries **74 gating of 76 total as of 2026-09-04**
-(`python3 -c "import json;print(sum(1 for c in
-json.load(open('planning/harness.json'))['validation']['checks'] if c.get('gates')))"`); this page
-has drifted **20** checks behind and needs a full catch-up pass, tracked as a `carryover[]` entry
-rather than fixed here (out of scope for a surgical `/close-out` patch — see
-[harness-json.md](harness-json.md) for the schema and how to configure your own).
+What "passing" means in this repo. **`planning/harness.json` is the authority; this page is a
+convenience copy of it and is currently behind.** Ask the file rather than trusting a number here:
+
+```bash
+# terminal, base-template root — how many checks there are, and how many gate
+python3 -c "import json; c=json.load(open('planning/harness.json'))['validation']['checks']; \
+print(len(c), 'checks,', sum(1 for x in c if x.get('gates')), 'gating')"
+```
+
+**Not every check gates**, and that is deliberate: an install-state or freshness check would go red
+on any machine that has not run an installer, for reasons unrelated to the change under review.
+Each non-gating entry carries a `gates_reason` saying why — read it before arguing one into a gate.
+
+The per-check table below lists **54** checks and has drifted well behind the file. Closing that gap
+is a full catch-up pass, tracked as the `gates-md-8-checks-behind-harness-json` `carryover[]` entry
+rather than fixed here — out of scope for a surgical `/close-out` patch. See
+[harness-json.md](harness-json.md) for the schema and how to configure your own.
 
 Three more arrived 2026-09-04 from the `runs-that-can-be-believed` factory lane, all gating:
 `engines-pass-agent` (both engines pass `--agent` on every `emit-state --write`),
