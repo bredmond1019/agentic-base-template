@@ -328,8 +328,12 @@ nothing in the document will look wrong.
 Step 7 of `.claude/workflows/block-registration.md`, once over every block in this roadmap, across
 every repo, never per block. A roadmap is exactly the case it exists for: N authoring agents, one
 row each, none of them able to see a second repo, a concurrent lane, an inherited edge, a prior
-sizing flag, or an ungrounded operator artifact. Its five checks (C1–C5) are the last point at
+sizing flag, or an ungrounded operator artifact. Its checks (C1–C7) are the last point at
 which any of those is cheap to fix; after Wave 0 closes, four concurrent lanes are running on them.
+**C7 is the check this command most needs and least obviously owns.** This command gates on a block
+ID RESOLVING in `state.json` — a check on EXISTENCE, not on content — and C1-C6 are all structural, so
+without C7 a block can register cleanly and still be unbuildable. C7 applies `/plan`'s self-sufficiency
+bar to every block registered here, whichever command authored it.
 Record its findings in Wave 0 — including "none".
 
 ### Check the prefixes against the repos before you write Wave 0
@@ -896,6 +900,9 @@ I have not run anything. This command authors; /begin-orchestration executes.
 - A piped command's exit code is the **pipe's**, not the command's. Redirect, then check `$?`.
 - `rg`/`find` are symlink-blind and every `planning/` is a symlink into a `_planning/` vault — pass
   `-L`, and `-uu` to reach gitignored sub-repos. An inventory sweep without them is not trustworthy.
+  **With `-uu`, also add `--glob '!**/target/**' --glob '!**/node_modules/**' --glob '!**/.git/**'`**
+  — `-uu` disables `.gitignore`, and this fleet's ~43GB of Rust `target/` dirs will otherwise get
+  walked, pegging 350–500% CPU or hitting a Bash timeout that reads as a hang, not a slow search.
 - `planning/state.json` round-trips with `json.dump(..., indent=2, ensure_ascii=False)` plus a
   trailing newline. The default escapes every em dash and turns a small edit into ~130 lines of churn.
 - **HQ commits need an explicit pathspec** — `git commit -o <paths>`. Every repo's `planning/` is a
