@@ -106,8 +106,18 @@ same file; including both double-counts every finding.
 
 ```bash
 find -L "$BRAIN_ROOT" -path '*_planning/*/orchestration-run/*' \
-     \( -name notes.md -o -name review.md \) | grep -v '/trees/'
+     \( -name notes.md -o -name review.md -o -name verification-ledger.json \) | grep -v '/trees/'
 ```
+
+**`verification-ledger.json` is in that list deliberately.** `notes.md` and `review.md` say what went
+wrong; the ledger says what now works and how to check it, and it is the input to the test-catalogue
+pass below. It was missing from this sweep until 2026-09-05, by which point nine ledgers holding 152
+entries had accumulated across six repos, none consolidated.
+
+**The `grep -v '/trees/'` matters more for the ledgers than for the records.** Measured 2026-09-05: a
+`find -L` for `verification-ledger.*` returns **144 paths that are 18 distinct files**, one okf-core
+ledger reachable by **25** separate worktree chains. Dedup by inode or realpath, never by path
+string.
 
 Filter to records whose frontmatter `roadmap:` matches a selected slug **and** whose `lifecycle:` is
 **not** `consolidated` — that stamp is `/consolidate-run`'s own resume mechanism and this command
@@ -116,7 +126,9 @@ honours it rather than adding a second one for the same files.
 | Input | Where | Why |
 |---|---|---|
 | Lane-log lines | `lane_log_watermark.py pending --roadmap <slug> --json` | The per-block narrative; the `note` field carries the real signal |
-| Run records | the `find` above | Decisions, findings, ledgers |
+| Run records | the `find` above | Decisions, findings, traps re-confirmed |
+| Verification ledgers | the same `find` | What each run shipped and how to verify it — the input to the catalogue pass |
+| Test catalogue | `docs/sandbox/test-catalogue.json` | What is already covered, so a capability is promoted once and merged thereafter |
 | Carryover state | `mev carryover --json --allow-exec` | Clusters, suggested duplicates, single-repo `finding_id` warnings, broken-predicate diagnostics, misfiled-operator warnings |
 | Commander retros | `planning/open-work/orchestration-runs/retros/*.md` | Instrument failures; the highest-transfer material there is |
 | Commander chronology | `planning/open-work/orchestration-runs/run-log-*.md` | Drain-by-drain timeline |
@@ -249,8 +261,28 @@ retros `index.md` (standing rule 7), and these sections:
 | Carryover health | Read from `/triage-carryover`'s evidence, never re-audited here: per-repo rot rate **beside pool age**, machine-checkable share, broken-predicate counts in all three directions, `needs` coverage, retired-kind survivors (`known_issue`/`constraint` on disk mark entries nobody has re-read since August) |
 | Self-report audit | Every number a record asserted about itself, recounted, with the delta |
 | Already known | Mechanisms matching a prior analysis — reported as another instance, with the instance count |
+| Coverage and docs debt | What the verification ledgers say the fleet can now do, and where that is unwatched — see below |
 | Proposed disposal | A **pointer to `disposal.json`** (below) plus the same rows rendered for a human reader. The JSON is the contract; the table is the courtesy copy |
 | What needs the operator | Only what genuinely cannot be decided by an agent |
+
+**The Coverage and docs debt section** is the cross-run view of what `/consolidate-run` Step 5b does
+per roadmap. This command does not re-do the per-entry promotion — it reads the catalogue and reports
+the *shape* of what accumulated:
+
+- **Unwired seams.** Entries with `finding: true` — a capability shipped with no production caller.
+  Count them, name the repo, and say whether they cluster: measured on the first pass, **7 of 152**,
+  five of them in a single repo, which is a fact about that repo's lane and not about the fleet.
+- **Untestable tests.** Entries carrying `recipe_status` — `missing` (no recipe at all) or
+  `not-cold-runnable`. **27 of 257 on the first pass.** A catalogue whose recipes cannot be run reads
+  as coverage while providing none, so this number is the honest measure of how much of the catalogue
+  is real.
+- **Docs owed.** Entries whose `docs.state` is `missing` or `stale`. New functionality that no doc
+  describes is how a capability becomes folklore — the person who shipped it is the only one who
+  knows, and this command runs precisely when that person's session is long gone.
+- **Never-run tests.** Catalogue ids with no row in **any** `docs/sandbox/results/*.json`. These have
+  never been checked anywhere, in any environment, which is different from having failed.
+
+Report these as counts with named examples, not as a full listing — the catalogue is the listing.
 
 Every claim carries a provenance tag. A section that reports nothing says so as a claim
 ("no instrument failures found in 6 records") so a reader can tell it ran.
@@ -386,10 +418,15 @@ is invisible. Under `--dry-run`, advance nothing.
 ## Write boundary
 
 **No `state.json`, in any repo.** One command writing state across a dozen repos is the contention
-pattern that has cost real runs (CLAUDE.md standing rule 10). This command writes exactly three
+pattern that has cost real runs (CLAUDE.md standing rule 10). This command writes exactly four
 things: the analysis at `--out`, `disposal.json` beside it, their `index.md` rows, and the
 watermark file. The
 `lifecycle: consolidated` stamps are `/consolidate-run`'s writes, made by that command.
+
+**It does not write the test catalogue either.** Promotion is per-roadmap and belongs to
+`/consolidate-run` Step 5b; this command *reads* `docs/sandbox/test-catalogue.json` to report the
+shape of what accumulated across runs. Two commands appending to one catalogue is the same
+multi-writer contention this boundary exists to prevent.
 
 ## Traps
 
