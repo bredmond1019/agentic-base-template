@@ -12,6 +12,14 @@ related: [consolidate-run, roadmap-status, D57-orchestration-run-artifact-contra
 
 # Consolidate Fleet — what the runs, together, say about the system
 
+> **HQ-only by nature, not by target.** `scripts/sync_downstream_harness.py` deliberately drops
+> this file from every downstream repo via `EXCLUDED_COMMAND_FILENAMES` (line 241, comment:
+> "HQ-only by nature, not by target") — that exclusion means **globally installed only**, not
+> unreachable. This command reaches an agent ONLY through `/sync-global-commands`, which rsyncs it
+> into `~/.claude/commands/`. Misreading the exclusion as "unreachable" is exactly what left this
+> command runnable only by opening the file for a day (BT.chore.consolidate-fleet-not-globally-installed).
+> Drift signal: `scripts/check_global_commands_fresh.py`.
+
 `/consolidate-run` answers *"what did this roadmap turn up?"* and proposes `carryover[]` entries for
 it. This command answers a different question: **"across every run since the last time we looked,
 what is wrong with our orchestration system, our engines, and the way we file findings?"**
