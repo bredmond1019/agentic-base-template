@@ -420,6 +420,104 @@ def check_negative_options_below_min() -> None:
           any("options" in p for p in problems), f"problems: {problems}")
 
 
+# --- --repo attribution: gate narrows to one repo's own records, reporting stays whole -------
+#
+# D68: these four cases describe a `--repo <slug>` flag that does not exist yet in
+# check_escalations.py. Task 1's deliverable IS these cases observed FAILING (the flag is an
+# unrecognised argparse argument today, so the CLI exits non-zero via argparse's own usage error
+# rather than the behaviour described below) -- expect_red inverts the verdict for this task.
+# Case B is the load-bearing one: without it, a --repo implementation that unconditionally exits
+# 0 would pass every other case here.
+
+def check_repo_attribution_foreign_only_exits_zero_but_still_reports() -> None:
+    """Case A: the only malformed records carry a `repo` OTHER than the gated slug -- under
+    `--repo <slug>` the CLI must exit 0, AND every one of those failures must still appear in
+    the output, each naming its owning (foreign) repo. Going quiet is as wrong as exiting 1."""
+    with tempfile.TemporaryDirectory() as td:
+        roadmaps_dir = Path(td) / "roadmaps"
+        foreign_bad_one = _valid_record("operator-gate", repo="bastion")
+        foreign_bad_one["kind"] = "URGENT_PING"
+        foreign_bad_two = _valid_record("finding", repo="mev")
+        del foreign_bad_two["verified_at_sha"]
+        _write_jsonl(
+            roadmaps_dir / "attribution-fixture" / "escalations.jsonl",
+            [foreign_bad_one, foreign_bad_two],
+        )
+
+        proc = _run_cli(roadmaps_dir, ["--repo", "base-template"])
+        check("Case A: foreign-only failures under --repo <slug> exit 0",
+              proc.returncode == 0, proc.stdout + proc.stderr)
+        check("Case A: the foreign `kind` failure still appears in the output, naming `bastion`",
+              "bastion" in (proc.stdout + proc.stderr) and "URGENT_PING" in (proc.stdout + proc.stderr),
+              proc.stdout + proc.stderr)
+        check("Case A: the foreign `verified_at_sha` failure still appears in the output, "
+              "naming `mev`",
+              "mev" in (proc.stdout + proc.stderr) and "verified_at_sha" in (proc.stdout + proc.stderr),
+              proc.stdout + proc.stderr)
+
+
+def check_repo_attribution_own_repo_failure_still_gates() -> None:
+    """Case B, THE POSITIVE CONTROL: the only malformed record carries `repo` EQUAL to the
+    gated slug -- `--repo <slug>` must still exit 1. Without this case, a --repo implementation
+    that unconditionally returns 0 would pass every other case in this section."""
+    with tempfile.TemporaryDirectory() as td:
+        roadmaps_dir = Path(td) / "roadmaps"
+        own_bad = _valid_record("operator-gate", repo="base-template")
+        own_bad["kind"] = "URGENT_PING"
+        _write_jsonl(roadmaps_dir / "attribution-fixture" / "escalations.jsonl", [own_bad])
+
+        proc = _run_cli(roadmaps_dir, ["--repo", "base-template"])
+        check("Case B (POSITIVE CONTROL): an own-repo malformed record under --repo <slug> "
+              "still exits 1 -- proves the flag narrows the gate rather than disabling it",
+              proc.returncode != 0, proc.stdout + proc.stderr)
+
+
+def check_repo_attribution_no_flag_is_unchanged() -> None:
+    """Case C: the same fixture as Case A, run with no --repo flag at all -- must reproduce
+    today's exit code (non-zero) unchanged. The corpus-wide sweep is not affected by this flag."""
+    with tempfile.TemporaryDirectory() as td:
+        roadmaps_dir = Path(td) / "roadmaps"
+        foreign_bad_one = _valid_record("operator-gate", repo="bastion")
+        foreign_bad_one["kind"] = "URGENT_PING"
+        foreign_bad_two = _valid_record("finding", repo="mev")
+        del foreign_bad_two["verified_at_sha"]
+        _write_jsonl(
+            roadmaps_dir / "attribution-fixture" / "escalations.jsonl",
+            [foreign_bad_one, foreign_bad_two],
+        )
+
+        proc = _run_cli(roadmaps_dir)
+        check("Case C: omitting --repo entirely reproduces today's exit code (non-zero) on the "
+              "same fixture Case A used -- the corpus-wide sweep is unchanged",
+              proc.returncode != 0, proc.stdout + proc.stderr)
+
+
+def check_repo_attribution_missing_repo_field_is_foreign() -> None:
+    """Case D: a record with no `repo` field at all. DECISION (not a default): such a record is
+    treated as FOREIGN (non-gating) under `--repo <slug>` -- it cannot be attributed to the
+    gated repo, so it must not be able to fail the gate on that repo's behalf -- but it still
+    gates (exits 1) when no --repo is given at all, exactly like today."""
+    with tempfile.TemporaryDirectory() as td:
+        roadmaps_dir = Path(td) / "roadmaps"
+        no_repo_bad = _valid_record("operator-gate")
+        del no_repo_bad["repo"]
+        no_repo_bad["kind"] = "URGENT_PING"
+        _write_jsonl(roadmaps_dir / "attribution-fixture" / "escalations.jsonl", [no_repo_bad])
+
+        proc_scoped = _run_cli(roadmaps_dir, ["--repo", "base-template"])
+        check("Case D: a record missing `repo` entirely is treated as FOREIGN under --repo "
+              "<slug> and does not gate",
+              proc_scoped.returncode == 0, proc_scoped.stdout + proc_scoped.stderr)
+        check("Case D: the missing-`repo` failure still appears in the output even though it "
+              "does not gate",
+              "URGENT_PING" in (proc_scoped.stdout + proc_scoped.stderr),
+              proc_scoped.stdout + proc_scoped.stderr)
+
+        proc_unscoped = _run_cli(roadmaps_dir)
+        check("Case D: the same record still gates (exits non-zero) with no --repo flag",
+              proc_unscoped.returncode != 0, proc_unscoped.stdout + proc_unscoped.stderr)
+
+
 def main() -> int:
     check_dependency_free()
     check_positive_round_trip_per_kind()
@@ -442,6 +540,10 @@ def main() -> int:
     check_negative_options_missing_when_notification()
     check_negative_options_present_when_session()
     check_negative_options_below_min()
+    check_repo_attribution_foreign_only_exits_zero_but_still_reports()
+    check_repo_attribution_own_repo_failure_still_gates()
+    check_repo_attribution_no_flag_is_unchanged()
+    check_repo_attribution_missing_repo_field_is_foreign()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed:")
