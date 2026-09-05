@@ -154,6 +154,34 @@ eea9230 feat: implement BT.ticket.lane-log-watermark-needs-a-real-since-task1
 ```
 
 ---
+## 2026-09-05 — one source for the session commands; two spec-authoring defects closed
+
+- **What:** collapsed `handoff`, `wrap-up`, `log-work` and `begin-session` onto one source. Each
+  existed in up to **three forks** — base-template's, HQ's own, and one shared by the five tiers via
+  `commands/brain/` — and every fork was missing the entire `carryover[]`/state-routing vocabulary,
+  in the repo that owns every `planning/` directory in the fleet. HQ's `handoff` also had a
+  different *architecture*: `Invoke /log-work` -> `Invoke /commit`, making the `/close-out` chain
+  four levels deep, which was the reported bug where agents stop before the log entry. Nothing
+  needed reconciling — base-template's versions already declare themselves `brain.toml`-driven and
+  depth-agnostic, so the forks were deleted rather than merged. Narrow D54 exception
+  (`ENGINES_ONLY_COMMAND_ALLOWLIST`, four commands) with four tests pinning it small.
+  **Also:** retired `/generate-master-plan` at the brain level (13 live files for a command D65
+  replaced; the tier sync was still shipping the 281-line original on every run); promoted
+  `write-operating-doc` to a fleet skill after de-braining three repo-relative links that resolved
+  only at the brain root; shipped `regenerate_gemini.py`, the generator the AGENTS.md split had
+  been missing; and fixed the two spec-authoring defects reported from `core/okf-core` — a
+  `files: []` task can never satisfy the work assertion, and a `files[]` path copied verbatim from
+  a block record is fleet-root-relative where the assertion compares repo-relative.
+- **Why:** the operator asked why `/close-out` runs stop before `log-work`. The answer was not one
+  bug: the only mention of `log-work` in the whole chain was a *prohibition*, two nested skills each
+  end in their own Report section, and HQ ran a fork four levels deep. Each was fixed where it
+  actually lived rather than papered over in the report.
+- **Measured, and worth keeping:** three of the four forks had **zero** brain-specific content;
+  `log-work`'s seven brain mentions were a strict subset of base-template's coverage. 137 live
+  `Validate` tasks fleet-wide still carry the unsatisfiable shape, which is why `task-files` is
+  registered non-gating with a closed-ended backlog carryover rather than gating on day one.
+- **Refs:** `planning/BT.chore.session-commands-are-one-source/spec.md`, `planning/handoff.md`.
+
 ## 2026-09-04 — /close-out stopped before the log entry and the commit
 
 - **What:** fixed three structural causes in `.claude/commands/close-out.md` and `handoff.md`
