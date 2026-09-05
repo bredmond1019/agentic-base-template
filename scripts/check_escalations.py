@@ -26,18 +26,24 @@ envelope, at any nesting depth, is a NAMED error, not merely an "unknown key" --
 same rationale as check_messages.py (D43 owns priority in this fleet).
 
 Usage:
-    check_escalations.py [--roadmaps-dir DIR] [--roadmap SLUG] [--quiet]
+    check_escalations.py [--roadmaps-dir DIR] [--roadmap SLUG] [--repo SLUG] [--quiet]
 
     --roadmaps-dir DIR   override the default `planning/roadmaps` directory (default: resolved
                          by walking up from cwd for a brain.toml, then joining `planning/roadmaps`)
     --roadmap SLUG       check only `<roadmaps-dir>/<SLUG>/escalations.jsonl` instead of every
                          roadmap directory found
+    --repo SLUG          narrow the GATE to records whose own `repo` field equals SLUG -- every
+                         record is still read, validated, and printed exactly as without the
+                         flag; a failing record whose `repo` differs (or is absent) prints under
+                         a heading naming it foreign and does not contribute to the exit code.
+                         Without --repo, behaviour is unchanged: whole corpus, everything gates.
     --quiet              print only failures and the summary
 
-Exit code 1 if any record fails validation. Exit code 0 on a clean corpus, INCLUDING a corpus
-with zero `escalations.jsonl` files -- that is the state of every roadmap today, before the
-scripted sweep (block 5) ever writes one, and must stay silent (matches check_messages.py's
-"no message records found" precedent).
+Exit code 1 if any record whose OWN `repo` field matches `--repo` (or, with no `--repo` given,
+any record at all) fails validation. Exit code 0 on a clean corpus, INCLUDING a corpus with zero
+`escalations.jsonl` files -- that is the state of every roadmap today, before the scripted sweep
+(block 5) ever writes one, and must stay silent (matches check_messages.py's "no message records
+found" precedent).
 """
 
 from __future__ import annotations
@@ -307,10 +313,16 @@ def discover_escalation_files(roadmaps_dir: Path, roadmap: Optional[str] = None)
     return found
 
 
-def _check_one_file(path: Path, quiet: bool) -> tuple:
-    """Validate every line of one escalations.jsonl file. Returns (total, failed, lines)."""
+def _check_one_file(path: Path, quiet: bool, gate_repo: Optional[str] = None) -> tuple:
+    """Validate every line of one escalations.jsonl file. Returns (total, gating_failed, lines).
+
+    `gate_repo`, when given, narrows only the EXIT-CODE contribution: a record whose own `repo`
+    field does not equal `gate_repo` (including a record with no `repo` field at all -- Case D)
+    still gets read, validated, and printed here exactly as it would with no `gate_repo`, but its
+    failures are labelled FOREIGN and excluded from `gating_failed`. The `total` and reporting
+    lines never narrow -- only what gate_repo does is decide which failures count."""
     total = 0
-    failed = 0
+    gating_failed = 0
     lines: list = []
 
     with open(path) as fh:
@@ -322,23 +334,35 @@ def _check_one_file(path: Path, quiet: bool) -> tuple:
             try:
                 record = json.loads(raw_stripped)
             except Exception as exc:                # noqa: BLE001 - report, never raise
-                failed += 1
-                lines.append(f"FAIL {path}:{lineno}")
+                record_repo = None
+                is_foreign = gate_repo is not None and record_repo != gate_repo
+                if is_foreign:
+                    lines.append(f"FAIL (FOREIGN, repo=unknown) {path}:{lineno}")
+                else:
+                    gating_failed += 1
+                    lines.append(f"FAIL {path}:{lineno}")
                 lines.append(f"       does not parse: {exc}")
                 continue
 
             problems = check_escalation_record(record)
             if problems:
-                failed += 1
-                lines.append(f"FAIL {path}:{lineno}")
+                record_repo = record.get("repo") if isinstance(record, dict) else None
+                is_foreign = gate_repo is not None and record_repo != gate_repo
+                if is_foreign:
+                    owner = record_repo if record_repo else "unknown"
+                    lines.append(f"FAIL (FOREIGN, repo={owner}) {path}:{lineno}")
+                else:
+                    gating_failed += 1
+                    lines.append(f"FAIL {path}:{lineno}")
                 lines.extend(f"       {p}" for p in problems)
             elif not quiet:
                 lines.append(f"ok   {path}:{lineno}")
 
-    return total, failed, lines
+    return total, gating_failed, lines
 
 
-def run(roadmaps_dir: Optional[Path], quiet: bool, roadmap: Optional[str] = None) -> int:
+def run(roadmaps_dir: Optional[Path], quiet: bool, roadmap: Optional[str] = None,
+        gate_repo: Optional[str] = None) -> int:
     total = 0
     failed = 0
     lines: list = []
@@ -346,7 +370,7 @@ def run(roadmaps_dir: Optional[Path], quiet: bool, roadmap: Optional[str] = None
     files = discover_escalation_files(roadmaps_dir, roadmap) if roadmaps_dir else []
 
     for path in files:
-        f_total, f_failed, f_lines = _check_one_file(path, quiet)
+        f_total, f_failed, f_lines = _check_one_file(path, quiet, gate_repo=gate_repo)
         total += f_total
         failed += f_failed
         lines.extend(f_lines)
@@ -358,7 +382,7 @@ def run(roadmaps_dir: Optional[Path], quiet: bool, roadmap: Optional[str] = None
         print("no escalation records found (not a failure)")
         return 0
 
-    print(f"\n{total} record(s) checked, {failed} failed")
+    print(f"\n{total} record(s) checked, {failed} gating failure(s)")
     return 1 if failed else 0
 
 
@@ -369,11 +393,14 @@ def main() -> int:
     ap.add_argument("--roadmap", default=None,
                      help="check only this roadmap's escalations.jsonl instead of every "
                           "roadmap directory found")
+    ap.add_argument("--repo", default=None,
+                     help="narrow the GATE to records whose own `repo` field equals this slug; "
+                          "every record is still read, validated, and printed regardless")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
     roadmaps_dir = resolve_roadmaps_dir(args.roadmaps_dir)
-    return run(roadmaps_dir, args.quiet, roadmap=args.roadmap)
+    return run(roadmaps_dir, args.quiet, roadmap=args.roadmap, gate_repo=args.repo)
 
 
 if __name__ == "__main__":
