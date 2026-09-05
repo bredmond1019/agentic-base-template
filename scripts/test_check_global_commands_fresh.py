@@ -8,7 +8,7 @@ suite watches the checker's own logic).
 
 Every case below builds its own throwaway source dir AND install dir under tempfile.mkdtemp().
 Nothing here reads or writes the real .claude/commands/ or the real ~/.claude/commands/, and
-no test references Path.home().
+no test references the home directory directly.
 
 Case D is a RUNTIME INVERSION rather than a frozen red baseline (per D68's evidence
 requirement, satisfied the way /generate-tasks' own pitfall 6 recommends): it starts from an
