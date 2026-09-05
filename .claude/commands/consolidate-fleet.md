@@ -33,6 +33,17 @@ automates the second. It **calls** `/consolidate-run` for the first rather than 
 corpus in view; that is the job. Extraction fans out to Sonnet subagents (Step 3) — the synthesis in
 Step 4 does not.
 
+**Do not `/prime` first.** This command assembles its own input set in Step 2 from explicit paths, so
+priming spends a large part of the window on orientation it will not use — and Step 4's cross-repo
+synthesis is what needs that room. The one exception is `planning/handoff.md`: read that single file
+if it exists.
+
+**The disposal half runs in yet another fresh session.** `/dispose-run` deliberately does not run
+here — its `ungrounded[]` contract only works when a reader who did **not** write the analysis picks
+it up, because this session will fill those gaps from memory without noticing. See
+[`/dispose-run`](dispose-run.md)'s session note. Stay reachable while it runs: its Step 2 asks the
+analysis's author when a field is unsupported, and that author is you.
+
 
 **Before writing down anything that is wrong, follow
 [`.claude/workflows/finding-discipline.md`](../workflows/finding-discipline.md).** Evidence travels

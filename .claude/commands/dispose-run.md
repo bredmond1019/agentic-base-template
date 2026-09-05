@@ -20,6 +20,37 @@ appear on no board — the "prose gates nothing" failure, one level up from the 
 roadmap — `/generate-roadmap --from <analysis>` does that when there are enough blocks to need
 lanes, and running both produces two schedulers over one body of findings.
 
+## Run it in a FRESH Opus session — not the one that wrote the analysis
+
+**A different session from `/consolidate-fleet`'s, deliberately.** Step 2 below says to ask the
+analysis's author *"if that session is reachable"*, and that sentence only makes sense because
+disposal normally runs somewhere else.
+
+The reason is `ungrounded[]`. It is the analysis's own list of fields it could not support, and it
+is a real contract only when a different reader picks it up. **The author who just wrote the
+analysis will fill those gaps from memory without noticing they are doing it** — which is the
+confident invention Step 2 forbids, and it multiplies through every downstream task. A second reader
+either finds the evidence in the sidecar or cannot, and that is the signal.
+
+There is a second reason: `disposal.json` exists so the handoff does not depend on prose or on one
+session's context. Disposing in the authoring session never tests whether the sidecar is actually
+sufficient — you find that out weeks later, when someone else tries.
+
+**Opus, not Sonnet.** This is routing under judgement, not transcription: Step 3 may route a row to
+*explicitly nothing*, which is the verdict needing the most judgement; Step 2 requires **refusing**
+a row the evidence does not support and reporting the refusal rather than filing something
+plausible; Step 4 writes `state.json` and re-runs `emit-state`, whose blast radius is corpus-wide.
+
+**Always `--dry-run` first.** It resolves, validates and reports every row while writing nothing.
+
+```
+# Claude Code, in a fresh Opus session at the brain root — NOT a terminal
+/dispose-run <path-to-analysis.md> --dry-run
+/dispose-run <path-to-analysis.md>
+```
+
+**If the authoring session is still open, use it — Step 2 asks you to.** Just do not *be* it.
+
 ## Variables
 
 ```

@@ -256,15 +256,25 @@ against a persistent tmux session. The script itself is `agentic-portfolio/scrip
 
 ## After the run — the harvest
 
-The run ending is not the end of the work. Four steps, in order, each with a different job. **Run
-them from a fresh session at the brain root**, not from a lane.
+The run ending is not the end of the work. Four steps, in order, each with a different job.
 
-| Step | Command | Produces | Writes state? |
-|---|---|---|---|
-| 1 | [`/commander-retro <slug>...`](../../.claude/commands/commander-retro.md) | `retros/commander-retro-<date>.md` — what the drain saw, what it was blind to, and the instrument failures | no |
-| 2 | [`/consolidate-fleet --since-watermark`](../../.claude/commands/consolidate-fleet.md) | `retros/pattern-analysis-<date>.md` + **`disposal-<date>.json`** — named mechanisms with counted breadth | stamps `lifecycle: consolidated` |
-| 3 | [`/dispose-run <analysis>`](../../.claude/commands/dispose-run.md) | blocks, `carryover[]` entries, operator edges — or explicitly nothing | yes, via `mev create-block` |
-| 4 | [`/generate-roadmap --from <analysis>`](../../.claude/commands/generate-roadmap.md) | a roadmap, **only if** the filed blocks need lanes | yes |
+**Each step gets its own fresh session at the brain root, never a lane's** — and steps 2 and 3 must
+not share one. `/dispose-run` reads the analysis's `ungrounded[]` list, which names the fields the
+analysis could not support; that contract only works when the reader is **not** the author. Run them
+in one session and it fills those gaps from memory without noticing, which is exactly the confident
+invention its Step 2 forbids. Keep the step-2 session reachable while step 3 runs — step 3 is
+supposed to ask it questions.
+
+**Do not `/prime` first.** Every one of these commands assembles its own input set from explicit
+paths, so priming spends the window on orientation none of them use. Read `planning/handoff.md` if
+it exists; that is the whole exception.
+
+| Step | Command | Session · model | Produces | Writes state? |
+|---|---|---|---|---|
+| 1 | [`/commander-retro <slug>...`](../../.claude/commands/commander-retro.md) | fresh · Opus | `retros/commander-retro-<date>.md` — what the drain saw, what it was blind to, and the instrument failures | no |
+| 2 | [`/consolidate-fleet --since-watermark`](../../.claude/commands/consolidate-fleet.md) | fresh · Opus (fans out to Sonnet for extraction) | `retros/pattern-analysis-<date>.md` + **`disposal-<date>.json`** — named mechanisms with counted breadth | stamps `lifecycle: consolidated` |
+| 3 | [`/dispose-run <analysis>`](../../.claude/commands/dispose-run.md) | **fresh, NOT step 2's** · Opus | blocks, `carryover[]` entries, operator edges — or explicitly nothing | yes, via `mev create-block` |
+| 4 | [`/generate-roadmap --from <analysis>`](../../.claude/commands/generate-roadmap.md) | fresh · Opus | a roadmap, **only if** the filed blocks need lanes | yes |
 
 **Why four commands and not one.** Each stops where the next begins, and the boundaries are load-bearing:
 
