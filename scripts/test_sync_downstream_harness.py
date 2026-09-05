@@ -132,9 +132,18 @@ class EnginesOnlyGuard(unittest.TestCase):
         self.assertNotIn("base-template", self._targets())
 
     def test_harness_files_drops_commands_when_engines_only(self):
+        """D54's core guarantee, NARROWED (not weakened) by
+        BT.chore.session-commands-are-one-source: engines_only still drops every command HQ
+        authors its own version of. log-work.md moved out of this assertion deliberately — it is
+        depth-agnostic by construction and is now in ENGINES_ONLY_COMMAND_ALLOWLIST, which
+        EnginesOnlyCommandAllowlistGuard pins to exactly four entries."""
         names = {p.name for p in sync.harness_files(self.bt, engines_only=True)}
         self.assertNotIn("prime.md", names)
-        self.assertNotIn("log-work.md", names)
+        self.assertIn(
+            "log-work.md", sync.ENGINES_ONLY_COMMAND_ALLOWLIST,
+            "log-work is exempted here only because it is allowlisted; if it leaves the "
+            "allowlist this assertion must go back to assertNotIn",
+        )
 
     def test_harness_files_keeps_engines_when_engines_only(self):
         names = {p.name for p in sync.harness_files(self.bt, engines_only=True)}
@@ -276,10 +285,15 @@ class EnginesOnlyGuard(unittest.TestCase):
         report = sync.diff_repo(self.bt.resolve(), self.brain.resolve(), self._targets()["brain"])
         self.assertIsNone(report.error)
         changed = [d.rel_path for d in report.diffs if d.dest_prefix == ".claude"]
+        cmds = [c for c in changed if "commands" in c]
+        allowed = {f"commands/{n}" for n in sync.ENGINES_ONLY_COMMAND_ALLOWLIST}
+        unexpected = [c for c in cmds if c not in allowed]
         self.assertEqual(
-            [c for c in changed if "commands" in c],
+            unexpected,
             [],
-            f"HQ commands would be overwritten: {changed}",
+            f"HQ commands would be overwritten: {unexpected}. Only the four depth-agnostic "
+            f"session commands may reach the brain root (D54's narrow exception); anything else "
+            f"here means an HQ-authored command is about to be silently replaced.",
         )
 
     def test_diff_still_reports_command_changes_for_a_normal_repo(self):
@@ -341,6 +355,62 @@ class MirroredSkillBodiesMatch(unittest.TestCase):
                 continue
             fm = mirror.read_text(encoding="utf-8").split("---", 2)[1]
             self.assertNotIn("allowed-tools", fm, f"{slug}: allowed-tools is Claude-only")
+
+
+class EnginesOnlyCommandAllowlistGuard(unittest.TestCase):
+    """BT.chore.session-commands-are-one-source — the narrow D54 exception must stay narrow.
+
+    D54 makes the brain root engines_only because HQ's commands genuinely diverge (/prime is 193
+    lines to base-template's 77). ENGINES_ONLY_COMMAND_ALLOWLIST punches a hole in that for four
+    commands which are depth-agnostic by construction. The hole is only safe while it stays small,
+    and the failure mode of widening it is silent: HQ's authored command is simply overwritten on
+    the next sync, and nothing says so.
+    """
+
+    # Commands HQ authors its own version of, measured 2026-09-04. Adding any of these to the
+    # allowlist would have base-template overwrite HQ's copy — exactly what D54 forbids.
+    KNOWN_DIVERGENT = {
+        "prime.md", "update-state.md", "archive.md", "capture.md", "commit.md",
+        "assess.md", "seams.md", "sequence.md", "session-recap.md", "backlog-ticket.md",
+        "roadmap-status.md", "define-design-system.md", "README.md",
+    }
+
+    def test_allowlist_contains_only_the_four_session_commands(self):
+        self.assertEqual(
+            sync.ENGINES_ONLY_COMMAND_ALLOWLIST,
+            {"handoff.md", "wrap-up.md", "log-work.md", "begin-session.md"},
+            "the D54 exception must stay narrow — widening it silently overwrites an "
+            "HQ-authored command on the next sync",
+        )
+
+    def test_no_known_divergent_command_is_allowlisted(self):
+        overlap = sync.ENGINES_ONLY_COMMAND_ALLOWLIST & self.KNOWN_DIVERGENT
+        self.assertEqual(
+            overlap, set(),
+            f"{sorted(overlap)} are commands HQ authors its own version of. Allowlisting one "
+            f"makes base-template overwrite HQ's copy — the exact D54 violation. If HQ needs "
+            f"different behaviour the command is not depth-agnostic and cannot be shared.",
+        )
+
+    def test_allowlisted_commands_reach_an_engines_only_target(self):
+        """Positive control: the allowlist must actually DO something."""
+        root = Path(sync.__file__).resolve().parent.parent
+        names = {
+            p.name for p in sync.harness_files(root, engines_only=True) if p.suffix == ".md"
+        }
+        for cmd in sorted(sync.ENGINES_ONLY_COMMAND_ALLOWLIST):
+            self.assertIn(cmd, names, f"{cmd} is allowlisted but does not reach an engines_only target")
+
+    def test_a_non_allowlisted_command_still_does_not(self):
+        """The other half: engines_only must still drop everything else."""
+        root = Path(sync.__file__).resolve().parent.parent
+        names = {
+            p.name for p in sync.harness_files(root, engines_only=True) if p.suffix == ".md"
+        }
+        self.assertNotIn(
+            "prime.md", names,
+            "engines_only must still drop HQ-authored commands — D54's whole point",
+        )
 
 
 class SkillSlugRegistrationGuard(unittest.TestCase):

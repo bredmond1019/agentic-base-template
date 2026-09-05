@@ -1,108 +1,162 @@
-# Handoff — Hand off an in-flight brain session to a fresh agent.
+# Handoff — Hand off an in-flight session cleanly to a fresh agent.
 
 Use this when the current session has grown large enough that continuing in a new context is
-better than pressing on. Writes `planning/handoff.md` so the next agent orients instantly
-after running `/prime`, then logs and commits.
+better than pressing on. It writes `planning/handoff.md` so the next agent can orient instantly
+after `/prime`, logs the work, and commits.
 
 ## Variables
 
-$ARGUMENTS — optional free-text note to include in the handoff (e.g. "focus on the services
-             page next, the PT post is drafted and ready to review"). If omitted, the agent
-             derives context from git history and status.md.
+$ARGUMENTS — optional free-text note to include in the handoff (e.g. "focus on the parser
+             next, the renderer is blocked on the tokenizer fix"). If omitted, derive context
+             from git history and status.md.
 
 ## Execution Model
 
-Run inline — do NOT spawn a subagent. `/log-work` and `/commit` are invoked as Skill tool
-calls from the main agent context; they have their own confirmation gates.
+**Run entirely inline. Spawn no subagents.**
+
+**The `log.md` entry, the `status.md` bump and the commit are all written by Step 4 below — they
+are part of this command, not separate work.** So do not additionally invoke `/log-work`,
+`/commit` or `/backlog-ticket` as skills; their steps are already inlined. Finishing this command
+means Step 4 has run. **Never report `/log-work` or `/commit` as outstanding** — if you have not
+done Step 4, the handoff is not finished; go do it.
+
+This is deliberate and is the whole point of the command. `/handoff` exists to *serialize the
+current session's context to disk*, and the main agent is the only thing that holds that
+context. A subagent cold-starts and has to reconstruct the session narrative from `git log` —
+slow, lossy, and exactly the reconstruction the handoff is meant to prevent. Delegating also
+fires at the end of a long session, when re-serializing instructions into a subagent prompt
+costs the most.
+
+Budget: ~3 file reads, ~3 file writes, 2 shell calls. If you find yourself spawning an agent
+or reading more than five files, stop — you are re-deriving something you already know.
 
 ## Instructions
 
-### Step 1 — Gather current state
+### Step 1 — Gather (3 reads + 1 shell call)
 
 Read:
-- `planning/status.md` — current focus and active work
-- `log.md` — the three most recent entries (for narrative context)
-- `planning/handoff.md` — if it exists, read it (you are updating it, not replacing blindly)
-- `planning/state.json` — the existing `carryover[]` (you are appending to it, not duplicating)
-- `docs/state/state-schema.md` — the `carryover[]` section, for the field shape
+- `planning/status.md` — current focus, block statuses
+- `planning/state.json` — `tracks[].blocks[]` statuses and the existing `carryover[]`
+- `planning/handoff.md` — only if it exists (you are updating, not blindly replacing)
 
-Run:
-- `git log --oneline -10` — recent commits
-- `git diff --stat` — uncommitted changes
-- `git status` — untracked / staged state
+Run once: `git log --oneline -10 && git status --short`
 
-### Step 2 — Drain durable context into `state.json` `carryover[]`
+Do **not** re-read `log.md`, the task spec, or `docs/state/state-schema.md` — you have the
+session context those would reconstruct. Read them only if you genuinely lack something.
 
-**This is what keeps `handoff.md` disposable.** Before writing the handoff, route anything that must
-outlive *this* handoff (so the next one can't overwrite it away) into the right durable home — do **not**
-leave it living only in the prose below:
+### Step 2 — Flip closed blocks, then drain durable context
 
-- **Committed, sequenced work** with real dependencies → a `tracks[].blocks[]` block in the target repo.
-- **Free-floating ideas/chores** not on a critical path → HQ `backlog[]` (via `/backlog-ticket`).
-- **Work only a human can do** — a decision only the operator can make, a credential only they hold,
-  a judgement call, a thing they must look at → an `{"type":"operator", ...}` edge on the block it
-  gates, per the operator-work rule below. **Ask this before reaching for `carryover[]`**, because
-  the two look alike at write time and behave nothing alike afterwards: a carryover entry gates
-  nothing, so operator work parked there is never forced. Measured 2026-08-19 — **30 of the fleet's
-  202 `carryover[]` entries are operator work misfiled this way.**
-- **Permanently-true facts** — a gotcha still true next month, a deliberate non-fix nobody intends to
-  reverse, a load-bearing measured number → `reference[]`, not `carryover[]`. The signal is a finding
-  with no `clears_when` because nothing will ever make it stop being true.
-  See `docs/state/reference-container-schema.md`.
-- **Durable caveats, environmental notes, drifted surfaces, and not-yet-ticketed deferred follow-ons** →
-  append a `carryover[]` entry to `planning/state.json`. This is the in-between lane the others miss —
-  work-class findings that eventually clear. The kind vocabulary is exactly four (HQ D72):
-  - `kind: defect` — a real unticketed bug with a fix, not yet filed as its own block.
-  - `kind: deferred` — a real follow-on you haven't ticketed yet; promote it to a block/backlog when ready.
-  - `kind: drift` — a doc, comment, block title or generated surface out of step with the code or graph.
-  - `kind: env` — a transient environmental caveat (e.g. "installed binary is stale, rebuild first").
+**2a — Flip any block this session closed** to `status: "closed"` in `planning/state.json`
+`tracks[].blocks[]`. Do this **before** Step 4's `emit-state`: that authored field is the
+*input* the derivation reads, and `emit-state` never infers completion from `status.md` (the
+sync is one-way by design). Skipping this leaves `focus` and every generated surface stale
+until someone reconciles by hand — the `engine-rs` `state-json-block-status-stale` incident,
+2026-07-03.
 
-  `constraint` and `known_issue` are **retired** — D72 removed them and okf-core now preserves them
-  only through its `Unknown(String)` fallback. Do not mint new entries with either.
+**2b — Drain anything that must outlive this handoff** into `planning/state.json`'s
+`carryover[]`, so the next handoff can't overwrite it away. One quick pass, not a routing
+ceremony — append an entry with `slug`, `scope`, `kind`, `text`, `created` as the required
+core, plus these optional fields — `docs/state/state-schema.md` is the authoritative field
+table; this restates only what an agent needs inline while appending:
 
-  Follow the `carryover[]` field shape in `docs/state/state-schema.md` — the authoritative table — for
-  the required core (`slug`, `scope`, `kind`, `text`, `created`) plus the optional fields worth naming
-  inline here since this is what agents actually read while appending:
-  - `priority` (int, `0..=3`) — value if resolved, same rubric as `tracks[].blocks[]`; omit when the
-    entry carries no value judgement.
-  - `blocks` (array) — edges to the work this entry blocks (`{type:"block",repo,id}` /
-    `{type:"external",what}`), feeding the same reverse-topological `min`-propagation that derives
-    `effective_priority`. Omit (don't write `[]`) when it blocks nothing.
-  - `finding_id` (string) — free-form join key so `mev carryover` can correlate the same finding filed
-    in several repos.
-  - `related`, `reviewed`, `snoozed_until` — as documented in `docs/state/state-schema.md`.
-  - `clears_when` — either the legacy human-readable string (subjective conditions only), or a **typed
-    predicate** mev can evaluate: `block_closed` (`repo`, `id`), `file_exists` (`path`), `file_contains`
-    (`path`, `pattern`), `command_exits_zero` (`command`) — each takes an optional `note`. Prefer the
-    typed form whenever the condition is checkable.
+| kind | for |
+|---|---|
+| `defect` | a real unticketed bug with a fix — not yet filed as its own block |
+| `deferred` | a real follow-on you haven't ticketed yet |
+| `drift` | a doc, comment, block title or generated surface that has fallen out of step with the code or the graph |
+| `env` | a transient environmental caveat ("installed binary is stale, rebuild first") |
 
-  **Only entries with a typed `clears_when` predicate are machine-evaluable by `mev carryover`** — a
-  prose `clears_when` (or none) lands the entry in its not-evaluable lane; `priority` and `finding_id`
-  are what make it rankable and cross-repo-correlatable.
+`constraint` and `known_issue` are **retired** (HQ D72) — okf-core preserves them only through its
+`Unknown(String)` fallback so legacy entries still round-trip. Do not mint new entries with either.
 
-  Keep it valid JSON; append, don't duplicate an existing slug. **Delete** any existing `carryover[]`
-  entry whose `clears_when` resolved this session.
+**Route at write time — load the `edit-state-json` skill's Step 1 before appending.** It covers
+the operator-edge vs. `reference[]` vs. `carryover[]` question in full, including the measured
+30-of-202 fleet-wide misfiling rate for operator work parked in `carryover[]` by mistake — do not
+re-derive the routing rule here.
 
-The handoff prose in Step 3 then *points at* these slugs instead of being their only home.
+Only what survives both of its questions is a `carryover[]` entry: work-class findings that eventually
+clear — an unticketed defect, a deferred follow-on, a drifted surface, a transient env caveat.
 
-**File operator work as a graph edge, never as prose.** Anything this session is leaving for the
-operator to decide, review, approve, or judge — a call only they can make, a credential only they
-hold, a thing they must look at — is filed as a `{"type":"operator", slug, exit, start, what?}`
-entry in `depends_on` on the block(s) it gates, **not** written into the handoff prose, a `note`
-field, or an `## Open questions` bullet. `slug` is kebab-case, prefixed `operator-`; `exit` names
-the artifact whose existence ends the gate (never a description of the work — e.g. `planning/
-decision-rate-card.md exists`, not "decide on pricing"); `start` is a paste-ready command the
-operator runs to begin. If the decision reduces to a single yes/no on a fixed payload, use
-`{"type":"approval", slug, what, digest}` instead. **Why:** an operator (or approval) edge
-inherits the effective priority of everything it gates and surfaces in `/next` as the reason work
-cannot start; prose in a handoff file surfaces nowhere and is exactly how these get left for days.
-Skip entirely if this repo has no `planning/state.json` — say so explicitly in the handoff instead
-and name who is expected to file it once one exists.
+- `priority` (int, `0..=3`) — value if resolved, on the same rubric as `tracks[].blocks[]`.
+  Omit when the entry carries no value judgement.
+- `blocks` (array) — edges to the work this entry blocks, same forms as `depends_on`
+  (`{type:"block",repo,id}` / `{type:"external",what}`); feeds the same reverse-topological
+  `min`-propagation that derives `effective_priority`. Omit (don't write `[]`) when it blocks
+  nothing.
+- `finding_id` (string) — free-form join key so `mev carryover` can correlate the same finding
+  filed in multiple repos.
+- `related`, `reviewed`, `snoozed_until` — as documented in `docs/state/state-schema.md`.
+- `clears_when` — either the legacy human-readable string (for genuinely subjective
+  conditions), or a **typed predicate** object mev can evaluate itself: `block_closed`
+  (`repo`, `id`), `file_exists` (`path`), `file_contains` (`path`, `pattern`), or
+  `command_exits_zero` (`command`) — each takes an optional `note`. Prefer the typed form
+  whenever the condition is checkable.
+
+**Only entries with a typed `clears_when` predicate are machine-evaluable by `mev carryover`**
+— a prose `clears_when` (or none) lands the entry in its not-evaluable lane. `priority` and
+`finding_id` are what make an entry rankable and cross-repo-correlatable; an entry with none
+of these three still counts, but sits inert until someone triages it by hand.
+
+Append; don't duplicate an existing slug. Skip entirely if this repo has no
+`planning/state.json`.
+
+Sequenced work with real dependencies belongs in `tracks[].blocks[]`, and free-floating ideas
+belong in the HQ `backlog[]` — but **do not invoke `/update-state` or `/backlog-ticket` from
+here**. Note them in the handoff prose and let the next session file them properly.
+
+Never hand-edit a block's `tasks` field — it's a derived pointer, not somewhere to inject
+entries.
+
+**2c — Delete resolved entries.** This is not a cleanup pass to run "if there's time" — a
+`carryover[]` array that only ever grows is exactly as broken as one that silently loses
+entries, and it's the more common failure because deleting feels riskier than appending. Before
+writing anything in Step 2b, first sweep the entries you just read in Step 1 and delete every
+one whose `clears_when` has actually resolved this session or was already resolved before it
+(carried forward unnoticed by a prior handoff):
+
+- **Typed `clears_when`** — check it for real, don't eyeball it: `block_closed` means the named
+  `{repo, id}` is `status: "closed"` in *that* target's `state.json` (which may not be this
+  repo's — check the right file); `file_exists` means the path is present now; `file_contains`
+  means the pattern is present in the file now; `command_exits_zero` means running the command
+  now exits `0`. An entry only clears when its predicate is verified true at the moment of this
+  handoff — not because it looks old, not because you vaguely recall it was fixed, and not
+  because deleting it would shrink a messy-looking array.
+- **Prose `clears_when`** — resolve it only if this session's own work (or a fact you can point
+  to concretely) makes the condition true. If you're not sure, leave the entry and say so in
+  Step 5's report rather than guessing either way.
+- **`reference[]` entries are never deleted by this step.** They have no `clears_when` because
+  they're permanently true by construction (Step 2b's routing rule); if one looks stale or wrong,
+  that's a correction, not a resolution, and belongs in the handoff prose as an open question,
+  not a silent delete.
+- Deleting an entry that hasn't actually resolved is worse than leaving a stale one: the next
+  agent loses the only record that the constraint, defect, or caveat exists at all.
+
+**Run `mev validate-state planning/state.json` immediately after Step 2b/2c's writes — this is
+a mandatory step, not a suggestion to consider.** Do it before moving on to Step 2d or Step 3.
+Treat a nonzero exit as blocking: read the reported error, fix the entry (wrong field shape,
+`scope` written as a string instead of a struct, `related` as bare slugs instead of the
+schema's objects — the exact mistakes that cascaded to 50 errors across seven `state.json`
+files in a past incident before anyone ran this check), and re-run until it passes. Skip only
+if this repo has no `planning/state.json` (Step 2b already established that).
+
+**2d — File operator work as a graph edge, never as prose.** Anything this session is leaving
+for the operator to decide, review, approve, or judge — a call only they can make, a credential
+only they hold, a thing they must look at — is filed as a `{"type":"operator", slug, exit,
+start, what?}` entry in `depends_on` on the block(s) it gates, **not** written into the handoff
+prose, a `note` field, or an `## Open questions` bullet. `slug` is kebab-case, prefixed
+`operator-`; `exit` names the artifact whose existence ends the gate (never a description of the
+work — e.g. `planning/decision-rate-card.md exists`, not "decide on pricing"); `start` is a
+paste-ready command the operator runs to begin. If the decision reduces to a single yes/no on a
+fixed payload, use `{"type":"approval", slug, what, digest}` instead. **Why:** an operator (or
+approval) edge inherits the effective priority of everything it gates and surfaces in `/next` as
+the reason work cannot start; prose in a handoff file surfaces nowhere and is exactly how these
+get left for days. Skip entirely if this repo has no `planning/state.json` — say so explicitly in
+the handoff instead (Step 3) and name who is expected to file it once one exists.
 
 ### Step 3 — Write `planning/handoff.md`
 
-Create or overwrite `planning/handoff.md` using this template. Be specific: the next agent
-has zero session memory and relies entirely on this file + `/prime` to orient.
+The next agent has zero session memory. Be specific and honest. If `$ARGUMENTS` was provided,
+weave it in as the primary focus note.
 
 ```markdown
 ---
@@ -115,62 +169,102 @@ created: YYYY-MM-DD
 > **For the next agent:** Read this immediately after `/prime`. Delete this file once consumed.
 
 ## What we're doing and why
-<One paragraph. State the goal, why it matters right now, and any non-obvious background.
-Reference specific file paths, doc sections, or business context where helpful.>
+<One paragraph: the goal, why it matters now, and any non-obvious background the next agent
+would otherwise re-derive. Cite file paths and decision numbers.>
 
 ## Completed this session
-<Bulleted list of concrete things done — commits made, docs updated, decisions reached.
-Pull from git log. Be specific: "updated business/docs/career.md Upwork section + planning/status.md
-focus line" not "updated docs".>
+<Concrete things done — commits, files changed, decisions reached. "bumped the harness-config
+loader to sonnet in both engines (`loadHarnessConfig` in sdlc-flow.js and sdlc-task.js)",
+not "fixed engine". Name the symbol, not a line number — it drifts the moment the file is
+next edited.>
 
 ## Remaining work
-<Bulleted list of what's left, in priority order. Mark blockers explicitly. For anything durable
-you drained in Step 2, *point at the home* rather than re-describing it: "see `state.json` carryover
-`cortex-leaf-migration`" or "block `BA.11.C` in `core/bastion`".>
+<What's left, in priority order. Mark blockers explicitly.>
+
+## Durable State Updates
+<`carryover[]` slugs added or deleted, and any block whose status you flipped. Slug / block ID
+only — the next agent can look them up.>
 
 ## Open questions / choices
-<Name the `operator-`/`approval` slugs already filed in `depends_on` (Step 2) and what each
-gates — this section points at the graph, it does not substitute for it. If none: "None — clear
-to proceed.">
-
-## Context the next agent needs
-<Only ephemeral, this-session framing the next agent needs to read the above. Durable constraints,
-known-issues, and env caveats belong in `state.json` `carryover[]` (Step 2) — reference their slugs
-here, don't restate them. Omit this section if Step 2 captured everything.>
+<Name the `operator-`/`approval` slugs already filed in `depends_on` (Step 2d) and what each
+gates — this section points at the graph, it does not substitute for it. If truly nothing
+needs the operator: "None — clear to proceed.">
 
 ## First command after `/prime`
 `<exact command to run first>`
 ```
 
-Fill every section. Do not leave placeholder text.
+**Omit a section rather than padding it.** An absent "Open questions" reads as "none"; a
+section full of filler wastes the next agent's attention, which is the one thing this file
+exists to protect.
 
-### Step 4 — Invoke `/log-work`
+### Step 4 — Log, regenerate, commit (2 shell calls, no delegation)
 
-Invoke the `/log-work` skill. Pass $ARGUMENTS if provided so the log entry gets the same
-narrative. The brain's `/log-work` will ask for the narrative if not passed — let that flow.
+**4a — Append to `log.md`** (repo root, `type: Log`; create with OKF frontmatter if missing).
+Add a `### <title>` sub-entry under today's `## [YYYY-MM-DD]` section, creating that date
+section at the top just below `# Log` if absent:
 
-### Step 5 — Invoke `/commit`
+```markdown
+### <Short title of the session>
+- **What:** <what was built / changed / decided>
+- **Why:** <what prompted it — the problem, request, or insight>
+- **Refs:** <driving plan / decision / tasks — omit if none>
+```
 
-After `/log-work` completes, invoke the `/commit` skill. It will pick up `planning/handoff.md`,
-the `state.json` `carryover[]` edits, plus any other uncommitted changes and ask for confirmation
-before committing.
+**Why** is required. If `$ARGUMENTS` doesn't make the reason clear, ask one brief question.
+Bump `log.md`'s frontmatter `timestamp` to the current ISO-8601 time.
 
-### Step 6 — Report
+**4b — Bump `planning/status.md`'s frontmatter `timestamp`** to the same time, and update any
+hand-maintained prose (`## Momentum`, narrative callouts) that this session changed. Do **not**
+hand-write the focus line — Step 4c derives it. Never edit `master-plan.md` from this command.
 
-Tell the user:
-- `planning/handoff.md` was written (or updated)
+**4c — Regenerate derived surfaces.** If `$BRAIN_ROOT/scripts/sync/emit_state_write.sh` exists,
+run it instead of the bare command — some brains wrap `emit-state --write` in a script that adds
+content-loss guards and commits what it wrote **locally only** (push stays opt-in behind an env
+var only a nightly cron sets, never something this session's use triggers). This harness stays
+project-agnostic, so it only checks for the script; it never assumes one exists. Otherwise run
+`mev emit-state --write` directly — it walks up to find `brain.toml` itself; no `cd` needed —
+and let Step 4d's commit below pick up the result. This regenerates every derived surface from
+the state you authored in Step 2a: leaf `state.json` focus fields, the brain rollup, the
+per-project cache doc + `synced_from` watermark, tier rollups, the HQ Operating Board, and
+`master-plan.md`'s wave tables.
+
+Do not reimplement any of that by hand. If the run reports `W_EMIT_NO_SENTINEL` against a
+target this repo feeds, report it rather than inventing the missing sentinel pair.
+
+- **No `brain.toml` found** (standalone repo) → skip 4c and say so in the report.
+- **`_root` repos only** (`brain`, `learn-ai`, `base-template`) → additionally update *this*
+  repo's `###` subsection in `BRAIN_ROOT/README.md`'s `## Quick Status` by hand; `emit-state`
+  doesn't generate it (no `generated:` sentinel). Verify the heading matches before writing —
+  never touch another project's subsection.
+
+**4d — Commit.** Stage `planning/handoff.md`, the `state.json` edits, `log.md`, `status.md`, and
+any other uncommitted work. Write a conventional-commit message. Show the staged file list and
+get confirmation before committing. **Commit on whatever branch you are already on — do not
+create one.** `/handoff` is called at the end of finished work, which is normally already on
+`main`; branching there strands the handoff off the branch the next session opens. Do not push
+unless asked.
+
+### Step 5 — Report
+
+**<= 10 lines.** First line: outcome + whether it needs the operator. Then <= 6 one-line
+bullets. Link paths; never restate a file. See the `report-to-the-operator` skill.
+
+- `planning/handoff.md` written (or updated)
+- Blocks flipped to `closed`; `carryover[]` slugs added or cleared
 - Any `operator`/`approval` edges filed this session, and what they gate
-- What was logged and committed
-- The exact sequence to resume:
-  1. Open a fresh Claude Code session:
-     - **At HQ root:** open in `agentic-portfolio/`
-     - **In a sub-brain tier:** open in this sub-brain directory (e.g. `agentic-portfolio/core/`), not the brain root
-  2. Run `/prime` — it will surface the handoff automatically
-  3. Run the first command listed in the handoff
+- The `emit-state --write` summary, or that it was skipped (standalone)
+- What was committed
+- Next session: open a fresh session in **the directory whose `planning/` this handoff belongs
+  to** — for a tier sub-brain that is the tier directory (e.g. `agentic-portfolio/core/`), not the
+  brain root — then `/prime` (it surfaces the handoff automatically) → run the first command listed
+  in the handoff
+
+If a settled architectural decision came out of this session, say so and suggest `/log-decision`
+— do not author one inline.
 
 ## Context / Files to Read
 
 - `planning/status.md`
-- `log.md` (last 3 entries)
-- `planning/handoff.md` (if it already exists)
-- `planning/state.json` (existing `carryover[]`) + `docs/state/state-schema.md` (`carryover[]` field shape)
+- `planning/state.json` (`tracks[].blocks[]` + `carryover[]`)
+- `planning/handoff.md` (only if it already exists)

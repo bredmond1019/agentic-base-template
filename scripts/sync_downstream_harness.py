@@ -240,6 +240,35 @@ class RepoReport:
 # consolidate. Same reasoning as generate-roadmap: HQ-only by nature, not by target.
 EXCLUDED_COMMAND_FILENAMES: set[str] = {"generate-roadmap.md", "consolidate-fleet.md", "dispose-run.md", "commander-retro.md"}
 
+# Commands that sync to EVERY target INCLUDING engines_only ones (i.e. the brain root).
+#
+# D54 makes HQ engines_only because its commands genuinely diverge - /prime is 193 lines to
+# base-template's 77. That stays true and is guarded by 8 regression tests. This is the narrow
+# exception: these four are **depth-agnostic by construction**. log-work.md's own header says so -
+# "brain.toml-driven and depth-agnostic ... works unchanged whether this repo lives at the brain
+# root, inside a tier sub-brain, or standalone" - and handoff resolves $BRAIN_ROOT the same way.
+#
+# Measured 2026-09-04 (BT.chore.session-commands-are-one-source): HQ and the five tiers were each
+# carrying an OLDER FORK of these, missing the entire carryover[]/state-routing vocabulary -
+# wrap-up's fork lacked carryover, defect, deferred, drift, env, kind, state.json, tracks,
+# depends_on, operator-, slug, exit, start, edit-state-json, focus and /next. These four are
+# exactly where a carryover entry or an operator edge gets filed, and HQ owns every planning/
+# directory in the fleet, so the repo with the most state to route had the commands that never
+# learned the rules. HQ's handoff additionally still delegated (Invoke /log-work -> Invoke
+# /commit), making the /close-out chain four levels deep - the reported "it stops before the log
+# entry" bug.
+#
+# ADDING TO THIS LIST IS A DELIBERATE ACT. A command belongs here only if it resolves everything
+# from brain.toml at runtime and the brain root has no legitimate variant of it. If HQ needs
+# different behaviour, the command does not belong here - fix the command to be depth-agnostic
+# instead. `test_sync_downstream_harness.py` fails if a known-divergent command (prime) is added.
+ENGINES_ONLY_COMMAND_ALLOWLIST: set[str] = {
+    "handoff.md",
+    "wrap-up.md",
+    "log-work.md",
+    "begin-session.md",
+}
+
 
 def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
     """The exact base-template harness file set this script owns, relative to `root/.claude`.
@@ -258,11 +287,13 @@ def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
     """
     files: list[Path] = []
     commands_dir = root / ".claude" / "commands"
-    if commands_dir.is_dir() and not engines_only:
+    if commands_dir.is_dir():
         files.extend(
             p
             for p in commands_dir.glob("*.md")
-            if p.is_file() and p.name not in EXCLUDED_COMMAND_FILENAMES
+            if p.is_file()
+            and p.name not in EXCLUDED_COMMAND_FILENAMES
+            and (not engines_only or p.name in ENGINES_ONLY_COMMAND_ALLOWLIST)
         )
     workflows_dir = root / ".claude" / "workflows"
     if workflows_dir.is_dir():

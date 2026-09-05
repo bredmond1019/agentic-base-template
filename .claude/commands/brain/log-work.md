@@ -63,6 +63,34 @@ adding value here.
    a future session reconciles by hand (the engine-rs `state-json-block-status-stale` incident,
    2026-07-03).
 
+   **If this session surfaced a durable caveat, drain it into `planning/state.json` `carryover[]`
+   while you're in this file**, with one of these `kind` values:
+
+   | kind | for |
+   |---|---|
+   | `defect` | a real unticketed bug with a fix — not yet filed as its own block |
+   | `deferred` | a real follow-on you haven't ticketed yet |
+   | `drift` | a doc, comment, block title or generated surface that has fallen out of step with the code or the graph |
+   | `env` | a transient environmental caveat ("installed binary is stale, rebuild first") |
+
+   `constraint` and `known_issue` are **retired** (HQ D72) — okf-core preserves them only through its
+   `Unknown(String)` fallback so legacy entries still round-trip. Do not mint new entries with either.
+
+   **Route at write time — load the `edit-state-json` skill's Step 1 before appending.** This
+   command has no operator-work step of its own, so the skill (not `/handoff`'s step 2d) is the
+   routing authority here. It covers the operator-edge vs. `reference[]` vs. `carryover[]`
+   question in full, including the measured 30-of-202 fleet-wide misfiling rate for operator work
+   parked in `carryover[]` by mistake — do not re-derive the routing rule here.
+
+   Only what survives both of its questions is a `carryover[]` entry: work-class findings that eventually
+   clear — an unticketed defect, a deferred follow-on, a drifted surface, a transient env caveat.
+
+   **Run `mev validate-state planning/state.json` immediately after any write this step makes
+   to `state.json` (the block-status flip and/or a `carryover[]`/`reference[]` entry) — this is
+   a mandatory step, not a suggestion to consider.** Treat a nonzero exit as blocking: read the
+   reported error, fix the entry, and re-run until it passes. Skip only if the repo has no
+   `planning/state.json`.
+
    Then open this repo's `status_file` (`type: ProjectStatus`) and update **surgically** — only the
    parts `emit-state` does not derive:
    - the `timestamp` frontmatter field → current ISO-8601 time;
@@ -85,10 +113,16 @@ adding value here.
 
 ### Step 3 — Regenerate derived surfaces (`mev emit-state --write`)
 
-9. Shell out to `mev emit-state --write` (it walks up from the current directory to find
-   `brain.toml` itself — no need to `cd` to `BRAIN_ROOT` first). This is the **single derivation
-   engine** and it regenerates, in place, every generated surface from the `tracks[]` you just
-   authored in Step 2:
+9. **If `$BRAIN_ROOT/scripts/sync/emit_state_write.sh` exists, run it instead of the bare command
+   below.** Some brains wrap `emit-state --write` in a script that adds content-loss guards and
+   commits what it wrote — **locally only**, never pushing on its own (that class of wrapper is
+   opt-in to push, gated behind an env var only a nightly cron sets). This repo's harness stays
+   project-agnostic, so it never assumes that script exists — it only checks for it. If it's
+   absent, shell out to `mev emit-state --write` directly (it walks up from the current directory
+   to find `brain.toml` itself — no need to `cd` to `BRAIN_ROOT` first), and leave the resulting
+   changes uncommitted for `/commit`, `/wrap-up`, or `/handoff` to pick up — never commit them here
+   yourself with a broad `git add`. Either way, this step regenerates, in place, every generated
+   surface from the `tracks[]` you just authored in Step 2:
    - this repo's leaf `state.json` focus fields (`now` / `next` / `blocked`);
    - the brain `state.json`'s `repos[]` / `cross_repo[]` rollup and its own `focus`;
    - the per-project cache doc's focus headline + `synced_from` watermark
