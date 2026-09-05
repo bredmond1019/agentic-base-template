@@ -170,11 +170,19 @@ with tempfile.TemporaryDirectory() as tmp:
     )
 
 
-if failures:
-    print(f"\n{len(failures)} failure(s):")
-    for f in failures:
-        print(f"  - {f}")
-    sys.exit(1)
+if __name__ == "__main__":
+    # Guarded 2026-09-05 (round-5 triage) -- `python3 -m pytest scripts` imports every
+    # `test_*.py` it discovers, including this one, and a module-level `sys.exit(...)` raises
+    # SystemExit during that import, aborting collection for the WHOLE run
+    # (`INTERNALERROR> SystemExit: 0`, `no tests ran`) rather than just skipping this file. This
+    # script is written to be RUN (`python3 scripts/test_nextest_artifact_wrapper.py`), not
+    # collected -- the guard preserves that entry point unchanged while making pytest's import
+    # side-effect-free.
+    if failures:
+        print(f"\n{len(failures)} failure(s):")
+        for f in failures:
+            print(f"  - {f}")
+        sys.exit(1)
 
-print(f"\nall checks passed")
-sys.exit(0)
+    print(f"\nall checks passed")
+    sys.exit(0)
