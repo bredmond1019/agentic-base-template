@@ -1,0 +1,21 @@
+# NOTE: this file is named `gitignore` (no dot) ON PURPOSE, and /new-project renames it to
+# `.gitignore` when it copies the scaffold. A dotfile here would apply to base-template's OWN
+# tree — its `/planning` rule would hide `scaffold/planning/` from base-template's git, so any
+# NEW file added to the template's planning scaffold would be silently untracked. Already-tracked
+# files keep working, which is what makes that failure quiet.
+/target
+**/target
+
+# planning/ is a SYMLINK into the brain vault (core/_planning/<slug>) and is tracked by the
+# agentic-portfolio (HQ) repo, NEVER by this one. Most repos scaffolded from this template are
+# public; the vault is private. Without this rule the first `git add -A` commits the whole
+# planning tree into the public repo.
+/planning
+
+# Nested planning/ dirs inside crates (knowledge.md, memory.md, archived SDLC worklogs).
+**/planning/
+
+.env
+.env.*
+!.env.example
+.DS_Store

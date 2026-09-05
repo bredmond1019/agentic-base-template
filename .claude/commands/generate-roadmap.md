@@ -708,6 +708,28 @@ and chore block**, which is most of what a roadmap of small work contains.
 Create it empty. Append-only, one line per integrated block. Four sessions editing one markdown
 file is the contention pattern this structure exists to avoid.
 
+### Every repo in the roadmap has a wave-table sentinel
+
+**Check once per repo the roadmap touches, before registration closes.** Same failure as in
+`/plan`'s self-check, but a roadmap spans repos so it is checked per repo:
+
+```bash
+for r in <each repo in this roadmap>; do
+  grep -q 'generated:wave-table' "$r/planning/master-plan.md" || echo "MISSING sentinel: $r"
+done
+```
+
+A repo with no `<!-- BEGIN generated:wave-table -->` / `<!-- END ... -->` pair is silently skipped
+by `mev emit-state --write` (`W_EMIT_NO_SENTINEL`): its lane registers, every gate passes, and its
+wave table never renders. `/generate-master-plan` used to add the pair and **D65 retired it without
+anything inheriting the job**. Add the empty pair where it is missing; never hand-author rows
+between the sentinels.
+
+**Related trap, same origin — `epics` goes on the `state.json` ROW, never on the block record.**
+`block.schema.json` is `additionalProperties: false` and has no `epics` property, so a record
+carrying one is schema-invalid. Measured 2026-09-05: 611 `state.json` block rows carry `epics`
+correctly against 6 block records that carry it wrongly. Declare epic membership on the rows.
+
 ### Register the roadmap in `epics[]`
 
 **A roadmap's home is a folder; its findability is a registry row — the folder alone only tidies

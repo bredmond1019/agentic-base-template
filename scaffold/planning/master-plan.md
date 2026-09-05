@@ -65,9 +65,17 @@ related: [context, status, planning-index]
 
 ## Quick Reference Sequence Table
 
-| Phase | Block | What | Why | Role in destination |
-|---|---|---|---|---|
-| 0 | A | Foundation setup | Clean starting point | Enables everything downstream |
+> **Do not hand-edit between the sentinels.** `mev emit-state --write` splices the live
+> status/dependency view for this repo's block graph in here. The pair must be present from the
+> scaffold onward: a `master-plan.md` with no sentinels is silently SKIPPED
+> (`W_EMIT_NO_SENTINEL`) and the wave table stays empty forever with nothing saying why.
+>
+> It ships in the scaffold because the command that used to add it, `/generate-master-plan`, was
+> retired by D65 — and for a while nothing replaced that responsibility, so freshly scaffolded
+> repos got no sentinel at all.
+
+<!-- BEGIN generated:wave-table -->
+<!-- END generated:wave-table -->
 
 ---
 
