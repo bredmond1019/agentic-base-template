@@ -86,16 +86,19 @@ FLAG_INTERP = "${" + RESOLVER_NAME + "()}"
 # Real invocations look like either:
 #   `... && mev emit-state --write . If ...`                 (chained after a `cd`, task/flow)
 #   `   mev emit-state --write`                               (standalone, flow's --auto-merge)
-# Once fixed, an optional `${renderAgentFlag()}` sits immediately after `--write` in both shapes.
-# Every OTHER mention of "emit-state --write" in these files is prose wrapped in backticks
-# (`` `mev emit-state --write` `` in a schema description, comment, or log line) and is excluded
-# by requiring the literal, un-backticked shapes below.
+# Once fixed, an optional `${renderAgentFlag()}` sits immediately after `--write` in both shapes,
+# and once BT.ticket.engines-pass-scope-to-emit-state also lands, a second interpolation
+# (`${renderScopeFlag()}`) sits immediately after that one -- so the interpolation group allows
+# ZERO OR MORE contiguous `${...}` chunks, not just zero-or-one, or this locator stops matching
+# the moment a second flag is appended. Every OTHER mention of "emit-state --write" in these
+# files is prose wrapped in backticks (`` `mev emit-state --write` `` in a schema description,
+# comment, or log line) and is excluded by requiring the literal, un-backticked shapes below.
 
 CD_SITE_RE = re.compile(
-    r"^(?P<line>.*&&\s*mev emit-state --write(?:\$\{[^}]+\})?\s*\.\s*If\b.*)$", re.M
+    r"^(?P<line>.*&&\s*mev emit-state --write(?:\$\{[^}]+\})*\s*\.\s*If\b.*)$", re.M
 )
 STANDALONE_SITE_RE = re.compile(
-    r"^(?P<line>[ \t]*mev emit-state --write(?:\$\{[^}]+\})?[ \t]*)$", re.M
+    r"^(?P<line>[ \t]*mev emit-state --write(?:\$\{[^}]+\})*[ \t]*)$", re.M
 )
 
 # The frozen pre-change baseline: the exact three lines as they exist BEFORE this fix, captured
@@ -127,8 +130,14 @@ def find_sites(path: Path):
 
 
 def flag_expr(line: str) -> str | None:
-    """The exact `${...}` substring immediately after `--write`, or None if absent."""
-    m = re.search(r"--write(\$\{[^}]+\})", line)
+    """The contiguous run of ONE OR MORE `${...}` chunks immediately after `--write`, or None if
+    absent. A later flag (e.g. `${renderScopeFlag()}`) is appended immediately after an earlier
+    one (`${renderAgentFlag()}`) with no separator, so this must capture the WHOLE run, not just
+    the first chunk -- capturing only the first would leave the second uncounted for `missing_agent`
+    and unstripped for the baseline comparison, silently breaking the moment a second interpolation
+    is added in either order.
+    """
+    m = re.search(r"--write((?:\$\{[^}]+\})+)", line)
     return m.group(1) if m else None
 
 

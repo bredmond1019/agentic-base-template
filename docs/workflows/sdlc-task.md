@@ -255,7 +255,12 @@ properties are pinned by `scripts/test_block_close_decision.py` and
 
 `planning/state.json`'s top-level `focus` object (`focus.next` in particular) is derived, not
 bookkeep's to hand-edit — it's recomputed by `mev emit-state --write`. **In-place** runs execute
-that command as part of bookkeep, so `focus.next` is current by the time the run finishes.
+that command as part of bookkeep, so `focus.next` is current by the time the run finishes. The
+call also passes `--scope <repo-slug>` when the running lane's own repo slug resolves (from
+`FLEET_LANE_REPO`, else the same `brain.toml` `[[repos]]` walk-up used to resolve `--agent`),
+bounding the regenerated derived surfaces to that one repo instead of the whole corpus
+(`BT.ticket.engines-pass-scope-to-emit-state`) — a standalone repo with no `brain.toml` degrades
+to the unscoped, corpus-wide behaviour, exactly as it always has.
 **`--worktree` runs skip it** (running `mev emit-state --write` from inside a linked worktree is
 unsafe), so `focus.next` is left pointing at the pre-close state after the branch's own commits —
 this is a deliberate deferral, not a bug, and the engine's own log line states it explicitly

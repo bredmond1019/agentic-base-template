@@ -3281,7 +3281,7 @@ ${renderStateFlipScript({ runRoot: worktreePath, indent: '        ' })}
     rollups, /attention boards, wave tables) need resyncing every time, not only on a full close.
     ${useWorktree
       ? `- Do NOT run \`mev emit-state --write\` here: this is a linked git worktree, where emit-state refuses to run. The authored edits are committed on the branch below (step 5); the derived surfaces regenerate on the base branch when this branch merges (/clean-worktree or /close-out --merge-branch run emit-state after integration). Set emitStateRan=false.`
-      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \`git commit\` already lands right here: cd ${worktreePath} && mev emit-state --write${renderAgentFlag()} . If \`mev\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}
+      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \`git commit\` already lands right here: cd ${worktreePath} && mev emit-state --write${renderAgentFlag()}${renderScopeFlag()} . If \`mev\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}
 
 2d. OPTIONAL post-emit commit hook. ${postEmitCommitCommand
       ? `planning/harness.json declares postEmitCommitCommand — run it ONLY when step 2c set emitStateRan=true
@@ -3570,7 +3570,7 @@ ${useWorktree ? `
    ${GIT} branch --list ${branchName}
 `}
 5. Regenerate derived surfaces on ${prBase} (you are now on ${prBase} in the main tree — emit-state is safe here):
-   mev emit-state --write${renderAgentFlag()}
+   mev emit-state --write${renderAgentFlag()}${renderScopeFlag()}
    This re-derives the one-way surfaces (focus, rollups, cache synced_from watermarks, tier tables,
    the HQ Operating Board, master-plan wave tables) from the authored state.json block-status flip the
    merge just landed. If \`mev\` or brain.toml is absent (a standalone repo), skip it silently and set
@@ -3707,3 +3707,64 @@ function renderAgentFlag() {
   }
 }
 // <</shared:renderAgentFlag>>
+
+// <<shared:renderScopeFlag>>
+// Renders the `--scope <slug>` argument for a `mev emit-state --write` invocation so an
+// in-place lane's wrap-up/bookkeep regenerates only its OWN repo's derived surfaces instead of
+// the whole corpus (BT.ticket.engines-pass-scope-to-emit-state). Returns '' (empty string) when
+// no repo slug resolves -- an unconditional flag would break every non-lane, standalone-repo run
+// of these engines across 18+ downstream repos with no brain.toml at all. Every failure path (no
+// brain.toml, unreadable file, no matching repo) falls through to '' inside a try/catch -- this
+// function must never be the reason an emit-state call does not run.
+//
+// Resolution order (mirrors renderAgentFlag()'s FLEET_LANE_AGENT / lease-file precedence):
+//   1. FLEET_LANE_REPO env var, if set and non-empty.
+//   2. Else the brain.toml [[repos]] walk-up already used by renderAgentFlag(): the deepest
+//      repo_path that is cwd or an ancestor of cwd, yielding that entry's slug.
+//   3. Else no identity resolves and '' is returned.
+function renderScopeFlag () {
+  try {
+    const envRepo = process.env.FLEET_LANE_REPO
+    if (envRepo && envRepo.trim()) return ` --scope ${envRepo.trim()}`
+
+    const fs = require('fs')
+    const path = require('path')
+
+    function findBrainRoot(start) {
+      let dir = start
+      while (true) {
+        if (fs.existsSync(path.join(dir, 'brain.toml'))) return dir
+        const parent = path.dirname(dir)
+        if (parent === dir) return null
+        dir = parent
+      }
+    }
+
+    const brainRoot = findBrainRoot(process.cwd())
+    if (!brainRoot) return ''
+
+    // Minimal [[repos]] table reader: brain.toml's array-of-tables entries are flat
+    // `key = "value"` lines, never nested or multi-line — a regex split is sufficient and
+    // avoids pulling in a TOML dependency this inlined, dependency-free block cannot have.
+    const tomlText = fs.readFileSync(path.join(brainRoot, 'brain.toml'), 'utf8')
+    const repoBlocks = tomlText.split(/^\[\[repos\]\]\s*$/m).slice(1)
+    const here = path.resolve(process.cwd())
+    let bestSlug = null
+    let bestDepth = -1
+    for (const block of repoBlocks) {
+      const slugMatch = block.match(/^\s*slug\s*=\s*"([^"]*)"/m)
+      const pathMatch = block.match(/^\s*repo_path\s*=\s*"([^"]*)"/m)
+      if (!slugMatch || !pathMatch) continue
+      const repoAbs = path.resolve(brainRoot, pathMatch[1])
+      if (here !== repoAbs && !here.startsWith(repoAbs + path.sep)) continue
+      const depth = repoAbs.split(path.sep).length
+      if (depth > bestDepth) { bestDepth = depth; bestSlug = slugMatch[1] }
+    }
+    if (!bestSlug) return ''
+
+    return ` --scope ${bestSlug}`
+  } catch (e) {
+    return ''
+  }
+}
+// <</shared:renderScopeFlag>>
