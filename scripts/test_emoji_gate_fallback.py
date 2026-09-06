@@ -39,6 +39,9 @@ fixture, and asserts the verdict -- never a Python re-implementation of the gate
 Run against the UNFIXED source (2026-09-06 baseline), case 1 below fails with the real
 "cannot scope diff" message -- this is task 1's expected RED. Task 2 makes every case here pass.
 
+Registered in planning/harness.json as `emoji-gate-fallback` (task 3 of this block) --
+run directly: python3 scripts/test_emoji_gate_fallback.py
+
 Run directly: python3 scripts/test_emoji_gate_fallback.py
 """
 
