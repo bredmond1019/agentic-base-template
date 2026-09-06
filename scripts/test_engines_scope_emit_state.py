@@ -58,8 +58,9 @@ WHAT THIS SUITE ASSERTS
 Run today, against the unfixed tree: 3 invocation sites, 0 renderScopeFlag references, exit 1.
 This is the intended RED for task 1 of this block; task 2 wires the fix to make it exit 0.
 
-This is a GATING check once registered (task 3 of this block) -- it is deliberately NOT
-registered in planning/harness.json by this file; that registration is a separate, later task.
+This IS a registered GATING check: `engines-scope-emit-state` in planning/harness.json (task 3
+of this block). Registration lives in harness.json, not in this file -- this docstring only
+records the fact for a reader of the source.
 
 Usage:
     python3 scripts/test_engines_scope_emit_state.py
