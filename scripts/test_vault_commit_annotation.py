@@ -30,13 +30,14 @@ B. STAT-LOOP POSITIVE CONTROL (`verifyVaultCommit`'s embedded shell script): ext
    later fix to `vaultRelPathsFrom` must not (and does not need to) touch it -- a fix that always
    reports VAULT_OK would pass half A trivially but must fail this half.
 
-RUNNING THIS AGAINST THE UNFIXED TREE (2026-09-06) IS EXPECTED TO FAIL:
-half A's annotated-path case fails; half B (independent of the defect) passes.
+RUNNING THIS AGAINST THE UNFIXED TREE (2026-09-06) FAILED as expected:
+half A's annotated-path case failed on both engines; half B (independent of the defect) passed.
+Task 2 then moved `vaultRelPathsFrom` into prompts/shared.js's `<<shared:vaultRelPathsFrom>>`
+block with the annotation stripped, rebuilt both engines via
+`python3 scripts/build_engines.py --write`, and this suite now exits 0.
 
-Once .claude/workflows/prompts/shared.js gains a `<<shared:vaultRelPathsFrom>>` block with the
-annotation stripped and both engines are rebuilt via `python3 scripts/build_engines.py --write`,
-this suite is registered in planning/harness.json as the gating check `vault-commit-annotation`
-(see BT.chore.vault-commit-checker-misparses-its-own-annotation task 3) -- mirroring the
+THIS IS A GATING CHECK, registered in planning/harness.json as `vault-commit-annotation`
+(task 3 of BT.chore.vault-commit-checker-misparses-its-own-annotation) -- mirroring the
 registration note scripts/test_engines_pass_agent.py carries about itself.
 """
 
