@@ -63,28 +63,35 @@ MANIFEST_PATH = ROOT / "scripts" / "engine_docs_sync_manifest.json"
 # line ranges already stamped in scripts/skill_sync_manifest.json for the same engine + anchor
 # name — do not re-derive different ranges for the same region.
 ANCHORS = [
+    # BT.ticket.emoji-gate-fallback-must-attribute-a-range-it-did-not-author, task 2: the
+    # <<shared:renderEmojiGate>> fallback rewrite inserted 35 net lines into shared.js, which is
+    # inlined into both engines at that exact position -- every anchor whose range sat AFTER the
+    # inline point shifted by the same +35 lines in the affected file, with no other content
+    # change (confirmed against the diff: one contiguous insertion hunk per file, nothing else
+    # touched). Ranges below are re-picked from CONTENT at their new positions, not blindly
+    # renumbered.
     (".claude/workflows/sdlc-task.js", "flags-and-defaults", 111, 155,
      "docs/workflows/sdlc-task.md", "## Usage"),
     (".claude/workflows/sdlc-task.js", "stage-list", 87, 96,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1628, 1691,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1663, 1726,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
     # taxonomy it exists to guard. Two entries because both docs pages describe it.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 535, 583,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 570, 618,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 535, 583,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 570, 618,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2873, 2900,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2908, 2935,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 806, 823,
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 841, 858,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1704, 1826,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1739, 1861,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3317, 3352,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3352, 3387,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

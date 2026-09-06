@@ -498,43 +498,51 @@ class EmojiGateDiffScopedTest(unittest.TestCase):
             "-- the narrowed scope must not be able to hide a real violation",
         )
 
-    # -- empty run-state must never pass vacuously -----------------------------------------
+    # -- empty run-state must attribute the range, not refuse on it ------------------------
+    #
+    # BT.ticket.emoji-gate-fallback-must-attribute-a-range-it-did-not-author, task 2, replaced
+    # the RUN_STATE_SITES "cannot-scope" refusal below with attribution: when this run recorded
+    # no commits, main..HEAD is not this run's to judge (it may be entirely a sibling session's
+    # already-reviewed work), so the sites now judge this run's own UNCOMMITTED work instead
+    # (tracked modifications plus untracked files) and pass on a clean tree regardless of what
+    # landed in the committed range. See scripts/test_emoji_gate_fallback.py for the full
+    # attribution contract (foreign-commit PASS, own-uncommitted-emoji FAIL); these two tests
+    # only pin that RUN_STATE_SITES actually exercise that new path rather than the retired
+    # refuse-on-non-empty one.
 
-    def test_empty_run_state_with_nonempty_diff_cannot_scope(self):
-        """No commits are recorded for this run (an empty RUN_COMMITS list), but main..HEAD is
-        non-empty (some commit landed on the branch). RUN_STATE_SITES must exit non-zero with a
-        cannot-scope diagnostic naming the run-state file -- never print 'EMOJI CHECK: OK'. This
-        is the anti-vacuous guard: an unwritten run-state must degrade loudly, not into a silent
-        pass on an unscoped diff."""
+    def test_empty_run_state_with_committed_work_and_clean_tree_passes(self):
+        """No commits are recorded for this run (an empty RUN_COMMITS list), main..HEAD is
+        non-empty (some commit landed on the branch), and the working tree is clean -- there is
+        nothing of this run's own left to judge. RUN_STATE_SITES must exit zero with
+        'EMOJI CHECK: OK', never the retired cannot-scope refusal."""
         fx = self.new_fixture()
         fx.base_commit({"README.md": "hello\n"})
         fx.task_commit(files={"docs/something.md": "clean, but nothing was recorded for it\n"})
         results = run_all_sites(fx.path, run_commits=[])   # empty recorded-commit set
         for site in RUN_STATE_SITES:
             result = results[site]
-            self.assertNotEqual(
+            self.assertEqual(
                 result.returncode, 0,
-                f"{site}: an empty recorded-commit set with a non-empty main..HEAD must exit "
-                f"non-zero (cannot-scope), not pass. Got:\n{result.stdout}{result.stderr}",
+                f"{site}: an empty recorded-commit set with a non-empty main..HEAD but a CLEAN "
+                f"working tree must PASS (nothing of this run's own to judge). "
+                f"Got:\n{result.stdout}{result.stderr}",
+            )
+            self.assertIn(
+                "EMOJI CHECK: OK", result.stdout,
+                f"{site}: must print 'EMOJI CHECK: OK' on a clean tree with an empty recorded-"
+                f"commit set, got:\n{result.stdout}",
             )
             self.assertNotIn(
-                "EMOJI CHECK: OK", result.stdout,
-                f"{site}: must never print 'EMOJI CHECK: OK' when it cannot scope the diff at all",
-            )
-            self.assertIn(
                 "cannot scope", result.stdout.lower(),
-                f"{site}: must print an explicit cannot-scope diagnostic, got:\n{result.stdout}",
-            )
-            state_file_sub = STATE_FILE_SUBSTITUTE[site]
-            self.assertIn(
-                state_file_sub, result.stdout,
-                f"{site}: cannot-scope diagnostic must name the run-state file, got:\n{result.stdout}",
+                f"{site}: the refuse-on-non-empty diagnostic is retired; must not appear, "
+                f"got:\n{result.stdout}",
             )
 
     def test_empty_run_state_synthesised_via_write_run_state_file(self):
-        """Same guard, but exercised through write_run_state_file() -- the fixture synthesises a
-        real run-state JSON with an empty tasks map, proving the helper's derived commit list
-        (empty here) is exactly what gets substituted and exactly what trips the guard."""
+        """Same scenario, but exercised through write_run_state_file() -- the fixture synthesises
+        a real run-state JSON with an empty tasks map, proving the helper's derived commit list
+        (empty here) is exactly what gets substituted and exactly what exercises the attribution
+        path (clean tree -> PASS)."""
         fx = self.new_fixture()
         fx.base_commit({"README.md": "hello\n"})
         fx.task_commit(files={"docs/something.md": "clean, but nothing was recorded for it\n"})
@@ -542,8 +550,8 @@ class EmojiGateDiffScopedTest(unittest.TestCase):
         self.assertEqual(commits, [])
         results = run_all_sites(fx.path, run_commits=commits)
         result = results["sdlc-task.js"]
-        self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn("EMOJI CHECK: OK", result.stdout)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("EMOJI CHECK: OK", result.stdout)
 
     # -- the suite must be able to detect real disagreement ------------------------------
 
@@ -583,13 +591,24 @@ class ExtractionSanityTest(unittest.TestCase):
                 )
             self.assertNotIn("${", script, f"{site}: unsubstituted template placeholder leaked through")
 
-    def test_run_state_sites_carry_the_anti_vacuous_guard(self):
+    def test_run_state_sites_carry_the_attribution_fallback(self):
+        """BT.ticket.emoji-gate-fallback-must-attribute-a-range-it-did-not-author, task 2: the
+        empty-RUN_COMMITS branch no longer refuses on a non-empty `--name-only` existence check --
+        it judges this run's own uncommitted work via `git diff HEAD` (tracked modifications) and
+        `git status --porcelain` (untracked files) instead. Full behavioural coverage lives in
+        scripts/test_emoji_gate_fallback.py; this only pins that the mechanism, not the retired
+        one, is what shipped."""
         for site in RUN_STATE_SITES:
             script = EMOJI_SCRIPTS[site]
             self.assertIn(
-                "--name-only", script,
-                f"{site}: the anti-vacuous guard's existence check uses --name-only "
-                "(distinct from the added-line content scan, which stays -U0)",
+                "git','diff','HEAD'", script,
+                f"{site}: the attribution fallback must diff the working tree against HEAD "
+                "(tracked modifications), not the whole BASE_SHA..HEAD commit range",
+            )
+            self.assertIn(
+                "status','--porcelain'", script,
+                f"{site}: the attribution fallback must also scan untracked files via "
+                "`git status --porcelain`, not just tracked modifications",
             )
             self.assertIn("RUN_COMMITS", script)
             self.assertIn(RUN_COMMITS_SENTINEL, script, f"{site}: sentinel not left for run-time substitution")

@@ -431,9 +431,44 @@ BASE_SHA = '${baseSha}'
 STATE_FILE = '${stateFile}'
 RUN_COMMITS = ${recordedCommitsJson}
 if not RUN_COMMITS:
-    base_diff = subprocess.run(['git','diff','--name-only',f'{BASE_SHA}..HEAD'], capture_output=True, text=True).stdout.strip()
-    if base_diff:
-        print(f'EMOJI CHECK: cannot scope diff -- no commits recorded in the run-state ({STATE_FILE}) for this run, but {BASE_SHA}..HEAD is non-empty. Refusing to pass on an unscoped diff.')
+    # No commits recorded by this run: nothing in BASE_SHA..HEAD is attributable to it, so the
+    # committed range is not this run's to judge (it may be entirely a sibling session's already-
+    # reviewed work). Judge this run's own UNCOMMITTED work instead -- tracked modifications plus
+    # untracked files -- so a concurrent sibling's committed history can never fail a diff this run
+    # never touched, while emoji this run itself is actively writing still fails closed.
+    hits = []
+    diff = subprocess.run(['git','diff','HEAD','-M','-U0','--','*.md','*.mdx'], capture_output=True, text=True).stdout.splitlines()
+    cur_file = None
+    cur_line = None
+    for line in diff:
+        if line.startswith('diff --git '):
+            cur_file = None; cur_line = None
+        elif line.startswith('+++ '):
+            p = line[4:]
+            cur_file = None if p == '/dev/null' else (p[2:] if p.startswith('b/') else p)
+        elif line.startswith('@@'):
+            m = re.match(r'@@ -\\d+(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@', line)
+            cur_line = int(m.group(1)) if m else None
+        elif cur_file and cur_line is not None and line.startswith('+') and not line.startswith('+++'):
+            content = line[1:]
+            if EMOJI.search(content) and FOOTER not in content:
+                hits.append(f'{cur_file}:{cur_line}: {content.rstrip()[:100]}')
+            cur_line += 1
+    status = subprocess.run(['git','status','--porcelain','--','*.md','*.mdx'], capture_output=True, text=True).stdout.splitlines()
+    for line in status:
+        if not line.startswith('??'):
+            continue
+        untracked_path = line[3:]
+        try:
+            with open(untracked_path, encoding='utf-8') as fh:
+                for lineno, content in enumerate(fh, start=1):
+                    if EMOJI.search(content) and FOOTER not in content:
+                        hits.append(f'{untracked_path}:{lineno}: {content.rstrip()[:100]}')
+        except (OSError, UnicodeDecodeError):
+            pass
+    if hits:
+        print(f'EMOJI CHECK FAIL (uncommitted work by this run -- no commits recorded yet in the run-state, {STATE_FILE}):')
+        [print(h) for h in hits[:25]]
         sys.exit(1)
     print('EMOJI CHECK: OK'); sys.exit(0)
 hits = []

@@ -57,7 +57,14 @@ MANIFEST_PATH = ROOT / "scripts" / "skill_sync_manifest.json"
 # the drift check compares hashes, never the `lines` string. So edit a range HERE and re-run with
 # `--update`; hand-editing `lines` in the manifest changes nothing and will be silently overwritten.
 ANCHORS = [
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1628, 1691,
+    # BT.ticket.emoji-gate-fallback-must-attribute-a-range-it-did-not-author, task 2: the
+    # <<shared:renderEmojiGate>> fallback rewrite inserted 35 net lines into shared.js, which is
+    # inlined into both engines at that exact position -- every anchor whose range sat AFTER the
+    # inline point shifted by the same +35 lines in the affected file, with no other content
+    # change (confirmed against the diff: one contiguous insertion hunk per file, nothing else
+    # touched). Ranges below are re-picked from CONTENT at their new positions, not blindly
+    # renumbered.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1663, 1726,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -65,15 +72,15 @@ ANCHORS = [
     # have left this tripwire hashing a one-line function CALL: green forever, blind to every change
     # in the text it exists to guard. Two entries because both replication guides describe the
     # taxonomy and each must be re-verified when it moves.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 535, 583,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 570, 618,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 535, 583,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 570, 618,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2873, 2900,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2908, 2935,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1704, 1826,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1739, 1861,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3317, 3352,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3352, 3387,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 
