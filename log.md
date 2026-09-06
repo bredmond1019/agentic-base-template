@@ -3,7 +3,51 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-05
+**Last updated:** 2026-09-06
+
+---
+## 2026-09-06 — Carryover-cleanup lane: four engine defects that only bite in a shared tree
+
+### carryover-cleanup — base-template factory lane, 4/4 closed
+- **What:** Drove an inline four-block chain to completion, no bails and no state repairs.
+  `BT.ticket.engines-pass-scope-to-emit-state` added a shared `renderScopeFlag()` and wired it into
+  all three `mev emit-state --write` invocation sites, so a lane's wrap-up regenerates its own
+  repo's derived surfaces instead of the whole corpus; it degrades to no flag in a standalone repo
+  with no `brain.toml`, leaving the 18+ downstream repos unaffected.
+  `BT.chore.commander-drain-suite-must-not-spawn-real-tmux` gave the drain fixture a unique per-run
+  session name, a `tmux has-session` pre-flight guard, a survival assertion and a runtime-inversion
+  decoy case (15 -> 18 cases). `BT.chore.vault-commit-checker-misparses-its-own-annotation` moved
+  `vaultRelPathsFrom` into `prompts/shared.js` and taught it to strip the exact trailing
+  `(vault: <path>)` annotation the engines themselves emit, which had been reporting committed vault
+  files as UNCOMMITTED. `BT.ticket.emoji-gate-fallback-must-attribute-a-range-it-did-not-author`
+  rewrote the `if not RUN_COMMITS:` fallback to judge this run's uncommitted work rather than refuse
+  on a `BASE_SHA..HEAD` range that may hold nothing but a sibling's commits. Three new gating checks
+  registered: `engines-scope-emit-state`, `vault-commit-annotation`, `emoji-gate-fallback`.
+- **Why:** All four are failures that only appear when several lanes share one working tree, which
+  is this fleet's normal condition — an unscoped emit rewriting sibling repos, a fixed fixture name
+  wedging a fleet-wide gate for a day, a false UNCOMMITTED bail on any vaulted repo, and a gate that
+  failed a lane for another lane's already-landed commits and then re-failed identically on every
+  `--resume` because `BASE_SHA` is fixed at setup.
+- **Worth knowing:** Two of the four block records were materially stale at Step 1B. The
+  commander-drain block's "spawns a real tmux session" half had already been fixed by the FAKE_HOME
+  `bastion` shim in `10e75a7` two weeks earlier; only the idempotency half was live. The emoji-gate
+  block named one of three copies of the gate — the canonical one is `prompts/shared.js`'s
+  `<<shared:renderEmojiGate>>`, inlined into both engines — so following it verbatim would have left
+  `sdlc-flow.js` broken and desynced all three.
+- **Also:** wiring a second interpolation after `--write` breaks `test_engines_pass_agent.py`'s
+  byte-identity check, whose regex strips only the first `${...}`. Caught at spec time and folded
+  into the same task; had it landed later, every task boundary after it would have been red.
+- **Verification:** all 84 `gates: true` checks pass in their authoritative form; all four
+  `bastion validate-brain` flags exit 0. The six `check_skill_sync.py` / `check_engine_docs_sync.py`
+  anchors that shifted by the +35-line insertion were confirmed to bracket byte-identical content
+  (old range at `b000dea` vs new range today), and neither manifest was re-stamped — so the
+  tripwires were repositioned, not made decorative.
+- **Cannot be verified here:** every engine run in this lane executed a launch-time snapshot taken
+  before the fixes (blocks 1 and 2 launched byte-identical snapshots `0ad7519` while the tree moved
+  to `5c891e9`), so none of this takes effect until a fresh session. See
+  `planning/handoff.md`.
+- **Record:** `planning/orchestration-run/carryover-cleanup/notes.md` +
+  `review.md`.
 
 ---
 ## 2026-09-05 — Escalations lane: 3 blocks closed, a 4th found already done
