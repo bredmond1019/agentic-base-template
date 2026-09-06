@@ -47,7 +47,7 @@ projects that have a dev server to smoke-test.
 ```
 
 > **Rust test speed is a link-time problem, not a test-time problem.** See
-> [rust-sdlc-iteration-speed.md](../../docs/rust-sdlc-iteration-speed.md) before tuning these
+> `base-template/docs/rust-sdlc-iteration-speed.md` (in the brain, not this repo) before tuning these
 > commands — on a real workspace, *running* the tests took 2s while compile+link took minutes, and
 > the three fixes that mattered (one integration-test binary, nextest, no sccache) are worth far
 > more than any change to the check list. `cargo-nextest` is assumed above (`brew install
@@ -59,8 +59,8 @@ projects that have a dev server to smoke-test.
 > widens to `--all-targets` so the end-of-flow review always sees test/bench lint; `fastCommand`
 > keeps the narrow, cheaper form for the per-task tripwire so `--all-targets`'s ~3.3x warm-time
 > cost (measured on `engine-rs`) doesn't get paid on every task. See
-> [D55](../../planning/decisions/D55-all-targets-clippy-placement.md) and
-> [rust-sdlc-iteration-speed.md](../../docs/rust-sdlc-iteration-speed.md) section 7 for the
+> `D55-all-targets-clippy-placement` (base-template's decisions, not this repo's) and
+> `base-template/docs/rust-sdlc-iteration-speed.md` (in the brain, not this repo) section 7 for the
 > measurement and reasoning behind this split.
 
 ## Python / FastAPI + pydantic — no web UI to smoke-test
@@ -237,7 +237,7 @@ This skips relinking the integration-test binaries on every task/attempt while t
 per-task signal. Fix the underlying link cost first — in a measured Rust workspace, collapsing 25
 integration-test binaries into one cut the full-suite build from 2m24s to 35s and the run from 58s
 to 2.2s, which is a bigger win than any `fastCommand` and costs no signal at all. See
-[rust-sdlc-iteration-speed.md](../../docs/rust-sdlc-iteration-speed.md).
+`base-template/docs/rust-sdlc-iteration-speed.md` (in the brain, not this repo).
 
 ### Per-task overrides: `validation_commands` in `tasks.json`
 
