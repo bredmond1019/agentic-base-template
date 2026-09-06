@@ -851,13 +851,22 @@ Return via StructuredOutput:${extraReturnFields}
 // Given a task stage's self-reported filesModified (repo-root-relative) and a resolved vault, return
 // the vault-relative subset (the part of the path after "planning/") that needs an independent
 // vault-commit check. Derived from what the task ACTUALLY wrote — never a hard-coded filename list.
+// <<shared:vaultRelPathsFrom>>
 function vaultRelPathsFrom(filesModified, vault) {
   if (!vault.vaulted || !Array.isArray(filesModified)) return []
   return filesModified
     .filter(f => typeof f === 'string' && (f === 'planning' || f.startsWith('planning/')))
     .map(f => f.slice('planning/'.length))
+    // A stage may self-report a path carrying its own "(vault: <path>)" annotation --
+    // e.g. 'harness.json (vault: side/_planning/price-scout/harness.json)' -- which must
+    // be stripped before stat-ing, or the literal annotation text gets treated as part of
+    // the path (BT.chore.vault-commit-checker-misparses-its-own-annotation). Only the
+    // exact trailing " (vault: ...)" annotation shape is stripped -- a path containing
+    // unrelated, legitimate parentheses must survive untouched.
+    .map(f => f.replace(/\s*\(vault:[^)]*\)\s*$/, '').trim())
     .filter(Boolean)
 }
+// <</shared:vaultRelPathsFrom>>
 
 log(`Target: ${blockId} (${selectedTasks ? [...selectedTasks].sort((a, b) => a - b).join(', ') : 'all tasks'})`)
 log(`Spec: ${blockId} (resolving block record first, tasks.md fallback) | mode: ${useWorktree ? 'worktree' : 'in-place'}${resumeMode ? ' | RESUME' : ''}`)

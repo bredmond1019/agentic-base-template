@@ -67,7 +67,7 @@ ANCHORS = [
      "docs/workflows/sdlc-task.md", "## Usage"),
     (".claude/workflows/sdlc-task.js", "stage-list", 87, 96,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1619, 1682,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1628, 1691,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -76,15 +76,15 @@ ANCHORS = [
      "docs/workflows/sdlc-task.md", "## Pipeline"),
     (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 535, 583,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2864, 2891,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2873, 2900,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 797, 814,
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 806, 823,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1695, 1817,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1704, 1826,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3308, 3343,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3317, 3352,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

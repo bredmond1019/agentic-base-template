@@ -754,6 +754,23 @@ Return via StructuredOutput:${extraReturnFields}
 }
 // <</shared:renderImplementPrompt>>
 
+// <<shared:vaultRelPathsFrom>>
+function vaultRelPathsFrom(filesModified, vault) {
+  if (!vault.vaulted || !Array.isArray(filesModified)) return []
+  return filesModified
+    .filter(f => typeof f === 'string' && (f === 'planning' || f.startsWith('planning/')))
+    .map(f => f.slice('planning/'.length))
+    // A stage may self-report a path carrying its own "(vault: <path>)" annotation --
+    // e.g. 'harness.json (vault: side/_planning/price-scout/harness.json)' -- which must
+    // be stripped before stat-ing, or the literal annotation text gets treated as part of
+    // the path (BT.chore.vault-commit-checker-misparses-its-own-annotation). Only the
+    // exact trailing " (vault: ...)" annotation shape is stripped -- a path containing
+    // unrelated, legitimate parentheses must survive untouched.
+    .map(f => f.replace(/\s*\(vault:[^)]*\)\s*$/, '').trim())
+    .filter(Boolean)
+}
+// <</shared:vaultRelPathsFrom>>
+
 // <<shared:renderAgentFlag>>
 // Renders the `--agent <id>` argument for a `mev emit-state --write` invocation so a lane that
 // holds its own exclusive lease is exempt from mev's `refuse_if_quiesced` (BT.ticket.engines-
