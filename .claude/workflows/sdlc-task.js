@@ -1271,6 +1271,14 @@ const HARNESS_CONFIG_SCHEMA = {
   }
 }
 
+// Named diagnostics for the two hard-bail conditions the harness-config stage can raise
+// (BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload). Named so a run journal can
+// be grepped for either string.
+const HARNESS_CONFIG_BAIL = {
+  unparseable: 'HARNESS_CONFIG_UNPARSEABLE',
+  zeroGatingChecks: 'HARNESS_CONFIG_ZERO_GATING_CHECKS',
+}
+
 async function loadHarnessConfig(cwd) {
   const result = await agent(`
 You are the harness-config loader for the SDLC pipeline. Your ONLY job is to read the project's
@@ -1293,8 +1301,39 @@ STEP 2 — Decide:
 Return your findings using the StructuredOutput tool.
 `, { label: 'harness-config', schema: HARNESS_CONFIG_SCHEMA, model: 'sonnet' })
 
-  if (!result || !result.present || !result.config) return null
-  return result.config
+  // "__HARNESS_ABSENT__" or present-but-invalid-JSON both come back as present=false (STEP 2 above)
+  // — both degrade to the spec's `## Validation Commands`, never a bail (D5 / standing rule 1: the
+  // engine ships no stack defaults, and every scaffolded repo with no harness.json must keep running).
+  if (!result || !result.present) return null
+
+  // Defensive unwrap (BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload): the
+  // loader agent has been observed returning a double-wrapped payload
+  // ({"config":{"present":true,"config":{...}}}) instead of the flat {present, config} shape
+  // HARNESS_CONFIG_SCHEMA declares. Detect it by SHAPE, not by trusting the agent's own claimed
+  // shape — either the outer `config` value itself carries a `present` key (the double-wrap
+  // signature: a whole second {present, config} envelope one level too deep), or its own `.config`
+  // carries `validation`/`stack` (the real config content one level too deep, present key or not).
+  let cfg = result.config
+  if (cfg && typeof cfg === 'object' && !Array.isArray(cfg)) {
+    const nested = cfg.config
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      const wrapperLooksDoubled = Object.prototype.hasOwnProperty.call(cfg, 'present')
+      const nestedLooksLikeConfig = Object.prototype.hasOwnProperty.call(nested, 'validation') ||
+        Object.prototype.hasOwnProperty.call(nested, 'stack')
+      if (wrapperLooksDoubled || nestedLooksLikeConfig) cfg = nested
+    }
+  }
+
+  // present=true (planning/harness.json exists and parsed as JSON) but, even after the defensive
+  // unwrap above, there is no usable config object to return — this must be a hard BAIL, never a
+  // silent null-fallback: a null return here is indistinguishable downstream from "no harness.json
+  // at all", and the engine cannot tell "the project configured zero checks" apart from "I could
+  // not read the config" any other way (this exact ambiguity is what let BA.22.A close a block
+  // having run no project gate at all, see the block record's `why`).
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) {
+    return { __bail: HARNESS_CONFIG_BAIL.unparseable }
+  }
+  return cfg
 }
 
 // Pure delta-evaluation for the skip-count-regression kind: fail ONLY when currentCount exceeds
@@ -2150,7 +2189,12 @@ Return via StructuredOutput.
 }
 
 // Load the project's validation policy once (from the run root). null → fall back to the spec.
-const harnessCfg = await loadHarnessConfig(runDir)
+let harnessCfg = await loadHarnessConfig(runDir)
+if (harnessCfg && harnessCfg.__bail) {
+  const diagnostic = harnessCfg.__bail
+  log(`BAILED (${diagnostic}) — planning/harness.json is present but the harness-config stage could not resolve it into a usable config even after the defensive double-wrap unwrap. Refusing to run this block with an unknown gating set rather than silently falling back or running ungated.`)
+  return { error: diagnostic, blockId }
+}
 log(harnessCfg
   ? `Harness config: ${(harnessCfg.validation?.checks || []).length} check(s).`
   : 'No planning/harness.json — validation falls back to the spec.')
@@ -2159,8 +2203,16 @@ log(harnessCfg
 // overridden task's augmentation has nothing of the harness's own to add, which is the one case
 // where /sdlc-task can still land on VALIDATED_LABEL.ranNoneOfHarnessList (see runTests below).
 const harnessGatingCheckCount = gatingChecks(harnessCfg).length
-if (taskCheckMap.size && harnessGatingCheckCount === 0) {
-  log(`WARNING (D63): planning/harness.json defines ZERO gates:true checks — task(s) [${[...taskCheckMap.keys()].sort((a, b) => a - b).join(', ')}] with a validation_commands override will run ONLY their own declared commands; there is nothing of the project-wide harness list to augment with.`)
+
+// BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload: a PRESENT (non-empty)
+// planning/harness.json that resolves to ZERO gates:true checks is a hard BAIL, not a warning —
+// this is the "reports success FASTER for having run nothing" defect (see the block record's
+// `why`). Scoped strictly to the present case: `harnessCfg` is null when the file is absent (or
+// present-but-invalid-JSON, per loadHarnessConfig above), and that case must keep falling back to
+// the spec's `## Validation Commands`, never bail (D5 / standing rule 1).
+if (harnessCfg && harnessGatingCheckCount === 0) {
+  log(`BAILED (${HARNESS_CONFIG_BAIL.zeroGatingChecks}) — planning/harness.json is present and non-empty but resolves to ZERO gates:true checks; refusing to run this block with no project-wide gating rather than silently running with none (previously only a D63 warning).`)
+  return { error: HARNESS_CONFIG_BAIL.zeroGatingChecks, blockId }
 }
 
 // Resolve test depth: CLI flag overrides harness.json overrides the built-in 'fast' default.
