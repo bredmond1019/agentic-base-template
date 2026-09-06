@@ -47,6 +47,34 @@ check() { # check <description> <result: 0=pass>
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# --- unique per-run fixture identity, so two concurrent runs of this suite cannot collide ----
+# commander_drain.sh:145 derives SESSION="commander-${REPO_NAME}-${LANE}" -- a FIXED name if the
+# fixture always passes the same --repo. $WORK is already unique per run (mktemp -d), so derive
+# the fixture repo name from it rather than hardcoding "repo" as case 5 used to.
+#
+# $WORK's basename (from macOS mktemp -d, e.g. "tmp.XXXXXXXX") contains a literal "." --
+# tmux's target syntax treats "." as the session.window separator, so a session name built
+# from it verbatim is misparsed by `tmux has-session`/`kill-session` (measured: both silently
+# no-op against the dotted name). Strip anything that is not alnum/dash before using it.
+FIXTURE_REPO="drainfix-$(basename "$WORK" | tr -c 'A-Za-z0-9' '-')"
+FIXTURE_SESSION="commander-${FIXTURE_REPO}-main"
+
+# tmux_has_session <name> -> 0 (true) if a session by that name exists, 1 otherwise.
+# A host with no tmux binary at all is treated as "no session" -- the suite must still run there.
+tmux_has_session() {
+  command -v tmux >/dev/null 2>&1 || return 1
+  tmux has-session -t "$1" 2>/dev/null
+}
+
+# --- pre-flight guard: refuse to run into a known hang rather than proceeding into one --------
+# On 2026-08-23 a leftover session of this exact fixed name hung the suite at case 8 for >70s.
+# Fail loudly and immediately instead.
+if tmux_has_session "$FIXTURE_SESSION"; then
+  echo "FATAL: a tmux session named '$FIXTURE_SESSION' already exists -- a previous run of this" >&2
+  echo "suite did not clean up. Kill it before re-running: tmux kill-session -t '$FIXTURE_SESSION'" >&2
+  exit 1
+fi
+
 # --- resolve the brain root this checked-out worktree already lives under -------------------
 # We copy the REAL brain scripts (never the checked-out repo's own tree) into isolated scratch
 # dirs below — this suite never touches the actual planning/state.json, .fleet-locks, or logs.
@@ -230,13 +258,13 @@ check "no lease at all -> alert" "$r"
 # ==============================================================================================
 
 CASE5="$WORK/case5"
-mkdir -p "$CASE5/brain/repo/scripts" "$CASE5/brain/repo/.claude/commands" "$CASE5/brain/scripts/sync" "$CASE5/bin"
+mkdir -p "$CASE5/brain/$FIXTURE_REPO/scripts" "$CASE5/brain/$FIXTURE_REPO/.claude/commands" "$CASE5/brain/scripts/sync" "$CASE5/bin"
 touch "$CASE5/brain/brain.toml"
 cp "$BRAIN_ROOT_REAL/scripts/sync/lib.sh" "$CASE5/brain/scripts/sync/lib.sh"
-cp "$REPO_ROOT/scripts/commander_drain.sh" "$CASE5/brain/repo/scripts/commander_drain.sh"
+cp "$REPO_ROOT/scripts/commander_drain.sh" "$CASE5/brain/$FIXTURE_REPO/scripts/commander_drain.sh"
 cp "$REPO_ROOT/.claude/commands/orchestration-commander.md" \
-   "$CASE5/brain/repo/.claude/commands/orchestration-commander.md"
-chmod +x "$CASE5/brain/repo/scripts/commander_drain.sh"
+   "$CASE5/brain/$FIXTURE_REPO/.claude/commands/orchestration-commander.md"
+chmod +x "$CASE5/brain/$FIXTURE_REPO/scripts/commander_drain.sh"
 
 # lib.sh (sourced by commander_drain.sh) unconditionally re-exports PATH as
 # "$HOME/.cargo/bin:...:$PATH" -- putting the REAL installed `bastion` (this machine's
@@ -268,11 +296,11 @@ SH
 chmod +x "$FAKE_HOME/.cargo/bin/bastion"
 
 HEARTBEAT_DIR="$CASE5/brain/.fleet-locks/commander-heartbeats"
-HEARTBEAT_FILE="$HEARTBEAT_DIR/repo-main.heartbeat"
+HEARTBEAT_FILE="$HEARTBEAT_DIR/${FIXTURE_REPO}-main.heartbeat"
 
 DRAIN_LOG_OUT="$CASE5/drain_stdout.log"
-( cd "$CASE5/brain/repo" && HOME="$FAKE_HOME" PATH="$FAKE_HOME/.cargo/bin:$PATH" \
-    bash scripts/commander_drain.sh --repo repo --lane main > "$DRAIN_LOG_OUT" 2>&1 )
+( cd "$CASE5/brain/$FIXTURE_REPO" && HOME="$FAKE_HOME" PATH="$FAKE_HOME/.cargo/bin:$PATH" \
+    bash scripts/commander_drain.sh --repo "$FIXTURE_REPO" --lane main > "$DRAIN_LOG_OUT" 2>&1 )
 CASE5_EXIT=$?
 
 r=0
@@ -361,6 +389,36 @@ check_quiet_pass_unchanged() { # 0 if the exact two-line rule is present verbati
 
 r=0; check_quiet_pass_unchanged "$CMD_FILE" || r=1
 check "quiet-pass one-line report rule is byte-unchanged" "$r"
+
+# ==============================================================================================
+# Case: the pre-flight guard is shown capable of FAILING (D68 discipline), by runtime inversion
+# rather than a committed red case -- commander-drain-tests already gates:true, so a committed
+# red case would red-gate every concurrent lane. We create a decoy tmux session under exactly
+# this run's unique fixture name, observe the guard detect it, kill ONLY that decoy (a wildcard
+# kill would touch a real, unrelated live session on this machine, see the safety note below),
+# then observe the guard report clean again.
+# ==============================================================================================
+
+if command -v tmux >/dev/null 2>&1; then
+  tmux new-session -d -s "$FIXTURE_SESSION" 2>/dev/null
+
+  r=0; tmux_has_session "$FIXTURE_SESSION" || r=1
+  check "pre-flight guard detects a decoy session under this run's fixture name" "$r"
+
+  # SAFETY: kill ONLY the exact decoy session this run created -- never a wildcard kill verb.
+  # A live tmux session on this machine (commander-bastion-test-gate) hosts a real interactive
+  # agent session and must never be touched by this suite.
+  tmux kill-session -t "$FIXTURE_SESSION" 2>/dev/null || true
+
+  r=0; tmux_has_session "$FIXTURE_SESSION" && r=1
+  check "guard reports clean again once the decoy is killed" "$r"
+else
+  echo "SKIP: no tmux binary on this host -- guard-inversion case not exercised"
+fi
+
+# --- final assertion: no tmux session matching this run's fixture survives the suite ----------
+r=0; tmux_has_session "$FIXTURE_SESSION" && r=1
+check "no tmux session survives the suite (fixture: $FIXTURE_SESSION)" "$r"
 
 # footer --------------------------------------------------------------------------------------
 echo
