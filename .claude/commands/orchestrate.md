@@ -205,6 +205,15 @@ Each of these exists because it has already caused a real failure in this fleet.
     that cannot be written down (base-template standing rule 10) — the lease release and the
     drain both wait for a point where nothing is in flight.
 
+    **The lease is advisory, not a lock — nothing reads it at commit time today.** Holding it
+    across a block does not stop another session from committing to this repo while it is held;
+    it only gives a session that chooses to check something to check. A concurrent commit through
+    a live exclusive lease has been observed twice: 2026-09-05 (commit d89093f, 9 files, landed
+    mid-chain against a fresh `base-template-cb` lease) and 2026-09-07 (commit 8b49968 landed
+    mid-chain against this lane's own held lease, deleting a doc marker the lane had cited an hour
+    earlier). `scripts/check_repo_lease.py` makes a held lease visible on demand, but nothing
+    invokes it automatically at commit time.
+
     **Draining**: this lane's queue is `<lock_dir>/queue/<repo>/<lane>/{inbox,processing,done}`.
     Use `scripts/check_messages.py`'s `drain_queue()` to move everything from `inbox/` to
     `processing/`, then `complete_message()` per message once triaged — do not restate the queue

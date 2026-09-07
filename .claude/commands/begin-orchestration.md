@@ -385,6 +385,17 @@ Print, and stop for confirmation unless `--execute`:
 - Both writes happen before the first block launches. If either write fails, stop; do not start
   the chain holding only one of the two.
 
+**The repo lease is advisory, not a lock — nothing reads it at commit time today.** Taking it
+here does not prevent another session from committing to this repo while it is held; it only
+gives a session that chooses to look something to look at. Observed twice: 2026-09-05, commit
+d89093f (9 files) landed in base-template mid-chain while `lease-base-template.json` named agent
+`base-template-cb`, kind `exclusive`, with a fresh heartbeat; and 2026-09-07, commit 8b49968
+landed mid-chain while lane `base-template-5c` held the same lease, deleting a
+`docs/workflows/index.md` marker that running lane had cited an hour earlier. `scripts/
+check_repo_lease.py` exists to make a held lease visible on demand — printing the holder, its
+lane and current block, and the heartbeat age — but nothing invokes it automatically; it must be
+run by hand.
+
 **Agent identity comes from the transport, never from self-report.** `agent_name` is the
 ListAgents nickname this session is currently reachable at, taken from the transport-stamped
 identity — never typed, assumed, or copied from a listing row. The reason is not that an agent
