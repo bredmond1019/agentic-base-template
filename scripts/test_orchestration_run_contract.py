@@ -1234,6 +1234,110 @@ def self_test() -> int:
         violations = check_records([rec])
         check("(o) clean full stamp (consolidated + consolidated_by) passes (control)", violations == [])
 
+    # -------------------------------------------------------------------------------------------
+    # (p) Lifecycle stamp-timing fixtures (BT.ticket.run-record-lifecycle-must-be-gated-and-agree-
+    # across-its-pair task 1). TWO NEW RULES the checker does not implement yet -- that is task 2's
+    # job, not this one:
+    #
+    #   RULE C -- STAMP TIMING: `lifecycle: active` with a non-null `run_ended` date is REJECTED --
+    #   a live lane's own record must be able to hold `run_ended` absent or explicitly null.
+    #   RULE D -- VOCABULARY: `paused` becomes a valid lifecycle value and does not fail the check
+    #   on its own, whether or not it carries a `run_ended` date -- only `active` forbids the field.
+    #
+    # The three non-control cases below assert the rules' DESIRED end-state behavior against
+    # `check_records`/`Record`/`VALID_LIFECYCLES` as they exist TODAY (unfixed): `Record` has no
+    # `run_ended` field at all, `check_records` never inspects one, and `paused` is not a member of
+    # `VALID_LIFECYCLES`, so none of the three can pass yet. That failure is DELIBERATE -- it is the
+    # RED half of this ticket's red/green split across task 1 and task 2, and these fixtures turn
+    # GREEN in task 2 with no further change to them. The two control cases below
+    # (active-without-run_ended, active-with-explicit-null) pass both before and after -- they prove
+    # the new rule doesn't fire on the shape a live lane's own record must be able to hold, and are
+    # not new coverage. Do NOT touch VALID_LIFECYCLES or check_records in this task -- that is
+    # task 2's job; this task only proves the gap.
+    #
+    # OBSERVED RED (captured verbatim 2026-09-07 running
+    # `python3 scripts/test_orchestration_run_contract.py --self-test` against this file BEFORE
+    # task 2's fix landed) -- quoted verbatim into planning/harness.json in task 5:
+    #   FAIL (p) active with a run_ended date is rejected -- RULE C, unimplemented as of task 1 (watched RED; task 2 makes this GREEN)
+    #   FAIL (p) paused lifecycle passes -- RULE D, unimplemented as of task 1 (watched RED; task 2 makes this GREEN)
+    #   FAIL (p) paused lifecycle with a run_ended date passes -- RULE D, unimplemented as of task 1 (watched RED; task 2 makes this GREEN)
+    # (the two controls below -- active without run_ended, active with explicit null run_ended --
+    # passed in that same run, as expected of a control)
+    # -------------------------------------------------------------------------------------------
+
+    # RULE C, non-control: lifecycle: active WITH a run_ended date -> must be rejected, and the
+    # message names the file plus both field values (task 2's job; this task only proves the gap).
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check(
+            "(p) active with a run_ended date is rejected -- RULE C, unimplemented as of task 1 "
+            "(watched RED; task 2 makes this GREEN)",
+            any("run_ended" in v for v in violations),
+        )
+
+    # Control: lifecycle: active with run_ended ABSENT -> the shape a live lane's own record must
+    # be able to hold. Passes now (check_records ignores run_ended entirely) and must still pass
+    # after task 2.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        fm = dict(_WELL_FORMED_FM)
+        del fm["run_ended"]
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", fm)
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check("(p) active without run_ended passes (control)", violations == [])
+
+    # Control: lifecycle: active with run_ended EXPLICITLY NULL -> the other shape a live lane's
+    # own record must be able to hold. Passes now and must still pass after task 2.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        fm = dict(_WELL_FORMED_FM)
+        fm["run_ended"] = "null"
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", fm)
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check("(p) active with explicit null run_ended passes (control)", violations == [])
+
+    # RULE D, non-control: lifecycle: paused, no run_ended -> valid vocabulary value, must be
+    # accepted. Currently rejected because `paused` is not yet in VALID_LIFECYCLES.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        fm = dict(_WELL_FORMED_FM)
+        fm["lifecycle"] = "paused"
+        del fm["run_ended"]
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", fm)
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check(
+            "(p) paused lifecycle passes -- RULE D, unimplemented as of task 1 "
+            "(watched RED; task 2 makes this GREEN)",
+            violations == [],
+        )
+
+    # RULE D, non-control: lifecycle: paused WITH a run_ended date -> only `active` forbids the
+    # field, so this must be accepted too. Currently rejected because `paused` is not yet in
+    # VALID_LIFECYCLES.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        fm = dict(_WELL_FORMED_FM)
+        fm["lifecycle"] = "paused"  # run_ended stays populated
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", fm)
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check(
+            "(p) paused lifecycle with a run_ended date passes -- RULE D, unimplemented as of "
+            "task 1 (watched RED; task 2 makes this GREEN)",
+            violations == [],
+        )
+
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")
         return 1
