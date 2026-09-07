@@ -91,7 +91,12 @@ ANCHORS = [
     # 123 net lines into sdlc-task.js, entirely ABOVE this anchor -- re-picked from CONTENT at the
     # new position (confirmed byte-identical to the pre-shift content via diff), not blindly
     # renumbered. sdlc-flow.js is untouched by this block (out of scope) and needs no re-pick.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3258, 3285,
+    # BT.ticket.criteria-verdict-stage-silently-no-ops-and-is-never-persisted, task 2: the
+    # loadBlockRecordAcceptanceCriteria reason plumbing inserted 30 net lines into sdlc-task.js,
+    # entirely ABOVE this anchor -- re-picked from CONTENT at the new position (confirmed
+    # byte-identical to the pre-shift content via diff), not blindly renumbered. sdlc-flow.js is
+    # untouched by this block (out of scope) and needs no re-pick.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3288, 3315,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
      ".agents/skills/sdlc-flow/SKILL.md"),

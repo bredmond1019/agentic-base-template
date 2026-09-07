@@ -2994,6 +2994,10 @@ let blockDone = !bailed && !reconcileFailed && passedAll.length === allTasks.len
 // caller can log WHY the Criteria stage is being skipped instead of silently no-opping (this is
 // the defect measured on run wf_5ef1102e-490, 2026-09-07: the guard was true, the stage never
 // fired, and every cause collapsed into the same bare []).
+// NOTE: this function body inserted 26 net lines above the bookkeep-vault-commit anchor further
+// down this file -- scripts/check_skill_sync.py, scripts/check_engine_docs_sync.py and
+// scripts/test_engines_pass_agent.py's FROZEN_BASELINE were all re-pinned to match (content
+// confirmed byte-identical to the pre-shift versions via diff).
 function loadBlockRecordAcceptanceCriteria(cwd, recordFile) {
   const path = require('path')
   const fullPath = path.join(cwd, recordFile)

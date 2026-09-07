@@ -107,7 +107,12 @@ ANCHORS = [
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2 (this bookkeep-vault-commit
     # anchor is sdlc-task.js's own -- see the isolation-and-branch-naming note above for the same
     # cause): re-picked from CONTENT (hash match against the manifest), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3258, 3285,
+    # BT.ticket.criteria-verdict-stage-silently-no-ops-and-is-never-persisted, task 2: the
+    # loadBlockRecordAcceptanceCriteria reason plumbing inserted 30 net lines into sdlc-task.js
+    # ABOVE this anchor -- re-picked from CONTENT at the new position (confirmed byte-identical
+    # to the pre-shift content via diff), not blindly renumbered. sdlc-flow.js is untouched by
+    # this block (out of scope) and needs no re-pick.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3288, 3315,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
