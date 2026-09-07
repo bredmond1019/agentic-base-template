@@ -132,6 +132,21 @@ that directory holds **no** `roadmap.md` and **no** lane records, which is exact
 `scripts/lane_log_watermark.py`'s `is_roadmap_dir()` already distinguishes a roadmap from
 something else, so nothing downstream mistakes it for one.
 
+**`planning/roadmaps/<slug>/` resolves at `BRAIN_ROOT`, not at the invoking repo.** In every
+vaulted repo `planning/` is a symlink into `_planning/<repo>/`, so a lane driven from a leaf repo
+must NOT read this path relative to that repo — the lane log and escalations file belong at the
+brain root's `planning/roadmaps/<slug>/`, full stop. The mechanism: `scripts/check_escalations.py`
+and `scripts/lane_log_watermark.py` both resolve their directory by walking up for `brain.toml`
+and joining `planning/roadmaps` onto whatever directory holds it — never onto the invoking repo's
+own `planning/`. This is safe rather than a layering violation: attribution is by each record's
+own `repo` field, not by file location, so a leaf repo's lane-log and escalation records living at
+HQ are correctly attributed and read by every gate that scans them (escalations-schema's own
+observed_red evidence includes the `--repo` attribution control). **Contrast this deliberately
+with Step 1E**: `run_record_dir` (`planning/orchestration-run/<slug>/`) IS repo-local and stays
+that way — the two paths look alike (both keyed by `<slug>`, both under `planning/`) but resolve
+in opposite places on purpose, and conflating them sends a lane's escalations to a directory no
+gate ever reads.
+
 **E. `run_record_dir`** = `planning/orchestration-run/<slug>/` in **this repo**, where `<slug>` is
 as defined in D — the roadmap's directory name, or the `--run` value. Create the directory if absent; if it
 already exists, **append** to its `notes.md` / `review.md` rather than creating new ones. **No
