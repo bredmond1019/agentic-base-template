@@ -813,6 +813,20 @@ Target:
    If a file outside your files[] looks wrong, is uncommitted, or appears to block this task, STOP:
    leave it exactly as it is and say so in notes. Do not fix it, do not revert it, do not stage it.
 
+3b. RELATED: DOC_ID RESOLUTION (BT.ticket.engines-must-not-author-unverified-records, rule 2) — if
+   this task creates or edits ANY markdown file carrying OKF frontmatter (every new \`.md\` under
+   \`docs/\` or \`planning/\` must, per CLAUDE.md standing rule 5/6), resolve every \`related:\` entry
+   BEFORE you write the file. A \`related:\` entry is a doc_id — the target file's own \`doc_id:\`
+   frontmatter field, defaulting to its filename stem when that field is absent — NEVER a filename, a
+   slug, a title, a task id, or a block id guessed from a sibling path. Confirm each target actually
+   resolves in the corpus (e.g. \`rg -L -n "^doc_id: <id>$" <repo>\`, or that a crawled file whose stem
+   is \`<id>\` exists — a leading \`_\` in a filename excludes it from the corpus, so such a target is
+   UNRESOLVED even though the file is on disk). An unresolvable target is OMITTED, not guessed —
+   dropping the whole \`related:\` field is the correct move when nothing resolves; writing an invented
+   doc_id red-gates the whole corpus (E_GRAPH_DANGLING_RELATED) for every concurrent lane, not just
+   this one. Load the \`write-okf-markdown\` skill for the full procedure, including the cross-repo
+   \`<scope>:<doc_id>\` prefix form a target outside this file's own scope needs.
+
 4. Follow every CLAUDE.md standing rule; add/update tests for new code/logic; verify any model ids /
    package names via the claude-api skill — never from memory.
 
