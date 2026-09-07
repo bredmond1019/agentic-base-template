@@ -31,6 +31,16 @@ link to `docs/sandbox/run-verification-ledger-prompt.md` (`notes.md` and `review
 were already named in both files, so only the ledger-related items were flagged),
 confirming the checker fails closed before the commands are patched. Task 4 records
 the narrower single-item removal-and-restore observation required by AC5.
+
+OBSERVED-RED EVIDENCE (task 4, D68/AC5 single-item removal): on 2026-09-07, with both
+command files patched (checker exiting 0), every occurrence of the string
+`verification-ledger.json` was removed from `.claude/commands/orchestrate.md` only
+(replaced with a placeholder token so no other required string was disturbed). Re-run,
+the checker exited non-zero (exit 1) and printed exactly one line:
+`.claude/commands/orchestrate.md: missing artifact name 'verification-ledger.json'`
+-- naming the command file the removal targeted and nothing else. The file was then
+restored via `git checkout -- .claude/commands/orchestrate.md`; `git diff --stat` for
+that path showed no residual change, and the checker returned to exit 0.
 """
 
 from __future__ import annotations
