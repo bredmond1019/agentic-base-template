@@ -44,6 +44,23 @@ records changes to the **factory** — it is never copied into generated project
   `E_LINK_DEAD_FILE_URI` gates, and the baseline had none only because they all resolved).
 - **Propagated:** 171 files across 18 repos via `sync_downstream_harness.py --apply`.
 
+### Same session — the seven authoring commands now emit OKF `created:`/`updated:`
+- **Why:** both fields are in the OKF schema (`docs/okf-frontmatter.md:38-39`) and were carried by
+  57 and 52 of 657 frontmatter files corpus-wide — under 9% — and by **0 of 25** pre-plan docs.
+  The operator raised it; the measurement confirmed it. A date field nothing writes is not a
+  signal, and archive readiness is exactly the question it should answer.
+- **Changed:** `/capture`, `/assess`, `/seams`, `/sequence`, `/plan`, `/define-design-system` and
+  `/define-polish-standard` seed both fields in the frontmatter they author, with `updated:`
+  carrying an explicit instruction to bump it on revision. `/archive` Step 0.3 now reads HQ's
+  computed readiness board instead of re-deriving coldness from prose, and names the two traps a
+  hand-check gets wrong (`git log -1` reports a migration date, not a content date; a bare name
+  search counts a repo's own vault as a reference). 20 files across `.claude/`, `.agents/` and
+  HQ's own copies; 136 more propagated to 18 repos.
+- **Note for anyone extending this:** the reader lives in HQ
+  (`planning/open-work/scripts/update_pre_plan.py`), not here — it depends on HQ's `open-work`
+  surface, so it is deliberately not part of the shipped harness. What ships is the *authoring*
+  half: the fields, so any repo's docs carry them.
+
 ---
 ## 2026-09-07 — /consolidate-fleet promotes the ledgers; 82 entries had been stranded by a stamp
 
