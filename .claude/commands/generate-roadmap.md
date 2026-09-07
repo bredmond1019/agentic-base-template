@@ -754,6 +754,54 @@ Round-trip `state.json` with `json.dump(..., indent=2, ensure_ascii=False)` plus
 (CLAUDE.md trap), and commit it with an explicit pathspec — never a bare `git commit` against the
 brain's index (standing rule 10).
 
+### `planning/roadmaps/<slug>/context.md`
+
+**Persist the reasoning behind this roadmap, once, instead of leaving every later agent to
+re-derive it (or skip it).** The information — the pre-plan findings, the operator's fork answers,
+the reason this cut and not another — exists exactly once, in this session, and nowhere else once
+it ends. Author `context.md` from the pre-plan (`sequence.md`/`seams.md`/`assessment.md` if Step 1b
+applied), the `--from` sources, and the decisions already made in Steps 1–6, while they are in hand.
+
+**Fixed six-section schema.** Three headings are reused **verbatim** from `.claude/commands/plan.md`
+so an agent that has read `/plan`'s output already knows this document's shape, and the two
+authoring commands never drift into two vocabularies for one idea:
+
+- `## The Goal, Stated Plainly` — 1–3 paragraphs: what this roadmap is, why it matters now, and
+  what "done" means for it — the checkpoint that signals completion.
+- `## The Destination` — the named outcome: what is true across the fleet when every lane in this
+  roadmap has landed.
+- `## What Is Cut, and Why` — the same `Candidate | Why it is out` table Step 3's cut list already
+  produced. Reuse it; do not re-derive a second cut list here.
+
+The other three sections are this document's own, and each has a fixed job:
+
+- `## Evidence and Sources` — every `--from` source read, and, when Step 1b applied, the pre-plan
+  chain it carried through (`sequence.md`/`seams.md`/`assessment.md`/`verification.md`, and where
+  they disagreed and verification won). Name the superseded roadmap's outcome here too, if any.
+- `## Operator Decisions` — every fork answer, ratification, or correction the operator made while
+  this roadmap was authored, each with its date. This is Wave 0's ratifications and Step 2's
+  re-verification corrections, gathered in one place instead of scattered across the document.
+- `## Why This Lane Split` — the reasoning behind Step 4's lane assignment and Step 5's cross-lane
+  edges: why the heavy budget landed where it did, why a cross-tree writer was sequenced against a
+  given lane, why an edge exists. `roadmap.md` carries the lane table and the edges themselves;
+  this section carries the *reasoning* that produced them, which is exactly what gets lost when a
+  later agent only reads the table.
+
+**The load-bearing rule: a section the run genuinely cannot fill is written with an explicit
+`not established`, never omitted and never invented.** An omitted section reads as an oversight to
+a later reader; an invented one reads as authored fact. Both are worse than an honest gap — a
+context doc that quietly drops what it could not fill is how an unexplained roadmap gets recorded
+as a fully-explained one, which is the exact failure this document exists to prevent.
+
+**Frontmatter.** Open `context.md` with OKF YAML frontmatter — `type`, `title`, `description`
+required, so the file passes `bastion validate-brain --structure` and `--graph`. If a `related:`
+entry is warranted, it must be a real target's actual `doc_id` (never a filename, slug, title, or
+block ID) — a cross-repo target is qualified `<repo>:<doc_id>`. When no real target resolves, omit
+`related:` entirely rather than guess; an invented doc_id red-gates the whole corpus
+(`E_GRAPH_DANGLING_RELATED`) for every concurrent lane, not just this one.
+
+---
+
 ### `planning/index.md`
 
 Add the folder (standing rule 7) at `planning/roadmaps/<slug>/`. If superseding, mark the old
