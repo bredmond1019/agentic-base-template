@@ -3,7 +3,35 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-06
+**Last updated:** 2026-09-07
+
+---
+## 2026-09-07 — /consolidate-fleet promotes the ledgers; 82 entries had been stranded by a stamp
+
+### D84 — ledger promotion moves to the command that actually runs
+- **What:** Added **Step 5c** to `/consolidate-fleet` — promote every roadmap's
+  `verification-ledger.json` entries into `docs/sandbox/test-catalogue.json` or
+  `test-catalogue-run-local.json`, unconditionally, before Step 6 stamps `lifecycle: consolidated`.
+  `/consolidate-run` Step 5b stays the single home for *how* to judge each entry and is cited rather
+  than copied; what moved is *when* it runs. `--also-per-roadmap` narrows to the per-roadmap
+  `consolidated-review.md` + `carryover[]` proposals. `/consolidate-fleet` is now the single writer
+  of both catalogues.
+- **Why:** the operator's entry point is `/consolidate-fleet` and `/consolidate-run` is not expected
+  to be invoked separately any more, so a step that lived only in the latter stopped happening.
+  Measured 2026-09-07: a fleet pass stamped `carryover-cleanup` and `sandbox-findings`
+  `consolidated` and advanced both watermarks while **82 of 234 ledger entries across 8 ledgers
+  reached neither catalogue** — 57 of them the whole fleet-wide `carryover-cleanup` run. 111 entries
+  across 8 other roadmaps are fully promoted, which is the control proving the machinery works and
+  this was a skipped step.
+- **Worse than late:** `/consolidate-run`'s selection filter is `lifecycle != consolidated`, so the
+  stamp made those 82 entries unreachable by the only command that promotes them.
+- **Also corrected two false statements** in `consolidate-fleet.md`'s own write boundary, which
+  contradicted its Step 6 on the same page: that the `lifecycle` stamps belong to `/consolidate-run`,
+  and that this command does not write the test catalogue. The contention argument the boundary was
+  defending still holds — the resolution is one writer, not neither.
+- **Outstanding:** the 82 stranded entries need a one-off promotion pass; they cannot arrive by the
+  normal path. And `/sync-global-commands` has not been run — `check_global_commands_fresh.py` exits
+  1, and the roadmap's own operator gate says to run it only once no lane is live (`mev-54` is).
 
 ---
 ## 2026-09-06 — Carryover-cleanup lane: four engine defects that only bite in a shared tree

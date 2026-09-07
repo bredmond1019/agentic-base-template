@@ -78,7 +78,7 @@ Usage: /consolidate-fleet [<roadmap-slug>...] [--since-watermark] [--all]
 | `<roadmap-slug>...` | — | Roadmaps to consolidate. Repeatable and positional. |
 | `--since-watermark` | — | Select every roadmap whose `lane-log.jsonl` has lines past its watermark. The normal invocation. |
 | `--all` | — | Every roadmap with a `lane-log.jsonl`, watermark ignored. Use for a first run or a deliberate re-read. |
-| `--also-per-roadmap` | off | **Additionally** invoke `/consolidate-run` per roadmap for its own `consolidated-review.md`. Off by default — this command is the harvest (Step 6). |
+| `--also-per-roadmap` | off | **Additionally** invoke `/consolidate-run` per roadmap for its own `consolidated-review.md` and `carryover[]` proposals. Off by default — this command is the harvest (Step 6), and it promotes the verification ledgers itself (Step 5c). |
 | `--since <YYYY-MM-DD>` | — | Select by lane-log activity date rather than by roadmap. A roadmap is not a run: one run spans several roadmaps and one roadmap spans months, so a slug list cannot express "the run of 2026-09-02". Composes with the selectors above; narrows, never widens. |
 | `--dry-run` | off | Do everything except write the analysis and advance the watermarks. |
 | `--out <path>` | `planning/open-work/orchestration-runs/retros/pattern-analysis-<YYYY-MM-DD>.md` | Where the analysis lands. |
@@ -276,9 +276,9 @@ retros `index.md` (standing rule 7), and these sections:
 | Proposed disposal | A **pointer to `disposal.json`** (below) plus the same rows rendered for a human reader. The JSON is the contract; the table is the courtesy copy |
 | What needs the operator | Only what genuinely cannot be decided by an agent |
 
-**The Coverage and docs debt section** is the cross-run view of what `/consolidate-run` Step 5b does
-per roadmap. This command does not re-do the per-entry promotion — it reads the catalogue and reports
-the *shape* of what accumulated:
+**The Coverage and docs debt section** is the cross-run *shape* of the catalogue, written after
+Step 5c has done the per-entry promotion. Step 5c decides each entry; this section counts what the
+catalogue now holds:
 
 - **Unwired seams.** Entries with `finding: true` — a capability shipped with no production caller.
   Count them, name the repo, and say whether they cluster: measured on the first pass, **7 of 152**,
@@ -392,6 +392,51 @@ altered it. "File these but do not emit" is an instruction nothing can obey. A `
 **`write-carryover-entry`** skill — load it before proposing one, and do not restate its rules here.
 This command still **proposes only**; see the write boundary.
 
+## Step 5c — Promote the verification ledgers, per roadmap
+
+**This runs on every invocation. It is not behind a flag, and it is not optional.**
+
+`/consolidate-run` Step 5b is the authority for *how* to make each call — the merge-not-overwrite
+rule for an id already present, the never-rename-an-id rule, judging whether a recipe is cold-runnable,
+the `docs: {page, state}` verdict, and the fact that a ledger's `status`/`last_verified` are results
+that belong in `docs/sandbox/results/<env>.json` and are rejected by the catalogue's own checker.
+**Read that step and follow it; it is cited here, not restated.**
+
+What this command adds is *when*: once per roadmap in scope, over the ledgers Step 2 already
+collected, **before Step 6 stamps anything**.
+
+**Why it moved here.** `/consolidate-fleet` is the entry point; `/consolidate-run` is not expected to
+be invoked separately any more. A per-roadmap step that only ran under a command nobody runs is a
+step that does not run. MEASURED 2026-09-07: a fleet pass stamped `carryover-cleanup` and
+`sandbox-findings` `lifecycle: consolidated` and advanced both watermarks while **82 ledger entries
+across 8 ledgers reached neither catalogue** — 57 of them the whole fleet-wide `carryover-cleanup`
+run. Worse than late: `/consolidate-run`'s own selection filter is `lifecycle != consolidated`, so
+the stamp made those entries **unreachable by the only path that promotes them**. The control that
+proves this is a skipped step and not broken machinery: 111 entries across 8 other roadmaps are
+fully promoted.
+
+The routing decision, restated here only because it is the one part a reader must not have to
+follow a link to make:
+
+| `scope` | The entry describes | Goes to |
+|---|---|---|
+| `fleet` | a durable surface — a registered `harness.json` check, a CLI verb or flag, a schema another repo reads, an engine behaviour, a documented instruction agents follow, a guard against a recurring mistake | [`docs/sandbox/test-catalogue.json`](../../../docs/sandbox/test-catalogue.json) |
+| `run-local` | a one-time state change — a data migration, a repair of one record, documentation prose with no code seam, or proof that one specific bug is fixed | [`test-catalogue-run-local.json`](../../../docs/sandbox/test-catalogue-run-local.json), with the reason |
+
+**The test for `fleet`: if this broke silently in six weeks, would anyone want to know?**
+
+**A `call_site: NONE` is not one verdict.** NONE because the entry is documentation is `run-local`.
+NONE because a real seam shipped with **no production caller** is a `fleet` entry *and a finding* —
+set `finding: true`, say why, and carry it into Step 5's disposal table like any other finding rather
+than leaving it only in the catalogue.
+
+**Validate before Step 6:** `python3 scripts/check_test_catalogue.py` from `BRAIN_ROOT`, exit 0. It is
+`gates: true` in HQ's `harness.json`, so a malformed write here red-gates every lane in the fleet.
+
+**A roadmap whose ledger promotion failed or was skipped does not get stamped in Step 6** — same rule
+as a record Step 3 failed to extract from, and for the same reason: an unstamped record is recoverable,
+a wrongly-stamped one is invisible.
+
 ## Step 6 — Stamp what you consumed: this command IS the harvest
 
 **A record this command read is harvested.** Its findings are in the mechanisms; re-reading it in a
@@ -408,11 +453,15 @@ not stamp it leaves the corpus ambiguous**, and the ambiguity is invisible.
 **Do not stamp a record Step 3 failed to extract from** — a fan-out that errored, or a record the
 selection reached but no agent read. Those stay unstamped and are named in the report.
 
+**Stamp only after Step 5c.** A record whose ledger entries have not been promoted is not
+harvested, however thoroughly its prose was read — the ledger is half of what the record carries.
+
 `--also-per-roadmap` additionally invokes `/consolidate-run <slug>` per roadmap, for the per-roadmap
 `consolidated-review.md` and its `carryover[]` proposals. **Off by default**: the mechanism pass
 already routes every finding through Step 5's disposal table, and running both produces two disposal
 queues over one body of findings. Reach for it when a single roadmap needs its own reviewable
-artifact — a handover, or an operator who owns one roadmap and not the run.
+artifact — a handover, or an operator who owns one roadmap and not the run. **Ledger promotion is no
+longer a reason to reach for it** — Step 5c does that unconditionally.
 
 ## Step 7 — Advance the watermarks
 
@@ -429,15 +478,18 @@ is invisible. Under `--dry-run`, advance nothing.
 ## Write boundary
 
 **No `state.json`, in any repo.** One command writing state across a dozen repos is the contention
-pattern that has cost real runs (CLAUDE.md standing rule 10). This command writes exactly four
-things: the analysis at `--out`, `disposal.json` beside it, their `index.md` rows, and the
-watermark file. The
-`lifecycle: consolidated` stamps are `/consolidate-run`'s writes, made by that command.
+pattern that has cost real runs (CLAUDE.md standing rule 10). This command writes exactly six things:
+the analysis at `--out`, `disposal.json` beside it, their `index.md` rows, the watermark file, the
+`lifecycle: consolidated` stamps of Step 6, and the test catalogue writes of Step 5c
+(`docs/sandbox/test-catalogue.json`, `test-catalogue-run-local.json`, and ledger verdicts appended to
+`docs/sandbox/results/<env>.json`).
 
-**It does not write the test catalogue either.** Promotion is per-roadmap and belongs to
-`/consolidate-run` Step 5b; this command *reads* `docs/sandbox/test-catalogue.json` to report the
-shape of what accumulated across runs. Two commands appending to one catalogue is the same
-multi-writer contention this boundary exists to prevent.
+**Corrected 2026-09-07.** This section used to say the `lifecycle` stamps were `/consolidate-run`'s
+writes and that this command "does not write the test catalogue either" — both were false. The stamp
+moved here in Step 6's own deliberate reversal and this section was never updated with it, and the
+catalogue moved here in Step 5c. Two commands appending to one catalogue is still the contention this
+boundary guards against; the resolution is that **this command is the single writer**, not that
+neither is.
 
 ## Traps
 
@@ -467,8 +519,9 @@ multi-writer contention this boundary exists to prevent.
 <n> roadmaps, <r> records, <l> lane-log lines -> <m> mechanisms (<k> new, <j> known)
 - <the highest-breadth mechanism, one line>
 - <anything skipped, and why>
+Ledgers: <e> entries -> <f> to the catalogue, <r> run-local, <d> merged; <x> findings (call_site NONE with a real seam)
 Analysis: <path>. Disposal: <path> (<u> of <m> rows carry a non-empty ungrounded[]).
-Watermarks advanced: <slugs>. No state.json written.
+Watermarks advanced: <slugs>. Catalogue: <n> tests. No state.json written.
 ```
 
 **Report the `ungrounded[]` count, not just the file.** It is the one number that says how much of
