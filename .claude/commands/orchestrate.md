@@ -105,6 +105,24 @@ Each of these exists because it has already caused a real failure in this fleet.
    The log lives at **`planning/roadmaps/<slug>/lane-log.jsonl`** — resolve `<slug>` via
    `/begin-orchestration`'s Step 1D rule: the driving roadmap's directory name, or the operator's
    `--run <slug>` verbatim when the chain has no roadmap. Never a hardcoded `planning/<slug>/`.
+   **A slug present at both `planning/roadmaps/<slug>/` and the legacy `planning/<slug>/` is an
+   error — stop and report rather than silently choosing one**; that ambiguity is exactly how a
+   lane ends up appending to the wrong lane log.
+
+   **This path resolves at `BRAIN_ROOT`, not at the invoking repo.** In every vaulted repo
+   `planning/` is a symlink into `_planning/<repo>/`, so a lane driven from a leaf repo must NOT
+   read `planning/roadmaps/<slug>/` relative to that repo — the lane log and escalations file
+   belong at the brain root's `planning/roadmaps/<slug>/`, full stop. The mechanism:
+   `scripts/check_escalations.py` and `scripts/lane_log_watermark.py` both resolve their directory
+   by walking up for `brain.toml` and joining `planning/roadmaps` onto whatever directory holds it
+   — never onto the invoking repo's own `planning/`. This is safe rather than a layering
+   violation: attribution is by each record's own `repo` field, not by file location, so a leaf
+   repo's lane-log and escalation records living at HQ are correctly attributed and read by every
+   gate that scans them (escalations-schema's own observed_red evidence includes the `--repo`
+   attribution control). **Contrast this deliberately with rule 9's `run_record_dir`**
+   (`planning/orchestration-run/<slug>/`), which IS repo-local and stays that way — the two paths
+   look alike (both keyed by `<slug>`, both under `planning/`) but resolve in opposite places on
+   purpose, and conflating them sends a lane's escalations to a directory no gate ever reads.
 
    **A run with no roadmap is still a run and still leaves a lane log.** It takes its slug from
    `/begin-orchestration --run <slug>` — an operator-named flag, never derived here. **Do not invent
