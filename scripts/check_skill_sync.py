@@ -113,11 +113,19 @@ ANCHORS = [
     # 3319->3351, 3346->3378. Re-picked from CONTENT at the new position (confirmed
     # byte-identical to the pre-shift content via diff), not blindly renumbered. sdlc-flow.js is
     # untouched by this block (out of scope) and needs no re-pick.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3351, 3378,
+    # BT.ticket.engine-render-identity-schema-tdz (2026-09-07): the
+    # <<shared:RENDER_IDENTITY_SCHEMA>> const was declared BELOW the top-level awaits that
+    # reach it, so both engines threw "Cannot access 'RENDER_IDENTITY_SCHEMA' before
+    # initialization" at the bookkeep stage. Moving the 9-line region up to just after
+    # <</shared:BAIL_REASONS>> inserted 10 net lines ABOVE this anchor in both engines,
+    # shifting it 3351->3361 / 3520->3530 with NO content change: verified by diffing the old
+    # range in the pre-fix file against the new range in the fixed file -- byte-identical in
+    # both engines. Re-stamped on that evidence, not on a re-read.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3361, 3388,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3520, 3555,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3530, 3565,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

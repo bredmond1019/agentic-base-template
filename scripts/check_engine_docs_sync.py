@@ -129,7 +129,13 @@ ANCHORS = [
     # 3319->3351, 3346->3378. Re-picked from CONTENT at the new position (confirmed
     # byte-identical to the pre-shift content via diff), not blindly renumbered. sdlc-flow.js is
     # untouched by this block (out of scope) and needs no re-pick.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3351, 3378,
+    # BT.ticket.engine-render-identity-schema-tdz (2026-09-07): same +10 shift as
+    # check_skill_sync.py's twin anchor -- the RENDER_IDENTITY_SCHEMA const moved above the
+    # top-level awaits that reach it, inserting 10 net lines above this range in both engines.
+    # Content byte-identical across the move (old range in the pre-fix file vs new range in the
+    # fixed file diffed clean in both engines), so the docs pages still describe exactly what is
+    # there. Re-stamped on that evidence.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3361, 3388,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
@@ -142,7 +148,7 @@ ANCHORS = [
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3520, 3555,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3530, 3565,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 
