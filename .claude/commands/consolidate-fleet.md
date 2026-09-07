@@ -26,7 +26,7 @@ what is wrong with our orchestration system, our engines, and the way we file fi
 
 They are two artifacts, and both already exist on disk, written by hand:
 `planning/roadmaps/<slug>/consolidated-review*.md` (per roadmap) and
-`planning/open-work/orchestration-runs/retros/pattern-analysis-*.md` (across runs). This command
+`$BRAIN_ROOT/planning/open-work/orchestration-runs/retros/pattern-analysis-*.md` (across runs). This command
 automates the second. It **calls** `/consolidate-run` for the first rather than reimplementing it.
 
 **Run from a fresh Opus session at the brain root.** It reads across every repo and holds the whole
@@ -81,7 +81,7 @@ Usage: /consolidate-fleet [<roadmap-slug>...] [--since-watermark] [--all]
 | `--also-per-roadmap` | off | **Additionally** invoke `/consolidate-run` per roadmap for its own `consolidated-review.md` and `carryover[]` proposals. Off by default — this command is the harvest (Step 6), and it promotes the verification ledgers itself (Step 5c). |
 | `--since <YYYY-MM-DD>` | — | Select by lane-log activity date rather than by roadmap. A roadmap is not a run: one run spans several roadmaps and one roadmap spans months, so a slug list cannot express "the run of 2026-09-02". Composes with the selectors above; narrows, never widens. |
 | `--dry-run` | off | Do everything except write the analysis and advance the watermarks. |
-| `--out <path>` | `planning/open-work/orchestration-runs/retros/pattern-analysis-<YYYY-MM-DD>.md` | Where the analysis lands. |
+| `--out <path>` | `$BRAIN_ROOT/planning/open-work/orchestration-runs/retros/pattern-analysis-<YYYY-MM-DD>.md` | Where the analysis lands. |
 
 No selector at all (no slugs, no `--since-watermark`, no `--all`) → print the watermark status table
 and stop. That is the cheap "what would this read?" call.
@@ -141,9 +141,9 @@ honours it rather than adding a second one for the same files.
 | Verification ledgers | the same `find` | What each run shipped and how to verify it — the input to the catalogue pass |
 | Test catalogue | `docs/sandbox/test-catalogue.json` | What is already covered, so a capability is promoted once and merged thereafter |
 | Carryover state | `mev carryover --json --allow-exec` | Clusters, suggested duplicates, single-repo `finding_id` warnings, broken-predicate diagnostics, misfiled-operator warnings |
-| Commander retros | `planning/open-work/orchestration-runs/retros/*.md` | Instrument failures; the highest-transfer material there is |
-| Commander chronology | `planning/open-work/orchestration-runs/retros/commander-retro-*.md` and `liaison-retro-*.md` | Drain-by-drain timeline. (Was `run-log-*.md`, retired 2026-09-07 — the chronology now lives with the retros.) |
-| **The open-work board** | `planning/open-work/orchestration-runs/new-work-log.md` | **Every finding a drain surfaced and left open.** The one input that was missing: `orchestration-commander` writes every finding here and closes a row only "when a human resolves it or a later drain observes it gone", and until 2026-09-07 nothing read it — so findings accumulated with no promotion path. Measured that day: 60 findings, exactly **one** marked CLOSED. Treat each open row as a candidate for Step 4's disposal rows. |
+| Commander retros | `$BRAIN_ROOT/planning/open-work/orchestration-runs/retros/*.md` | Instrument failures; the highest-transfer material there is |
+| Commander chronology | `$BRAIN_ROOT/planning/open-work/orchestration-runs/retros/commander-retro-*.md` and `liaison-retro-*.md` | Drain-by-drain timeline. (Was `run-log-*.md`, retired 2026-09-07 — the chronology now lives with the retros.) |
+| **The open-work board** | `$BRAIN_ROOT/planning/open-work/orchestration-runs/new-work-log.md` | **Every finding a drain surfaced and left open.** The one input that was missing: `orchestration-commander` writes every finding here and closes a row only "when a human resolves it or a later drain observes it gone", and until 2026-09-07 nothing read it — so findings accumulated with no promotion path. Measured that day: 60 findings, exactly **one** marked CLOSED. Treat each open row as a candidate for Step 4's disposal rows. |
 | Carryover triage | `planning/carryover-triage-*/` (per-repo files + `evidence/`) | Per-repo rot rates and their causes |
 | Prior analyses | `retros/pattern-analysis-*.md`, `roadmaps/*/consolidated-review*.md` | So a known mechanism is reported as another instance, not rediscovered |
 
@@ -262,7 +262,7 @@ human confirms it by authoring the shared id.
 
 ## Step 4b — The open-work board's rows
 
-**Every open row on `planning/open-work/orchestration-runs/new-work-log.md` is a candidate for a
+**Every open row on `$BRAIN_ROOT/planning/open-work/orchestration-runs/new-work-log.md` is a candidate for a
 disposal row, and this is the only step that gives them an exit.**
 
 `orchestration-commander` writes every finding a drain surfaces to that board and, by its step 5,
@@ -283,7 +283,7 @@ For each open `##` row:
 3. **Route it** with the same vocabulary as every other row — `block` / `chore` / `carryover` /
    `operator` / `none`. `route: "none"` is a real answer for a row that turned out to be a
    one-off, and saying so is what lets the next pass stop re-reading it.
-4. **Evidence is the board line**: `planning/open-work/orchestration-runs/new-work-log.md:<line>`,
+4. **Evidence is the board line**: `$BRAIN_ROOT/planning/open-work/orchestration-runs/new-work-log.md:<line>`,
    plus whatever the row itself cites. A row whose evidence is only "a drain said so" is
    `route: "none"` with that stated — see `.claude/workflows/finding-discipline.md`.
 
@@ -530,7 +530,7 @@ is invisible. Under `--dry-run`, advance nothing.
 pattern that has cost real runs (CLAUDE.md standing rule 10). This command writes exactly seven things:
 the analysis at `--out`, `disposal.json` beside it, their `index.md` rows, the watermark file, the
 `lifecycle: consolidated` stamps of Step 6, the `> PROMOTED` markers Step 6 appends to
-`planning/open-work/orchestration-runs/new-work-log.md` rows it routed, and the test catalogue
+`$BRAIN_ROOT/planning/open-work/orchestration-runs/new-work-log.md` rows it routed, and the test catalogue
 writes of Step 5c (`docs/sandbox/test-catalogue.json`, `test-catalogue-run-local.json`, and ledger
 verdicts appended to `docs/sandbox/results/<env>.json`).
 

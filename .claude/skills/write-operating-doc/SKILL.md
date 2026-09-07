@@ -96,7 +96,7 @@ why the `external` edge type exists in `state.json` and why it is worth the writ
 A hand-maintained board drifts, and a drifted board is distrusted, and a distrusted board is not
 opened. Prefer a generator plus a small hand-written mapping (the *act* text, which cannot be
 derived) over a fully-authored file. See
-`planning/open-work/scripts/update_manual.py` **in the brain root** for the pattern: derived
+`$BRAIN_ROOT/planning/open-work/scripts/update_manual.py` **in the brain root** for the pattern: derived
 structure, hand-written verbs, and an explicit "not atomic yet" lane for anything missing its verb.
 (Bare path, not a link — see the note under Worked example.)
 

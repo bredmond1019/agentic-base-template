@@ -29,7 +29,7 @@ Usage: /commander-retro <roadmap-slug>... [--since <YYYY-MM-DD>] [--out <path>]
 |---|---|---|
 | `<roadmap-slug>...` | required unless `--since` | The run's roadmaps. A run usually spans several. |
 | `--since <date>` | — | Select by drain/lane-log activity instead of by slug — a roadmap is not a run. |
-| `--out <path>` | `planning/open-work/orchestration-runs/retros/commander-retro-<YYYY-MM-DD>.md` | Where the retro lands. |
+| `--out <path>` | `$BRAIN_ROOT/planning/open-work/orchestration-runs/retros/commander-retro-<YYYY-MM-DD>.md` | Where the retro lands. |
 
 ## Step 0 — Run this in the commander's own session
 
@@ -72,7 +72,7 @@ question it made unanswerable.
 | Artifact | Answers |
 |---|---|
 | `planning/roadmaps/<slug>/drain-log.jsonl` | how many drains, over what window, what each routed |
-| `planning/open-work/orchestration-runs/new-work-log.md` | every recovery item and alert previously surfaced — **the board**. Not `planning/open-work/index.md`, which is the directory index for `open-work/`: a table of what each file there is for, not a findings board. This row named `index.md` until 2026-09-07; `orchestration-commander` had already corrected the same confusion in its own step 1.0, and this copy did not follow. |
+| `$BRAIN_ROOT/planning/open-work/orchestration-runs/new-work-log.md` | every recovery item and alert previously surfaced — **the board**. Not `$BRAIN_ROOT/planning/open-work/index.md`, which is the directory index for `open-work/`: a table of what each file there is for, not a findings board. This row named `index.md` until 2026-09-07; `orchestration-commander` had already corrected the same confusion in its own step 1.0, and this copy did not follow. |
 | `<lock_dir>/commander-heartbeats/` | when a drain last ran, per commander |
 | `<lock_dir>/queue/<repo>/<lane>/{inbox,processing,done}/` + `receipts.jsonl` | drained, completed, and anything stuck across drains |
 | `<lock_dir>/lane-agents/` · `<lock_dir>/leases/` | claims and their ages |
@@ -163,7 +163,7 @@ and section F's one change. The file carries the rest.
 
 ## Worked example
 
-`planning/open-work/orchestration-runs/retros/commander-retro-2026-09-02.md` — 26 drains, seven
+`$BRAIN_ROOT/planning/open-work/orchestration-runs/retros/commander-retro-2026-09-02.md` — 26 drains, seven
 lanes. Its section 2 (five instrument failures, every one clean-looking and wrong) is the part that
 proved most reusable; its section 3 ("where this session was wrong", seven entries) is what makes
 the rest credible.
