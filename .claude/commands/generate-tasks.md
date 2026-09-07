@@ -287,6 +287,17 @@ $ARGUMENTS — one of two input modes:
      spec error, revise it in place — and confirm no entry names one of
      `planning/harness.json` → `validation.checks[]`'s `gates: true` commands; `expect_red` may only
      invert a command the task itself declared, never a harness gate shared by every concurrent lane.
+   - **Non-compiler instance of gate-passing boundaries.** The same shape recurs with no compiler
+     involved: a task that sharpens a detector (a threshold, floor, lint, or schema check) before a
+     later task fixes the artifact it reads. Measured: `BE.ticket.vhs-capture-trustworthiness`
+     sharpened the vhs-fresh per-scene floor in task 3 and re-captured the reference PNGs in task 4;
+     task 3's implementation was correct yet bailed on two identical retries, because the sharper
+     floor correctly failed on the still-blank PNG only task 4 could fix. **A task that fixes a
+     detector must also fix what it detects — merge them.** This also closes the loophole of
+     dodging a gate via a narrow `validation_commands` list: under `/sdlc-task`, per
+     [D63](../../planning/decisions/D63-per-task-validation-commands-augment-gating.md) the engine
+     runs every `gates: true` check's `fastCommand` (or `command` where none is defined) alongside
+     the task's own `validation_commands`, so a gating check left red still fails the task.
    - **No task's `files[]` names a path under `planning/` — can fail.** `planning/` is a symlink
      into the private HQ vault, excluded from this repo's git by `base-template/.gitignore:20` (the
      bare rule `/planning`). Code that references such a path — an `include_str!`, a fixture path,
