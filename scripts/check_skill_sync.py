@@ -69,7 +69,7 @@ ANCHORS = [
     # above this anchor too, so it shifted even though the EXPECT needle (at the very start
     # of the range) still happened to land inside the old fixed window. Re-picked from
     # CONTENT at the new positions (confirmed byte-identical via diff), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1762, 1825,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1832, 1895,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -86,7 +86,12 @@ ANCHORS = [
     # 62 net lines into sdlc-flow.js, both entirely ABOVE this anchor -- re-picked from CONTENT
     # at the new positions (confirmed byte-identical to the pre-shift content via diff), not
     # blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3035, 3062,
+    # BT.ticket.sdlc-task-must-verify-its-blocks-acceptance-criteria, task 2: the criteria-
+    # evidence stage (acceptance_criteria loading + the acceptanceCriteriaVerdicts() call) inserted
+    # 123 net lines into sdlc-task.js, entirely ABOVE this anchor -- re-picked from CONTENT at the
+    # new position (confirmed byte-identical to the pre-shift content via diff), not blindly
+    # renumbered. sdlc-flow.js is untouched by this block (out of scope) and needs no re-pick.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3228, 3255,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1839, 1961,
      ".agents/skills/sdlc-flow/SKILL.md"),

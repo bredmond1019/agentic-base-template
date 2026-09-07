@@ -1161,6 +1161,32 @@ const BOOKKEEP_SCHEMA = {
   }
 }
 
+// BT.ticket.sdlc-task-must-verify-its-blocks-acceptance-criteria (task 2): the criteria-evidence
+// stage returns EVIDENCE ONLY, never a verdict or a close decision — those are computed in engine
+// code by acceptanceCriteriaVerdicts() (task 1), because this stage (like bookkeep) runs on
+// MODEL.bookkeep = 'haiku' and a correctness gate must not rest on a haiku agent's self-report.
+const CRITERIA_EVIDENCE_SCHEMA = {
+  type: 'object',
+  required: ['criteria'],
+  properties: {
+    criteria: {
+      type: 'array',
+      description: 'One entry per acceptance criterion supplied in the prompt, in the same order.',
+      items: {
+        type: 'object',
+        required: ['criterion', 'evaluated'],
+        properties: {
+          criterion: { type: 'string', description: 'The criterion text, copied verbatim from the prompt (the bare string, or the object form\'s "criterion" field)' },
+          evaluated: { type: 'boolean', description: 'true only if THIS run actually checked whether the criterion holds (a command was run, a file inspected, a test executed); false if nothing this run addressed it' },
+          met:       { type: 'boolean', description: 'meaningful only when evaluated is true — the observed result' },
+          evidence:  { type: 'string', description: 'one line quoting what was actually observed; never a guess' }
+        }
+      }
+    },
+    notes: { type: 'string' }
+  }
+}
+
 // ----------------------------------------------------------------
 // MODEL TIERING — the primary token lever for this pipeline.
 //
@@ -2923,7 +2949,104 @@ if (reconcileFailed) {
 // Skipped entirely on a bail or a reconcile_failed (the block is not done) and on a partial task
 // selection (can't close the block).
 // ----------------------------------------------------------------
-const blockDone = !bailed && !reconcileFailed && passedAll.length === allTasks.length
+let blockDone = !bailed && !reconcileFailed && passedAll.length === allTasks.length
+
+// BT.ticket.sdlc-task-must-verify-its-blocks-acceptance-criteria (task 2): re-read the block
+// record's acceptance_criteria array directly off disk (engine code, never an agent's
+// transcription of it — this is the array acceptanceCriteriaVerdicts() below is graded against,
+// so it must be the same bytes the block record actually carries). Legacy tasks-md specs
+// (specSource !== 'block-record') carry no such array — [] is correct there, never a bail: this
+// gate is a pure add-on to the D65 block-record path and must not touch the legacy path at all.
+function loadBlockRecordAcceptanceCriteria(cwd, recordFile) {
+  try {
+    const fs = require('fs')
+    const path = require('path')
+    const raw = fs.readFileSync(path.join(cwd, recordFile), 'utf8')
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed && parsed.acceptance_criteria) ? parsed.acceptance_criteria : []
+  } catch (e) {
+    return []
+  }
+}
+const blockAcceptanceCriteria = (specSource === 'block-record' && !bailed && !reconcileFailed)
+  ? loadBlockRecordAcceptanceCriteria(runDir, blockRecordFile)
+  : []
+
+// Per-criterion verdicts for THIS run's payload (task 2 AC1: "the run payload carries a per-
+// criterion verdict of met, unmet or not-evaluated, not a boolean over tasks"). Populated only
+// when there is something to grade; stays [] for a bail/reconcile_failed run or a legacy spec.
+let criteriaVerdicts = []
+let criteriaRefuse = false
+let criteriaRefuseReason = null
+if (blockAcceptanceCriteria.length) {
+  phase('Criteria')
+  const criteriaEvidenceResult = await tracedAgent(`${W}
+You are the acceptance-criteria EVIDENCE agent for the lean /sdlc-task pipeline
+(BT.ticket.sdlc-task-must-verify-its-blocks-acceptance-criteria). Report EVIDENCE ONLY for each
+criterion below — whether THIS run actually evaluated it, and if so what was observed. Do NOT
+decide met/unmet/not-evaluated yourself and do NOT decide whether the block may close: that
+verdict and that decision are computed in engine code from what you report here, never from your
+own judgment call — this is the same discipline the bookkeep stage below already follows for
+state.json flips. All Bash from the run root (cd ${runDir} && ...).
+
+Block: ${blockId}
+Tasks run this run: ${taskList.join(', ')}  (passed: ${passedTasks.join(', ') || 'none'})
+Full spec run: ${fullRun ? 'yes (every task in the spec)' : 'no (a task subset)'}
+
+The block record's acceptance_criteria array, verbatim from ${blockRecordFile} (each entry is
+EITHER a bare string OR an object {criterion, gateable, evidence, ...} per block.schema.json's
+oneOf — gateable defaults to true when omitted on either form):
+${JSON.stringify(blockAcceptanceCriteria, null, 2)}
+
+For EACH entry above, inspect what this run actually produced — the implement/test/fix output
+already captured this run, this run's committed diffs, and any validation-command output — and
+report one object:
+  - criterion: the criterion's exact text (the bare string itself, or the object form's
+    "criterion" field) — copied verbatim so it can be matched back to the entry above.
+  - evaluated: true ONLY if this run actually checked whether the criterion holds (a command was
+    run, a file was inspected, a test executed this run). false if nothing this run addressed it,
+    even if it seems likely to be true.
+  - met: meaningful only when evaluated is true — the observed result (true/false).
+  - evidence: one line quoting what was actually observed (a command plus its output, or the exact
+    file content inspected). Never a guess and never "it should work" / "presumably fine".
+An entry whose object form declares "gateable": false is the spec author's own admission that this
+run's evidence cannot cover it — it is fine, and often correct, to report evaluated:false for one
+of those; do not strain to invent evidence for it.
+
+Return via StructuredOutput: criteria (array of {criterion, evaluated, met, evidence}, one per
+entry above, same order), notes.
+`, withModel({ label: 'criteria-evidence', schema: CRITERIA_EVIDENCE_SCHEMA }, MODEL.bookkeep))
+
+  const evidenceByCriterion = {}
+  for (const item of (criteriaEvidenceResult && criteriaEvidenceResult.criteria) || []) {
+    if (item && typeof item.criterion === 'string') {
+      evidenceByCriterion[item.criterion] = { evaluated: !!item.evaluated, met: !!item.met }
+    }
+  }
+  const verdict = acceptanceCriteriaVerdicts(blockAcceptanceCriteria, evidenceByCriterion)
+  criteriaVerdicts = verdict.results
+  criteriaRefuse = verdict.refuse
+  criteriaRefuseReason = verdict.reason
+  if (criteriaRefuse) {
+    log(`Acceptance-criteria verdict REFUSES a clean close: ${criteriaRefuseReason}`)
+  } else {
+    log(`Acceptance-criteria verdicts: ${criteriaVerdicts.map(r => r.verdict).join(', ')} — clean close not blocked on criteria.`)
+  }
+}
+
+// A refused criteria verdict behaves exactly like reconcileFailed for closing purposes (task 2:
+// "do NOT flip the block to done in state.json, and report the run as not cleanly closed — the
+// same shape the existing reconcile_failed path uses") — it only ever narrows blockDone (never
+// widens it back to true), and only matters when the run would otherwise have closed the block.
+if (criteriaRefuse) {
+  blockDone = false
+  if (state.status === 'done') state.status = 'criteria_refused'
+  state.bail_reason = `Acceptance criteria refused clean close: ${criteriaRefuseReason}`
+  // APPEND-ONLY (BT.ticket.bails-must-be-append-only) — no task to attribute this to (it fires
+  // after every task already passed its own tripwire, exactly like the reconcile bail above), so
+  // task_id stays null.
+  state.bails = [...state.bails, { occurred_at: '__BAIL_OCCURRED_AT__', task_id: null, check_id: 'acceptance-criteria', failing_artifact: null, ownership: null, bail_class: null, reason: state.bail_reason, resolution: null }]
+}
 // BT.ticket.bookkeep-leaves-derived-output-uncommitted (task 4): OPTIONAL post-emit commit hook,
 // project policy only (mechanism: run it if configured; never a default, never a fact about where
 // any project's scripts live). String, not boolean — a missing/blank key means "no hook". Manual-
@@ -2950,7 +3073,7 @@ Target:
   Tasks run:   ${taskList.join(', ')}  (passed: ${passedTasks.join(', ') || 'none'})
   Full spec run: ${fullRun ? 'yes (every task in the spec)' : 'no (a task subset — do NOT close the block)'}
   Spec-wide:   ${passedAll.length}/${allTasks.length} tasks passed across all runs${outstandingTasks.length ? ` | outstanding: ${outstandingTasks.join(', ')}` : ''}
-  Block done:  ${blockDone ? 'yes — every task in the spec has passed, each with a confirmed workAssertionPassed outcome from its own implement/fix stage (the per-task loop refuses to mark a task passed without one)' : `no — keep the block open/in-progress (outstanding: ${outstandingTasks.join(', ') || 'none, but bailed/reconcile_failed this run'})`}
+  Block done:  ${blockDone ? 'yes — every task in the spec has passed, each with a confirmed workAssertionPassed outcome from its own implement/fix stage (the per-task loop refuses to mark a task passed without one)' : criteriaRefuse ? `no — REFUSED by the acceptance-criteria gate (BT.ticket.sdlc-task-must-verify-its-blocks-acceptance-criteria): ${criteriaRefuseReason}. Every task passed, but this refusal overrides that — do NOT flip the block to done in state.json this run regardless.` : `no — keep the block open/in-progress (outstanding: ${outstandingTasks.join(', ') || 'none, but bailed/reconcile_failed this run'})`}
 
 1. Read the surfaces:
    cd ${runDir} && cat ${specFile}
@@ -3189,9 +3312,17 @@ return {
   runDir,
   bailed,
   reconcileFailed,
-  bailReason: bailReason || (reconcileFailed ? state.bail_reason : null),
+  bailReason: bailReason || (reconcileFailed ? state.bail_reason : (criteriaRefuse ? state.bail_reason : null)),
   tasksRun: taskList,
   tasksPassed: passedTasks,
+  // BT.ticket.sdlc-task-must-verify-its-blocks-acceptance-criteria (task 2): the run's actual
+  // per-criterion verdict list (met/unmet/not-evaluated), computed in engine code by
+  // acceptanceCriteriaVerdicts() from evidence the criteria-evidence stage reported — never a
+  // boolean over tasks. [] for a legacy tasks-md spec or a bail/reconcile_failed run that never
+  // reached the criteria stage.
+  criteriaVerdicts,
+  criteriaRefuse,
+  criteriaRefuseReason,
   stateFile,
   tokens: tokensBlock,
 }
