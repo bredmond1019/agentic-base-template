@@ -260,6 +260,26 @@ print(chr(10).join(t[0].get('files', []) if t else []))
 }
 // <</shared:renderWorkAssertion>>
 
+// Operator-gated acceptance-criterion rule (BT.ticket.engines-must-not-author-unverified-records,
+// task 1). Measured 2026-08-21: /sdlc-flow's wrap-up stage authored a COMPLETED sign-off record
+// naming the operator for a criterion no operator had actually reviewed ("Brandon (operator, via
+// this session)"), because the agent had no way to represent "this AC item cannot be done by me"
+// and wrote a plausible completion instead. Every record-authoring stage in both engines must
+// carry this rule so an operator-gated criterion renders PENDING rather than fabricated-passed.
+// <<shared:renderOperatorGatedACRule>>
+function renderOperatorGatedACRule() {
+  return `OPERATOR-GATED ACCEPTANCE CRITERIA — before recording ANY acceptance-criterion item as
+passed/complete in this record, check whether it names an operator gate: a human decision, review,
+credential, judgement call, or sign-off that only the operator can give (e.g. "operator reviews the
+posts and approves", "Brandon signs off on the copy", a manual read-through only a person can
+attest to). Such an item is NOT yours to close. Record it as PENDING (operator gate) — never as
+passed, pass, done, or complete — and NEVER attribute a verdict on it to any named person or to
+"the operator, via this session": you did not perform the review, so no verdict of yours is
+evidence that it happened. Recording it PENDING is the correct, non-failing outcome — it is how you
+say "this item needs the operator," not a bail and not a defect in this run.`
+}
+// <</shared:renderOperatorGatedACRule>>
+
 // <<shared:renderEngineParseChecks>>
 function renderEngineParseChecks(files, cd, startIndex) {
   files = (files || []).filter(f => f.endsWith('.js'))

@@ -351,6 +351,20 @@ print(chr(10).join(t[0].get('files', []) if t else []))
 }
 // <</shared:renderWorkAssertion>>
 
+// <<shared:renderOperatorGatedACRule>>
+function renderOperatorGatedACRule() {
+  return `OPERATOR-GATED ACCEPTANCE CRITERIA — before recording ANY acceptance-criterion item as
+passed/complete in this record, check whether it names an operator gate: a human decision, review,
+credential, judgement call, or sign-off that only the operator can give (e.g. "operator reviews the
+posts and approves", "Brandon signs off on the copy", a manual read-through only a person can
+attest to). Such an item is NOT yours to close. Record it as PENDING (operator gate) — never as
+passed, pass, done, or complete — and NEVER attribute a verdict on it to any named person or to
+"the operator, via this session": you did not perform the review, so no verdict of yours is
+evidence that it happened. Recording it PENDING is the correct, non-failing outcome — it is how you
+say "this item needs the operator," not a bail and not a defect in this run.`
+}
+// <</shared:renderOperatorGatedACRule>>
+
 // <<shared:renderEmojiGate>>
 // The universal emoji gate, DIFF-SCOPED to the commit SHAs this run itself recorded. Shared because
 // it is executable PYTHON, not prose: a divergence between the engines' copies is a behaviour bug
@@ -3194,6 +3208,8 @@ if (!bailed && finalVerdict === 'PASS') {
 You are the documentation agent for the /sdlc-flow pipeline — a surgical /update-docs --patch over only
 the surface this run changed. All Bash from the ${runRootLabel}.
 
+${renderOperatorGatedACRule()}
+
 1. Read the committed run-state for the list of files changed across all tasks:
    Run: cd ${worktreePath} && cat ${stateFile}
    Run: cd ${worktreePath} && ${GIT} diff --stat ${prBase}..HEAD
@@ -3321,6 +3337,8 @@ const wrapupStatePayload = buildWrapupStatePayload()
 const wrapupResult = await tracedAgent(`${W}
 You are the wrap-up agent for an /sdlc-flow run. Write the human-facing status/log + the D18 amendment log
 ON THIS BRANCH (the PR will carry them), then commit. All Bash from the ${runRootLabel}.
+
+${renderOperatorGatedACRule()}
 
 Target:
   Spec:          ${blockId}

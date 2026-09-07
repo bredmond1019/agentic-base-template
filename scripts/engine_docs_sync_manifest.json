@@ -13,31 +13,31 @@
   },
   ".claude/workflows/sdlc-task.js::isolation-and-branch-naming": {
     "hash": "4c212bcb27b4d4fa4d706a8a3dfb9f4f59dd886feb9f65c880a9bb7eda522843",
-    "lines": "1832-1895",
+    "lines": "1846-1909",
     "docs_md": "docs/workflows/sdlc-task.md",
     "section": "## In-place vs. `--worktree`"
   },
   ".claude/workflows/prompts/shared.js::triage-bail-taxonomy": {
     "hash": "ce3dcf4a8897f01e3d045aa63485cf5e611da0b605d2afb875ebaa66aca35544",
-    "lines": "630-678",
+    "lines": "650-698",
     "docs_md": "docs/workflows/sdlc-task.md",
     "section": "## Pipeline"
   },
   ".claude/workflows/prompts/shared.js::triage-bail-taxonomy-flow-doc": {
     "hash": "ce3dcf4a8897f01e3d045aa63485cf5e611da0b605d2afb875ebaa66aca35544",
-    "lines": "630-678",
+    "lines": "650-698",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Pipeline"
   },
   ".claude/workflows/sdlc-task.js::bookkeep-vault-commit": {
     "hash": "cdfb59198f4225fa9082b34499732e0ec3b40ba8f2451f2ac52a9fa1c91e02d3",
-    "lines": "3228-3255",
+    "lines": "3244-3271",
     "docs_md": "docs/workflows/sdlc-task.md",
     "section": "## Vaulted `planning/` writes in the per-task loop"
   },
   ".claude/workflows/sdlc-flow.js::flags-and-defaults": {
     "hash": "31f23afa983116da743438e3a9246865056a0249d525ee20d33913b38d08c0b4",
-    "lines": "901-918",
+    "lines": "915-932",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Usage"
   },
@@ -49,13 +49,13 @@
   },
   ".claude/workflows/sdlc-flow.js::isolation-and-branch-naming": {
     "hash": "963d8062102b6f06463b070a09b6734809a9f661ce410ece3293d81f0b6b7e81",
-    "lines": "1839-1961",
+    "lines": "1853-1975",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Isolation mode \u2014 branch by default, `--worktree` for true isolation"
   },
   ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
     "hash": "ce5c39e7332097784e3681ca9eb8b5c3d5843bffafb8952be6af1c03a996efe2",
-    "lines": "3488-3523",
+    "lines": "3506-3541",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Vaulted planning directories (D46)"
   }
