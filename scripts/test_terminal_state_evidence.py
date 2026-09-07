@@ -117,6 +117,30 @@ OPERATOR_VERDICT_RE = re.compile(
 )
 SELF_TEST_INJECTION = "operator sign-off"
 
+# The ONE region where this vocabulary is not a regression but the point: the shared
+# renderOperatorGatedACRule() block, added by BT.ticket.engines-must-not-author-unverified-records,
+# is the rule that FORBIDS authoring an operator sign-off, so it must name the thing it forbids
+# ("a human decision, review, credential, judgement call, or sign-off that only the operator can
+# give"). Assertion D is a blunt substring guard and cannot tell a prohibition from a construction,
+# so it matched the prohibition and failed the terminal reconcile.
+#
+# The exemption is deliberately the narrowest available: it is keyed on the named shared-library
+# delimiters, NOT on the word "sign-off", so it covers exactly that one function body and nothing
+# else. Rewording the rule to dodge the grep was rejected -- a rule that cannot name the thing it
+# forbids is a worse rule, and a guard that forces that is the tail wagging the dog.
+# EXEMPT_REGION_RE is bounded by both delimiters; assertion_d_exemption_is_bounded() below proves an
+# injection placed immediately AFTER the closing delimiter still trips, so the exemption cannot be
+# widened into a hole by accident.
+EXEMPT_REGION_RE = re.compile(
+    r"// <<shared:renderOperatorGatedACRule>>.*?// <</shared:renderOperatorGatedACRule>>",
+    re.DOTALL,
+)
+
+
+def strip_exempt_regions(text: str) -> str:
+    """Blank the exempt region, preserving newlines so reported offsets stay meaningful."""
+    return EXEMPT_REGION_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+
 # --- Assertion E: positive control -----------------------------------------------------------------
 
 
@@ -215,12 +239,38 @@ def assertion_c(text: str, r: Result, terminal_heading_re: re.Pattern[str]) -> N
 
 
 def assertion_d(text: str, r: Result) -> None:
-    m = OPERATOR_VERDICT_RE.search(text)
+    m = OPERATOR_VERDICT_RE.search(strip_exempt_regions(text))
     r.check(
         "D (regression guard: no operator-attributed verdict path)",
         m is None,
         f"matched {m.group(0)!r} at offset {m.start()} -- an operator-sign-off-shaped construction "
         "was introduced" if m else "",
+    )
+
+
+def assertion_d_exemption_is_bounded(text: str, r: Result) -> None:
+    """Prove the renderOperatorGatedACRule exemption is a window, not a hole.
+
+    Injects the literal "operator sign-off" immediately AFTER the exempt region's closing
+    delimiter, in an in-memory copy, and asserts assertion D's regex still trips on the stripped
+    text. If it did not, the exemption would be swallowing the rest of the file and assertion D
+    would be decorative from that point on.
+    """
+    m = EXEMPT_REGION_RE.search(text)
+    if m is None:
+        r.check(
+            "D exemption bounded (injection after the exempt region still trips)",
+            False,
+            "the renderOperatorGatedACRule delimiters were not found -- the exemption is anchored "
+            "on a marker that no longer exists, so this control cannot run",
+        )
+        return
+    injected = text[: m.end()] + f"\n// {SELF_TEST_INJECTION}\n" + text[m.end():]
+    tripped = OPERATOR_VERDICT_RE.search(strip_exempt_regions(injected)) is not None
+    r.check(
+        "D exemption bounded (injection after the exempt region still trips)",
+        tripped,
+        "" if tripped else "the exemption is swallowing text beyond its closing delimiter",
     )
 
 
@@ -268,6 +318,7 @@ def run_engine(name: str, text: str | None, path: Path, r: Result,
     assertion_c(text, r, terminal_heading_re)
     assertion_d(text, r)
     assertion_d_self_test(text, r)
+    assertion_d_exemption_is_bounded(text, r)
     assertion_e(text, r, terminal_heading_re, name)
 
 
