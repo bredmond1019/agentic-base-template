@@ -74,7 +74,12 @@ ANCHORS = [
      "docs/workflows/sdlc-task.md", "## Usage"),
     (".claude/workflows/sdlc-task.js", "stage-list", 87, 96,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1663, 1726,
+    # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: same
+    # cause as the bookkeep-vault-commit note below -- the +52/+62 net line insertions sat
+    # above this anchor too, so it shifted even though the EXPECT needle (at the very start
+    # of the range) still happened to land inside the old fixed window. Re-picked from
+    # CONTENT at the new positions (confirmed byte-identical via diff), not blindly renumbered.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1702, 1765,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -83,15 +88,20 @@ ANCHORS = [
      "docs/workflows/sdlc-task.md", "## Pipeline"),
     (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 570, 618,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2908, 2935,
+    # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: the
+    # loadHarnessConfig() unwrap + bail additions inserted 52 net lines into sdlc-task.js and
+    # 62 net lines into sdlc-flow.js, both entirely ABOVE this anchor -- re-picked from CONTENT
+    # at the new positions (confirmed byte-identical to the pre-shift content via diff), not
+    # blindly renumbered.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2960, 2987,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 841, 858,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1739, 1861,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1779, 1901,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3352, 3387,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3414, 3449,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 
