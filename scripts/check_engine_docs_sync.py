@@ -85,7 +85,12 @@ ANCHORS = [
     # shifting every range below them by the same net line count per file -- re-picked from
     # CONTENT at the new positions (confirmed byte-identical to the pre-shift content via hash
     # match against the manifest), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1860, 1923,
+    # BT.ticket.criteria-verdict-stage-silently-no-ops-and-is-never-persisted, task 3: the
+    # criteriaVerdicts state-literal field + its comment block inserted 12 net lines into
+    # sdlc-task.js entirely ABOVE this anchor, shifting it 1860->1872, 1923->1935. Re-picked
+    # from CONTENT at the new position (confirmed byte-identical to the pre-shift content via
+    # diff), not blindly renumbered.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1872, 1935,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -112,7 +117,13 @@ ANCHORS = [
     # ABOVE this anchor -- re-picked from CONTENT at the new position (confirmed byte-identical
     # to the pre-shift content via diff), not blindly renumbered. sdlc-flow.js is untouched by
     # this block (out of scope) and needs no re-pick.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3288, 3315,
+    # BT.ticket.criteria-verdict-stage-silently-no-ops-and-is-never-persisted, task 3: the
+    # criteriaVerdicts state-literal field + its comment block, plus the state.criteriaVerdicts
+    # assignment at the point verdicts are computed, inserted 18 net lines into sdlc-task.js
+    # entirely ABOVE this anchor, shifting it 3288->3306, 3315->3333. Re-picked from CONTENT at
+    # the new position (confirmed byte-identical to the pre-shift content via diff), not blindly
+    # renumbered. sdlc-flow.js is untouched by this block (out of scope) and needs no re-pick.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3306, 3333,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs

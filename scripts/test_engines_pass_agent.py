@@ -140,9 +140,14 @@ STANDALONE_SITE_RE = re.compile(
 # persisted, task 2 fix pass): the loadBlockRecordAcceptanceCriteria reason plumbing inserted 30 net lines
 # into sdlc-task.js ABOVE this site, shifting it from 3251->3281. Text unchanged (diffed against
 # the pre-shift content) -- only the key moved. sdlc-flow.js unaffected.
+# Re-pinned again 2026-09-07 (BT.ticket.criteria-verdict-stage-silently-no-ops-and-is-never-
+# persisted, task 3): the criteriaVerdicts state-literal field + its comment block, plus the
+# state.criteriaVerdicts assignment at the point verdicts are computed, inserted 18 net lines into
+# sdlc-task.js ABOVE this site, shifting it from 3281->3299. Text unchanged (diffed against the
+# pre-shift content) -- only the key moved. sdlc-flow.js unaffected.
 FROZEN_BASELINE = {
     str(TASK_JS): {
-        3281: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
+        3299: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
     },
     str(FLOW_JS): {
         3496: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",

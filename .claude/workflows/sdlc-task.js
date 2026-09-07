@@ -1744,6 +1744,18 @@ const state = {
   // Nothing reads `bails` yet (clustering/counting is separate, out-of-scope work); this is the
   // durable per-run record that work will consume.
   bails: [],
+  // BT.ticket.criteria-verdict-stage-silently-no-ops-and-is-never-persisted (task 3): the
+  // per-criterion verdict list acceptanceCriteriaVerdicts() computes (see criteriaVerdicts
+  // further down this file), mirrored here so writeTaskState()'s wholesale JSON.stringify(state)
+  // carries it to disk instead of the value dying with the process when the session ends.
+  // ABSENT-OR-EMPTY, NEVER MISSING: stays [] here (Criteria stage not yet reached, or this run
+  // never reaches it — legacy tasks-md spec, bail, reconcile_failed), and is assigned the real
+  // computed array the moment the Criteria stage produces one (see the `state.criteriaVerdicts =`
+  // assignment below). Every intermediate write in between (per-task buildPassPayload/
+  // buildBailPayload snapshots) legitimately serializes whatever this field holds at that point
+  // in the run — [] until the Criteria stage runs, which is correct: those stages fire before
+  // Criteria ever does.
+  criteriaVerdicts: [],
   tokens: { stages: [], total: { promptTokEst: 0, filesReadKb: 0, inTokEst: 0, outTok: 0 } },  // Block A — refreshed on every write
 }
 
@@ -3088,6 +3100,12 @@ entry above, same order), notes.
   criteriaVerdicts = verdict.results
   criteriaRefuse = verdict.refuse
   criteriaRefuseReason = verdict.reason
+  // BT.ticket.criteria-verdict-stage-silently-no-ops-and-is-never-persisted (task 3): mirror
+  // into the in-memory `state` object the instant the verdicts are known, so every write from
+  // here on (including the final writeTaskState() call) persists them to sdlc-task-state.json
+  // instead of the value dying with the process. Never assigned when the Criteria stage does not
+  // run (state.criteriaVerdicts stays the [] the state literal initialises it to).
+  state.criteriaVerdicts = criteriaVerdicts
   if (criteriaRefuse) {
     log(`Acceptance-criteria verdict REFUSES a clean close: ${criteriaRefuseReason}`)
   } else {

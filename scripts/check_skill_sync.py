@@ -69,7 +69,12 @@ ANCHORS = [
     # above this anchor too, so it shifted even though the EXPECT needle (at the very start
     # of the range) still happened to land inside the old fixed window. Re-picked from
     # CONTENT at the new positions (confirmed byte-identical via diff), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1860, 1923,
+    # BT.ticket.criteria-verdict-stage-silently-no-ops-and-is-never-persisted, task 3: the
+    # criteriaVerdicts state-literal field + its comment block inserted 12 net lines into
+    # sdlc-task.js entirely ABOVE this anchor, shifting it 1860->1872, 1923->1935. Re-picked
+    # from CONTENT at the new position (confirmed byte-identical to the pre-shift content via
+    # diff), not blindly renumbered.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1872, 1935,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -96,7 +101,13 @@ ANCHORS = [
     # entirely ABOVE this anchor -- re-picked from CONTENT at the new position (confirmed
     # byte-identical to the pre-shift content via diff), not blindly renumbered. sdlc-flow.js is
     # untouched by this block (out of scope) and needs no re-pick.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3288, 3315,
+    # BT.ticket.criteria-verdict-stage-silently-no-ops-and-is-never-persisted, task 3: the
+    # criteriaVerdicts state-literal field + its comment block, plus the state.criteriaVerdicts
+    # assignment at the point verdicts are computed, inserted 18 net lines into sdlc-task.js
+    # entirely ABOVE this anchor, shifting it 3288->3306, 3315->3333. Re-picked from CONTENT at
+    # the new position (confirmed byte-identical to the pre-shift content via diff), not blindly
+    # renumbered. sdlc-flow.js is untouched by this block (out of scope) and needs no re-pick.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3306, 3333,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
      ".agents/skills/sdlc-flow/SKILL.md"),
