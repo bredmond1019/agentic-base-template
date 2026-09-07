@@ -75,6 +75,41 @@ def looks_repo_relative(token: str) -> bool:
     return token[0] not in "-$/~"
 
 
+def path_resolves(tok: str) -> bool:
+    """A candidate path resolves if it exists relative to this repo's root, or — the fallback
+    that matters for a validation_commands string that greps a DOC for a mention of a path that
+    lives one repo up — relative to the BRAIN root. Some validation_commands strings check that a
+    command file MENTIONS a path (e.g. `grep -q 'docs/sandbox/foo.md' some-command.md`) rather
+    than opening that path itself, and the mentioned path is sometimes a brain-root doc, not a
+    base-template one. Accepting either root avoids flagging that shape as a phantom path while
+    still catching a genuinely nonexistent one under both."""
+    if (REPO_ROOT / tok).exists():
+        return True
+    return (REPO_ROOT.parent / tok).exists()
+
+
+def load_closed_spec_slugs(repo_root: Path) -> set:
+    """Return the set of spec slugs (block ids) whose planning/state.json block is closed.
+
+    A closed spec is historical record — CLAUDE.md/AGENTS.md standing rule: don't repair a
+    phantom path in a spec that already shipped and closed; it stays as evidence of what the
+    validation gap looked like before this lint existed. So it must not gate this check either,
+    the same way an archived spec (moved under planning/archive/) already doesn't."""
+    state_path = repo_root / "planning" / "state.json"
+    try:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    closed = set()
+    for track in data.get("tracks") or []:
+        for block in track.get("blocks") or []:
+            if isinstance(block, dict) and block.get("status") == "closed":
+                bid = block.get("id")
+                if isinstance(bid, str):
+                    closed.add(bid)
+    return closed
+
+
 def is_candidate_from_command(token: str) -> bool:
     if not looks_repo_relative(token):
         return False
@@ -129,7 +164,7 @@ def check_spec(path: Path):
             if not isinstance(f, str) or not looks_repo_relative(f):
                 continue
             checked += 1
-            if (REPO_ROOT / f).exists():
+            if path_resolves(f):
                 continue
             creator = creates.get(f)
             # Legal when an earlier (or this same) task in the spec creates it — a task always
@@ -149,7 +184,7 @@ def check_spec(path: Path):
                 continue
             for tok in extract_command_candidates(cmd):
                 checked += 1
-                if (REPO_ROOT / tok).exists():
+                if path_resolves(tok):
                     continue
                 creator = creates.get(tok)
                 if isinstance(creator, int) and isinstance(tid, int) and creator <= tid:
@@ -176,11 +211,17 @@ def main() -> int:
     all_violations = []
     specs_checked = 0
     paths_checked = 0
+    closed_slugs = load_closed_spec_slugs(REPO_ROOT)
 
     for p in sorted(planning.rglob("tasks.json")):
         # Archived specs are historical record; a phantom path there changes nothing that will
         # ever run.
         if f"{os.sep}archive{os.sep}" in str(p):
+            continue
+        # A spec whose block already CLOSED is historical record too, by the same reasoning —
+        # it will never run again, and repairing a stale path in it is explicitly out of scope
+        # (the spec stays as evidence of what the gap looked like before this lint existed).
+        if p.parent.name in closed_slugs:
             continue
         specs_checked += 1
         violations, checked = check_spec(p)

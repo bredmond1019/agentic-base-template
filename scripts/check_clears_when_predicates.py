@@ -28,6 +28,10 @@ For every carryover[] entry whose `clears_when` is a typed object with `"type":
     A path that does not resolve is reported, naming the entry (slug/finding_id + scope) and the
     unresolved path — including the `! grep <nonexistent path>` shape, which must be reported as a
     violation rather than read as satisfied just because the shell negation would exit 0.
+    A path is accepted if it resolves under EITHER this repo's own root OR the BRAIN root one
+    level up (see `path_resolves()`) — this corpus does not author `cross_repo` predicates
+    consistently against one fixed root, so guessing from the scope tag alone produces false
+    positives; only a path that resolves under neither root is a genuine violation.
   Rule B — a predicate whose `command` contains the substring `git rev-parse --show-toplevel` is
     rejected outright, regardless of whether its paths happen to resolve, because which root that
     resolves to depends on where the predicate is evaluated from and this fleet nests git repos
@@ -115,6 +119,27 @@ def load_carryover(path: Path) -> list:
     return []
 
 
+def path_resolves(tok: str, repo_root: Path) -> bool:
+    """A candidate path resolves if it exists relative to THIS repo's root, or — the fallback that
+    matters for a `cross_repo` scoped entry — relative to the BRAIN root one level up.
+
+    `predicate-root-resolution-is-ambiguous` is this block's own origin slug for a reason: a
+    cross_repo entry's command is not evaluated the same way twice in this corpus. Some are
+    authored brain-root-relative (`written-constraints-do-not-gate-installs`'s own note says so
+    outright: "cwd is the brain root (scope cross_repo)" — its path
+    `base-template/.claude/workflows/block.schema.json` only exists under the brain root, not
+    under `<brain root>/base-template/base-template/...`). Others are explicitly `cd base-template
+    && ...` or annotated "Evaluated per-repo: each repo clears its own entry"
+    (`six-block-dirs-need-a-naming-decision`, `task-files-backlog-blocks-gating-the-work-assertion-
+    guard`) — repo-root-relative like every non-cross_repo entry. Scope alone does not say which,
+    so a path is accepted if it resolves under EITHER root rather than guessing from the scope tag;
+    only a path that resolves under neither is a genuine violation.
+    """
+    if (repo_root / tok).exists():
+        return True
+    return (repo_root.parent / tok).exists()
+
+
 def check_state_file(path: Path, repo_root: Path):
     """Return (violations, examined_count) for one state.json's typed command_exits_zero entries."""
     try:
@@ -154,11 +179,11 @@ def check_state_file(path: Path, repo_root: Path):
             continue
 
         for tok in extract_path_candidates(command):
-            if (repo_root / tok).exists():
+            if path_resolves(tok, repo_root):
                 continue
             violations.append(
                 f"{path}: {label}: clears_when path {tok!r} does not resolve under {repo_root} "
-                f"(command: {command!r})"
+                f"or {repo_root.parent} (command: {command!r})"
             )
 
     return violations, examined

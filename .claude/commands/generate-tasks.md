@@ -271,6 +271,15 @@ $ARGUMENTS — one of two input modes:
      behaviour — the two diverge, and the divergence is invisible unless named.
    - **Validation Commands are present** (or `planning/harness.json` → `validation.checks[]` supplies
      them as the fallback).
+   - **Every repo-relative script path named in a task's `validation_commands` or `files[]` must
+     exist in this repo, or be created by an earlier task in the same spec** — gated by
+     `spec-validation-command-paths` (`scripts/check_spec_validation_commands.py`). Measured
+     2026-08-24: three specs carried `python3 scripts/check_harness_registration.py` for a script
+     that has never existed anywhere in this fleet, and one of those specs closed with the phantom
+     command still live in two of its tasks — a fabricated load-bearing fact in the plan that
+     nothing caught until it failed mid-run. A path that resolves nowhere (and is not a later
+     `files[]` entry an earlier task in this same spec creates) is a spec error: revise it in place
+     — name the real path, or add the task that creates it — then re-run this self-check.
    - **Every `expect_red` entry is a subset of that same task's own `validation_commands`, and never
      names a project-wide harness check.** A task with no `expect_red` field is unaffected by this
      rule and needs no further check. Where `expect_red` is set, confirm each entry string also
