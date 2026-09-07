@@ -1436,6 +1436,76 @@ function renderEngineParseChecks(files, cd, startIndex) {
 }
 // <</shared:renderEngineParseChecks>>
 
+// Pure per-criterion verdict + close-decision evaluator (BT.ticket.sdlc-task-must-verify-its-blocks-
+// acceptance-criteria, task 1). Modelled on the skipCountRegressionResult() pattern above: a pure
+// function in engine code, mirrored verbatim into the bookkeep prompt text, so verdict logic and the
+// agent-facing description of it cannot drift. No I/O — exercised directly by
+// scripts/test_sdlc_task_criteria_verdicts.py without launching an engine run.
+//
+// `acceptanceCriteria` is the block record's array as declared in block.schema.json's oneOf: each
+// entry is EITHER a bare string (gateable defaults to true) OR an object
+// {criterion, gateable, evidence, ...} (gateable defaults to true when omitted on the object form
+// too). `evidenceByCriterion` is a Map or plain object keyed by the criterion's exact text, valued
+// with { evaluated: boolean, met: boolean } — the bookkeep stage supplies this from what the run
+// actually observed; this function derives no evidence of its own.
+//
+// Verdict rules:
+//   - gateable:false                                  -> 'not-evaluated' (never fails the run)
+//   - gateable:true (default) and no evidence entry,
+//     or evidence entry with evaluated:false           -> 'not-evaluated'
+//   - gateable:true and evaluated:true and met:true     -> 'met'
+//   - gateable:true and evaluated:true and met:false    -> 'unmet'
+//
+// Close decision: refuse when ANY criterion is 'not-evaluated' AND was not declared gateable:false
+// (i.e. an undeclared not-evaluated criterion), OR when any criterion is 'unmet'. A gateable:false
+// criterion reported not-evaluated never causes a refusal by itself.
+// <<shared:acceptanceCriteriaVerdicts>>
+function acceptanceCriteriaVerdicts(acceptanceCriteria, evidenceByCriterion) {
+  const evidenceFor = (text) => {
+    if (!evidenceByCriterion) return undefined
+    if (evidenceByCriterion instanceof Map) return evidenceByCriterion.get(text)
+    return evidenceByCriterion[text]
+  }
+
+  const criteria = (acceptanceCriteria || []).map((entry) => {
+    if (typeof entry === 'string') {
+      return { text: entry, gateable: true }
+    }
+    // Object form: {criterion, gateable, evidence, ...}. gateable defaults to true when omitted.
+    const gateable = entry && Object.prototype.hasOwnProperty.call(entry, 'gateable')
+      ? !!entry.gateable
+      : true
+    return { text: entry && entry.criterion, gateable }
+  })
+
+  const results = criteria.map(({ text, gateable }) => {
+    if (!gateable) {
+      return { criterion: text, gateable, verdict: 'not-evaluated' }
+    }
+    const evidence = evidenceFor(text)
+    if (!evidence || !evidence.evaluated) {
+      return { criterion: text, gateable, verdict: 'not-evaluated' }
+    }
+    return { criterion: text, gateable, verdict: evidence.met ? 'met' : 'unmet' }
+  })
+
+  const unmet = results.filter((r) => r.verdict === 'unmet')
+  const undeclaredNotEvaluated = results.filter((r) => r.verdict === 'not-evaluated' && r.gateable)
+
+  let refuse = false
+  let reason = null
+  if (unmet.length) {
+    refuse = true
+    reason = `acceptance criterion UNMET: "${unmet[0].criterion}"`
+  } else if (undeclaredNotEvaluated.length) {
+    refuse = true
+    reason = `acceptance criterion NOT EVALUATED and not declared gateable:false: "${undeclaredNotEvaluated[0].criterion}"`
+  }
+
+  return { results, refuse, reason }
+}
+// <</shared:acceptanceCriteriaVerdicts>>
+
 // Render the inner project-validation check list for a Test stage. When gatingOnly is true (the fast
 // per-task tripwire), emit only the checks with gates:true; --test-depth full runs the whole suite.
 // When the config is absent (or carries no checks), fall back to the spec's `## Validation Commands` —
