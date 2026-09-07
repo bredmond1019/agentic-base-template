@@ -118,9 +118,25 @@ STANDALONE_SITE_RE = re.compile(
 # dispatch) was inlined ABOVE these sites in both engines, shifting them from 2950->3025 in
 # sdlc-task.js and 3390->3464 / 3679->3753 in sdlc-flow.js. Text unchanged (diffed against the
 # pre-shift content) -- only the keys moved.
+#
+# Re-pinned again 2026-09-06 (BT.ticket.sdlc-task-must-verify-its-blocks-acceptance-criteria,
+# task 1): the new acceptanceCriteriaVerdicts function (70 net lines) was inlined at the engine
+# source level ABOVE these sites in sdlc-task.js, shifting it from 3025->3095. Text unchanged
+# (pre-change bytes extracted via diff) -- only the key moved. sdlc-flow.js unaffected.
+# Re-pinned again 2026-09-06 (BT.ticket.sdlc-task-must-verify-its-blocks-acceptance-criteria,
+# task 2): the new Criteria stage prompt (123 net lines) was inlined at the engine source level
+# ABOVE this site in sdlc-task.js, shifting it from 3095->3218. Text unchanged (diffed against the
+# pre-shift content) -- only the key moved. sdlc-flow.js unaffected.
+# Re-pinned again 2026-09-06 (BT.ticket.sdlc-task-must-verify-its-blocks-acceptance-criteria,
+# task 4): dropping the mistaken <<shared:acceptanceCriteriaVerdicts>> library markers (the
+# function is sdlc-task-only; sdlc-flow.js never carried a twin copy for build_engines.py to
+# reconcile against) replaced a 1-line open marker with a 5-line explanatory comment and removed
+# the 1-line close marker, a net +3 lines ABOVE this site in sdlc-task.js, shifting it from
+# 3218->3221. Text unchanged (diffed against the pre-shift content) -- only the key moved.
+# sdlc-flow.js unaffected.
 FROZEN_BASELINE = {
     str(TASK_JS): {
-        3025: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
+        3221: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
     },
     str(FLOW_JS): {
         3464: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",

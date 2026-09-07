@@ -1,6 +1,6 @@
 {
   ".claude/workflows/sdlc-task.js::isolation-and-branch-naming": {
-    "hash": "c1daf8eaf74a30e04879cb366d92f169fe196f28fbd77ff4244339e7ed4f7edb",
+    "hash": "4c212bcb27b4d4fa4d706a8a3dfb9f4f59dd886feb9f65c880a9bb7eda522843",
     "lines": "1832-1895",
     "skill_md": ".agents/skills/sdlc-task/SKILL.md"
   },
@@ -15,7 +15,7 @@
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   },
   ".claude/workflows/sdlc-task.js::bookkeep-vault-commit": {
-    "hash": "aae3817513079d531669949454065f643a5270e4a1385113980584729eccf2c6",
+    "hash": "cdfb59198f4225fa9082b34499732e0ec3b40ba8f2451f2ac52a9fa1c91e02d3",
     "lines": "3228-3255",
     "skill_md": ".agents/skills/sdlc-task/SKILL.md"
   },

@@ -1485,7 +1485,11 @@ function renderEngineParseChecks(files, cd, startIndex) {
 // Close decision: refuse when ANY criterion is 'not-evaluated' AND was not declared gateable:false
 // (i.e. an undeclared not-evaluated criterion), OR when any criterion is 'unmet'. A gateable:false
 // criterion reported not-evaluated never causes a refusal by itself.
-// <<shared:acceptanceCriteriaVerdicts>>
+//
+// sdlc-task-ONLY, not a <<shared:...>> library block: sdlc-flow.js already re-reads the complete
+// acceptance criteria at its own review stage (sdlc-flow.js:~2874) and this ticket explicitly
+// keeps sdlc-flow.js untouched, so there is no second engine copy for scripts/build_engines.py to
+// reconcile this against.
 function acceptanceCriteriaVerdicts(acceptanceCriteria, evidenceByCriterion) {
   const evidenceFor = (text) => {
     if (!evidenceByCriterion) return undefined
@@ -1530,7 +1534,6 @@ function acceptanceCriteriaVerdicts(acceptanceCriteria, evidenceByCriterion) {
 
   return { results, refuse, reason }
 }
-// <</shared:acceptanceCriteriaVerdicts>>
 
 // Render the inner project-validation check list for a Test stage. When gatingOnly is true (the fast
 // per-task tripwire), emit only the checks with gates:true; --test-depth full runs the whole suite.
