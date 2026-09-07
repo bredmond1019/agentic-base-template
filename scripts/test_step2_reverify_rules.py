@@ -83,7 +83,13 @@ FALLBACK_BRANCH_PHRASES = [
 ]
 
 # --- Assertion D: exactly four rows, base-template and brain-root read --no-worktree -----------
-EXPECTED_ROW_COUNT = 4
+# The isolation table may legitimately GROW -- BT.ticket.isolation-must-account-for-path-
+# dependency-neighbours added a fifth row on 2026-09-07. Pinning an exact count made this
+# assertion forbid the very change a later block was filed to make, and the count is only ever a
+# proxy for what assertion D actually protects: that the two load-bearing rows still read
+# --no-worktree. So this is a FLOOR, not an equality, and the required rows are asserted by
+# content below.
+MIN_ROW_COUNT = 4
 BASE_TEMPLATE_ROW_RE = re.compile(
     r"\|\s*`base-template`\s*\|[^\n]*`--no-worktree`", re.IGNORECASE
 )
@@ -91,6 +97,7 @@ BRAIN_ROOT_ROW_RE = re.compile(
     r"\|\s*the brain root[^\n|]*\|[^\n]*`--no-worktree`", re.IGNORECASE
 )
 TABLE_ROW_RE = re.compile(r"^\|\s*`?[^\n|]+?`?\s*\|\s*\*?\*?`--", re.MULTILINE)
+PATH_DEP_ROW_RE = re.compile(r"path-depends on", re.MULTILINE)
 
 
 class RegionNotFound(Exception):
@@ -164,15 +171,21 @@ def assert_c_lane_record_override_rule(region: str) -> str | None:
 
 def assert_d_table_unchanged(region: str) -> str | None:
     rows = TABLE_ROW_RE.findall(region)
-    if len(rows) != EXPECTED_ROW_COUNT:
+    if len(rows) < MIN_ROW_COUNT:
         return (
-            f"assertion D FAILED: expected exactly {EXPECTED_ROW_COUNT} isolation table rows, "
+            f"assertion D FAILED: expected at least {MIN_ROW_COUNT} isolation table rows, "
             f"found {len(rows)}: {rows}"
         )
     if not BASE_TEMPLATE_ROW_RE.search(region):
         return "assertion D FAILED: `base-template` row no longer reads `--no-worktree`"
     if not BRAIN_ROOT_ROW_RE.search(region):
         return "assertion D FAILED: brain-root row no longer reads `--no-worktree`"
+    if not PATH_DEP_ROW_RE.search(region):
+        return (
+            "assertion D FAILED: the path-dependency-neighbour row is missing. It states that "
+            "--worktree mitigates NEITHER direction of a Cargo `path = \"../<repo>\"` dependency; "
+            "losing it silently restores the belief a worktree isolates a path dep."
+        )
     return None
 
 
