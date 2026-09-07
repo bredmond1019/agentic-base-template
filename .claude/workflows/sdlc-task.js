@@ -498,18 +498,80 @@ PYEOF`
 // <</shared:renderEmojiGate>>
 
 // <<shared:renderStateFlipScript>>
-// The D64 validate-then-commit mutation for planning/state.json's authored block status: capture
-// the pre-write bytes, mutate in memory, run `mev validate-brain --state` BEFORE and AFTER, and
-// roll back byte-exactly on any NET-NEW diagnostic. Shared for the same reason as the emoji gate --
-// it is executable Python performing a validated write, and the two engines had a full 57-line copy
-// each. `indent` exists only because the two prompts nest it at different depths.
-function renderStateFlipScript({ runRoot, indent }) {
+// The deterministic block-status flip for planning/state.json's authored block status
+// (BT.ticket.sdlc-bookkeep-writes-block-status-deterministically). Outside a linked git worktree,
+// with `mev` on PATH and this repo resolvable in brain.toml's [[repos]] table, the rendered script
+// calls `mev set-block-status <repo>:<id> closed --write` and derives success/failure from ITS OWN
+// subprocess exit code -- never from an agent-authored payload field. That `--write` call always
+// carries the SAME `--agent <lane>` flag the adjacent `mev emit-state --write` call site already
+// uses (renderAgentFlag(), resolved once here at prompt-GENERATION time, exactly as that call site
+// does) -- reused rather than a second identity resolver. `<repo>` is resolved the same way
+// renderScopeFlag() resolves its `--scope` slug (the brain.toml [[repos]] walk-up matching cwd to
+// a registered repo_path); both are computed once, at generation time, and baked into the script
+// as literals, matching this file's existing convention for those two flags.
+//
+// WORKTREE-MODE DECISION (made here, not left implicit, per this ticket's task 1): a successful
+// `mev set-block-status --write` ALWAYS chains `emit-state --write` internally -- there is no flag
+// to suppress it -- and `emit-state` refuses to run inside a linked git worktree. So inside a
+// worktree this script NEVER calls `mev set-block-status` at all: the caller passes
+// `runningInWorktree: true` and the script falls straight to the SAME validated hand-edit this
+// region has always used (validated via `mev validate-brain --state` when `mev` is on PATH,
+// degraded json.load-only when it is not), with `stateWriteValidated` reflecting that distinction
+// exactly as before. Rewriting emit-state's own worktree-deferral behavior is out of scope for this
+// ticket; this decision only says which route THIS script takes.
+//
+// mev ABSENT, or this repo unregistered in brain.toml (no repo slug resolves), MUST DEGRADE, NEVER
+// BAIL: these engines ship to 18+ downstream repos with no brain.toml and no `mev` on PATH (D5,
+// standing rule 1: mechanism, never stack defaults). Both of those cases fall back to the identical
+// validated hand-edit the worktree case uses -- see the adjacent `emit-state` call site's identical
+// contract.
+//
+// Machine-readable result lines a caller's bookkeep prompt copies verbatim, never re-derives:
+//   deterministic path  -- "FLIPPED: <repo>:<id>" (exit 0) or "FLIP_REFUSED: <repo>:<id>" followed
+//                          by "MEV_OUTPUT: <line>" lines (exit 1) -- both read from mev's own exit
+//                          code, never from mev's stdout wording.
+//   hand-edit fallback  -- unchanged from before this ticket: "NOT_FOUND" (exit 0), "FLIPPED:<id>"
+//                          with an optional "UNVALIDATED:" line (exit 0), or "REJECTED:<id>" with
+//                          "NET_NEW:" lines (exit 1).
+//
+// `indent` exists only because the two prompts nest it at different depths.
+function renderStateFlipScript({ runRoot, indent, runningInWorktree = false }) {
+  const agentFlag = renderAgentFlag()
+  const scopeFlagRaw = renderScopeFlag()
+  const scopeMatch = scopeFlagRaw.match(/--scope\s+(\S+)/)
+  const repoSlug = scopeMatch ? scopeMatch[1] : null
+  const useDeterministic = !runningInWorktree && !!repoSlug
+
+  const agentTrim = agentFlag.trim()
+  const agentArgsPy = agentTrim
+    ? '[' + agentTrim.split(/\s+/).map(a => `'${a}'`).join(', ') + ']'
+    : '[]'
+
   return `${indent}cd ${runRoot} && python3 -c "
 import json, subprocess, sys, shutil
 
 path = 'planning/state.json'
 bid = sys.argv[1]
+USE_DETERMINISTIC = ${useDeterministic ? 'True' : 'False'}
+REPO_SLUG = '${repoSlug || ''}'
 
+mev_available = shutil.which('mev') is not None
+
+if USE_DETERMINISTIC and mev_available:
+    key = REPO_SLUG + ':' + bid
+    cmd = ['mev', 'set-block-status', key, 'closed', '--write'] + ${agentArgsPy}
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode == 0:
+        print('FLIPPED: ' + key)
+        sys.exit(0)
+    print('FLIP_REFUSED: ' + key)
+    for line in (r.stdout + r.stderr).splitlines():
+        print('MEV_OUTPUT: ' + line)
+    sys.exit(1)
+
+# Fallback: mev is not on PATH, this repo has no resolvable brain.toml slug, or this run is inside
+# a linked git worktree (set-block-status's unconditional chained emit-state --write would trip
+# emit-state's own worktree refusal) -- degrade to the validated hand edit rather than bail.
 with open(path, 'rb') as fh:
     pre_bytes = fh.read()
 
@@ -527,8 +589,6 @@ for track in data.get('tracks', []):
 if not found:
     print('NOT_FOUND')
     sys.exit(0)
-
-mev_available = shutil.which('mev') is not None
 
 def diagnostics():
     r = subprocess.run(['mev', 'validate-brain', '--state'], capture_output=True, text=True)
@@ -1090,8 +1150,8 @@ const BOOKKEEP_SCHEMA = {
     statusWriteValidated: { type: 'boolean', description: 'true if mev validate-brain --sync gated the planning/status.md mutation (before/after diff, net-new only); false when mev was not on PATH and the write landed with only line-level parsing (a degrade, not a pass)' },
     statusWriteRejected: { type: 'boolean', description: 'true if the planning/status.md mutation introduced net-new corpus errors and was rolled back byte-exact; status.md on disk is unchanged from before this step ran' },
     tasksMarked:        { type: 'boolean', description: 'true if tasks.md task markers were updated' },
-    blockStatusFlipped: { type: 'string', description: 'the state.json tracks[].blocks[].id flipped to "closed", or "" if none (partial run, no state.json, block not found, or the write was rejected by validation)' },
-    stateWriteValidated: { type: 'boolean', description: 'true if mev validate-brain --state gated the state.json mutation (before/after diff, net-new only); false when mev was not on PATH and the write landed with only json.load-level parsing (a degrade, not a pass)' },
+    blockStatusFlipped: { type: 'string', description: 'the state.json tracks[].blocks[].id whose flip to "closed" was reported by `mev set-block-status`\'s own exit code (deterministic route) or by the degraded hand-edit fallback, transcribed from the flip script\'s stdout — never agent-authored; "" if none (partial run, no state.json, block not found, `mev set-block-status` refused via FLIP_REFUSED, or the fallback write was rejected by validation)' },
+    stateWriteValidated: { type: 'boolean', description: 'true when the deterministic `mev set-block-status --write` route ran and reported FLIPPED (mev\'s own exit code validated the write), or when the fallback hand-edit passed `mev validate-brain --state` (before/after diff, net-new only); false when the fallback wrote with only json.load-level parsing because mev was unavailable — a degrade, not a pass' },
     stateWriteRejected: { type: 'boolean', description: 'true if the state.json mutation introduced net-new schema errors and was rolled back byte-exact; the block was NOT flipped to closed this run' },
     emitStateRan:       { type: 'boolean', description: 'true if mev emit-state --write ran successfully (false when skipped: worktree mode or mev/brain.toml absent)' },
     postEmitHookRan:    { type: 'boolean', description: 'true if planning/harness.json\'s postEmitCommitCommand was configured AND invoked this run (in-place only, and only when emitStateRan is true); false when absent, or skipped (worktree mode / emit-state did not run)' },
@@ -2905,40 +2965,55 @@ ${renderStatusWriteScript({ runRoot: runDir, indent: '   ' })}
    surface, because \`mev emit-state\` reads this field and NEVER infers completion from status.md.
    - Resolve the block's canonical ID from the status.md Progress Table row (the <BlockID> column, or
      the id that row maps to in state.json). This is the only part of this step that stays your
-     judgment call — the mutation itself is scripted below, not an Edit-tool diff.
-   - VALIDATE-THEN-COMMIT CONTRACT: the mutation must not stand unless it passes the real typed schema
-     check. \`json.load()\` succeeding is NOT schema validity — mev deserializes state.json into typed
-     structs, so a scalar where a struct belongs parses fine as JSON and fails deserialization for the
-     WHOLE FILE (this is exactly what happened 2026-08-09 with a string \`origin\` where the schema
-     types it as a struct). Run ONE scripted mutation (never the Edit tool) that captures the pre-write
-     bytes, mutates in memory, runs \`mev validate-brain --state\` BEFORE and AFTER the write, and
-     rejects — byte-exact rollback — any write that introduces diagnostic lines NOT present in the
-     BEFORE baseline. Pre-existing corpus errors (e.g. a sibling lane's unrelated breakage) must never
-     block this write — NET-NEW only, the same delta-attribution rule the push gate uses under D64.
+     judgment call. Do NOT locate or hand-edit the block's \`tracks[].blocks[]\` entry yourself on any
+     path — the mutation is entirely scripted below, never an Edit-tool diff, whether \`mev\` is
+     present or absent.
+   - DETERMINISTIC-FIRST CONTRACT: when \`mev\` is on PATH, this repo resolves to a brain.toml repo
+     slug, and this run is NOT in a worktree, the script below calls \`mev set-block-status
+     <repo>:<id> closed --write\` and derives success or failure from THAT SUBPROCESS'S OWN EXIT
+     CODE — never from anything you narrate. Only when that deterministic route is unavailable (mev
+     absent, no resolvable repo slug, or a worktree run) does the script fall back to the validated
+     hand-edit contract: capture the pre-write bytes, mutate in memory, run \`mev validate-brain
+     --state\` BEFORE and AFTER the write, and reject — byte-exact rollback — any write that
+     introduces diagnostic lines NOT present in the BEFORE baseline (pre-existing corpus errors, e.g.
+     a sibling lane's unrelated breakage, must never block this write — NET-NEW only, the same
+     delta-attribution rule the push gate uses under D64). Run the script exactly once; do not choose
+     between the two routes yourself — the script resolves that at generation/run time.
      Substitute the id you resolved for <RESOLVED_ID> (keep it as the script's sole argv, quoted):
-${renderStateFlipScript({ runRoot: runDir, indent: '     ' })}
-     The script searches EVERY tracks[].blocks[] entry and only ever mutates the one matching block's
-     "status" field. Read the script's own stdout AND exit code — do not infer success yourself:
-       - "NOT_FOUND" (exit 0) → the file stays byte-unchanged. Report it in notes, do NOT fabricate a
-         block entry, and set blockStatusFlipped to "".
-       - "FLIPPED:<id>" with NO "UNVALIDATED:" line (exit 0) → mev validated the write and found no
-         net-new diagnostics. Set blockStatusFlipped to that id and stateWriteValidated=true.
-       - "FLIPPED:<id>" WITH an "UNVALIDATED:" line (exit 0) → mev is not installed; the write landed
-         unchecked (json.load-level parse only, matching how the harness degrades other absent
-         tooling). Set blockStatusFlipped to that id, stateWriteValidated=false, and copy the
-         UNVALIDATED line verbatim into notes — this is a DEGRADE, not a silent pass.
-       - "REJECTED:<id>" (exit 1) → the write introduced net-new schema errors and was rolled back;
-         state.json on disk is now byte-identical to its content before this step ran. Set
-         blockStatusFlipped to "", stateWriteRejected=true, and copy every "NET_NEW:" line verbatim
-         into notes. This MUST be reported — never silently swallow it, and do not treat the block as
-         closed this run even though "Block done" above said yes; step 3's status.md edit already
-         recorded progress narrative, but the block stays open until a clean write lands on a later
-         run.
-   - WORKTREE NOTE (decided, not deferred): this validation step runs the SAME WAY in worktree mode as
-     in place. \`mev validate-brain --state\` reads planning/state.json in THIS repo directly — it does
-     not need the cross-repo BRAIN_ROOT resolution that makes \`--graph\`/\`emit-state --write\` unsafe
-     inside a linked worktree. Only step 5's \`emit-state --write\` (regenerating derived surfaces) is
-     deferred to merge in worktree mode; this validation is never deferred.
+${renderStateFlipScript({ runRoot: runDir, indent: '     ', runningInWorktree: useWorktree })}
+     Read the script's own stdout AND exit code — do not infer success yourself, and simply
+     TRANSCRIBE which of these lines it printed rather than re-deriving the outcome:
+       - "FLIPPED: <repo>:<id>" (exit 0, deterministic route) → \`mev set-block-status --write\`
+         reported success via its own exit code. Set blockStatusFlipped to <id> and
+         stateWriteValidated=true (mev-backed, deterministic).
+       - "FLIP_REFUSED: <repo>:<id>" followed by one or more "MEV_OUTPUT:" lines (exit 1,
+         deterministic route) → \`mev set-block-status --write\` refused the flip. Set
+         blockStatusFlipped to "", and copy every "MEV_OUTPUT:" line verbatim into notes — this MUST
+         be reported, never silently swallowed. Do not treat the block as closed this run even though
+         "Block done" above said yes; it stays open until a clean write lands on a later run.
+       - "NOT_FOUND" (exit 0, fallback route) → the file stays byte-unchanged. Report it in notes, do
+         NOT fabricate a block entry, and set blockStatusFlipped to "".
+       - "FLIPPED:<id>" with NO "UNVALIDATED:" line (exit 0, fallback route) → mev validated the
+         write and found no net-new diagnostics. Set blockStatusFlipped to that id and
+         stateWriteValidated=true.
+       - "FLIPPED:<id>" WITH an "UNVALIDATED:" line (exit 0, fallback route) → mev is not installed;
+         the write landed unchecked (json.load-level parse only, matching how the harness degrades
+         other absent tooling). Set blockStatusFlipped to that id, stateWriteValidated=false, and
+         copy the UNVALIDATED line verbatim into notes — this is a DEGRADE, not a silent pass.
+       - "REJECTED:<id>" (exit 1, fallback route) → the write introduced net-new schema errors and
+         was rolled back; state.json on disk is now byte-identical to its content before this step
+         ran. Set blockStatusFlipped to "", stateWriteRejected=true, and copy every "NET_NEW:" line
+         verbatim into notes. This MUST be reported — never silently swallow it, and do not treat the
+         block as closed this run even though "Block done" above said yes; step 3's status.md edit
+         already recorded progress narrative, but the block stays open until a clean write lands on a
+         later run.
+   - WORKTREE NOTE (decided, not deferred): inside a worktree the script above never calls \`mev
+     set-block-status\` at all (it always chains \`emit-state --write\`, which refuses to run inside a
+     linked worktree) — it goes straight to the fallback hand-edit contract, validated the same way
+     as in-place (\`mev validate-brain --state\` reads planning/state.json in THIS repo directly and
+     needs no cross-repo BRAIN_ROOT resolution). Only step 5's \`emit-state --write\` (regenerating
+     derived surfaces) is deferred to merge in worktree mode; this step's write and its validation are
+     never deferred.
 
 5. Regenerate derived surfaces via \`mev emit-state --write\`. Run this step whenever this bookkeep
    stage runs at all — it is NOT conditional on "Block done" above: step 2/3 already edited
@@ -2999,7 +3074,7 @@ Return via StructuredOutput: statusUpdated, statusWriteValidated, statusWriteRej
   if (bookkeepResult?.stateWriteRejected) {
     log(`state.json: write REJECTED — net-new schema error(s) from mev validate-brain --state; rolled back byte-exact, block NOT closed this run. ${bookkeepResult?.notes || ''}`)
   } else if (bookkeepResult?.blockStatusFlipped) {
-    log(`state.json: block "${bookkeepResult.blockStatusFlipped}" → closed (${bookkeepResult.stateWriteValidated ? 'validated: mev validate-brain --state, net-new only' : 'UNVALIDATED: mev not available, json.load-level parse only'})${bookkeepResult.emitStateRan ? '; derived surfaces (incl. focus.next) regenerated (mev emit-state --write).' : useWorktree ? '; focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree runs `mev emit-state --write` on merge.' : '.'}`)
+    log(`state.json: block "${bookkeepResult.blockStatusFlipped}" → closed (${bookkeepResult.stateWriteValidated ? 'deterministic: mev set-block-status --write exit code, or fallback validated via mev validate-brain --state net-new only' : 'UNVALIDATED: mev not available, json.load-level parse only'})${bookkeepResult.emitStateRan ? '; derived surfaces (incl. focus.next) regenerated (mev emit-state --write).' : useWorktree ? '; focus.next is DEFERRED — it still points at the pre-close state until /clean-worktree runs `mev emit-state --write` on merge.' : '.'}`)
   } else if (blockDone) {
     log(`Bookkeep: no state.json block flipped (${bookkeepResult?.notes || 'no state.json, or block not found'}).`)
   }
