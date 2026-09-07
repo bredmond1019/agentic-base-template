@@ -748,12 +748,12 @@ the reason.
 Move the pre-plan folder's contents into `<roadmap_dir>/pre-plan/`:
 
 ```
-planning/<slug>/{assessment,verification,seams,sequence,notes,index}.md, evidence/
+planning/open-work/pre-plan/<slug>/{assessment,verification,seams,sequence,notes,index}.md, evidence/
    ->  planning/roadmaps/<slug>/pre-plan/
 ```
 
 **Why this is a step and not housekeeping.** `/assess`, `/seams` and `/sequence` all write to
-`planning/<slug>/`, and which successor consumes them is unknown until `/sequence` counts the repos
+`planning/open-work/pre-plan/<slug>/`, and which successor consumes them is unknown until `/sequence` counts the repos
 in its cut: one repo goes to `/plan`, which authors `plan.md` into that same directory, several come
 here, which writes `planning/roadmaps/<slug>/`. So on the multi-repo path the slug ends up in BOTH
 places, every time, by design — and a slug in both places is what `/begin-orchestration` Step 1C and
@@ -764,7 +764,7 @@ produced puts cause and effect in one place.
 
 **The invariant this maintains, and it is the whole point:**
 
-> `planning/<slug>/` and `planning/roadmaps/<slug>/` are never both populated.
+> `planning/open-work/pre-plan/<slug>/` and `planning/roadmaps/<slug>/` are never both populated.
 
 `/plan` satisfies it by staying put. This command satisfies it by taking the pre-plan with it.
 
@@ -772,8 +772,8 @@ Three things to get right:
 
 1. **Move, never copy or delete.** `evidence/` holds each scout's raw return and the roadmap cites
    it; that is the audit trail behind every block in the cut.
-2. **Move through the REAL vault path**, `core/_planning/<repo>/<slug>/`, never through the
-   `planning/` symlink face — `git mv` there fails with "source directory is empty" and silently
+2. **Move through the REAL vault path**, `core/_planning/<repo>/open-work/pre-plan/<slug>/`, never
+   through the `planning/` symlink face — `git mv` there fails with "source directory is empty" and silently
    does nothing (brain-root standing rule 10).
 3. **Move AFTER the roadmap files are written and verified**, never before. If roadmap authoring
    fails, the pre-plan must still be where `/sequence` left it so a retry finds it.

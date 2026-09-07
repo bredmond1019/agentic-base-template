@@ -6,6 +6,45 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-07
 
 ---
+## 2026-09-07 — planning/ splits by audience: authored work moves to open-work/pre-plan/
+
+### The findability problem, measured
+- **What:** HQ's `planning/` held **79 top-level directories**. 44 are agent-owned spec dirs, 7 are
+  reserved, 4 are dated triage runs — and **18 were authored human work** (captures, assessments,
+  seam maps, sequences, one-off plans) sitting in the same flat namespace under a different naming
+  convention. **Eight commands mint a bare `planning/<slug>/` with no uniqueness check**, into the
+  namespace four others fill with `planning/<BlockID>/`. Nothing distinguished them, which is why
+  work put aside became unfindable: the 18 authored folders overlapped almost exactly with the 10
+  stalest directories in the repo (54-66 days untouched).
+- **Decision:** [HQ D87](file:///Users/brandon/Dev/agentic-portfolio/docs/decisions/D87-planning-splits-by-audience.md).
+  Authored narrative moves to `planning/open-work/pre-plan/<slug>/`; machine records stay put —
+  D65's rule applied to folders. Extends D65, narrows D16 (the concept-folder model stands; the
+  claim that every concept folder sits at the `planning/` root does not).
+- **Why this direction:** nesting the *agent* side was measured at **~40 hardcoded path sites across
+  four codebases** — ~15 independent `.join("planning")` calls in mev with no shared
+  `planning_root()` helper, ~13 in engine-rs, both engines' 2-candidate template-literal resolution,
+  `check_block_records.py` — several failing **silently** (`last_touched.rs` drops unseen spec
+  folders by documented contract; `check_block_records.py:370`'s `endswith("planning/blocks")` skips
+  a nested `blocks/` with no error). Moving the human side cost 8 command files, their `.agents/`
+  mirrors, and **two lines of Rust**.
+- **Changed here:** `/assess`, `/seams`, `/sequence`, `/capture`, `/plan`, `/define-design-system`,
+  `/define-polish-standard`, `/generate-roadmap` (Step 7b source + vault path), `begin-session`,
+  `report-to-the-operator`, and `.claude/commands/README.md` — whose planning-layout section is now
+  an audience-split diagram. `/plan --lane`'s `lane-<slug>.json` deliberately does **not** move:
+  `planning/<slug>/` is the only path both `/begin-orchestration`'s fallback and mev's
+  `discover_lane_files` read.
+- **Two latent bugs fixed in passing:** `/capture`'s guard refused only when `notes.md` already
+  existed, so a slug colliding with a spec directory wrote into that block's folder; `/assess
+  --resume` had no fallback to `planning/roadmaps/<slug>/pre-plan/`, so a slug relocated by Step 7b
+  was invisible and `--resume` silently restarted from scratch.
+- **Verification:** 91 gated base-template checks pass. All four `validate-brain` flags clean
+  (links back to its exact 83-warning baseline). The mev guard's regression test was confirmed to
+  **fail without the fix** — a lane record under `open-work/` came back as `roadmap: "open-work"`.
+  17 folders migrated in HQ; 26 links broke and were repaired (12 markdown, 14 `file:///` —
+  `E_LINK_DEAD_FILE_URI` gates, and the baseline had none only because they all resolved).
+- **Propagated:** 171 files across 18 repos via `sync_downstream_harness.py --apply`.
+
+---
 ## 2026-09-07 — /consolidate-fleet promotes the ledgers; 82 entries had been stranded by a stamp
 
 ### verifiable-runs factory lane — run artifacts, criteria verdicts, and a require() that is not defined
