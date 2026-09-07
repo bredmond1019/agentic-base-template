@@ -404,18 +404,80 @@ PYEOF`
 // <</shared:renderEmojiGate>>
 
 // <<shared:renderStateFlipScript>>
-// The D64 validate-then-commit mutation for planning/state.json's authored block status: capture
-// the pre-write bytes, mutate in memory, run `mev validate-brain --state` BEFORE and AFTER, and
-// roll back byte-exactly on any NET-NEW diagnostic. Shared for the same reason as the emoji gate --
-// it is executable Python performing a validated write, and the two engines had a full 57-line copy
-// each. `indent` exists only because the two prompts nest it at different depths.
-function renderStateFlipScript({ runRoot, indent }) {
+// The deterministic block-status flip for planning/state.json's authored block status
+// (BT.ticket.sdlc-bookkeep-writes-block-status-deterministically). Outside a linked git worktree,
+// with `mev` on PATH and this repo resolvable in brain.toml's [[repos]] table, the rendered script
+// calls `mev set-block-status <repo>:<id> closed --write` and derives success/failure from ITS OWN
+// subprocess exit code -- never from an agent-authored payload field. That `--write` call always
+// carries the SAME `--agent <lane>` flag the adjacent `mev emit-state --write` call site already
+// uses (renderAgentFlag(), resolved once here at prompt-GENERATION time, exactly as that call site
+// does) -- reused rather than a second identity resolver. `<repo>` is resolved the same way
+// renderScopeFlag() resolves its `--scope` slug (the brain.toml [[repos]] walk-up matching cwd to
+// a registered repo_path); both are computed once, at generation time, and baked into the script
+// as literals, matching this file's existing convention for those two flags.
+//
+// WORKTREE-MODE DECISION (made here, not left implicit, per this ticket's task 1): a successful
+// `mev set-block-status --write` ALWAYS chains `emit-state --write` internally -- there is no flag
+// to suppress it -- and `emit-state` refuses to run inside a linked git worktree. So inside a
+// worktree this script NEVER calls `mev set-block-status` at all: the caller passes
+// `runningInWorktree: true` and the script falls straight to the SAME validated hand-edit this
+// region has always used (validated via `mev validate-brain --state` when `mev` is on PATH,
+// degraded json.load-only when it is not), with `stateWriteValidated` reflecting that distinction
+// exactly as before. Rewriting emit-state's own worktree-deferral behavior is out of scope for this
+// ticket; this decision only says which route THIS script takes.
+//
+// mev ABSENT, or this repo unregistered in brain.toml (no repo slug resolves), MUST DEGRADE, NEVER
+// BAIL: these engines ship to 18+ downstream repos with no brain.toml and no `mev` on PATH (D5,
+// standing rule 1: mechanism, never stack defaults). Both of those cases fall back to the identical
+// validated hand-edit the worktree case uses -- see the adjacent `emit-state` call site's identical
+// contract.
+//
+// Machine-readable result lines a caller's bookkeep prompt copies verbatim, never re-derives:
+//   deterministic path  -- "FLIPPED: <repo>:<id>" (exit 0) or "FLIP_REFUSED: <repo>:<id>" followed
+//                          by "MEV_OUTPUT: <line>" lines (exit 1) -- both read from mev's own exit
+//                          code, never from mev's stdout wording.
+//   hand-edit fallback  -- unchanged from before this ticket: "NOT_FOUND" (exit 0), "FLIPPED:<id>"
+//                          with an optional "UNVALIDATED:" line (exit 0), or "REJECTED:<id>" with
+//                          "NET_NEW:" lines (exit 1).
+//
+// `indent` exists only because the two prompts nest it at different depths.
+function renderStateFlipScript({ runRoot, indent, runningInWorktree = false }) {
+  const agentFlag = renderAgentFlag()
+  const scopeFlagRaw = renderScopeFlag()
+  const scopeMatch = scopeFlagRaw.match(/--scope\s+(\S+)/)
+  const repoSlug = scopeMatch ? scopeMatch[1] : null
+  const useDeterministic = !runningInWorktree && !!repoSlug
+
+  const agentTrim = agentFlag.trim()
+  const agentArgsPy = agentTrim
+    ? '[' + agentTrim.split(/\s+/).map(a => `'${a}'`).join(', ') + ']'
+    : '[]'
+
   return `${indent}cd ${runRoot} && python3 -c "
 import json, subprocess, sys, shutil
 
 path = 'planning/state.json'
 bid = sys.argv[1]
+USE_DETERMINISTIC = ${useDeterministic ? 'True' : 'False'}
+REPO_SLUG = '${repoSlug || ''}'
 
+mev_available = shutil.which('mev') is not None
+
+if USE_DETERMINISTIC and mev_available:
+    key = REPO_SLUG + ':' + bid
+    cmd = ['mev', 'set-block-status', key, 'closed', '--write'] + ${agentArgsPy}
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode == 0:
+        print('FLIPPED: ' + key)
+        sys.exit(0)
+    print('FLIP_REFUSED: ' + key)
+    for line in (r.stdout + r.stderr).splitlines():
+        print('MEV_OUTPUT: ' + line)
+    sys.exit(1)
+
+# Fallback: mev is not on PATH, this repo has no resolvable brain.toml slug, or this run is inside
+# a linked git worktree (set-block-status's unconditional chained emit-state --write would trip
+# emit-state's own worktree refusal) -- degrade to the validated hand edit rather than bail.
 with open(path, 'rb') as fh:
     pre_bytes = fh.read()
 
@@ -433,8 +495,6 @@ for track in data.get('tracks', []):
 if not found:
     print('NOT_FOUND')
     sys.exit(0)
-
-mev_available = shutil.which('mev') is not None
 
 def diagnostics():
     r = subprocess.run(['mev', 'validate-brain', '--state'], capture_output=True, text=True)
