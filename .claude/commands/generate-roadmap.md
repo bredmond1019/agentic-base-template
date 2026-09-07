@@ -740,15 +740,37 @@ uses `planning/<slug>/roadmap.md` as an epic's `plan:` value. Reuse that registr
 inventing a parallel `roadmaps[]` array: a roadmap is a multi-repo initiative's plan, which is
 exactly what an epic's `plan` field is for.
 
+**A roadmap JOINS an existing epic. It never creates one.** An epic is a large standing target area
+that spans many roadmaps; a roadmap is one scheduled initiative inside that area —
+`core/planning/epics/fleet-integrity.md` already draws this distinction, and its own history is the
+warning: it absorbed the `clean-slate-sandbox` epic after `/generate-roadmap`'s Wave 0 correction C8
+read 21 registry entries, matched none, and opened a new one — a mistake repeated 2026-09-06 with the
+`verifiable-runs` roadmap, also removed after the fact. A fresh roadmap will *always* look unmatched
+on a literal-outcomes read, because it is stated in its own vocabulary — that is not evidence no epic
+covers it.
+
 In `<BRAIN_ROOT>/planning/state.json`'s `epics[]`:
 
 - **If this roadmap continues an existing epic** (it was authored `--from` that epic's prior
   roadmap, or its outcomes are that epic's outcomes), update that epic's `plan` field to
   `planning/roadmaps/<slug>/roadmap.md`. Do not add a second entry for the same initiative.
-- **If no existing epic covers this roadmap's outcomes**, add a new `epics[]` entry:
-  `{"slug": "<slug>", "title": "...", "description": "...", "status": "active", "weight": <n>,
-  "plan": "planning/roadmaps/<slug>/roadmap.md", "repos": [...]}` — `repos` is the union of every
-  lane's repo.
+- **Otherwise, pick the closest standing target area and join it.** Do not compare the roadmap's
+  outcomes against each epic's `description` looking for an exact match — ask which large area this
+  initiative's work falls inside. Update that epic's `plan` field the same way as the continuing
+  case, or, if the epic already points elsewhere and this roadmap is not its primary plan, leave
+  `plan` alone and rely on the Roadmaps table row below to carry the link. **Do not add a new
+  `epics[]` entry** — there is no branch in this step that creates one.
+
+Then **add the roadmap's row to the chosen epic's own Roadmaps table** — that is the join a reader
+actually follows, not the `plan` field alone. `core/planning/epics/fleet-integrity.md`'s Roadmaps
+table (`| Roadmap | Roadmap status | Open | Closed | Parked |`) is the shape to follow: add a row
+for `<slug>` naming its `roadmap.md` path and status, alongside the epic's other member roadmaps.
+
+**`weight` is authored importance, 0..100, consumed by bastion-web's ranking — it is not a block
+count.** A block count was once authored there and validated cleanly only because the number
+happened to fall in range; that is a coincidence of scale, not a correct value. If this step ever
+sets `weight` on an epic it touches, set it from a judgement of the epic's relative importance, never
+from a count of anything.
 
 Round-trip `state.json` with `json.dump(..., indent=2, ensure_ascii=False)` plus a trailing newline
 (CLAUDE.md trap), and commit it with an explicit pathspec — never a bare `git commit` against the
@@ -922,7 +944,9 @@ Then check by hand:
       (`exclusive_repos` or the block's own `notes`).
 - [ ] Every Definition-of-done item is an observation with a command, not a block ID.
 - [ ] Each lane record's own `roadmap` field resolves to this roadmap.
-- [ ] The roadmap is registered in `epics[]` with a `plan` field pointing at `roadmap.md`'s new path.
+- [ ] The roadmap has JOINED an existing `epics[]` entry — its row is in that epic's Roadmaps table,
+      and, where this roadmap is that epic's primary plan, the epic's `plan` field points at
+      `roadmap.md`'s new path. No new `epics[]` entry was created.
 - [ ] The cut list is longer than you are comfortable with.
 - [ ] **The floor is answered** — carried from `seams.md`/`sequence.md`, or answered inline per
       Step 1b: no capability on a lane's critical path is unclassified, and every artifact two lanes
@@ -954,7 +978,7 @@ Close by telling the operator:
 ```
 Roadmap authored: planning/roadmaps/<slug>/
   roadmap.md · lane-<a>.json · lane-<b>.json · ... · lane-log.jsonl
-Registered in state.json epics[] as <slug>.
+Joined existing epics[] entry <epic-slug> — row added to its Roadmaps table.
 
 Wave 0 is a HARD GATE — <n> items must be filed and registered before any lane
 launches. /orchestrate resolves block IDs from state.json; a lane naming an
