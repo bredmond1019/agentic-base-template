@@ -183,7 +183,7 @@ flowchart TD
 - `/sdlc-task` is the **fast path** for small work: a real implement→test→fix loop but no
   review/document/wrap-up agents. Pairs with `/chore` and `/ticket`.
 
-### Decomposition differs by engine: disjoint files vs. compilable boundaries
+### Decomposition is governed by compilable task boundaries, not disjoint files
 
 `/generate-tasks` decomposes a block **before** the consuming engine is chosen. Every engine
 `/orchestrate` drives — `/sdlc-task` and `/sdlc-flow` alike — runs its tasks **sequentially, on one
@@ -192,16 +192,18 @@ single task** — so **every task boundary must leave the gating suite passing**
 compiled/type-checked stack, the repo must compile at every boundary). A change that cannot be
 split without an intermediate non-compiling task — e.g. a renamed public type and every call site —
 lands in **one** task instead, even if that means merging tasks that would otherwise be file-disjoint.
-That compilable-boundary rule is what actually governs decomposition today.
+That compilable-boundary rule is what actually governs decomposition today, and it does **not**
+require the files a task names to be disjoint from another task's — two tasks are free to touch the
+same file under these sequential engines, since there is no inter-task merge to collide.
 
-**Under review:** an older version of this section additionally required blocks driven by
-`/orchestrate` to own **disjoint files**, justified by a claim that each block ran as its own
-pipeline in isolated worktrees merging independently of one another. That premise is false —
-`/orchestrate` runs one repo sequentially, one engine at a time, with no concurrent per-block
-isolation to merge back (see [orchestration.md](orchestration.md)) — so the disjoint-files
-requirement's stated justification did not survive contact with the command. The requirement is
-deliberately neither deleted nor re-justified here; whether it should still hold, and for what
-reason, is filed as `state.json` carryover `disjoint-files-rule-needs-a-true-justification`.
+An older version of this section additionally required blocks driven by `/orchestrate` to own
+**disjoint files**, justified by a claim that each block ran as its own pipeline in isolated
+worktrees merging independently of one another. That premise is false — `/orchestrate` runs one
+repo sequentially, one engine at a time, with no concurrent per-block isolation to merge back (see
+[orchestration.md](orchestration.md)) — so the requirement's stated justification did not survive
+contact with the command, and it never had a second one. Ruled obsolete and deleted rather than
+re-justified: `planning/decisions/D85-authoring-contract-rulings.md` ruling (a). Closes `state.json`
+carryover `disjoint-files-rule-needs-a-true-justification`.
 
 The full rule, its precedence, and the escape hatches (`additiveFiles`, `dependsOn`) live in
 [`generate-tasks.md`](../../.claude/commands/generate-tasks.md) — see its step 6 — rather than being
