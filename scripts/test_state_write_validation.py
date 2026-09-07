@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -117,7 +118,44 @@ def extract_mutation_script(engine_filename: str) -> str:
                 f"{engine_filename}: extracted script is missing {required!r} -- "
                 f"extraction markers matched the wrong region or the contract changed shape."
             )
-    return script
+    return _resolve_generation_time_placeholders(script)
+
+
+# BT.ticket.sdlc-bookkeep-writes-block-status-deterministically, task 1 prefixed this suite's
+# subject region with a NEW deterministic `mev set-block-status` dispatch, gated by two JS
+# template-literal interpolations (`${useDeterministic ? 'True' : 'False'}`, `${repoSlug || ''}`,
+# `${agentArgsPy}`) that are resolved by node at PROMPT-GENERATION time, never by this suite's
+# `python3 -c <script>` execution -- reading the raw .js text (as every suite in this file does;
+# there is no other way to get at the literal bytes an agent would run) therefore yields those
+# placeholders UNRESOLVED, which is a Python SyntaxError, not the fallback-path source this suite
+# was written to exercise.
+#
+# This suite's own scope (see the module docstring) is the validated hand-edit FALLBACK -- the
+# deterministic `mev set-block-status` dispatch itself is a separate, later-added concern owned by
+# scripts/test_deterministic_block_status_write.py. So here the placeholders are resolved to the
+# literal values that make the extracted script take the SAME fallback branch it always has:
+# `USE_DETERMINISTIC = False` (skip the new branch outright) and empty stand-ins for the other two
+# (never read once that branch is skipped, but must still be valid Python literals for the whole
+# string to parse).
+_GENERATION_TIME_PLACEHOLDERS = {
+    "${useDeterministic ? 'True' : 'False'}": "False",
+    "${repoSlug || ''}": "",
+    "${agentArgsPy}": "[]",
+}
+
+
+def _resolve_generation_time_placeholders(script: str) -> str:
+    resolved = script
+    for placeholder, literal in _GENERATION_TIME_PLACEHOLDERS.items():
+        resolved = resolved.replace(placeholder, literal)
+    remaining = re.findall(r"\$\{[^}]*\}", resolved)
+    if remaining:
+        raise AssertionError(
+            f"extracted script still has unresolved JS template placeholder(s) after applying "
+            f"the known substitutions: {remaining!r} -- a new interpolation was added to the "
+            f"fallback-path region; teach _GENERATION_TIME_PLACEHOLDERS its literal value."
+        )
+    return resolved
 
 
 def state_json_bytes(blocks) -> bytes:
@@ -382,15 +420,28 @@ class Case5WorktreeModeIsNotConditional(unittest.TestCase):
     running it in place."""
 
     def test_extracted_script_has_no_worktree_conditional(self):
+        # BT.ticket.sdlc-bookkeep-writes-block-status-deterministically, task 1 prefixed this
+        # script with a deterministic dispatch whose FALLBACK branch carries an explanatory `#`
+        # comment mentioning "worktree" (why the caller might have routed here) -- prose, not a
+        # runtime conditional. The rule this test actually enforces is that the script's CODE
+        # never branches on worktree state at runtime (that decision is made by the caller, via
+        # `runningInWorktree` baked into `USE_DETERMINISTIC` before this script ever executes) --
+        # so comment lines are stripped before the check, which is what makes the check about
+        # behavior rather than about a word appearing anywhere in the text.
         for engine in ENGINE_FILES:
             with self.subTest(engine=engine):
                 script = extract_mutation_script(engine)
-                lowered = script.lower()
+                code_only = "\n".join(
+                    line for line in script.splitlines()
+                    if not line.strip().startswith("#")
+                )
+                lowered = code_only.lower()
                 self.assertNotIn(
                     "worktree", lowered,
-                    f"{engine}: the mutation script itself must not branch on worktree state -- "
-                    f"that decision belongs to the surrounding prompt text (step 5's emit-state "
-                    f"deferral), not this script",
+                    f"{engine}: the mutation script's CODE must not branch on worktree state -- "
+                    f"that decision belongs to the surrounding prompt text/caller (step 5's "
+                    f"emit-state deferral, or the runningInWorktree flag baked into "
+                    f"USE_DETERMINISTIC before this script runs), not this script's own logic",
                 )
 
     def test_script_behaves_identically_in_a_simulated_worktree_directory(self):

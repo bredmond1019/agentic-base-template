@@ -69,7 +69,7 @@ ANCHORS = [
     # above this anchor too, so it shifted even though the EXPECT needle (at the very start
     # of the range) still happened to land inside the old fixed window. Re-picked from
     # CONTENT at the new positions (confirmed byte-identical via diff), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1702, 1765,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1762, 1825,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -77,20 +77,20 @@ ANCHORS = [
     # have left this tripwire hashing a one-line function CALL: green forever, blind to every change
     # in the text it exists to guard. Two entries because both replication guides describe the
     # taxonomy and each must be re-verified when it moves.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 570, 618,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 630, 678,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 570, 618,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 630, 678,
      ".agents/skills/sdlc-flow/SKILL.md"),
     # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: the
     # loadHarnessConfig() unwrap + bail additions inserted 52 net lines into sdlc-task.js and
     # 62 net lines into sdlc-flow.js, both entirely ABOVE this anchor -- re-picked from CONTENT
     # at the new positions (confirmed byte-identical to the pre-shift content via diff), not
     # blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2960, 2987,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3035, 3062,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1779, 1901,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1839, 1961,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3414, 3449,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3488, 3523,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

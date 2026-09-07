@@ -113,10 +113,19 @@ def find_sites(path: Path):
     return sites
 
 
-def count_scope_refs(path: Path) -> int:
-    """How many times `renderScopeFlag()` is referenced (called) in this file's text."""
-    text = path.read_text()
-    return len(re.findall(re.escape(RESOLVER_NAME) + r"\(\)", text))
+def count_scope_refs_at_sites(site_lines: list[str]) -> int:
+    """How many of the given `mev emit-state --write` invocation-site LINES carry a
+    `${renderScopeFlag()}` interpolation.
+
+    Deliberately scoped to just the invocation-site lines, not a whole-file textual tally: as of
+    BT.ticket.sdlc-bookkeep-writes-block-status-deterministically, `renderScopeFlag()` also has a
+    genuine, unrelated call site inside `renderStateFlipScript` (resolving the `<repo>` half of
+    its `mev set-block-status <repo>:<id>` key) plus a prose comment mentioning the function name
+    -- neither is an emit-state invocation, and counting them would break site-count parity for a
+    reason that has nothing to do with this suite's actual contract (every emit-state --write call
+    passes --scope, and only such calls are counted).
+    """
+    return sum(1 for line in site_lines if FLAG_INTERP in line)
 
 
 def extract_shared_block(name: str) -> str | None:
@@ -194,14 +203,15 @@ def main() -> int:
         return 1
 
     # Per-file structural parity: invocation-site count must equal renderScopeFlag() reference
-    # count, for each file independently.
-    per_file_sites: dict[Path, int] = {}
-    for path, _lineno, _line in sites:
-        per_file_sites[path] = per_file_sites.get(path, 0) + 1
+    # count AT THOSE SITES, for each file independently.
+    per_file_site_lines: dict[Path, list[str]] = {}
+    for path, _lineno, line in sites:
+        per_file_site_lines.setdefault(path, []).append(line)
 
     scope_refs_total = 0
-    for path, site_count in sorted(per_file_sites.items(), key=lambda kv: str(kv[0])):
-        ref_count = count_scope_refs(path)
+    for path, site_lines in sorted(per_file_site_lines.items(), key=lambda kv: str(kv[0])):
+        site_count = len(site_lines)
+        ref_count = count_scope_refs_at_sites(site_lines)
         scope_refs_total += ref_count
         print(
             f"{path.relative_to(REPO_ROOT)}: {site_count} invocation site(s), "

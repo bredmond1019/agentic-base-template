@@ -79,29 +79,29 @@ ANCHORS = [
     # above this anchor too, so it shifted even though the EXPECT needle (at the very start
     # of the range) still happened to land inside the old fixed window. Re-picked from
     # CONTENT at the new positions (confirmed byte-identical via diff), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1702, 1765,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1762, 1825,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
     # taxonomy it exists to guard. Two entries because both docs pages describe it.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 570, 618,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 630, 678,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 570, 618,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 630, 678,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: the
-    # loadHarnessConfig() unwrap + bail additions inserted 52 net lines into sdlc-task.js and
-    # 62 net lines into sdlc-flow.js, both entirely ABOVE this anchor -- re-picked from CONTENT
-    # at the new positions (confirmed byte-identical to the pre-shift content via diff), not
-    # blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 2960, 2987,
+    # BT.ticket.sdlc-bookkeep-writes-block-status-deterministically, tasks 1-3: the new
+    # renderStateFlipScript deterministic `mev set-block-status` dispatch was inlined ABOVE these
+    # anchors in both engines, shifting sdlc-task.js's ranges by +75 and sdlc-flow.js's by +60 --
+    # re-picked from CONTENT at the new positions (confirmed byte-identical to the pre-shift
+    # content via diff), not blindly renumbered.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3035, 3062,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 841, 858,
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 901, 918,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1779, 1901,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1839, 1961,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3414, 3449,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3488, 3523,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 
