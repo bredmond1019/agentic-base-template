@@ -79,12 +79,13 @@ ANCHORS = [
     # above this anchor too, so it shifted even though the EXPECT needle (at the very start
     # of the range) still happened to land inside the old fixed window. Re-picked from
     # CONTENT at the new positions (confirmed byte-identical via diff), not blindly renumbered.
-    # BT.ticket.engines-must-not-author-unverified-records, task 1: the new
-    # <<shared:renderOperatorGatedACRule>> block was inlined ABOVE these anchors in both engines,
-    # shifting every range below it by the same net line count per file -- re-picked from CONTENT
-    # at the new positions (confirmed byte-identical to the pre-shift content), not blindly
-    # renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1846, 1909,
+    # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the new
+    # <<shared:renderOperatorGatedACRule>> block (task 1) plus the related:-resolution rule added
+    # to the implement-stage prompt (task 2) were inlined ABOVE these anchors in both engines,
+    # shifting every range below them by the same net line count per file -- re-picked from
+    # CONTENT at the new positions (confirmed byte-identical to the pre-shift content via hash
+    # match against the manifest), not blindly renumbered.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1860, 1923,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -103,15 +104,23 @@ ANCHORS = [
     # re-picked from CONTENT at the new position (confirmed byte-identical to the pre-shift
     # content via diff), not blindly renumbered. sdlc-flow.js is untouched by this block (out of
     # scope) and needs no re-pick.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3244, 3271,
+    # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2 (this bookkeep-vault-commit
+    # anchor is sdlc-task.js's own -- see the isolation-and-branch-naming note above for the same
+    # cause): re-picked from CONTENT (hash match against the manifest), not blindly renumbered.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3258, 3285,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 915, 932,
+    # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
+    # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
+    # stages, plus the related:-resolution rule in the implement-stage prompt), each ABOVE these
+    # three sdlc-flow.js anchors -- re-picked from CONTENT (hash match against the manifest), not
+    # blindly renumbered.
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 929, 946,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1853, 1975,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3506, 3541,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3520, 3555,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 
