@@ -269,7 +269,7 @@ def check_engine_implements_fixed_rule() -> None:
         "tests a rule the engine does not implement",
     )
 
-    m = re.search(r"const\s+blockDone\s*=\s*([^\n;]+);?", text)
+    m = re.search(r"(?:const|let)\s+blockDone\s*=\s*([^\n;]+);?", text)
     check(
         "sdlc-task.js declares a blockDone condition",
         m is not None,
