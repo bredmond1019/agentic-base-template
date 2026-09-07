@@ -851,12 +851,12 @@ the reason.
 Move the pre-plan folder's contents into `<roadmap_dir>/pre-plan/`:
 
 ```
-planning/open-work/pre-plan/<slug>/{assessment,verification,seams,sequence,notes,index}.md, evidence/
+<BRAIN_ROOT>/planning/open-work/pre-plan/<slug>/{assessment,verification,seams,sequence,notes,index}.md, evidence/
    ->  planning/roadmaps/<slug>/pre-plan/
 ```
 
 **Why this is a step and not housekeeping.** `/assess`, `/seams` and `/sequence` all write to
-`planning/open-work/pre-plan/<slug>/`, and which successor consumes them is unknown until `/sequence` counts the repos
+`<BRAIN_ROOT>/planning/open-work/pre-plan/<slug>/`, and which successor consumes them is unknown until `/sequence` counts the repos
 in its cut: one repo goes to `/plan`, which authors `plan.md` into that same directory, several come
 here, which writes `planning/roadmaps/<slug>/`. So on the multi-repo path the slug ends up in BOTH
 places, every time, by design — and a slug in both places is what `/begin-orchestration` Step 1C and
@@ -867,7 +867,7 @@ produced puts cause and effect in one place.
 
 **The invariant this maintains, and it is the whole point:**
 
-> `planning/open-work/pre-plan/<slug>/` and `planning/roadmaps/<slug>/` are never both populated.
+> `<BRAIN_ROOT>/planning/open-work/pre-plan/<slug>/` and `planning/roadmaps/<slug>/` are never both populated.
 
 `/plan` satisfies it by staying put. This command satisfies it by taking the pre-plan with it.
 
@@ -875,8 +875,14 @@ Three things to get right:
 
 1. **Move, never copy or delete.** `evidence/` holds each scout's raw return and the roadmap cites
    it; that is the audit trail behind every block in the cut.
-2. **Move through the REAL vault path**, `core/_planning/<repo>/open-work/pre-plan/<slug>/`, never
-   through the `planning/` symlink face — `git mv` there fails with "source directory is empty" and silently
+2. **This is a same-repo move now, and the vault warning no longer applies.** Since HQ D87 the
+   pre-plan folder lives at `<BRAIN_ROOT>/planning/open-work/pre-plan/<slug>/` and the roadmap at
+   `<BRAIN_ROOT>/planning/roadmaps/<slug>/` — both under HQ's OWN `planning/`, which is a real
+   directory, not a symlink into `core/_planning/`. So a plain `git mv` works. (The old instruction
+   here said to move through `core/_planning/<repo>/...` because the pre-plan used to be written
+   into a leaf repo's symlinked `planning/`, where `git mv` fails with "source directory is empty".
+   That path no longer occurs.) Only if you are moving a *pre-D87* folder still sitting in a leaf
+   repo does the vault rule apply — go through the real path — `git mv` there fails with "source directory is empty" and silently
    does nothing (brain-root standing rule 10).
 3. **Move AFTER the roadmap files are written and verified**, never before. If roadmap authoring
    fails, the pre-plan must still be where `/sequence` left it so a retry finds it.
