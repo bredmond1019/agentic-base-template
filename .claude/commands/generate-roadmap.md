@@ -800,6 +800,17 @@ block ID) — a cross-repo target is qualified `<repo>:<doc_id>`. When no real t
 `related:` entirely rather than guess; an invented doc_id red-gates the whole corpus
 (`E_GRAPH_DANGLING_RELATED`) for every concurrent lane, not just this one.
 
+**This step also adds the `context.md` row to `<roadmap_dir>/index.md`** (standing rule 7) — part
+of authoring the file, not a follow-up to remember later: an index row added after the fact is an
+index row not added. Mirror the existing `File | What it is` table shape already used for
+`roadmap.md`, `lane-*.json` and `lane-log.jsonl` rows; do not introduce a second table shape. A
+worked example, from `planning/roadmaps/operator-console/index.md`:
+
+```
+| [`context.md`](context.md) | **Why this roadmap exists** — the measured problem, the trade taken,
+the cut list, the lane exclusions and the four operator gates. |
+```
+
 ---
 
 ### `planning/index.md`
