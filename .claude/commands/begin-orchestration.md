@@ -243,9 +243,23 @@ still bears on the *why*:
 | the brain root (HQ) | **`--no-worktree`, always** | `validate-brain` inside a worktree resolves the gitignored sub-repos against the worktree's own `brain.toml` and they are absent from any checkout. Measured: 64 structure / 601 state errors versus 0/0 in the main tree. Worktree creation is clean — it is the corpus gates that cannot pass. |
 | anything else | `--no-worktree` | Cheaper. Use `--worktree` when a change deserves quarantine — available again fleet-wide since the D81 lift. |
 | any repo that already has another session live in it | **`--worktree`** | The first three rows assume one session per repo. Two chains sharing a working tree share one git index, so each sees the other's uncommitted files: a tree-wide `validation_command` bails on a sibling's edits, `git status` reads as dirty for reasons you did not cause, and a `git checkout`/branch switch by either one moves the other's tree underneath it. Cheap detection before Step 4: `git -C <repo> status --short` showing edits you did not make, a branch you did not create (`git -C <repo> branch --show-current`), or the roadmap's lane records naming another live lane in this repo. When in doubt, take the worktree — except for the two rows above, where a worktree cannot pass the gates at all; there, do not start a second concurrent chain. |
+| a session live in a repo THIS repo path-depends on (Cargo `path = "../<repo>"`), or a session live in a repo that path-depends on THIS one | **`--worktree` mitigates NEITHER direction** | A Cargo path dependency of the form `../<repo>` resolves outside the worktree, straight to the sibling's main checkout — a worktree isolates this repo's own tree, never the tree its manifest reaches into. Measured fleet edge list (dependent → dependencies, depth ≤3): `core/engine-rs → mev, okf-core`; `core/mev → okf-core`; `core/bastion → bella, mev, okf-core, engine-rs`. Read it both ways: `okf-core` has no dependencies of its own yet is a compile-time input to three lanes at once (engine-rs, mev, bastion) — a lane there looks harmless and is not; `bastion` is the widest dependent, taking uncommitted source from four sibling repos at once. Measured cost: engine-rs was fully unable to compile for ~25 minutes because mev-a8 was mid-task in `../mev`, and engine-rs's chain had to pause. The lever that actually works is a path-dependency-aware quiesce, or a pinned sibling checkout — a design question, not a flag; this table does not resolve it, it only says `--worktree` will not. |
 
 An explicit `--isolation` that contradicts either of the first two rows → **stop and report.** Do
 not run a chain whose gates cannot pass.
+
+**Three measured control failures make this row necessary, not merely a caveat** — cited verbatim,
+not paraphrased as general advice (full narrative:
+`core/engine-rs/planning/orchestration-run/context-handling-between-nodes/notes.md`):
+
+- An sdlc-task engine "verified" two test failures were pre-existing by rebuilding at engine-rs's
+  base commit in a sibling worktree — which held `okf-core`'s working tree at an already-changed
+  version, because a worktree does not isolate a path dependency.
+- A lane chose `--no-worktree` because no session was live IN its own repo, never checking whether
+  one was live in a repo it path-depends on.
+- A lane disproved a test's existence with `rg -l <name> core/` run at the brain root, where every
+  sub-repo is gitignored — its positive control happened to name a path inside the ignored subtree,
+  returned a match, and read as proof the instrument worked when it had tested nothing.
 
 **Re-verify the caveat before you plan on it.** The isolation table above isn't policy handed down
 once — it's
