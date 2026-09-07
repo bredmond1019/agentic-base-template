@@ -123,7 +123,13 @@ ANCHORS = [
     # entirely ABOVE this anchor, shifting it 3288->3306, 3315->3333. Re-picked from CONTENT at
     # the new position (confirmed byte-identical to the pre-shift content via diff), not blindly
     # renumbered. sdlc-flow.js is untouched by this block (out of scope) and needs no re-pick.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3319, 3346,
+    # BT.ticket.engine-helpers-call-require-which-the-workflow-runtime-does-not-define: the
+    # CRITERIA_LOAD_SCHEMA constant + loadBlockRecordAcceptanceCriteria's agent()-based rewrite
+    # inserted 32 net lines into sdlc-task.js entirely ABOVE this anchor, shifting it
+    # 3319->3351, 3346->3378. Re-picked from CONTENT at the new position (confirmed
+    # byte-identical to the pre-shift content via diff), not blindly renumbered. sdlc-flow.js is
+    # untouched by this block (out of scope) and needs no re-pick.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3351, 3378,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs

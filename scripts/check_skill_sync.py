@@ -107,7 +107,13 @@ ANCHORS = [
     # entirely ABOVE this anchor, shifting it 3288->3306, 3315->3333. Re-picked from CONTENT at
     # the new position (confirmed byte-identical to the pre-shift content via diff), not blindly
     # renumbered. sdlc-flow.js is untouched by this block (out of scope) and needs no re-pick.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3319, 3346,
+    # BT.ticket.engine-helpers-call-require-which-the-workflow-runtime-does-not-define: the
+    # CRITERIA_LOAD_SCHEMA constant + loadBlockRecordAcceptanceCriteria's agent()-based rewrite
+    # inserted 32 net lines into sdlc-task.js entirely ABOVE this anchor, shifting it
+    # 3319->3351, 3346->3378. Re-picked from CONTENT at the new position (confirmed
+    # byte-identical to the pre-shift content via diff), not blindly renumbered. sdlc-flow.js is
+    # untouched by this block (out of scope) and needs no re-pick.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3351, 3378,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
      ".agents/skills/sdlc-flow/SKILL.md"),

@@ -80,7 +80,7 @@ FLOW_JS = REPO_ROOT / ".claude" / "workflows" / "sdlc-flow.js"
 SHARED_JS = REPO_ROOT / ".claude" / "workflows" / "prompts" / "shared.js"
 
 RESOLVER_NAME = "renderAgentFlag"
-FLAG_INTERP = "${" + RESOLVER_NAME + "()}"
+FLAG_INTERP = "${await " + RESOLVER_NAME + "()}"
 
 # --- locate the 3 real invocation sites -------------------------------------------------------
 # Real invocations look like either:
@@ -145,9 +145,15 @@ STANDALONE_SITE_RE = re.compile(
 # state.criteriaVerdicts assignment at the point verdicts are computed, inserted 18 net lines into
 # sdlc-task.js ABOVE this site, shifting it from 3281->3299. Text unchanged (diffed against the
 # pre-shift content) -- only the key moved. sdlc-flow.js unaffected.
+# Re-pinned again 2026-09-07 (BT.ticket.engine-helpers-call-require-which-the-workflow-runtime-
+# does-not-define): loadBlockRecordAcceptanceCriteria's agent-based rewrite (the CRITERIA_LOAD_
+# SCHEMA constant + the new async body, expanded again once the classification logic moved into
+# a deterministic probe script) added net 32 lines into sdlc-task.js ABOVE this site, shifting it
+# from 3312->3344. Text unchanged (diffed against the pre-shift content) -- only the key moved.
+# sdlc-flow.js unaffected (its two sites carry no such site-local change).
 FROZEN_BASELINE = {
     str(TASK_JS): {
-        3312: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
+        3344: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
     },
     str(FLOW_JS): {
         3496: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
@@ -196,24 +202,60 @@ def extract_shared_block(name: str) -> str | None:
     return m.group(1) if m else None
 
 
-def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, str]:
-    """Run `source` (must define renderAgentFlag) in a real node subprocess and call it.
+# The Workflow runtime the real engines execute in has no `process`, `require`, or filesystem
+# access at all (measured 2026-09-07, BT.ticket.engine-helpers-call-require-which-the-workflow-
+# runtime-does-not-define) -- the ONLY thing it provides for file/env inspection is `agent()`, a
+# call that hands a prompt to a real subagent and gets back a StructuredOutput object. A plain
+# `node` subprocess is the exact opposite sandbox: it has `process`/`require`/fs, but no `agent`.
+# Evaluating the extracted resolver source unmodified in such a subprocess (the pre-fix version of
+# this suite) is precisely how two previous fixes shipped past a green suite while dead in the
+# real runtime -- the suite exercised a sandbox the engine never runs in.
+#
+# The fix here is NOT to write a Python/JS re-implementation of the resolution logic (AC5
+# forbids that, for good reason -- a re-implementation can silently drift from what the prompt
+# text actually says to run). Instead, `agent()` is stubbed to do exactly what a real subagent is
+# instructed to do: extract the ONE fenced ```...``` script from the prompt verbatim and execute
+# it for real via `bash -c` -- so the exact probe script the engine ships (TOML parsing, lease
+# lookup, env fallback, all of it) is what actually runs, under its real interpreter (python3),
+# with only the "a subagent conversation happened" step stubbed out (unavoidable without spawning
+# a real Claude session). This exercises both halves of the real path: the async JS wrapper that
+# calls `agent()` with this exact prompt shape, and the exact script text that prompt carries.
+AGENT_STUB_JS = r"""
+global.agent = async function (prompt, opts) {
+  const { execSync } = require('child_process')
+  const m = prompt.match(/```\n([\s\S]*?)\n```/)
+  if (!m) return { value: '' }
+  let out
+  try {
+    out = execSync(m[1], { shell: '/bin/bash' }).toString()
+  } catch (e) {
+    out = (e.stdout || '').toString()
+  }
+  const vm = out.match(/^VALUE:(.*)$/m)
+  return { value: vm ? vm[1] : '' }
+};
+"""
 
-    Returns (result_or_None, stderr_or_diagnostic). A real subprocess, not a Python
-    re-implementation, so this exercises the actual JS the engines will run.
+
+def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, str]:
+    """Run `source` (must define an async renderAgentFlag() that calls agent(prompt, opts)) in a
+    real node subprocess, with `agent()` stubbed per AGENT_STUB_JS above, and call it.
+
+    Returns (result_or_None, stderr_or_diagnostic). Exercises the engine's own async/agent()-based
+    path -- never a Python re-implementation of the resolution logic, and never a bare node
+    subprocess pretending `process`/`require` are what the real runtime provides.
 
     Run with `cwd` set to a hermetic scratch directory with no `brain.toml` anywhere in its
-    ancestry (never this repo's own cwd). `renderAgentFlag()`'s no-FLEET_LANE_AGENT fallback
-    walks up from cwd looking for a lease this caller might already hold -- exactly the
-    self-exemption this suite's own repo is running under whenever this suite runs inside a
-    live `/sdlc-task` lane (this block's own subject: a lane holding its own exclusive lease).
-    Leaving cwd at the real repo root would make the '' (no-identity) assertion depend on
-    whether THIS run happens to hold a fleet lease at the moment the suite executes, which is
-    not what "no identity available" is supposed to test.
+    ancestry (never this repo's own cwd) -- see the original note this replaces: the no-identity
+    case must not depend on whether this suite happens to run inside a live fleet lease.
     """
     import os
 
-    script = source + f"\nprocess.stdout.write(JSON.stringify({RESOLVER_NAME}()));\n"
+    script = (
+        source
+        + AGENT_STUB_JS
+        + f"\n;(async () => {{ const r = await {RESOLVER_NAME}(); process.stdout.write(JSON.stringify(r)); }})();\n"
+    )
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
         f.write(script)
         tmp_path = f.name
@@ -308,19 +350,32 @@ def main() -> int:
 
     # All three sites reference the resolver -- verify it exists, is inlined identically into
     # both engines (build_engines.py parity), and actually behaves per the contract.
-    shared_src = extract_shared_block(RESOLVER_NAME)
-    if shared_src is None:
+    resolver_src = extract_shared_block(RESOLVER_NAME)
+    schema_src = extract_shared_block("RENDER_IDENTITY_SCHEMA")
+    if resolver_src is None:
         failures.append(
             f"shared.js has no `<<shared:{RESOLVER_NAME}>>` block -- the resolver referenced at "
             "all three sites is not defined anywhere build_engines.py can inline from"
         )
+    elif schema_src is None:
+        failures.append(
+            f"shared.js has no `<<shared:RENDER_IDENTITY_SCHEMA>>` block -- {RESOLVER_NAME}() "
+            "references it as an agent() schema and cannot run without it"
+        )
     else:
+        shared_src = schema_src + "\n" + resolver_src
         for engine_path in (TASK_JS, FLOW_JS):
             engine_text = engine_path.read_text()
-            if shared_src not in engine_text:
+            if resolver_src not in engine_text:
                 failures.append(
                     f"{engine_path.relative_to(REPO_ROOT)} does not contain the shared "
                     f"`{RESOLVER_NAME}` block byte-for-byte -- run `python3 "
+                    "scripts/build_engines.py --write` to re-inline it"
+                )
+            if schema_src not in engine_text:
+                failures.append(
+                    f"{engine_path.relative_to(REPO_ROOT)} does not contain the shared "
+                    "`RENDER_IDENTITY_SCHEMA` block byte-for-byte -- run `python3 "
                     "scripts/build_engines.py --write` to re-inline it"
                 )
 

@@ -86,11 +86,15 @@ def _balanced_scan(text: str, brace_start_idx: int, literal_start_idx: int) -> s
 
 
 def extract_function(text: str, name: str) -> str:
-    """From `function <name>(...) {` to its matching `}`, inclusive -- balanced-brace scan."""
-    m = re.search(rf"function {re.escape(name)}\([^)]*\)\s*\{{", text)
+    """From `[async ]function <name>(...) {` to its matching `}`, inclusive -- balanced-brace
+    scan. Captures a leading `async ` keyword when present so an extracted async function stays
+    syntactically valid (an extraction that dropped `async` while keeping an `await` inside its
+    body would be a SyntaxError under `node`, not merely wrong behaviour)."""
+    m = re.search(rf"(async\s+)?function {re.escape(name)}\([^)]*\)\s*\{{", text)
     if not m:
         raise AssertionError(f"function {name}() not found in {ENGINE_PATH}")
-    return _balanced_scan(text, text.index("{", m.start()), m.start())
+    literal_start = m.start(1) if m.group(1) else m.start()
+    return _balanced_scan(text, text.index("{", m.start()), literal_start)
 
 
 def extract_const_object(text: str, name: str) -> str:
@@ -109,17 +113,63 @@ def run_node(script: str) -> str:
 
 
 def load_block_record_acceptance_criteria_src() -> str:
-    return extract_function(read_source(), "loadBlockRecordAcceptanceCriteria")
+    source = read_source()
+    # loadBlockRecordAcceptanceCriteria() references CRITERIA_LOAD_SCHEMA (an agent() schema
+    # option) at call time, so an extraction of the function alone throws ReferenceError the
+    # moment it runs -- prepend the real, extracted schema const rather than a hand-authored
+    # stand-in.
+    schema_src = extract_const_object(source, "CRITERIA_LOAD_SCHEMA")
+    fn_src = extract_function(source, "loadBlockRecordAcceptanceCriteria")
+    return f"{schema_src}\n{fn_src}"
+
+
+def extract_shared_const(name: str) -> str:
+    return extract_const_object(read_source(), name)
+
+
+# loadBlockRecordAcceptanceCriteria() is `async` and calls `agent(prompt, opts)` -- the ONLY
+# thing the real Workflow runtime provides for file I/O (measured 2026-09-07:
+# BT.ticket.engine-helpers-call-require-which-the-workflow-runtime-does-not-define; `process`,
+# and therefore `require`, do not exist there at all). A bare `node -e` subprocess is the wrong
+# sandbox for this function (no `agent`), so `agent()` is stubbed here to do exactly what a real
+# subagent is instructed to do: extract the ONE fenced ```...``` script from the prompt verbatim
+# and execute it for real via `bash -c`, then parse its tagged output lines -- never a
+# reimplementation of the classification logic, which lives entirely inside that script.
+AGENT_STUB_JS = r"""
+global.agent = async function (prompt, opts) {
+  const { execSync } = require('child_process')
+  const m = prompt.match(/```\n([\s\S]*?)\n```/)
+  if (!m) return { found: false, criteria: [], reason: 'no fenced script found in prompt' }
+  let out
+  try {
+    out = execSync(m[1], { shell: '/bin/bash' }).toString()
+  } catch (e) {
+    out = (e.stdout || '').toString()
+  }
+  const foundMatch = out.match(/^FOUND:(true|false)$/m)
+  const found = !!foundMatch && foundMatch[1] === 'true'
+  const reasonMatch = out.match(/^REASON:(.*)$/m)
+  const criteriaMatch = out.match(/^CRITERIA_JSON:(.*)$/m)
+  let criteria = []
+  if (found && criteriaMatch) {
+    try { criteria = JSON.parse(criteriaMatch[1]) } catch (e) { criteria = [] }
+  }
+  return { found, criteria, reason: reasonMatch ? reasonMatch[1] : '' }
+};
+"""
 
 
 def call_load(cwd: str, record_file: str):
-    """Call the REAL, extracted loadBlockRecordAcceptanceCriteria() and return its parsed
-    result, normalized to {"criteria": [...], "reason": <str-or-None>} so this suite can compare
-    the pre-fix bare-array shape against the post-fix {criteria, reason} object shape."""
+    """Call the REAL, extracted loadBlockRecordAcceptanceCriteria() -- async, agent()-based --
+    with `agent()` stubbed per AGENT_STUB_JS, and return its parsed result normalized to
+    {"criteria": [...], "reason": <str-or-None>}."""
     script = (
         f"{load_block_record_acceptance_criteria_src()}\n"
-        f"const result = loadBlockRecordAcceptanceCriteria({json.dumps(cwd)}, {json.dumps(record_file)})\n"
-        "console.log(JSON.stringify(result))"
+        f"{AGENT_STUB_JS}\n"
+        f";(async () => {{\n"
+        f"  const result = await loadBlockRecordAcceptanceCriteria({json.dumps(cwd)}, {json.dumps(record_file)})\n"
+        f"  process.stdout.write(JSON.stringify(result))\n"
+        f"}})();\n"
     )
     raw = json.loads(run_node(script))
     if isinstance(raw, list):

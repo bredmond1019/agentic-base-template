@@ -80,7 +80,7 @@ FLOW_JS = REPO_ROOT / ".claude" / "workflows" / "sdlc-flow.js"
 SHARED_JS = REPO_ROOT / ".claude" / "workflows" / "prompts" / "shared.js"
 
 RESOLVER_NAME = "renderScopeFlag"
-FLAG_INTERP = "${" + RESOLVER_NAME + "()}"
+FLAG_INTERP = "${await " + RESOLVER_NAME + "()}"
 
 # --- locate the 3 real invocation sites -------------------------------------------------------
 # Real invocations look like either:
@@ -140,11 +140,34 @@ def extract_shared_block(name: str) -> str | None:
     return m.group(1) if m else None
 
 
-def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, str]:
-    """Run `source` (must define renderScopeFlag) in a real node subprocess and call it.
+# See test_engines_pass_agent.py's identical constant for why `agent()` is stubbed to execute the
+# prompt's own fenced script for real (via bash/python3) rather than being reimplemented, and why
+# a bare `node` subprocess with unmodified source is the wrong sandbox entirely -- it has
+# `process`/`require`, which the real Workflow runtime does NOT have, and lacks `agent()`, which
+# is the ONLY thing the real runtime provides for file/env inspection.
+AGENT_STUB_JS = r"""
+global.agent = async function (prompt, opts) {
+  const { execSync } = require('child_process')
+  const m = prompt.match(/```\n([\s\S]*?)\n```/)
+  if (!m) return { value: '' }
+  let out
+  try {
+    out = execSync(m[1], { shell: '/bin/bash' }).toString()
+  } catch (e) {
+    out = (e.stdout || '').toString()
+  }
+  const vm = out.match(/^VALUE:(.*)$/m)
+  return { value: vm ? vm[1] : '' }
+};
+"""
 
-    Returns (result_or_None, stderr_or_diagnostic). A real subprocess, not a Python
-    re-implementation, so this exercises the actual JS the engines will run.
+
+def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, str]:
+    """Run `source` (must define an async renderScopeFlag() that calls agent(prompt, opts)) in a
+    real node subprocess, with `agent()` stubbed per AGENT_STUB_JS above, and call it.
+
+    Returns (result_or_None, stderr_or_diagnostic). Exercises the engine's own async/agent()-based
+    path -- never a Python re-implementation of the resolution logic.
 
     Run with `cwd` set to a hermetic scratch directory with no `brain.toml` anywhere in its
     ancestry (never this repo's own cwd) -- mirrors test_engines_pass_agent.py's
@@ -153,7 +176,11 @@ def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, st
     """
     import os
 
-    script = source + f"\nprocess.stdout.write(JSON.stringify({RESOLVER_NAME}()));\n"
+    script = (
+        source
+        + AGENT_STUB_JS
+        + f"\n;(async () => {{ const r = await {RESOLVER_NAME}(); process.stdout.write(JSON.stringify(r)); }})();\n"
+    )
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
         f.write(script)
         tmp_path = f.name
@@ -234,19 +261,32 @@ def main() -> int:
 
     # All sites carry the reference count parity -- verify the resolver exists, is inlined
     # identically into both engines (build_engines.py parity), and actually behaves per contract.
-    shared_src = extract_shared_block(RESOLVER_NAME)
-    if shared_src is None:
+    resolver_src = extract_shared_block(RESOLVER_NAME)
+    schema_src = extract_shared_block("RENDER_IDENTITY_SCHEMA")
+    if resolver_src is None:
         failures.append(
             f"shared.js has no `<<shared:{RESOLVER_NAME}>>` block -- the resolver referenced at "
             "the invocation sites is not defined anywhere build_engines.py can inline from"
         )
+    elif schema_src is None:
+        failures.append(
+            f"shared.js has no `<<shared:RENDER_IDENTITY_SCHEMA>>` block -- {RESOLVER_NAME}() "
+            "references it as an agent() schema and cannot run without it"
+        )
     else:
+        shared_src = schema_src + "\n" + resolver_src
         for engine_path in (TASK_JS, FLOW_JS):
             engine_text = engine_path.read_text()
-            if shared_src not in engine_text:
+            if resolver_src not in engine_text:
                 failures.append(
                     f"{engine_path.relative_to(REPO_ROOT)} does not contain the shared "
                     f"`{RESOLVER_NAME}` block byte-for-byte -- run `python3 "
+                    "scripts/build_engines.py --write` to re-inline it"
+                )
+            if schema_src not in engine_text:
+                failures.append(
+                    f"{engine_path.relative_to(REPO_ROOT)} does not contain the shared "
+                    "`RENDER_IDENTITY_SCHEMA` block byte-for-byte -- run `python3 "
                     "scripts/build_engines.py --write` to re-inline it"
                 )
 
