@@ -142,7 +142,8 @@ honours it rather than adding a second one for the same files.
 | Test catalogue | `docs/sandbox/test-catalogue.json` | What is already covered, so a capability is promoted once and merged thereafter |
 | Carryover state | `mev carryover --json --allow-exec` | Clusters, suggested duplicates, single-repo `finding_id` warnings, broken-predicate diagnostics, misfiled-operator warnings |
 | Commander retros | `planning/open-work/orchestration-runs/retros/*.md` | Instrument failures; the highest-transfer material there is |
-| Commander chronology | `planning/open-work/orchestration-runs/run-log-*.md` | Drain-by-drain timeline |
+| Commander chronology | `planning/open-work/orchestration-runs/retros/commander-retro-*.md` and `liaison-retro-*.md` | Drain-by-drain timeline. (Was `run-log-*.md`, retired 2026-09-07 — the chronology now lives with the retros.) |
+| **The open-work board** | `planning/open-work/orchestration-runs/new-work-log.md` | **Every finding a drain surfaced and left open.** The one input that was missing: `orchestration-commander` writes every finding here and closes a row only "when a human resolves it or a later drain observes it gone", and until 2026-09-07 nothing read it — so findings accumulated with no promotion path. Measured that day: 60 findings, exactly **one** marked CLOSED. Treat each open row as a candidate for Step 4's disposal rows. |
 | Carryover triage | `planning/carryover-triage-*/` (per-repo files + `evidence/`) | Per-repo rot rates and their causes |
 | Prior analyses | `retros/pattern-analysis-*.md`, `roadmaps/*/consolidated-review*.md` | So a known mechanism is reported as another instance, not rediscovered |
 
@@ -258,6 +259,37 @@ human confirms it by authoring the shared id.
   all three; they are one mechanism with three signs.
 - **Self-reported counts are unreliable.** A prior analysis recounted a liaison retro's "6 sends" and
   found 8. Recount every number a record asserts about itself, mechanically, and report the delta.
+
+## Step 4b — The open-work board's rows
+
+**Every open row on `planning/open-work/orchestration-runs/new-work-log.md` is a candidate for a
+disposal row, and this is the only step that gives them an exit.**
+
+`orchestration-commander` writes every finding a drain surfaces to that board and, by its step 5,
+closes a row only "when a human resolves it or a later drain observes it gone". Until 2026-09-07
+nothing read the board, so there was no path from a row to `state.json`: measured that day, **60
+findings, exactly one marked CLOSED**, some carried across 40+ drains. Rows accumulate; nothing
+promotes them. That is the gap this step closes.
+
+For each open `##` row:
+
+1. **Skip the telemetry.** A row that only records a drain's own state — "quiet", "no change since
+   <ts>", "all leases cleared" — is not a finding. It is already recorded structurally in
+   `planning/roadmaps/<slug>/drain-log.jsonl`. Do not file it and do not count it.
+2. **Give it a `finding_id`** — reuse the row's own slug where it has one, so `mev`'s cross-repo
+   correlation joins it to any `carryover[]` entry already carrying that id. A row citing
+   `instance N of <row>` is the SAME finding as its parent, not a new one: one `finding_id`, and
+   the instance count goes in `breadth.instances`.
+3. **Route it** with the same vocabulary as every other row — `block` / `chore` / `carryover` /
+   `operator` / `none`. `route: "none"` is a real answer for a row that turned out to be a
+   one-off, and saying so is what lets the next pass stop re-reading it.
+4. **Evidence is the board line**: `planning/open-work/orchestration-runs/new-work-log.md:<line>`,
+   plus whatever the row itself cites. A row whose evidence is only "a drain said so" is
+   `route: "none"` with that stated — see `.claude/workflows/finding-discipline.md`.
+
+**Do not delete or rewrite rows here.** This command writes no `state.json` (see Write boundary)
+and it must not be the thing that drops a finding either — `/dispose-run` files the rows, and Step
+6 marks what was consumed.
 
 ## Step 5 — Write the analysis
 
@@ -456,6 +488,23 @@ selection reached but no agent read. Those stay unstamped and are named in the r
 **Stamp only after Step 5c.** A record whose ledger entries have not been promoted is not
 harvested, however thoroughly its prose was read — the ledger is half of what the record carries.
 
+**Stamp the board's rows the same way, and this is the only thing that ever closes one.** For every
+`new-work-log.md` row Step 4b turned into a disposal row, append a marker line to that row:
+
+```
+> PROMOTED 2026-09-07 — finding_id `<id>`, route `<route>`, in `retros/disposal-<date>.json`.
+```
+
+A marked row is done and later drains skip it; an unmarked row is still open and step 1.0 will
+keep surfacing it. **Do not delete the row.** `orchestration-commander` step 5's rule — an item
+closes only when a human resolves it or a later drain observes it gone, never because a drain
+forgot to relist it — is what keeps findings from evaporating, and deleting here would reintroduce
+exactly that. The marker gives a row an exit without giving any single pass the power to drop one.
+
+A row you routed `none` gets the same marker with `route: none`; that is a decision, and recording
+it is what stops the next pass re-reading it. **Rows skipped as telemetry get no marker** — they
+age out under the file's own retention rule instead.
+
 `--also-per-roadmap` additionally invokes `/consolidate-run <slug>` per roadmap, for the per-roadmap
 `consolidated-review.md` and its `carryover[]` proposals. **Off by default**: the mechanism pass
 already routes every finding through Step 5's disposal table, and running both produces two disposal
@@ -478,11 +527,16 @@ is invisible. Under `--dry-run`, advance nothing.
 ## Write boundary
 
 **No `state.json`, in any repo.** One command writing state across a dozen repos is the contention
-pattern that has cost real runs (CLAUDE.md standing rule 10). This command writes exactly six things:
+pattern that has cost real runs (CLAUDE.md standing rule 10). This command writes exactly seven things:
 the analysis at `--out`, `disposal.json` beside it, their `index.md` rows, the watermark file, the
-`lifecycle: consolidated` stamps of Step 6, and the test catalogue writes of Step 5c
-(`docs/sandbox/test-catalogue.json`, `test-catalogue-run-local.json`, and ledger verdicts appended to
-`docs/sandbox/results/<env>.json`).
+`lifecycle: consolidated` stamps of Step 6, the `> PROMOTED` markers Step 6 appends to
+`planning/open-work/orchestration-runs/new-work-log.md` rows it routed, and the test catalogue
+writes of Step 5c (`docs/sandbox/test-catalogue.json`, `test-catalogue-run-local.json`, and ledger
+verdicts appended to `docs/sandbox/results/<env>.json`).
+
+The board marker is an **append to an existing row**, never a deletion or a rewrite — the board's
+own append-only rule is what keeps a finding from evaporating when a drain forgets it, and this
+command must not be the exception to it.
 
 **Corrected 2026-09-07.** This section used to say the `lifecycle` stamps were `/consolidate-run`'s
 writes and that this command "does not write the test catalogue either" — both were false. The stamp

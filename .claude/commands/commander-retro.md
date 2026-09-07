@@ -72,7 +72,7 @@ question it made unanswerable.
 | Artifact | Answers |
 |---|---|
 | `planning/roadmaps/<slug>/drain-log.jsonl` | how many drains, over what window, what each routed |
-| `planning/open-work/index.md` | every recovery item and alert previously surfaced |
+| `planning/open-work/orchestration-runs/new-work-log.md` | every recovery item and alert previously surfaced — **the board**. Not `planning/open-work/index.md`, which is the directory index for `open-work/`: a table of what each file there is for, not a findings board. This row named `index.md` until 2026-09-07; `orchestration-commander` had already corrected the same confusion in its own step 1.0, and this copy did not follow. |
 | `<lock_dir>/commander-heartbeats/` | when a drain last ran, per commander |
 | `<lock_dir>/queue/<repo>/<lane>/{inbox,processing,done}/` + `receipts.jsonl` | drained, completed, and anything stuck across drains |
 | `<lock_dir>/lane-agents/` · `<lock_dir>/leases/` | claims and their ages |
