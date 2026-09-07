@@ -709,6 +709,28 @@ and chore block**, which is most of what a roadmap of small work contains.
 Create it empty. Append-only, one line per integrated block. Four sessions editing one markdown
 file is the contention pattern this structure exists to avoid.
 
+### Every repo in the roadmap has a wave-table sentinel
+
+**Check once per repo the roadmap touches, before registration closes.** Same failure as in
+`/plan`'s self-check, but a roadmap spans repos so it is checked per repo:
+
+```bash
+for r in <each repo in this roadmap>; do
+  grep -q 'generated:wave-table' "$r/planning/master-plan.md" || echo "MISSING sentinel: $r"
+done
+```
+
+A repo with no `<!-- BEGIN generated:wave-table -->` / `<!-- END ... -->` pair is silently skipped
+by `mev emit-state --write` (`W_EMIT_NO_SENTINEL`): its lane registers, every gate passes, and its
+wave table never renders. `/generate-master-plan` used to add the pair and **D65 retired it without
+anything inheriting the job**. Add the empty pair where it is missing; never hand-author rows
+between the sentinels.
+
+**Related trap, same origin — `epics` goes on the `state.json` ROW, never on the block record.**
+`block.schema.json` is `additionalProperties: false` and has no `epics` property, so a record
+carrying one is schema-invalid. Measured 2026-09-05: 611 `state.json` block rows carry `epics`
+correctly against 6 block records that carry it wrongly. Declare epic membership on the rows.
+
 ### Register the roadmap in `epics[]`
 
 **A roadmap's home is a folder; its findability is a registry row — the folder alone only tidies
@@ -719,19 +741,100 @@ uses `planning/<slug>/roadmap.md` as an epic's `plan:` value. Reuse that registr
 inventing a parallel `roadmaps[]` array: a roadmap is a multi-repo initiative's plan, which is
 exactly what an epic's `plan` field is for.
 
+**A roadmap JOINS an existing epic. It never creates one.** An epic is a large standing target area
+that spans many roadmaps; a roadmap is one scheduled initiative inside that area —
+`core/planning/epics/fleet-integrity.md` already draws this distinction, and its own history is the
+warning: it absorbed the `clean-slate-sandbox` epic after `/generate-roadmap`'s Wave 0 correction C8
+read 21 registry entries, matched none, and opened a new one — a mistake repeated 2026-09-06 with the
+`verifiable-runs` roadmap, also removed after the fact. A fresh roadmap will *always* look unmatched
+on a literal-outcomes read, because it is stated in its own vocabulary — that is not evidence no epic
+covers it.
+
 In `<BRAIN_ROOT>/planning/state.json`'s `epics[]`:
 
 - **If this roadmap continues an existing epic** (it was authored `--from` that epic's prior
   roadmap, or its outcomes are that epic's outcomes), update that epic's `plan` field to
   `planning/roadmaps/<slug>/roadmap.md`. Do not add a second entry for the same initiative.
-- **If no existing epic covers this roadmap's outcomes**, add a new `epics[]` entry:
-  `{"slug": "<slug>", "title": "...", "description": "...", "status": "active", "weight": <n>,
-  "plan": "planning/roadmaps/<slug>/roadmap.md", "repos": [...]}` — `repos` is the union of every
-  lane's repo.
+- **Otherwise, pick the closest standing target area and join it.** Do not compare the roadmap's
+  outcomes against each epic's `description` looking for an exact match — ask which large area this
+  initiative's work falls inside. Update that epic's `plan` field the same way as the continuing
+  case, or, if the epic already points elsewhere and this roadmap is not its primary plan, leave
+  `plan` alone and rely on the Roadmaps table row below to carry the link. **Do not add a new
+  `epics[]` entry** — there is no branch in this step that creates one.
+
+Then **add the roadmap's row to the chosen epic's own Roadmaps table** — that is the join a reader
+actually follows, not the `plan` field alone. `core/planning/epics/fleet-integrity.md`'s Roadmaps
+table (`| Roadmap | Roadmap status | Open | Closed | Parked |`) is the shape to follow: add a row
+for `<slug>` naming its `roadmap.md` path and status, alongside the epic's other member roadmaps.
+
+**`weight` is authored importance, 0..100, consumed by bastion-web's ranking — it is not a block
+count.** A block count was once authored there and validated cleanly only because the number
+happened to fall in range; that is a coincidence of scale, not a correct value. If this step ever
+sets `weight` on an epic it touches, set it from a judgement of the epic's relative importance, never
+from a count of anything.
 
 Round-trip `state.json` with `json.dump(..., indent=2, ensure_ascii=False)` plus a trailing newline
 (CLAUDE.md trap), and commit it with an explicit pathspec — never a bare `git commit` against the
 brain's index (standing rule 10).
+
+### `planning/roadmaps/<slug>/context.md`
+
+**Persist the reasoning behind this roadmap, once, instead of leaving every later agent to
+re-derive it (or skip it).** The information — the pre-plan findings, the operator's fork answers,
+the reason this cut and not another — exists exactly once, in this session, and nowhere else once
+it ends. Author `context.md` from the pre-plan (`sequence.md`/`seams.md`/`assessment.md` if Step 1b
+applied), the `--from` sources, and the decisions already made in Steps 1–6, while they are in hand.
+
+**Fixed six-section schema.** Three headings are reused **verbatim** from `.claude/commands/plan.md`
+so an agent that has read `/plan`'s output already knows this document's shape, and the two
+authoring commands never drift into two vocabularies for one idea:
+
+- `## The Goal, Stated Plainly` — 1–3 paragraphs: what this roadmap is, why it matters now, and
+  what "done" means for it — the checkpoint that signals completion.
+- `## The Destination` — the named outcome: what is true across the fleet when every lane in this
+  roadmap has landed.
+- `## What Is Cut, and Why` — the same `Candidate | Why it is out` table Step 3's cut list already
+  produced. Reuse it; do not re-derive a second cut list here.
+
+The other three sections are this document's own, and each has a fixed job:
+
+- `## Evidence and Sources` — every `--from` source read, and, when Step 1b applied, the pre-plan
+  chain it carried through (`sequence.md`/`seams.md`/`assessment.md`/`verification.md`, and where
+  they disagreed and verification won). Name the superseded roadmap's outcome here too, if any.
+- `## Operator Decisions` — every fork answer, ratification, or correction the operator made while
+  this roadmap was authored, each with its date. This is Wave 0's ratifications and Step 2's
+  re-verification corrections, gathered in one place instead of scattered across the document.
+- `## Why This Lane Split` — the reasoning behind Step 4's lane assignment and Step 5's cross-lane
+  edges: why the heavy budget landed where it did, why a cross-tree writer was sequenced against a
+  given lane, why an edge exists. `roadmap.md` carries the lane table and the edges themselves;
+  this section carries the *reasoning* that produced them, which is exactly what gets lost when a
+  later agent only reads the table.
+
+**The load-bearing rule: a section the run genuinely cannot fill is written with an explicit
+`not established`, never omitted and never invented.** An omitted section reads as an oversight to
+a later reader; an invented one reads as authored fact. Both are worse than an honest gap — a
+context doc that quietly drops what it could not fill is how an unexplained roadmap gets recorded
+as a fully-explained one, which is the exact failure this document exists to prevent.
+
+**Frontmatter.** Open `context.md` with OKF YAML frontmatter — `type`, `title`, `description`
+required, so the file passes `bastion validate-brain --structure` and `--graph`. If a `related:`
+entry is warranted, it must be a real target's actual `doc_id` (never a filename, slug, title, or
+block ID) — a cross-repo target is qualified `<repo>:<doc_id>`. When no real target resolves, omit
+`related:` entirely rather than guess; an invented doc_id red-gates the whole corpus
+(`E_GRAPH_DANGLING_RELATED`) for every concurrent lane, not just this one.
+
+**This step also adds the `context.md` row to `<roadmap_dir>/index.md`** (standing rule 7) — part
+of authoring the file, not a follow-up to remember later: an index row added after the fact is an
+index row not added. Mirror the existing `File | What it is` table shape already used for
+`roadmap.md`, `lane-*.json` and `lane-log.jsonl` rows; do not introduce a second table shape. A
+worked example, from `planning/roadmaps/operator-console/index.md`:
+
+```
+| [`context.md`](context.md) | **Why this roadmap exists** — the measured problem, the trade taken,
+the cut list, the lane exclusions and the four operator gates. |
+```
+
+---
 
 ### `planning/index.md`
 
@@ -842,7 +945,9 @@ Then check by hand:
       (`exclusive_repos` or the block's own `notes`).
 - [ ] Every Definition-of-done item is an observation with a command, not a block ID.
 - [ ] Each lane record's own `roadmap` field resolves to this roadmap.
-- [ ] The roadmap is registered in `epics[]` with a `plan` field pointing at `roadmap.md`'s new path.
+- [ ] The roadmap has JOINED an existing `epics[]` entry — its row is in that epic's Roadmaps table,
+      and, where this roadmap is that epic's primary plan, the epic's `plan` field points at
+      `roadmap.md`'s new path. No new `epics[]` entry was created.
 - [ ] The cut list is longer than you are comfortable with.
 - [ ] **The floor is answered** — carried from `seams.md`/`sequence.md`, or answered inline per
       Step 1b: no capability on a lane's critical path is unclassified, and every artifact two lanes
@@ -874,7 +979,7 @@ Close by telling the operator:
 ```
 Roadmap authored: planning/roadmaps/<slug>/
   roadmap.md · lane-<a>.json · lane-<b>.json · ... · lane-log.jsonl
-Registered in state.json epics[] as <slug>.
+Joined existing epics[] entry <epic-slug> — row added to its Roadmaps table.
 
 Wave 0 is a HARD GATE — <n> items must be filed and registered before any lane
 launches. /orchestrate resolves block IDs from state.json; a lane naming an

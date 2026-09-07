@@ -16,7 +16,7 @@ $ARGUMENTS — free-text description of the feature, experiment, or body of work
 | `--founding` | This is the project's founding roadmap — a new repo's first blocks. Adds the Goal / Destination / Architecture framing and writes to `planning/founding/`. Invoked by `/new-project`. |
 | `--clarify` | Force the clarify gate on regardless of `planning/harness.json`. |
 | `--no-redteam` | Skip the adversarial pass (step 10). For a small, low-risk initiative only. |
-| `--lane` | Also emit `planning/<slug>/lane-<slug>.json` (D71), authored against `.claude/workflows/lane.schema.json`, so `/begin-orchestration --roadmap <slug> --lane <slug>` can drive this initiative's blocks in dependency order — the same mechanism `/generate-roadmap` gives a multi-repo program. **Opt-in, not the default**: most `/plan` output is never meant to be orchestrated (small initiatives run block-by-block, by hand, on purpose), and silently emitting an extra artifact every time would surprise that far more common caller. See step 7c and the Output Format below. |
+| `--lane` | Also emit `planning/open-work/pre-plan/<slug>/lane-<slug>.json` (D71), authored against `.claude/workflows/lane.schema.json`, so `/begin-orchestration --roadmap <slug> --lane <slug>` can drive this initiative's blocks in dependency order — the same mechanism `/generate-roadmap` gives a multi-repo program. **Opt-in, not the default**: most `/plan` output is never meant to be orchestrated (small initiatives run block-by-block, by hand, on purpose), and silently emitting an extra artifact every time would surprise that far more common caller. See step 7c and the Output Format below. |
 
 ## Purpose
 
@@ -175,7 +175,7 @@ re-derived anyway (D65).
    work left in prose with no row in `state.json`. Report what it
    found — including "nothing", which on a multi-block initiative is a claim.
 
-7c. **When `--lane` is set, emit the lane record** — `planning/open-work/pre-plan/<slug>/lane-<slug>.json`, authored
+7c. **When `--lane` is set, emit the lane record** — `planning/<slug>/lane-<slug>.json`, authored
    against `.claude/workflows/lane.schema.json` (D71). One repo, one lane: this command scopes to a
    single repo, so the lane needs no cross-repo assignment, just the blocks in dependency order.
 
@@ -227,6 +227,21 @@ re-derived anyway (D65).
      graph node (`mev`'s `W_GRAPH_ISOLATED_NODE`). Use genuine doc_ids only; never invent one. On
      a revise, leave an already-populated `related:` intact.
    - **No `master-plan.md` was authored or edited.** It is generated from the block graph.
+   - **The target repo's `master-plan.md` carries the `generated:wave-table` sentinel pair.** Check
+     it, and add the pair if it is absent:
+
+     ```bash
+     grep -q 'generated:wave-table' <repo>/planning/master-plan.md || echo MISSING
+     ```
+
+     `mev emit-state --write` splices the derived wave table between
+     `<!-- BEGIN generated:wave-table -->` and `<!-- END generated:wave-table -->`. **A file with no
+     pair is silently SKIPPED** (`W_EMIT_NO_SENTINEL`) — the blocks register fine, every gate passes,
+     and the wave table stays empty forever with nothing pointing at the cause. This check exists
+     because `/generate-master-plan` used to add the pair and **D65 retired it without anything
+     inheriting the job**, so repos scaffolded in that window have no sentinel. base-template's
+     scaffold now ships the pair, but an older repo will not have it. Never hand-author rows between
+     the sentinels; add the empty pair and let `emit-state` fill it.
    - **Nothing actionable exists only in this document.** Every open question, follow-up, agreed
      red-team finding and "we should also" in `plan.md` is either a row in `state.json` — a block,
      an operator/approval edge, a `carryover[]` entry, a `reference[]` fact, a backlog row — or a

@@ -4,7 +4,7 @@ description: >
   Brief yourself from a roadmap and lane record, resolve engine/isolation policy, then drive this repo's chain through /orchestrate with the concurrency, reporting, and operator-gate rules enforced.
 ---
 
-# Begin Orchestration — Open one lane of a multi-repo roadmap run
+# Begin Orchestration — Open one lane of a run
 
 Wraps `/orchestrate` with the context a lane agent needs and the rules a concurrent run depends on.
 `/orchestrate` knows how to drive a chain; it does not know *which* chain, *why*, what may not be
@@ -22,24 +22,35 @@ three independent audits found 32%/32%/26% of filed carryover already dead.
 
 ## Variables
 
-`$ARGUMENTS` — flags, any order. **`--roadmap` is required, plus one of `--lane` or `--blocks`.**
-Everything else resolves to a default.
+`$ARGUMENTS` — flags, any order. **Exactly one of `--roadmap` or `--run` is required, plus one of
+`--lane` or `--blocks`.** Everything else resolves to a default.
 
-`--roadmap` is mandatory on purpose. An earlier version inferred it from whichever epic was
-`focused`, which is correct during a single-initiative week and silently wrong the moment two
-initiatives overlap — the case where a lane driven against the wrong roadmap is hardest to notice.
-Naming it costs one flag and removes a hidden coupling to epic status.
+**One of the two is mandatory on purpose, and neither is ever inferred.** An earlier version
+inferred the roadmap from whichever epic was `focused`, which is correct during a
+single-initiative week and silently wrong the moment two initiatives overlap — the case where a
+lane driven against the wrong roadmap is hardest to notice. Naming it costs one flag and removes a
+hidden coupling to epic status.
+
+**`--run <slug>` is that same flag for work that has no roadmap** — a chain assembled from
+`carryover[]`, a backlog promotion, or a bug ticketed mid-run. It is a peer, not a fallback: it
+fills the identical `<slug>` position and produces the identical run record, so a roadmap-less
+chain leaves the same four artifacts a roadmap chain does. What it does **not** do is guess. Before
+it existed, `/orchestrate` rules 8 and 9 said "a run slug fills the same `<slug>` position" without
+saying how to derive one, and on 2026-09-05 a three-block carryover chain invented
+`escalations-and-command-sync` by hand, mid-session — an invented slug is not reproducible, so a
+second run of the same work opens a second record instead of appending to the first.
 
 | Flag | Required | Default | What it does |
 |---|---|---|---|
-| `--roadmap <path\|slug>` | **yes** | — | The roadmap this lane belongs to. A path is absolute or relative to `BRAIN_ROOT` and is honoured as given; a bare slug is resolved per Step 1C. |
+| `--roadmap <path\|slug>` | one of | — | The roadmap this lane belongs to. A path is absolute or relative to `BRAIN_ROOT` and is honoured as given; a bare slug is resolved per Step 1C. |
+| `--run <slug>` | one of | — | A run slug, for a chain with no roadmap. **Honoured verbatim and never resolved against `planning/roadmaps/`** — a slug that happens to match a roadmap directory does not adopt that roadmap. Fills the same `<slug>` position as `--roadmap` everywhere downstream. Requires `--blocks`; see Step 1C. |
 | `--lane <path\|name>` | one of | — | Lane record. A bare name (`gtm`) resolves to `<roadmap-dir>/lane-<name>.json`, authored against `.claude/workflows/lane.schema.json` (D71). |
 | `--blocks <id ...>` | one of | — | Inline block IDs instead of a lane file. Space- or comma-separated. |
 | `--repo <slug>` | no | inferred from cwd | Override only when inference is wrong. |
 | `--isolation <worktree\|no-worktree\|auto>` | no | `auto` | `auto` applies the policy table below. |
 | `--plan-file <path>` | no | — | Spec source for `/generate-tasks --from`, when the blocks are not in `master-plan.md`. |
 | `--engine <task\|flow>` | no | per-block | Force one engine for the whole chain. |
-| `--log <path>` | no | `<roadmap-dir>/lane-log.jsonl` | Where to report integrated blocks. `--log none` disables. |
+| `--log <path>` | no | `planning/roadmaps/<slug>/lane-log.jsonl` | Where to report integrated blocks, `<slug>` per Step 1D. `--log none` disables. |
 | `--execute` | no | off | Skip the dry-run confirmation and start immediately. |
 | `--continue-on-fail` | no | off | Passed through to `/orchestrate`. |
 
@@ -51,10 +62,13 @@ Usage: /begin-orchestration --roadmap <path> --lane <path|name> [--repo <slug>]
                            [--engine task|flow] [--log <path>] [--execute]
                            [--continue-on-fail]
        /begin-orchestration --roadmap <path> --blocks <id> [<id> ...] [same optional flags]
+       /begin-orchestration --run <slug>    --blocks <id> [<id> ...] [same optional flags]
 ```
 
-`--roadmap` missing → print usage and stop. Do **not** infer it, and do not offer to; if the
-operator does not know which roadmap this lane belongs to, that is the thing to resolve first.
+**Both `--roadmap` and `--run` missing → print usage and stop. Both given → stop, naming both.**
+Do **not** infer either, and do not offer to; if the operator does not know which roadmap this lane
+belongs to, that is the thing to resolve first, and if the work genuinely has no roadmap that is
+what `--run` is for.
 
 ---
 
@@ -65,9 +79,21 @@ operator does not know which roadmap this lane belongs to, that is the thing to 
 **B. The repo** — this repo's `planning/state.json` → `repo`. `--repo` overrides. If cwd *is*
 `BRAIN_ROOT`, the repo is the brain (HQ).
 
-**C. The roadmap** — `--roadmap`, resolved against `BRAIN_ROOT` if relative. It must exist and it
-must be a roadmap; a path that resolves to a lane file or a `tasks.md` is an argument error, not
-something to work around. **Never infer it.**
+**C. The roadmap, or the run slug** — exactly one of the two, never inferred.
+
+**With `--run <slug>`:** the slug is taken **verbatim**. It is NOT resolved against
+`planning/roadmaps/`, NOT matched against any existing roadmap, and NOT created as one — a slug
+that coincides with a roadmap directory name does not adopt that roadmap, because a run slug names
+a run and a roadmap slug names an initiative. Validate it as kebab-case and stop if it is a path
+rather than a slug. `roadmap_dir` is not resolved at all; skip to D, which uses the slug directly.
+**`--run` requires `--blocks`.** A lane *file* cannot be used with it: `.claude/workflows/lane.schema.json`
+is `required: [lane, roadmap, blocks]` with `additionalProperties: false`, and mev's `LaneRecord`
+is `deny_unknown_fields`, so a lane record without a `roadmap` cannot be authored or parsed. If
+`--run` is given with `--lane`, stop and say that.
+
+**With `--roadmap`:** resolved against `BRAIN_ROOT` if relative. It must exist and it must be a
+roadmap; a path that resolves to a lane file or a `tasks.md` is an argument error, not something to
+work around. **Never infer it.**
 
 **Roadmap slug resolution (the canonical rule — `/orchestrate` and `/consolidate-run` cite this
 rather than restating it):** when `--roadmap` is given as a bare slug or resolves to a directory
@@ -94,10 +120,21 @@ An explicit path argument (one that already names a file or a full directory, e.
 `planning/roadmaps/close-the-loop/roadmap.md` or `planning/demand-ready/`) is always **honoured as
 given** — resolution applies only to a bare slug, never overriding an explicit path.
 
-**D. `roadmap_dir`** = the roadmap's directory, per the resolution above.
+**D. `roadmap_dir`** = the roadmap's directory, per the resolution above. **Under `--run` there is
+no `roadmap_dir`** — the slug from C stands in for it wherever a `<slug>` is needed, and any step
+below that reads a file *inside* `roadmap_dir` (a lane record, a roadmap document) does not apply.
 
-**E. `run_record_dir`** = `planning/orchestration-run/<roadmap-slug>/` in **this repo**, where
-`<roadmap-slug>` is `roadmap_dir`'s directory name (from D). Create the directory if absent; if it
+**The `<slug>` position, once, for both modes.** Everything downstream takes `<slug>` = the
+roadmap's directory name under `--roadmap`, or the `--run` value verbatim: the run record
+directory (E), the lane log (`<slug>/lane-log.jsonl`), and the escalations file
+(`planning/roadmaps/<slug>/escalations.jsonl`). A `--run` chain therefore creates
+`planning/roadmaps/<slug>/` to hold its lane log and escalations even though it is not a roadmap;
+that directory holds **no** `roadmap.md` and **no** lane records, which is exactly how
+`scripts/lane_log_watermark.py`'s `is_roadmap_dir()` already distinguishes a roadmap from
+something else, so nothing downstream mistakes it for one.
+
+**E. `run_record_dir`** = `planning/orchestration-run/<slug>/` in **this repo**, where `<slug>` is
+as defined in D — the roadmap's directory name, or the `--run` value. Create the directory if absent; if it
 already exists, **append** to its `notes.md` / `review.md` rather than creating new ones. **No
 rotation, no archive move, no dated filenames, no crash window** — a record is addressed by
 `(repo x roadmap)`, never by time. The required frontmatter (`roadmap`, `lane`, `run_started`,
@@ -156,10 +193,19 @@ code doing the wrong thing (M4, `pattern-analysis-2026-09-02`).
 For each block in the resolved chain:
 
 1. **Extract** every quantitative claim and every named live artifact from that block's record —
-   `description`, `what`, `why`, `acceptance_criteria`. A "quantitative claim" is a count, a line
-   number, an "N of M", or any number a reader could check against the live system. A "named live
-   artifact" is a file, a symbol, a command, or a registered check the record names as existing or
-   behaving a specific way right now.
+   `description`, `what`, `why`, `acceptance_criteria`, **and `validation_commands`**. A
+   "quantitative claim" is a count, a line number, an "N of M", or any number a reader could check
+   against the live system. A "named live artifact" is a file, a symbol, a command, or a registered
+   check the record names as existing or behaving a specific way right now. **`validation_commands`
+   is not exempt just because it looks like configuration rather than prose** — a command inherited
+   unexamined into a spec is a load-bearing claim about the live system in exactly this sense, and
+   it is the field most likely to be copied forward without re-derivation because it doesn't read
+   like an assertion. MEASURED 2026-09-04: three of the four defects that bailed BT.7.A were
+   validation commands copied verbatim into a downstream spec — one referenced a file the block's
+   own evidence required deleting, one (`python3 -m pytest scripts -q`) failed at collection on a
+   pre-existing, unrelated `sys.exit(0)` elsewhere in `scripts/`, and one forbade documenting a
+   change the block's own AC1 had scoped narrower. Re-derive these exactly like any other claim: run
+   the command against the live corpus before trusting it, not just against the record's prose.
 2. **Run one command per claim.** Re-reading the record is not re-derivation — the record is the
    thing under test, so reading it again only confirms what it already says. Run the actual check
    (`grep`, `wc -l`, the named script, `bastion validate-brain`, whatever answers that specific
@@ -531,6 +577,19 @@ Each has already cost a real run in this fleet.
    (correct the `doc_id`, `roadmap:`, or `lifecycle` field per Rule 5 above) and re-run the checker
    — do not proceed with a known violation. **Deleting or emptying the record is never an
    acceptable way to make the check pass**; the record is the run's evidence.
+
+   **A run leaves four artifacts, not two.** Alongside this `notes.md` and the terminal `review.md`
+   (Rule 5 above), also create `planning/orchestration-run/<roadmap-slug>/verification-ledger.json`
+   and its thin wrapper `verification-ledger.md` — the run-scoped record of what shipped and how to
+   check it. `docs/sandbox/run-verification-ledger-prompt.md` is the authority for the ledger's
+   entry schema (the exact JSON shape, `call_site`, `how_to_verify`); cite it, do not restate it
+   here. Two rules a lane gets wrong without reading it directly: an entry is **appended as each
+   block closes**, never batched at the end, so a bailed run still leaves a usable ledger; and the
+   lane that **built** a capability writes `status: untested` and never marks its own work
+   verified — that is the post-run verifier's job. Like the run record itself, a ledger is
+   addressed per (repo × roadmap) (D57) — a second wave against an existing ledger **appends** to
+   it, it never overwrites the file, which is exactly the clobber a sibling lane hit and repaired
+   in commit `559f1039d`.
 
 6. **Resolve what you can; record the call.** A lane that stops at every ambiguity is worthless,
    and one that stops at none is dangerous. Decide the ordinary things yourself — a spec slug that

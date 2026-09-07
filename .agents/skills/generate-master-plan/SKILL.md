@@ -34,7 +34,7 @@ rather than maintained.
 
 What the narrative layer still holds — the goal, the destination, the architecture framing, the
 sequencing rationale, the cut list — is genuinely about the *set* rather than any one block, and
-lives in an initiative's `planning/open-work/pre-plan/<slug>/plan.md`, authored by `/plan`.
+lives in an initiative's `planning/<slug>/plan.md`, authored by `/plan`.
 
 `/plan --founding` is the same code path as `/plan`, with the founding framing sections and a
 `planning/founding/` destination. There is no separate founding format.

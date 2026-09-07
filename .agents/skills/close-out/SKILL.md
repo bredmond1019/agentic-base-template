@@ -44,7 +44,7 @@ Examples:
 
 ## Execution Model
 
-Run inline — do NOT spawn a subagent. `/update-docs`, `write-repo-doc`, `/handoff`, and `/clean-worktree` are
+Run inline — do NOT spawn a subagent. `/update-docs`, `write-repo-doc` / `write-operating-doc`, `/handoff`, and `/clean-worktree` are
 invoked as Skill tool calls or commands from the main agent context; they have their own confirmation gates.
 
 ## Instructions
@@ -311,6 +311,18 @@ they never define, and name commands and scripts without linking them. `/close-o
 virtually every piece of work, which makes it the one reliable place these get fixed — a doc that is
 never touched stays as it is, and that is fine.
 
+**Pick the right standard for the doc's job — there are two, and they differ in kind, not degree.**
+
+| The doc is meant to be | Load |
+|---|---|
+| **understood** — a reference, a guide, an architecture page | `write-repo-doc` |
+| **acted on** — an operating rhythm, a checklist, a next-action board, a runbook | `write-operating-doc` |
+
+The operating standard is one screen, tables over prose, at most five things to do, every item a
+physical act under 20 minutes, and the argument split out into a `-rationale.md` sibling. Applying
+`write-repo-doc` to an operating doc produces a well-structured page nobody can act on — which is
+the failure it was written from: a 165-line doc that was correct, complete, and not read.
+
 **Scope, so this does not become a rewrite of the whole repo:** only docs in this run's
 `changed`/`created` set. Never sweep `docs/` looking for work.
 
@@ -429,11 +441,16 @@ If `--merge-branch` was passed:
    fixed here: an emit-state run always changes something, and a merge that lands looking clean while
    leaving derived files dirty in the working tree is worse than the merge failing outright.
    ```bash
-   git add planning/state.json planning/status.md docs/projects/*.md  # only the surfaces emit-state touched — never `git add -A`
+   git add planning/state.json planning/status.md docs/projects/*.md planning/*/sdlc/*state.json  # the surfaces emit-state touched, PLUS the block's own SDLC run-state — never `git add -A`
    git commit -m "chore: regenerate derived state after merging <branch-name>"
    ```
    Scope the `git add` to whatever `emit-state`'s own output named as touched, per the
    `commit-in-this-fleet` skill where this repo has one — never a broad `git add -A`/`git add .`.
+   **Also stage `planning/<block>/sdlc/sdlc-*state.json`** — the SDLC engines commit to the repo,
+   never to `planning/` (which belongs to HQ), so a block's own run-state — including its
+   append-only `bails[]` record — survives only if this step picks it up. Measured 2026-09-05:
+   nine blocks' worth of run-state sat uncommitted all day for exactly this reason before this
+   line existed.
    **Never push** — this command does not push under any flag; pushing is a separate, explicit step.
 
    Run it from the base branch (never a linked worktree — `emit-state` refuses there). If `mev` or
