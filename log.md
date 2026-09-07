@@ -6,6 +6,40 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-07
 
 ---
+## 2026-09-07 — Both SDLC engines were crashing at their final stage; fixed
+
+`5448cb9`, `b182ebf3c`, `952e0c50e`.
+
+Ran `/begin-orchestration --run carryover-cleanup-continued`, ten blocks. Block 1 completed 17
+agents and committed two tasks' work, then the engine threw
+`ReferenceError: Cannot access 'RENDER_IDENTITY_SCHEMA' before initialization` at the
+bookkeep/state-write stage. Not the block — the engine, and both of them, in every repo.
+
+`<<shared:RENDER_IDENTITY_SCHEMA>>` sat near the end of each engine while the bookkeep prompt
+reaches it ~150 lines earlier via `renderStateFlipScript` -> `renderAgentFlag`. The main body is
+top-level code with top-level `await`, so evaluation suspends there while agents run and resumes in
+source order — it reached the use having never evaluated the declaration. That is why the crash came
+*after* 18 minutes of successful work rather than immediately, which is what made it read as an
+agent problem.
+
+Nothing caught it because a temporal dead zone is a runtime error: `node --check`,
+`prompt-template-parse` and `build_engines.py` were all green over two engines that could not finish
+a run.
+
+Fixed by moving the region above its users in both engines; `build_engines.py` preserves region
+position by design, so placement is the authored thing. Three line-number-keyed records shifted +10
+and were re-pinned only after diffing old-range-in-pre-fix against new-range-in-fixed — byte-identical
+in every case.
+
+Added `engine-tdz-ordering` as a gated pin with a `--selftest` that synthesises a pre-fix copy and
+fails if the pin does not fire. Deliberately narrow: two broader regex checks were written and
+discarded (49 findings from comments and prompt prose; then 8 false positives on the *fixed* engines
+from property-name matches). `BT.ticket.engine-tdz-check-needs-a-real-parser` filed for the general
+version, with those 8 false positives as its regression corpus.
+
+**All 18 other checkouts still carry the broken engines** — the downstream sync is the first action
+in `planning/handoff.md`. 92/92 gated checks and four corpus gates green here.
+
 ## 2026-09-07 — planning/ splits by audience: authored work moves to open-work/pre-plan/
 
 ### The findability problem, measured
