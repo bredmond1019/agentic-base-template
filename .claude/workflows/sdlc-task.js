@@ -2988,20 +2988,46 @@ let blockDone = !bailed && !reconcileFailed && passedAll.length === allTasks.len
 // so it must be the same bytes the block record actually carries). Legacy tasks-md specs
 // (specSource !== 'block-record') carry no such array — [] is correct there, never a bail: this
 // gate is a pure add-on to the D65 block-record path and must not touch the legacy path at all.
+// Returns {criteria, reason}: criteria is the block record's acceptance_criteria array (possibly
+// empty), and reason is null when criteria is non-empty and a short, named cause when it is
+// empty — file unreadable, invalid JSON, key absent, or the array present but empty — so the
+// caller can log WHY the Criteria stage is being skipped instead of silently no-opping (this is
+// the defect measured on run wf_5ef1102e-490, 2026-09-07: the guard was true, the stage never
+// fired, and every cause collapsed into the same bare []).
 function loadBlockRecordAcceptanceCriteria(cwd, recordFile) {
+  const path = require('path')
+  const fullPath = path.join(cwd, recordFile)
+  let raw
   try {
     const fs = require('fs')
-    const path = require('path')
-    const raw = fs.readFileSync(path.join(cwd, recordFile), 'utf8')
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed && parsed.acceptance_criteria) ? parsed.acceptance_criteria : []
+    raw = fs.readFileSync(fullPath, 'utf8')
   } catch (e) {
-    return []
+    return { criteria: [], reason: `block record unreadable at ${recordFile}: ${e.message}` }
   }
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch (e) {
+    return { criteria: [], reason: `block record at ${recordFile} is not valid JSON: ${e.message}` }
+  }
+  if (!parsed || !Object.prototype.hasOwnProperty.call(parsed, 'acceptance_criteria')) {
+    return { criteria: [], reason: `block record at ${recordFile} has no acceptance_criteria key` }
+  }
+  if (!Array.isArray(parsed.acceptance_criteria)) {
+    return { criteria: [], reason: `block record at ${recordFile}'s acceptance_criteria is present but not an array` }
+  }
+  if (parsed.acceptance_criteria.length === 0) {
+    return { criteria: [], reason: `block record at ${recordFile} has an empty acceptance_criteria array` }
+  }
+  return { criteria: parsed.acceptance_criteria, reason: null }
 }
-const blockAcceptanceCriteria = (specSource === 'block-record' && !bailed && !reconcileFailed)
+const blockAcceptanceCriteriaLoad = (specSource === 'block-record' && !bailed && !reconcileFailed)
   ? loadBlockRecordAcceptanceCriteria(runDir, blockRecordFile)
-  : []
+  : { criteria: [], reason: null }
+const blockAcceptanceCriteria = blockAcceptanceCriteriaLoad.criteria
+if (blockAcceptanceCriteria.length === 0 && blockAcceptanceCriteriaLoad.reason) {
+  log(`Acceptance-criteria stage skipped: ${blockAcceptanceCriteriaLoad.reason}`)
+}
 
 // Per-criterion verdicts for THIS run's payload (task 2 AC1: "the run payload carries a per-
 // criterion verdict of met, unmet or not-evaluated, not a boolean over tasks"). Populated only
