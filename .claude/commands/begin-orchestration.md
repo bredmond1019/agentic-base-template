@@ -547,15 +547,25 @@ Each has already cost a real run in this fleet.
    roadmap: <driving-roadmap-slug>    # the --roadmap value resolved in Step 1C
    lane: <lane-name>
    run_started: YYYY-MM-DD
-   run_ended: YYYY-MM-DD              # stamped at lane close
-   lifecycle: active | lane-complete | consolidated
+   run_ended: null                    # leave null/absent while the lane runs
+   lifecycle: active | paused | lane-complete | consolidated
    ```
+
+   **`run_ended` is not a field you fill in when you create the record.** Create an active record
+   with `run_ended` absent or explicitly `null` — never a fill-in-now date. `run_ended` is
+   stamped at lane close, once the run is actually done, not before. **A record carrying
+   `lifecycle: active` alongside a non-null `run_ended` now FAILS the gated
+   `orchestration-run-contract-tests` check**
+   (`scripts/test_orchestration_run_contract.py`) — this template used to invite exactly that
+   shape by showing `run_ended: YYYY-MM-DD` as something to fill in immediately, which is the
+   source of the drift this rule now gates against, not a hypothetical.
 
    `doc_id: <repo-slug>-orchestration-run-<roadmap-slug>` — unqualified ids collide corpus-wide and
    a corpus-wide `--graph` error red-gates every concurrent lane, not just this one. `lifecycle`
-   replaces `status: archived`: `active` while the lane is running, `lane-complete` once this
-   repo's part is done (the roadmap itself may still be open), `consolidated` once a consolidation
-   run has consumed the record.
+   replaces `status: archived`: `active` while the lane is running, `paused` when the run has
+   halted without finishing — so a paused run is not forced to choose between lying `active` and
+   lying `lane-complete` — `lane-complete` once this repo's part is done (the roadmap itself may
+   still be open), `consolidated` once a consolidation run has consumed the record.
 
    **The per-block ledger table in the run record carries an `origin_roadmap` column**, defaulting
    to the record's own `roadmap` and set explicitly only when a block was adopted from a different
