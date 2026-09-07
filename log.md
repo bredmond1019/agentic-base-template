@@ -8,6 +8,30 @@ records changes to the **factory** — it is never copied into generated project
 ---
 ## 2026-09-07 — /consolidate-fleet promotes the ledgers; 82 entries had been stranded by a stamp
 
+### verifiable-runs factory lane — run artifacts, criteria verdicts, and a require() that is not defined
+- **What:** Closed four blocks. `run-artifacts-are-named-in-the-commands` — both
+  `/begin-orchestration` and `/orchestrate` now name notes.md, review.md and the two ledger files
+  (`grep -c verification-ledger` went 0 -> 3 and 0 -> 5), gated by a new
+  `check_run_artifacts_documented.py`. `criteria-verdict-stage-silently-no-ops-and-is-never-persisted`
+  — `loadBlockRecordAcceptanceCriteria` now returns `{criteria, reason}` with five distinct named
+  causes and `criteriaVerdicts` persists into `sdlc-task-state.json`; its suite shipped
+  **unregistered** and the lane registered it as `criteria-verdict-persistence`.
+  `generate-roadmap-authors-a-context-doc` — landed before the crash below and was closed after
+  verifying all nine ACs. `orchestrate-run-slug-is-a-peer-of-roadmap` — already shipped, closed as
+  stale-open. Gated suite 89 -> 91, all pass.
+- **Why:** The consume side of the fleet (`/consolidate-run`, `/consolidate-fleet`) had been taught
+  to read a verification ledger that nothing on the run path was ever told to write, so every ledger
+  in existence was produced by the operator pasting the prompt in by hand. Fixing that exposed the
+  rest: the first session whose engine snapshot matched the tree ran last night's five fixes for the
+  first time, four worked and one silently no-opped, and diagnosing that one produced
+  `ReferenceError: require is not defined` — **the root cause I had recorded as "eliminated by
+  measurement"**. My elimination chained two links I never tested. The engine crashed on every
+  block-record run until repaired; the repair is on disk and this session's snapshot would not pick
+  it up, which is why the work hands off rather than continuing.
+- **Refs:** `planning/roadmaps/verifiable-runs/roadmap.md` · `planning/handoff.md` ·
+  `planning/orchestration-run/verifiable-runs/{notes.md,review.md,verification-ledger.json,verification-ledger.md}`
+
+
 ### D84 — ledger promotion moves to the command that actually runs
 - **What:** Added **Step 5c** to `/consolidate-fleet` — promote every roadmap's
   `verification-ledger.json` entries into `docs/sandbox/test-catalogue.json` or
