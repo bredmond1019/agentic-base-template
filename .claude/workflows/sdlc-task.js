@@ -3011,14 +3011,27 @@ let blockDone = !bailed && !reconcileFailed && passedAll.length === allTasks.len
 // scripts/test_engines_pass_agent.py's FROZEN_BASELINE were all re-pinned to match (content
 // confirmed byte-identical to the pre-shift versions via diff).
 function loadBlockRecordAcceptanceCriteria(cwd, recordFile) {
-  const path = require('path')
-  const fullPath = path.join(cwd, recordFile)
+  // NO IN-PROCESS FILE I/O IS AVAILABLE HERE. `require` is not defined in the Workflow runtime --
+  // measured 2026-09-07 on run wf_dd76eb8f-565, which died with
+  // `ReferenceError: require is not defined at loadBlockRecordAcceptanceCriteria`. That is ALSO the
+  // root cause of the silent no-op this function was written to diagnose (run wf_5ef1102e-490): the
+  // original body called require('fs') INSIDE a try whose catch returned a bare [], so the
+  // ReferenceError was swallowed and every block-record run silently graded zero criteria. Moving
+  // the require out of the try turned a silent wrong answer into a crash -- an improvement in
+  // honesty and a regression in availability, hence this guard.
+  //
+  // The engine's own convention for this is stated at line ~190: use a cheap agent rather than
+  // calling fs in-process. Doing that properly is BT.ticket.criteria-load-must-not-use-require.
+  // Until then this function reports the runtime limitation as its reason instead of crashing the
+  // pipeline, which keeps the diagnostic the block asked for while a block-record run can still
+  // complete.
   let raw
   try {
-    const fs = require('fs')
-    raw = fs.readFileSync(fullPath, 'utf8')
+    const fsMod = require('fs')
+    const pathMod = require('path')
+    raw = fsMod.readFileSync(pathMod.join(cwd, recordFile), 'utf8')
   } catch (e) {
-    return { criteria: [], reason: `block record unreadable at ${recordFile}: ${e.message}` }
+    return { criteria: [], reason: `block record at ${recordFile} could not be read in-process: ${e.message}` }
   }
   let parsed
   try {

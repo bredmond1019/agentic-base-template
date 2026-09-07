@@ -107,7 +107,7 @@ ANCHORS = [
     # entirely ABOVE this anchor, shifting it 3288->3306, 3315->3333. Re-picked from CONTENT at
     # the new position (confirmed byte-identical to the pre-shift content via diff), not blindly
     # renumbered. sdlc-flow.js is untouched by this block (out of scope) and needs no re-pick.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3306, 3333,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3319, 3346,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
      ".agents/skills/sdlc-flow/SKILL.md"),
