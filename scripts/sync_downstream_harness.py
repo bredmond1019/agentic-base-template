@@ -377,6 +377,14 @@ HOOK_FILENAMES: list[str] = [
     # synced pre-commit/pre-push degrades gracefully (warns "not found — skipping"
     # instead of erroring), but gate 2 is inert until this ships alongside them.
     "validate_brain_gate.sh",
+    # Gate 3 (a write to an existing corpus path is unguarded) helper, added 2026-09-05
+    # (round-5 triage). Same failure shape as validate_brain_gate.sh above: without this file
+    # a synced pre-commit degrades gracefully ("not found — skipping the destructive-overwrite
+    # gate" instead of erroring), but gate 3 is inert until this ships alongside it. Its
+    # absence from this list was the exact bug it now prevents from recurring — five repos
+    # got the updated pre-commit without it (HQ.chore.a-write-to-an-existing-corpus-path-is-
+    # unguarded, commit 220a63ce8).
+    "destructive_overwrite_gate.sh",
 ]
 
 
