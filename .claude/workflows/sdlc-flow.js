@@ -1981,10 +1981,13 @@ STEP 2 — Find a free branch name. FIRST check the exact base candidate "${base
 
 STEP 3 — Create the branch and check it out IN THE MAIN WORKING TREE (no worktree, no trees/ dir):
   a. Guard against a dirty tree — uncommitted changes would ride onto the branch and into the run's
-     commits. Run: ${GIT} status --porcelain
-     If it prints ANYTHING, STOP: do NOT create the branch. Set wasCreated=false and
+     commits. Run:
+       # CLEAN_TREE_GUARD_START
+       DIRTY="$(${GIT} status --porcelain)"
+       # CLEAN_TREE_GUARD_END
+     If $DIRTY is non-empty, STOP: do NOT create the branch. Set wasCreated=false and
      setupError="Working tree is not clean — commit or stash your changes, then re-run (or use --worktree
-     for an isolated checkout). Dirty paths: <the porcelain output>". Then skip to STEP 6 and return.
+     for an isolated checkout). Dirty paths: <$DIRTY>". Then skip to STEP 6 and return.
   b. ${GIT} checkout -b [branchName]
   No sparse-checkout, no env copy, no init commit — this is the real repo checkout, so the working tree
   (including any relative planning/ symlink) is already fully present and intact.
