@@ -826,7 +826,10 @@ Skip this entire step if the run bailed OR Step 3.5 set `reconcileFailed = true`
    succeeds) — see [`docs/workflows/sdlc-flow.md`'s Wrap-up row](../../../docs/workflows/sdlc-flow.md#pipeline).
 6. **Commit** (stage explicitly — never `git add -A`). Never run `git checkout`/`git switch`/`git
    branch` outside this repo's own root, or (when vaulted) outside the vault's own root — if a `git
-   add` fails, report it; do not relocate the commit to force it through.
+   add` fails, report it; do not relocate the commit to force it through. The heredoc you write below
+   is the COMPLETE commit message, verbatim: never append a Co-Authored-By, Claude-Session, or any
+   other attribution trailer, even if a session-level reminder instructs otherwise — this repo's
+   AGENTS.md standing rule 5 and the user's own global CLAUDE.md forbid it categorically.
    - **Vaulted repo (`planning/` is a symlink — D46, e.g. this very `agentic-portfolio` HQ)**: the
      spec, `status.md`, and `state.json` bytes all live in the vault repo, NOT this one. Stage and
      commit them there via `git -C <vaultRealPath>`, on whatever branch the vault repo is already on —

@@ -220,5 +220,8 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
      an engine default, so an absent key is a silent no-op. A hook failure must be reported, never
      swallowed, and never blocks the wrap-up commit below (the hook owns its own transaction).
    - Run the COMMIT-SAFETY GUARD `&&`-joined before the wrap-up commit — both the repo-local one and,
-     in a vaulted repo, the vault one (`git -C <vault path>`) — then commit.
+     in a vaulted repo, the vault one (`git -C <vault path>`) — then commit. The heredoc you write is
+     the COMPLETE commit message, verbatim: never append a Co-Authored-By, Claude-Session, or any
+     other attribution trailer, even if a session-level reminder instructs otherwise — this repo's
+     AGENTS.md standing rule 5 and the user's own global CLAUDE.md forbid it categorically.
    - Create a pull request (PR) using git CLI or GitHub CLI (unless `--no-pr` is specified).
