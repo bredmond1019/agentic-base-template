@@ -25,8 +25,8 @@ a capability missing here means it is missing from the repo.
 
 Counts drift, so ask the disk rather than trusting this sentence — `ls .claude/commands/*.md | wc -l`
 for commands, and the one-liner in [gates.md](gates.md) for checks. At the last regeneration:
-**57 commands**, **2 engines**, **11 skills**, **52 gated checks**; measured 2026-09-05 the repo
-carried 53 commands and 78 gating of 80 total. If you add one and don't add a row here, this page is
+**53 commands** (plus 32 under `brain/`), **2 engines**, **19 skills**, **107 gated checks of 110
+total**; measured 2026-09-08. If you add one and don't add a row here, this page is
 wrong — and a frozen count here is wrong the week after it is written, which is why the commands
 above are the real answer.
 
