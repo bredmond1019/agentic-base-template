@@ -172,6 +172,32 @@ def check_registry_empty_current_block_rejected() -> None:
           any("current_block" in p for p in problems), f"problems: {problems}")
 
 
+# --- host: additive optional field (BT.8.A task 2) -----------------------------------------
+
+def check_registry_with_host_valid() -> None:
+    problems = check_lane_agents.check_registry_record(_valid_registry(host="mac-mini-01"))
+    check("a registry claim carrying `host` validates green",
+          problems == [], f"problems: {problems}")
+
+
+def check_registry_with_hostt_rejected() -> None:
+    problems = check_lane_agents.check_registry_record(_valid_registry(hostt="mac-mini-01"))
+    check("a registry claim carrying `hostt` (typo) is rejected as an unknown key",
+          any("unknown key" in p and "hostt" in p for p in problems), f"problems: {problems}")
+
+
+def check_lease_with_host_valid() -> None:
+    problems = check_lane_agents.check_lease_record(_valid_lease(host="mac-mini-01"))
+    check("a lease carrying `host` validates green",
+          problems == [], f"problems: {problems}")
+
+
+def check_lease_with_hostt_rejected() -> None:
+    problems = check_lane_agents.check_lease_record(_valid_lease(hostt="mac-mini-01"))
+    check("a lease carrying `hostt` (typo) is rejected as an unknown key",
+          any("unknown key" in p and "hostt" in p for p in problems), f"problems: {problems}")
+
+
 def check_lane_schema_json_unchanged_by_this_task() -> None:
     lane_schema = REPO_ROOT / ".claude" / "workflows" / "lane.schema.json"
     text = lane_schema.read_text()
@@ -545,6 +571,10 @@ def main() -> int:
     check_registry_with_both_new_fields_valid()
     check_registry_malformed_block_started_at_rejected()
     check_registry_empty_current_block_rejected()
+    check_registry_with_host_valid()
+    check_registry_with_hostt_rejected()
+    check_lease_with_host_valid()
+    check_lease_with_hostt_rejected()
     check_lane_schema_json_unchanged_by_this_task()
     check_lease_scope_values()
     check_negative_missing_required_field()

@@ -24,6 +24,51 @@
 #
 set -euo pipefail
 
+# --- heartbeat format/staleness check (BT.8.A task 3) ----------------------------------------
+# BT.6.D settled epoch seconds as the ONE heartbeat format. Two formats were live on disk at
+# once (ISO-8601 in brain-commander, epoch seconds in the other three writers) because a
+# staleness read of an ISO string silently mis-parsed under bash integer arithmetic instead of
+# failing loudly. check_heartbeat_staleness() is the one place that reads a heartbeat file, so
+# both the live run below and `--check-heartbeat` (used by scripts/test_commander_drain.sh to
+# exercise this in isolation, without standing up a fake brain root) share it.
+#
+# Prints one line and returns:
+#   0  FRESH <age>   -- valid epoch seconds, within threshold
+#   1  STALE <age>   -- valid epoch seconds, older than threshold
+#   2  RED: ...      -- NOT epoch seconds (e.g. ISO-8601) -- named explicitly, never mis-parsed
+#   3  MISSING       -- no such file
+check_heartbeat_staleness() {
+    local file="$1" threshold="$2"
+    [ -f "$file" ] || { echo "MISSING"; return 3; }
+    local content
+    content="$(cat "$file" 2>/dev/null || echo "")"
+    if ! [[ "$content" =~ ^[0-9]+$ ]]; then
+        echo "RED: heartbeat at ${file} is not epoch seconds (got '${content}') -- BT.6.D requires epoch seconds; ISO-8601 (or any other format) is rejected by name rather than silently mis-parsed by arithmetic"
+        return 2
+    fi
+    local now age
+    now="$(date -u +%s)"
+    age=$((now - content))
+    if [ "$age" -gt "$threshold" ]; then
+        echo "STALE ${age}"
+        return 1
+    fi
+    echo "FRESH ${age}"
+    return 0
+}
+
+# --check-heartbeat <file> [threshold_secs] -- run only the check above and exit with its code.
+# No brain root, lib.sh, or bastion required, so tests can exercise the format/staleness logic
+# directly instead of standing up a full fake drain.
+if [ "${1:-}" = "--check-heartbeat" ]; then
+    shift
+    HB_FILE="${1:?--check-heartbeat requires a file path}"
+    HB_THRESHOLD="${2:-5400}"
+    set +e
+    check_heartbeat_staleness "$HB_FILE" "$HB_THRESHOLD"
+    exit $?
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -91,17 +136,27 @@ HEARTBEAT_FILE="$HEARTBEAT_DIR/${REPO_NAME}-${LANE}.heartbeat"
 # plus kind-triggered wakes, so 90 minutes clears a normal gap with margin.
 HEARTBEAT_STALE_SECS=$((90 * 60))
 
-if [ -f "$HEARTBEAT_FILE" ]; then
-    PREV_EPOCH="$(cat "$HEARTBEAT_FILE" 2>/dev/null || echo 0)"
-    NOW_EPOCH="$(date -u +%s)"
-    AGE=$((NOW_EPOCH - PREV_EPOCH))
-    if [ "$AGE" -gt "$HEARTBEAT_STALE_SECS" ]; then
-        send_alert "commander_drain.sh: previous drain heartbeat for ${REPO_NAME}/${LANE} is ${AGE}s old (threshold ${HEARTBEAT_STALE_SECS}s) — drains may have stopped happening." \
+set +e
+HEARTBEAT_CHECK_OUTPUT="$(check_heartbeat_staleness "$HEARTBEAT_FILE" "$HEARTBEAT_STALE_SECS")"
+HEARTBEAT_CHECK_CODE=$?
+set -e
+
+case "$HEARTBEAT_CHECK_CODE" in
+    0)
+        log "Previous drain heartbeat for ${REPO_NAME}/${LANE}: ${HEARTBEAT_CHECK_OUTPUT}"
+        ;;
+    1)
+        send_alert "commander_drain.sh: previous drain heartbeat for ${REPO_NAME}/${LANE} is ${HEARTBEAT_CHECK_OUTPUT#STALE } old (threshold ${HEARTBEAT_STALE_SECS}s) — drains may have stopped happening." \
             "$DRAIN_LOG" "🚨 Commander drain heartbeat stale (${REPO_NAME}/${LANE})"
-    fi
-else
-    log "No prior heartbeat for ${REPO_NAME}/${LANE} — first drain, or heartbeat file was never written."
-fi
+        ;;
+    2)
+        send_alert "commander_drain.sh: ${HEARTBEAT_CHECK_OUTPUT}" \
+            "$DRAIN_LOG" "🚨 Commander drain heartbeat wrong format (${REPO_NAME}/${LANE})"
+        ;;
+    3)
+        log "No prior heartbeat for ${REPO_NAME}/${LANE} — first drain, or heartbeat file was never written."
+        ;;
+esac
 
 # --- inbox count, for the log only — the drain turn itself (step 1) is what actually acts ---
 # on it via check_messages.py's drain_queue(). An empty inbox is a normal, clean outcome, not
@@ -184,17 +239,19 @@ if [ "$ASK_EXIT" -ne 0 ]; then
     log "${RED}bastion ask exited ${ASK_EXIT} for ${REPO_NAME}/${LANE}${NC}"
     send_alert "commander_drain.sh: bastion ask failed (exit ${ASK_EXIT}) for ${REPO_NAME}/${LANE} — see ${DRAIN_LOG}" \
         "$DRAIN_LOG" "🚨 Commander drain failed (${REPO_NAME}/${LANE})"
-    # Still stamp the heartbeat below — the drain attempt happened even though it failed, and a
-    # missing heartbeat on top of a failed drain would hide the failure behind a second, less
-    # specific alarm (staleness) on the NEXT run instead of the specific one on this run.
+    # The turn failed before (or without) reaching step 6, so no registry write happened for
+    # this attempt — stamp a fallback heartbeat (epoch seconds, BT.6.D's one format) so the
+    # failure is visible as a completed attempt rather than silently indistinguishable from "no
+    # drain ran". This is the ONLY case this wrapper still writes the heartbeat itself.
+    date -u +%s > "$HEARTBEAT_FILE"
+    log "Heartbeat stamped as a failure fallback: ${HEARTBEAT_FILE}"
+else
+    # ONE HEARTBEAT WRITER (BT.8.A task 3): a successful turn's own step 6 already stamped the
+    # heartbeat (see .claude/commands/orchestration-commander.md, "Stamp the heartbeat") — this
+    # wrapper must NOT overwrite what the registry step just wrote. It previously did,
+    # unconditionally, which is exactly the double-writer situation this task removes.
+    log "bastion ask succeeded — the drain turn's own step 6 owns the heartbeat; not overwritten here."
 fi
-
-# --- stamp the heartbeat, unconditionally ------------------------------------------------------
-# Even a drain that did nothing (empty inbox, nothing dirty, no orphans) or one whose turn
-# failed still proves an attempt happened — a missing/stale heartbeat is itself the signal that
-# drains have stopped, per the command file's step 6.
-date -u +%s > "$HEARTBEAT_FILE"
-log "Heartbeat stamped: ${HEARTBEAT_FILE}"
 
 log "${GREEN}commander_drain.sh done for ${REPO_NAME}/${LANE} (bastion ask exit ${ASK_EXIT}).${NC}"
 
