@@ -23,12 +23,17 @@ sdlc-flow.js drifts from what these fixtures exercise, extraction either fails o
 assertion) or the behavioural assertions fail against the drifted text -- either way this suite
 goes red, which is the point.
 
-TASK 1 (this state, before the fix): the snippet has NOT yet been scoped to exempt _planning/-only
-dirt at the brain root -- it still just runs `git status --porcelain` unconditionally. All three
-fixtures therefore assert DIRTY is non-empty, INCLUDING fixture 1 (brain-root, sibling-only dirt
-under _planning/), which is the reproduction of the bug: a brain-root run with only sibling-repo
-_planning/ dirt is wrongly blocked. Task 2 flips fixture 1's assertion to "DIRTY must be empty"
-once the guard is scoped.
+TASK 1 (reproduction, superseded): the snippet was not yet scoped to exempt _planning/-only
+dirt at the brain root -- it just ran `git status --porcelain` unconditionally, so all three
+fixtures asserted DIRTY was non-empty, INCLUDING fixture 1 (brain-root, sibling-only dirt under
+_planning/) -- the reproduction of the bug: a brain-root run with only sibling-repo _planning/
+dirt was wrongly blocked.
+
+TASK 2 (this state, the fix): STEP 3a now scopes DIRTY to
+`git status --porcelain | grep -v '_planning/'` when brainTomlAtRoot is true, and leaves it as the
+bare `git status --porcelain` when false. Fixture 1 now asserts DIRTY is EMPTY (the fix landing);
+fixtures 2 and 3 are unchanged regression guards proving the fix is conditioned on brainTomlAtRoot
+and confined to the _planning/ path, not a blanket brain-root or _planning/ exemption.
 
 FIXTURES
 --------
@@ -46,6 +51,7 @@ Run: python3 scripts/test_clean_tree_guard_scoping.py
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -115,17 +121,26 @@ def _init_fixture_repo(root: Path, dirty_path: str) -> None:
     dirty_file.write_text("dirty\n", encoding="utf-8")
 
 
-def run_guard_snippet(cwd: Path) -> str:
+def run_guard_snippet(cwd: Path, brain_toml_at_root: bool) -> str:
     """Execute the extracted clean-tree guard snippet in `cwd` and return the resulting DIRTY
-    variable's value (echoed by an appended `echo "$DIRTY"`)."""
+    variable's value (echoed by an appended `echo "$DIRTY"`).
+
+    `brain_toml_at_root` simulates the GIVEN `brainTomlAtRoot` boolean the real engine already
+    resolved before building this prompt text (STEP 1) -- the extracted snippet reads it from the
+    `BRAIN_TOML_AT_ROOT` environment variable exactly as the live prompt exports it (via a line
+    immediately outside the marked region, so it is not part of the extracted text itself).
+    """
     snippet = extract_clean_tree_guard_snippet()
     script = f"#!/bin/sh\nset -e\n{snippet}\necho \"$DIRTY\"\n"
+    env = dict(os.environ)
+    env["BRAIN_TOML_AT_ROOT"] = "true" if brain_toml_at_root else "false"
     result = subprocess.run(
         ["/bin/sh", "-c", script],
         cwd=cwd,
         capture_output=True,
         text=True,
         check=True,
+        env=env,
     )
     return result.stdout.strip()
 
@@ -139,21 +154,21 @@ class CleanTreeGuardScopingTests(unittest.TestCase):
     def test_fixture_1_brain_root_sibling_planning_dirt_only(self) -> None:
         """Brain-root simulation, dirt confined to a _planning/ path only.
 
-        TASK 1 (pre-fix) expectation: the guard cannot yet distinguish this from any other dirt,
-        so DIRTY is still non-empty here -- this IS the reproduction of the bug. Task 2 will flip
-        this assertion to `assertEqual(dirty, "")` once STEP 3a is scoped by brainTomlAtRoot.
+        TASK 2 (post-fix) expectation: STEP 3a is now scoped by brainTomlAtRoot, so dirt confined
+        to a _planning/ path at the brain root is exempted -- DIRTY must be empty here. This is
+        the fix landing: a brain-root run with only sibling-repo _planning/ dirt is no longer
+        wrongly blocked.
         """
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "hq-root"
             _init_fixture_repo(root, "_planning/other-repo/state.json")
-            dirty = run_guard_snippet(root)
-            self.assertNotEqual(
+            dirty = run_guard_snippet(root, brain_toml_at_root=True)
+            self.assertEqual(
                 dirty,
                 "",
-                "reproduction check: today's unscoped guard must still report dirt for "
-                "sibling-only _planning/ changes at a brain root (fixture 1) -- if this now "
-                "passes empty, the fix has already landed and this test's task-1 assertion is "
-                "stale.",
+                "fix check: dirt confined to a _planning/ path at the brain root must no longer "
+                "trip the guard (fixture 1) -- if this is non-empty, the scoping fix did not "
+                "land or regressed.",
             )
 
     def test_fixture_2_brain_root_dirt_outside_planning(self) -> None:
@@ -161,7 +176,7 @@ class CleanTreeGuardScopingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "hq-root"
             _init_fixture_repo(root, "docs/notes.md")
-            dirty = run_guard_snippet(root)
+            dirty = run_guard_snippet(root, brain_toml_at_root=True)
             self.assertNotEqual(
                 dirty,
                 "",
@@ -178,7 +193,7 @@ class CleanTreeGuardScopingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "leaf-repo"
             _init_fixture_repo(root, "_planning/other-repo/state.json")
-            dirty = run_guard_snippet(root)
+            dirty = run_guard_snippet(root, brain_toml_at_root=False)
             self.assertNotEqual(
                 dirty,
                 "",

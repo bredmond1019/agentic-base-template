@@ -1981,9 +1981,18 @@ STEP 2 — Find a free branch name. FIRST check the exact base candidate "${base
 
 STEP 3 — Create the branch and check it out IN THE MAIN WORKING TREE (no worktree, no trees/ dir):
   a. Guard against a dirty tree — uncommitted changes would ride onto the branch and into the run's
-     commits. Run:
+     commits. At the brain root (BRAIN_TOML_AT_ROOT=${brainTomlAtRoot}), repoRoot is the whole vault
+     and every sibling repo's planning/ symlinks into HQ's own git index under a _planning/ path —
+     dirt confined there belongs to another lane's in-flight work, not this run, so it is excluded
+     from the check; dirt anywhere outside a _planning/ path still blocks exactly as before, and at a
+     non-brain root (BRAIN_TOML_AT_ROOT=false) this exception does not apply. Run:
+       export BRAIN_TOML_AT_ROOT=${brainTomlAtRoot}
        # CLEAN_TREE_GUARD_START
-       DIRTY="$(${GIT} status --porcelain)"
+       if [ "$BRAIN_TOML_AT_ROOT" = "true" ]; then
+         DIRTY="$(${GIT} status --porcelain | grep -v '_planning/' || true)"
+       else
+         DIRTY="$(${GIT} status --porcelain)"
+       fi
        # CLEAN_TREE_GUARD_END
      If $DIRTY is non-empty, STOP: do NOT create the branch. Set wasCreated=false and
      setupError="Working tree is not clean — commit or stash your changes, then re-run (or use --worktree
