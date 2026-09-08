@@ -753,7 +753,11 @@ ${sameContext ? `(Previous attempt context for the same-failure check: ${sameCon
 //                   say different things here: the lean engine warns about a sibling session on a
 //                   shared in-place branch, the flow engine about the PR footer. A whole sentence
 //                   from the caller, not a conditional in the middle of one.
-function renderTestPrompt({ enginePhrase, overrideNote, runRootLabel, runRoot, checklistBody, diffBase, stateFile, recordedCommitsJson, emojiScopeNote, onPassRecipe, stateWrittenNote }) {
+//   heartbeatRecipe the lane-heartbeat re-stamp block (renderLaneHeartbeatRecipe), pre-rendered by
+//                   the caller (it is async; this function is not) -- see
+//                   BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4. NEVER one of the gating
+//                   checks reported above it -- best-effort, and never affects allPassed.
+function renderTestPrompt({ enginePhrase, overrideNote, runRootLabel, runRoot, checklistBody, diffBase, stateFile, recordedCommitsJson, emojiScopeNote, onPassRecipe, stateWrittenNote, heartbeatRecipe }) {
   return `You are the test agent for the ${enginePhrase} pipeline. Run the project's validation checks and report.
 
 IMPORTANT — run ONLY the checks enumerated below (${overrideNote}). Do NOT invent
@@ -771,6 +775,7 @@ ${renderEmojiGate({ runRoot, baseSha: diffBase, stateFile, recordedCommitsJson }
   commit on a shared branch, does not.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
+${heartbeatRecipe || ''}
 ${onPassRecipe}
 Return via StructuredOutput: allPassed (true only if EVERY gating check passed and the emoji gate is
 clean), passCount, failCount, failedTests (names), failBlob (compact: failing check names + the tail of
@@ -2656,8 +2661,10 @@ async function runTests(label, { gatingOnly, taskCommands = null, expectRedSet =
     ? "this task declares its OWN validation_commands in tasks.json, which REPLACE the project-wide harness checks for this task (D63 — pure substitute for this engine) — the full harness suite still runs at the end review"
     : 'from planning/harness.json + the spec'
 
+  const heartbeatRecipe = await renderLaneHeartbeatRecipe({ runRoot: worktreePath, blockId })
+
   return tracedAgent(`${W}
-${renderTestPrompt({ enginePhrase: '/sdlc-flow', overrideNote, runRootLabel, runRoot: worktreePath, checklistBody, diffBase: prBase, stateFile, recordedCommitsJson, emojiScopeNote: `sibling session's commit on a shared branch can fail a diff this run never touched (the literal\n"\u{1F916} Generated with Claude Code" PR footer is exempt — it lives in the PR body, not a file, but the\ncheck exempts the phrase defensively too):`, onPassRecipe: onPass ? renderOnPassStateWriteRecipe(onPass) : '', stateWrittenNote: onPass ? ', stateWritten (true only if you performed the additional state write above)' : '' })}
+${renderTestPrompt({ enginePhrase: '/sdlc-flow', overrideNote, runRootLabel, runRoot: worktreePath, checklistBody, diffBase: prBase, stateFile, recordedCommitsJson, emojiScopeNote: `sibling session's commit on a shared branch can fail a diff this run never touched (the literal\n"\u{1F916} Generated with Claude Code" PR footer is exempt — it lives in the PR body, not a file, but the\ncheck exempts the phrase defensively too):`, onPassRecipe: onPass ? renderOnPassStateWriteRecipe(onPass) : '', stateWrittenNote: onPass ? ', stateWritten (true only if you performed the additional state write above)' : '', heartbeatRecipe })}
 `, withModel({ label, schema: TEST_SCHEMA, phase: 'Tasks' }, MODEL.test))
 }
 
@@ -4112,3 +4119,36 @@ line is missing or the script produced no output).
   return value ? ` --scope ${value}` : ''
 }
 // <</shared:renderScopeFlag>>
+
+// <<shared:renderLaneHeartbeatRecipe>>
+// Re-stamps this lane's claim+lease heartbeat FROM INSIDE the per-task test-stage recipe
+// (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4), so a long block re-stamps between
+// tasks instead of only at a block boundary (the release-and-re-take /orchestrate rule 10 already
+// does). scripts/lane_heartbeat.py is the writer this calls; see that script's own module
+// docstring for why a hand-driven lane needs this too, not only an /orchestrate-driven one.
+//
+// BEST-EFFORT, NEVER GATING: a spec run with no live claim or lease (outside /orchestrate, or a
+// standalone downstream repo with no fleet lock dir at all) must not bail because a heartbeat
+// could not be written -- the call is suffixed ` || true` and the prompt says explicitly that its
+// exit code never affects allPassed.
+//
+// IDENTITY: reuses renderAgentFlag()/renderScopeFlag() -- the SAME identity these engines already
+// thread to `mev emit-state --write` (and the same identity concept /orchestrate threads to
+// `scripts/fleet_concurrency_check.py register --agent <this lane's agent identity>`) -- never a
+// second, invented identity source. renderScopeFlag() renders a full `--scope <slug>` argument for
+// mev, so the slug is pulled back out of it (mirrors renderStateFlipScript's identical extraction
+// a few hundred lines above) rather than resolving the repo slug a third way.
+async function renderLaneHeartbeatRecipe({ runRoot, blockId }) {
+  const agentFlag = await renderAgentFlag()
+  const scopeFlagRaw = await renderScopeFlag()
+  const scopeMatch = scopeFlagRaw.match(/--scope\s+(\S+)/)
+  const repoSlug = scopeMatch ? scopeMatch[1] : null
+  const repoFlag = repoSlug ? ` --repo ${repoSlug}` : ''
+  return `
+Also re-stamp this lane's claim+lease heartbeat now (best-effort, NEVER gating -- a spec run with
+no live claim or lease must not fail because of this; its own exit code never affects allPassed
+above, which is why it is suffixed \` || true\`):
+  cd ${runRoot} && python3 scripts/lane_heartbeat.py${agentFlag}${repoFlag} --current-block ${blockId} || true
+`
+}
+// <</shared:renderLaneHeartbeatRecipe>>

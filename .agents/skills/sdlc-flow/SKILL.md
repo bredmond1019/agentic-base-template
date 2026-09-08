@@ -177,6 +177,16 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
      - Run `/update-task` to flip status to `In progress` in the worklog and local files.
      - Implement the task following instructions.
      - Run fast validation tests.
+     - **Also re-stamp this lane's claim+lease heartbeat now** (best-effort, NEVER gating —
+       `BT.ticket.lane-heartbeat-goes-stale-mid-block`, task 4; mirrors `/sdlc-task`'s identical
+       per-task step, see `.agents/skills/sdlc-task/SKILL.md`): from the repo root, run
+       `python3 scripts/lane_heartbeat.py --agent <this lane's agent identity> --repo <this
+       repo's slug in brain.toml> --current-block <blockId> || true`. Same identity this lane
+       already used to claim its lease — never a second, invented identity source. A lane driven
+       by hand never reaches `/orchestrate`'s release-and-re-take, so this is the ONLY heartbeat
+       re-stamp such a lane gets between block boundaries. If this lane holds no live claim or
+       lease, the call fails harmlessly (`|| true`) — its exit code must never affect the task's
+       own pass/fail verdict.
      - Fix failures (up to 3 triage/fix attempts).
      - Run the COMMIT-SAFETY GUARD above, `&&`-joined with the commit itself, then commit the task
        state on the branch (`feat: implement <slug> task N`). If a vault commit is also needed

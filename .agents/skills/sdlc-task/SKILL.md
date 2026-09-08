@@ -565,6 +565,18 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
        `<baseSha>..HEAD` is non-empty, refuse to pass — an unscoped range is a sign that the
        run-state never initialized the commit list correctly. A pure rename with no added content
        lines passes, a brand-new file with an emoji fails (its added lines are its whole content).
+     - **Also re-stamp this lane's claim+lease heartbeat now** (best-effort, NEVER gating —
+       `BT.ticket.lane-heartbeat-goes-stale-mid-block`, task 4): from the repo root, run
+       `python3 scripts/lane_heartbeat.py --agent <this lane's agent identity> --repo <this
+       repo's slug in brain.toml> --current-block <blockId> || true`. This is the SAME identity
+       this lane already used to claim its lease (see `scripts/check_lane_agents.py` /
+       `scripts/fleet_concurrency_check.py`) — never a second, invented identity source. A lane
+       driven by hand never reaches `/orchestrate`'s release-and-re-take, so this call is the
+       ONLY heartbeat re-stamp such a lane gets between block boundaries; skipping it lets a
+       long block's claim/lease look stale mid-block even though the lane is actively working.
+       If this lane holds no live claim or lease (no fleet lock dir at all, or a standalone
+       downstream repo), the call fails harmlessly — its exit code (hence the trailing `|| true`)
+       must NEVER affect this task's own pass/fail verdict.
      - The task PASSES this attempt only if every gating check passed AND the emoji gate is clean.
    - **On pass**: mark the task `passed`, record which check set validated it, and stop the attempt
      loop for this task (do not run further attempts).
