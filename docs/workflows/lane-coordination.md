@@ -170,8 +170,13 @@ Claude turn via `bastion ask`. Same instructions either way.
 > **There is no dry-run or `--help` that stops short of the real tree.** `find_brain_root` walks up
 > from the *script's own location*, so it always resolves the real `agentic-portfolio`.
 > `HEARTBEAT_DIR` is hardcoded to `$BRAIN_ROOT/.fleet-locks/commander-heartbeats` and is `mkdir -p`'d
-> before the inbox is even read, and the heartbeat file is written at the end whether the drain
-> succeeded or failed. **`FLEET_LOCK_DIR` does not redirect this** — it only changes the
+> before the inbox is even read. **One writer owns the heartbeat (BT.8.A task 3):** on a
+> successful `bastion ask`, the drain turn's own step 6 stamps it, and `commander_drain.sh` no
+> longer overwrites that write; the wrapper stamps the file itself only as a failure fallback,
+> when `bastion ask` exits nonzero and the turn likely never reached step 6. Either way the file
+> ends up holding bare epoch seconds — `commander_drain.sh` also rejects a non-epoch-seconds
+> heartbeat (e.g. ISO-8601) by name via `check_heartbeat_staleness()` rather than silently
+> mis-parsing it. **`FLEET_LOCK_DIR` does not redirect this** — it only changes the
 > informational inbox count. Your first invocation writes to the fleet-shared lock directory.
 
 Defaults: `--repo` is this repo's basename, `--lane` is `main`.
