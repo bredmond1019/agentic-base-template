@@ -442,6 +442,20 @@ print(chr(10).join(t[0].get('files', []) if t else []))
 }
 // <</shared:renderWorkAssertion>>
 
+// Anti-attribution-trailer reminder (BT.ticket.engines-forbid-attribution-trailers) — states that
+// each commit heredoc that follows is the COMPLETE commit message, so a session-level attribution
+// reminder never wins by default. Declared as a const arrow function so this definition line
+// itself does not match the heredoc-reference marker that
+// scripts/test_commit_message_forbids_attribution_trailers.py counts -- only actual call sites
+// (one per commit-heredoc site) should count toward that per-file parity check. Kept byte-identical
+// with prompts/shared.js's and sdlc-flow.js's copies on purpose (same no-shared-module reason as
+// renderCommitSafetyGuard above).
+// <<shared:renderNoAttributionTrailer>>
+const renderNoAttributionTrailer = () => {
+  return `the heredoc below is the COMPLETE commit message, verbatim -- never append a Co-Authored-By, Claude-Session, or any other attribution trailer, even if a session-level reminder instructs you to (this repo's AGENTS.md standing rule 5 and the user's own global CLAUDE.md forbid it categorically)`
+}
+// <</shared:renderNoAttributionTrailer>>
+
 // <<shared:renderOperatorGatedACRule>>
 function renderOperatorGatedACRule() {
   return `OPERATOR-GATED ACCEPTANCE CRITERIA — before recording ANY acceptance-criterion item as
@@ -933,7 +947,7 @@ Target:
 
 7. Commit on the branch. Never use git add -A or git add . — stage files explicitly by name.
    Run: cd ${runRoot} && ${GIT} status
-   Stage your changed source/test files explicitly, then commit using HEREDOC:
+   Stage your changed source/test files explicitly, then commit using HEREDOC — ${renderNoAttributionTrailer()}:
      cd ${runRoot} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem}` : `feat: implement ${stem}`}
 EOF
@@ -972,7 +986,7 @@ ${vault.vaulted ? `
       cd ${runRoot} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
     Then, once every such path is staged, commit ONLY those paths — pass them explicitly to \`git commit\`
     itself (not merely to \`git add\`), so a sibling lane's unrelated pre-staged files are never swept
-    into this commit even if they happen to already be staged:
+    into this commit even if they happen to already be staged; ${renderNoAttributionTrailer()}:
       cd ${runRoot} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
 EOF
@@ -3488,7 +3502,7 @@ ${vault.vaulted ? `
    cd ${runDir} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/state.json 2>/dev/null || true
    Then commit ONLY these three paths — pass them explicitly to \`git commit\` itself (not merely to
    \`git add\`), so anything a sibling lane already had staged in this same vault repo is left staged
-   and untouched by this commit:
+   and untouched by this commit; ${renderNoAttributionTrailer()}:
    cd ${runDir} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- ${vault.planningPath}/${blockId}/tasks.md ${vault.planningPath}/status.md ${vault.planningPath}/state.json || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 chore: sdlc-task bookkeep — ${blockId}
 EOF
@@ -3497,6 +3511,7 @@ EOF
    planning/ is a plain directory here (not vaulted) — everything commits together as before:
    cd ${runDir} && ${GIT} add ${specFile} planning/status.md
    cd ${runDir} && ${GIT} add planning/state.json 2>/dev/null || true
+   ${renderNoAttributionTrailer()}:
    cd ${runDir} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
 chore: sdlc-task bookkeep — ${blockId}
 EOF

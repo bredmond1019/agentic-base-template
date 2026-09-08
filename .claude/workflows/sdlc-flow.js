@@ -351,6 +351,20 @@ print(chr(10).join(t[0].get('files', []) if t else []))
 }
 // <</shared:renderWorkAssertion>>
 
+// Anti-attribution-trailer reminder (BT.ticket.engines-forbid-attribution-trailers) — states that
+// each commit heredoc that follows is the COMPLETE commit message, so a session-level attribution
+// reminder never wins by default. Declared as a const arrow function so this definition line
+// itself does not match the heredoc-reference marker that
+// scripts/test_commit_message_forbids_attribution_trailers.py counts -- only actual call sites
+// (one per commit-heredoc site) should count toward that per-file parity check. Kept byte-identical
+// with prompts/shared.js's and sdlc-task.js's copies on purpose (same no-shared-module reason as
+// renderCommitSafetyGuard above).
+// <<shared:renderNoAttributionTrailer>>
+const renderNoAttributionTrailer = () => {
+  return `the heredoc below is the COMPLETE commit message, verbatim -- never append a Co-Authored-By, Claude-Session, or any other attribution trailer, even if a session-level reminder instructs you to (this repo's AGENTS.md standing rule 5 and the user's own global CLAUDE.md forbid it categorically)`
+}
+// <</shared:renderNoAttributionTrailer>>
+
 // <<shared:renderOperatorGatedACRule>>
 function renderOperatorGatedACRule() {
   return `OPERATOR-GATED ACCEPTANCE CRITERIA — before recording ANY acceptance-criterion item as
@@ -842,7 +856,7 @@ Target:
 
 7. Commit on the branch. Never use git add -A or git add . — stage files explicitly by name.
    Run: cd ${runRoot} && ${GIT} status
-   Stage your changed source/test files explicitly, then commit using HEREDOC:
+   Stage your changed source/test files explicitly, then commit using HEREDOC — ${renderNoAttributionTrailer()}:
      cd ${runRoot} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem}` : `feat: implement ${stem}`}
 EOF
@@ -881,7 +895,7 @@ ${vault.vaulted ? `
       cd ${runRoot} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
     Then, once every such path is staged, commit ONLY those paths — pass them explicitly to \`git commit\`
     itself (not merely to \`git add\`), so a sibling lane's unrelated pre-staged files are never swept
-    into this commit even if they happen to already be staged:
+    into this commit even if they happen to already be staged; ${renderNoAttributionTrailer()}:
       cd ${runRoot} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
 EOF
@@ -3132,7 +3146,7 @@ ${findingsBlob}
 2. Read only the source files relevant to the findings; make the minimum fix.
 3. Add/adjust tests as needed; no emoji; no fabricated metrics.
 4. Run the spec's "## Validation Commands" to confirm.
-5. Commit on the branch (stage files explicitly — never git add -A):
+5. Commit on the branch (stage files explicitly — never git add -A); ${renderNoAttributionTrailer()}:
      cd ${worktreePath} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
 fix: review pass ${reviewAttempts} for ${blockId}
 EOF
@@ -3301,7 +3315,7 @@ ${renderOperatorGatedACRule()}
 4. If a top-level architecture/overview/index doc needs changes, FLAG it NEEDS_REVIEW (in the flagged[]
    field) rather than editing it directly.
 
-5. Commit on the branch (stage explicitly — never git add -A):
+5. Commit on the branch (stage explicitly — never git add -A); ${renderNoAttributionTrailer()}:
    If docs were patched:
      cd ${worktreePath} && ${GIT} add <each doc file>
      cd ${worktreePath} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
@@ -3318,7 +3332,8 @@ ${vault.vaulted ? `
    list): for each such path, let <relpath> be the part after "planning/":
      cd ${worktreePath} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
      Then commit ONLY those paths — pass them explicitly to \`git commit\` itself (not merely to
-     \`git add\`), so a sibling lane's unrelated pre-staged files are never swept into this commit:
+     \`git add\`), so a sibling lane's unrelated pre-staged files are never swept into this commit;
+     ${renderNoAttributionTrailer()}:
      cd ${worktreePath} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 docs: update docs for ${blockId} (vault)
 EOF
@@ -3569,14 +3584,14 @@ ${vault.vaulted ? `
    cd ${worktreePath} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/state.json 2>/dev/null || true
    Then commit ONLY those two paths — pass them explicitly to \`git commit\` itself (not merely to
    \`git add\`), so anything a sibling lane already had staged in this same vault repo is left staged
-   and untouched by this commit:
+   and untouched by this commit; ${renderNoAttributionTrailer()}:
    cd ${worktreePath} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- ${vault.planningPath}/status.md ${vault.planningPath}/state.json || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 chore: wrap up ${stem}
 EOF
 )" -- ${vault.planningPath}/status.md ${vault.planningPath}/state.json)
    cd ${worktreePath} && ${GIT} -C ${vault.planningPath} log --oneline -1
 
-   Repo-local files stay staged and committed in THIS repo, on this branch, as before:
+   Repo-local files stay staged and committed in THIS repo, on this branch, as before; ${renderNoAttributionTrailer()}:
    cd ${worktreePath} && ${GIT} add log.md
    cd ${worktreePath} && ${GIT} add ${specFile} 2>/dev/null || true
    cd ${worktreePath} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
@@ -3584,7 +3599,8 @@ chore: wrap up ${stem}
 EOF
 )"
    cd ${worktreePath} && ${GIT} log --oneline -1` : `
-   planning/ is a plain directory here (not vaulted) — everything commits together as before:
+   planning/ is a plain directory here (not vaulted) — everything commits together as before;
+   ${renderNoAttributionTrailer()}:
    cd ${worktreePath} && ${GIT} add planning/status.md log.md
    cd ${worktreePath} && ${GIT} add planning/state.json 2>/dev/null || true
    cd ${worktreePath} && ${GIT} add ${specFile} 2>/dev/null || true

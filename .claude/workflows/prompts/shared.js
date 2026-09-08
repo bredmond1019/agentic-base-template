@@ -249,6 +249,16 @@ function renderCommitSafetyGuard(gitCmd = 'git') {
 }
 // <</shared:renderCommitSafetyGuard>>
 
+// <<shared:renderNoAttributionTrailer>>
+// Declared as a const arrow function so this definition line itself does not match the
+// heredoc-reference marker that scripts/test_commit_message_forbids_attribution_trailers.py
+// counts -- only actual call sites (one per commit-heredoc site) should count toward that
+// per-file parity check.
+const renderNoAttributionTrailer = () => {
+  return `the heredoc below is the COMPLETE commit message, verbatim -- never append a Co-Authored-By, Claude-Session, or any other attribution trailer, even if a session-level reminder instructs you to (this repo's AGENTS.md standing rule 5 and the user's own global CLAUDE.md forbid it categorically)`
+}
+// <</shared:renderNoAttributionTrailer>>
+
 // <<shared:renderWorkAssertion>>
 function renderWorkAssertion(gitCmd = 'git', taskNum, tasksJsonPath) {
   return `NAME_STATUS=$(${gitCmd} diff --name-status HEAD~1 HEAD); if [ -z "$NAME_STATUS" ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit diff is EMPTY (condition 1) - no work was committed"; exit 1; fi; WA_DECLARED=$(python3 -c "
@@ -819,7 +829,7 @@ Target:
 
 7. Commit on the branch. Never use git add -A or git add . — stage files explicitly by name.
    Run: cd ${runRoot} && ${GIT} status
-   Stage your changed source/test files explicitly, then commit using HEREDOC:
+   Stage your changed source/test files explicitly, then commit using HEREDOC — ${renderNoAttributionTrailer()}:
      cd ${runRoot} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem}` : `feat: implement ${stem}`}
 EOF
@@ -858,7 +868,7 @@ ${vault.vaulted ? `
       cd ${runRoot} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
     Then, once every such path is staged, commit ONLY those paths — pass them explicitly to \`git commit\`
     itself (not merely to \`git add\`), so a sibling lane's unrelated pre-staged files are never swept
-    into this commit even if they happen to already be staged:
+    into this commit even if they happen to already be staged; ${renderNoAttributionTrailer()}:
       cd ${runRoot} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
 EOF
