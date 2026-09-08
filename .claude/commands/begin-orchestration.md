@@ -364,25 +364,53 @@ behavior this replaces, never a hard failure. Full design:
 `planning/decisions/D66-tiered-heavy-lane-concurrency.md` (in `base-template`).
 
 **At lane close, release both the repo lease and the registry claim taken in Step 4, alongside
-this fleet-concurrency slot release** — delete `<lock_dir>/leases/lease-<repo>.json` and
-`<lock_dir>/lane-agents/agent-<agent_name>.json`. All three releases happen together, on success,
-failure, or abandonment, so a reader looking for "what does this lane give back on exit" finds it
-in one place.
+this fleet-concurrency slot release.** All three releases happen together, on success, failure, or
+abandonment, so a reader looking for "what does this lane give back on exit" finds it in one
+place.
+
+#### Bastion coord (preferred)
+
+If `bastion` is on PATH, release the lease and the registry claim with `bastion coord unlease
+--repo <this-repo-name>` and `bastion coord release --agent-name <this lane's agent identity>`.
+Both are idempotent — each exits 0 whether or not the lease/claim existed, so it is always safe to
+call on abandonment even if the earlier acquire never confirmed. This is what removes this lane's
+row from the joined coordination view (`bastion coord status`) — nothing further to delete by
+hand.
+
+#### Fallback: hand-written JSON (no bastion binary)
+
+If `bastion` is not on PATH, delete `<lock_dir>/leases/lease-<repo>.json` and
+`<lock_dir>/lane-agents/agent-<agent_name>.json` directly. This fallback is permanent, not a
+migration step — keep it working even once the coord path is the default.
+
+#### Quiescing (either path)
 
 **Taking any exclusive lease quiesces this repo's `mev` write verbs for the length of the chain.** While a `kind: exclusive` lease is held — whether the ordinary per-lane lease Step 4 takes for every real lane, or an additional lease taken here for a repo named in `exclusive_repos` — every `mev` write verb for that leased repo (`set-block-status --write`, `emit-state --write`, and the other write verbs) is refused with `E_QUIESCE_LEASE_HELD`. This is a declared quiet window, distinct from `E_EMIT_LOCK_HELD` contention: do NOT retry — either wait for the lease to be released, or, if this lane is the holder, pass `--agent <this lane's agent identity>` as the self-exemption on the write verb, exactly as `register`/`release` already require it above. The lease Step 4 makes this lane take is one of the leases this section's own `register` check consults — `--agent` is what lets the holder's own `register`/`release`/write calls through without being refused by its own lease. (The holder's own re-register is never refused: both `fleet_concurrency_check.py` and `mev` skip a lease whose `agent` matches the requester.)
 
 **Fleet-exclusive lanes (`exclusive_repos`).** If the lane record's `exclusive_repos` array is
-non-empty, before the first block starts, write an additional `kind: exclusive` lease at
-`<lock_dir>/leases/lease-<repo>.json` for **each** repo named in `exclusive_repos` — same shape as
-any other lease record (`repo`, `lane`, `agent`, `acquired_at`, `kind: exclusive`; no new field).
-`scope` absent defaults to `repo`: a repo-scoped exclusive lease refuses `register` (and the
-`mev` write verbs above) only for a requester whose own repo the lease names — not every other
-agent. Only `scope: fleet` quiesces the whole fleet; the leases this paragraph writes for each
-`exclusive_repos` entry are repo-scoped, one per named repo, so together they close
-registration on exactly those repos. This is admission control only, never pre-emption of a
-lane already running. Remove every lease written this way at lane close — success, failure, or
-abandonment — alongside the ordinary lease and registry releases. `exclusive_repos` is read only
-here; no new field is added to `.claude/workflows/lane.schema.json` or to the lease record.
+non-empty, before the first block starts, take an additional `kind: exclusive` lease for **each**
+repo named in `exclusive_repos` — same shape as any other lease record (`repo`, `lane`, `agent`,
+`acquired_at`, `kind: exclusive`; no new field). `scope` absent defaults to `repo`: a repo-scoped
+exclusive lease refuses `register` (and the `mev` write verbs above) only for a requester whose
+own repo the lease names — not every other agent. Only `scope: fleet` quiesces the whole fleet; the
+leases below are repo-scoped, one per named repo, so together they close registration on exactly
+those repos. This is admission control only, never pre-emption of a lane already running. Remove
+every lease taken this way at lane close — success, failure, or abandonment — alongside the
+ordinary lease and registry releases (bastion coord's `unlease`/`release` above, or the
+fallback delete). `exclusive_repos` is read only here; no new field is added to
+`.claude/workflows/lane.schema.json` or to the lease record.
+
+##### Bastion coord (preferred)
+
+If `bastion` is on PATH, take each `exclusive_repos` lease with `bastion coord lease --repo <repo>
+--lane <this-lane> --agent-name <this lane's agent identity> --kind exclusive` (verify flag names
+against `bastion coord lease --help` before use — `--scope` and `--window` are optional and unused
+for this whole-lane exclusive lease).
+
+##### Fallback: hand-written JSON (no bastion binary)
+
+If `bastion` is not on PATH, write the lease record by hand at
+`<lock_dir>/leases/lease-<repo>.json` for each repo named in `exclusive_repos`.
 
 ## Step 4 — Confirm
 
@@ -397,11 +425,31 @@ Print, and stop for confirmation unless `--execute`:
 - **operator gates** — any block the roadmap marks as waiting on a human, with which item
 - the log path
 
-**Before any block runs**, claim this lane's identity in the registry and take the repo lease:
+**Before any block runs**, claim this lane's identity in the registry and take the repo lease.
+Resolve `<lock_dir>` exactly as `scripts/check_lane_agents.py` does — `--lock-dir`, else
+`FLEET_LOCK_DIR`, else a `brain.toml` walk-up joined with `.fleet-locks` — see that script for
+the precedence rather than re-deriving it here; `bastion coord`'s own `--lock-dir` mirrors the
+same precedence.
 
-- Resolve `<lock_dir>` exactly as `scripts/check_lane_agents.py` does — `--lock-dir`, else
-  `FLEET_LOCK_DIR`, else a `brain.toml` walk-up joined with `.fleet-locks` — see that script for
-  the precedence rather than re-deriving it here.
+#### Bastion coord (preferred)
+
+If `bastion` is on PATH, claim the identity and take the lease with two calls:
+
+- `bastion coord register --agent-name <this lane's agent identity> --repo <this-repo-name>
+  --lane <this-lane> --roadmap <roadmap-slug>` — writes the lane-agent registry claim.
+- `bastion coord lease --repo <this-repo-name> --lane <this-lane> --agent-name <this lane's
+  agent identity> --kind exclusive` — takes the repo lease. `exclusive` for a lane that will
+  commit — every real lane.
+
+Both calls happen before the first block launches. If either fails, stop; do not start the chain
+holding only one of the two. Re-stamp the claim's heartbeat with `bastion coord heartbeat
+--agent-name <this lane's agent identity>` (optionally `--current-block`/`--block-started-at`)
+at each block boundary rather than hand-editing the file — see the re-stamp rule below.
+
+#### Fallback: hand-written JSON (no bastion binary)
+
+If `bastion` is not on PATH, write both records by hand:
+
 - Write a lane-agent registry record, per `.claude/workflows/lane-agent.schema.json`
   (`agent_name`, `repo`, `lane`, `roadmap`, `started_at`, `heartbeat`), to
   `<lock_dir>/lane-agents/agent-<agent_name>.json`.
