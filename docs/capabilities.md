@@ -222,6 +222,7 @@ Everything under `scripts/` named `check_*.py` or `test_*.py` is a gate — see
 |---|---|
 | [`scripts/sync_downstream_harness.py`](../scripts/sync_downstream_harness.py) | The mechanical half of `/sync-downstream-harness`. Never deletes a file a repo added itself; stamps `planning/.template-version`. |
 | [`scripts/sync_all_skills_commands.py`](../scripts/sync_all_skills_commands.py) | The mechanical half of `/sync-all` — reconciles commands and skills across workspaces, tiers and global configs. |
+| [`scripts/generate_skill_surfaces.py`](../scripts/generate_skill_surfaces.py) | Regenerates each Antigravity-facing skill mirror's body from its Claude-facing source (frontmatter preserved), for the slugs listed in `AGENT_SKILL_SLUGS`. `--check` reports drift without writing; gated by `skill-surfaces-generated`. |
 | [`scripts/sync_claude_md_block.py`](../scripts/sync_claude_md_block.py) | Distributes one named `<!-- BEGIN:x -->…<!-- END:x -->` block into every canonical `CLAUDE.md`. Touches only the named block. |
 | [`scripts/fleet_concurrency_check.py`](../scripts/fleet_concurrency_check.py) | Enforces "at most two heavy-gate repos at once" with an advisory lockfile registry. A lane takes a slot before starting and releases it when done. |
 | [`scripts/roadmap_status_discovery.py`](../scripts/roadmap_status_discovery.py) | The discovery half of `/roadmap-status` — joins the four scattered artifact families into one view. |
