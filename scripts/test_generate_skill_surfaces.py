@@ -270,5 +270,64 @@ class GenerateSkillSurfacesFixtures(unittest.TestCase):
         self.assertEqual(created_body, claude_body)
 
 
+    def test_registry_slug_with_no_authored_source_is_skipped_and_untouched(self):
+        """Case (c): the sdlc-task/sdlc-flow shape. THE DESTRUCTIVE CASE.
+
+        A slug that IS in AGENT_SKILL_SLUGS but has NO .claude/skills/ source is a
+        hand-authored manual-replication guide, hashed against the engines by
+        check_skill_sync.py. Generating over it would destroy it silently on the first run.
+
+        Two independent defences, and this asserts BOTH rather than assuming either:
+
+          1. mirrored_slugs() never yields such a slug -- the primary defence, and the reason
+             the CLI prints no line for sdlc-task/sdlc-flow at all.
+          2. process_slug() returns "skipped-no-source" and writes nothing if one reaches it
+             anyway -- defence in depth against a future widening of the input set.
+
+        Defence 2 is UNREACHABLE from the CLI today precisely because defence 1 holds, which
+        is exactly why it needs a direct test: an untested guard that nothing can currently
+        trigger is indistinguishable from one that does not work.
+        """
+        import generate_skill_surfaces as gss
+
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, True)
+
+        slug = sdh.AGENT_SKILL_SLUGS[0]
+        (root / ".claude" / "skills").mkdir(parents=True)
+        guide = "---\nname: hand-authored\n---\n\nBody nothing may rewrite.\n"
+        agents_path = write_skill(root, "agents", slug, guide)
+        before = agents_path.read_bytes()
+
+        # Defence 1: the slug has an .agents/ file but no .claude/ source, so it is not selected.
+        self.assertNotIn(
+            slug,
+            gss.mirrored_slugs(root),
+            "a registry slug with no .claude/ source must never enter the generated set",
+        )
+
+        # Positive control: the same function DOES select a slug once a source exists, so the
+        # assertion above is watching a list that can contain things.
+        write_skill(root, "claude", slug, "---\nname: x\ndescription: d\n---\n\nBody.\n")
+        self.assertIn(
+            slug,
+            gss.mirrored_slugs(root),
+            "control: with a .claude/ source present the slug MUST be selected -- "
+            "otherwise the exclusion assertion above proves nothing",
+        )
+        (root / ".claude" / "skills" / slug / "SKILL.md").unlink()
+
+        # Defence 2: reached directly, it refuses and writes nothing, in both modes.
+        for write in (False, True):
+            status, changed = gss.process_slug(root, slug, write=write)
+            self.assertEqual(status, "skipped-no-source")
+            self.assertFalse(changed)
+            self.assertEqual(
+                agents_path.read_bytes(),
+                before,
+                f"the guide's bytes must be unchanged (write={write})",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
