@@ -74,7 +74,7 @@ ANCHORS = [
     # sdlc-task.js entirely ABOVE this anchor, shifting it 1860->1872, 1923->1935. Re-picked
     # from CONTENT at the new position (confirmed byte-identical to the pre-shift content via
     # diff), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1872, 1935,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1875, 1956,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -121,7 +121,13 @@ ANCHORS = [
     # shifting it 3351->3361 / 3520->3530 with NO content change: verified by diffing the old
     # range in the pre-fix file against the new range in the fixed file -- byte-identical in
     # both engines. Re-stamped on that evidence, not on a re-read.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3361, 3388,
+    # BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored, task 1: setup-stage worktree
+    # fail-closed logic (new SETUP_SCHEMA fields + prompt instructions + JS-side bail) inserted 51
+    # net lines ABOVE this anchor, shifting it 3361->3412 with NO content change to this region
+    # itself -- verified by diffing the old range against the new range: byte-identical text
+    # ("7. Commit your edits (stage explicitly" through the trailing `git log --oneline -1`).
+    # Re-stamped on that evidence, not on a re-read of the SKILL.md section.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3412, 3439,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1871, 2001,
      ".agents/skills/sdlc-flow/SKILL.md"),

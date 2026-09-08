@@ -90,7 +90,7 @@ ANCHORS = [
     # sdlc-task.js entirely ABOVE this anchor, shifting it 1860->1872, 1923->1935. Re-picked
     # from CONTENT at the new position (confirmed byte-identical to the pre-shift content via
     # diff), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1872, 1935,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1875, 1956,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -135,7 +135,7 @@ ANCHORS = [
     # Content byte-identical across the move (old range in the pre-fix file vs new range in the
     # fixed file diffed clean in both engines), so the docs pages still describe exactly what is
     # there. Re-stamped on that evidence.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3361, 3388,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3412, 3439,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs

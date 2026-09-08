@@ -542,6 +542,22 @@ A Rust repo whose manifest uses `path = "../<crate>"` needs its `trees/` sibling
 before a `--worktree` checkout is usable — see
 [`worktrees-in-rust-repos.md`](worktrees-in-rust-repos.md) for why and how to check.
 
+### Worktree fail-closed guard (BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored)
+
+Two independent, engine-decided (never model-self-reported-only) checks run right after the setup
+agent returns, before any state is recorded and before the binding/brain-root/population guards:
+
+1. **Self-reported failure.** If the setup agent could not find a free worktree name among the base
+   candidate through `-10`, or a `git worktree add`/creation command itself errored, it stops and
+   reports `worktreeFailed = true` with a reason — the engine aborts on that alone rather than
+   letting a fallback proceed.
+2. **Cause-independent cross-check.** Whether or not `worktreeFailed` was set, the engine compares
+   the reported `branchName`/`runDir` against the `currentBranch`/`repoRoot` captured at the start
+   of setup. If `--worktree` was requested and either value matches the main tree, the engine
+   aborts — `Worktree setup failed closed` — even if nothing self-reported a problem. This is what
+   makes the previously measured defect (`mode: "worktree"` reported while `branch: "main"` and
+   `runDir` was the main tree) structurally impossible rather than merely unlikely.
+
 ### Binding / brain-root / population guards (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root)
 
 Run immediately after the setup agent returns and before the enumerate/per-task stages — a
