@@ -1042,7 +1042,7 @@ const SETUP_SCHEMA = {
     specThin:       { type: 'boolean', description: 'D19: true on a fresh (non-resume) run with a structurally-valid but substantively-thin spec; false on resume or a healthy spec.' },
     thinReason:     { type: 'string', description: 'D19: the specific thin-spec failures when specThin; empty string otherwise.' },
     envFilesCopied: { type: 'array', items: { type: 'string' }, description: '--worktree only: repo-root-relative paths of every gitignored env-shaped file seeded into the worktree (from ENV_COPIED: lines); empty array if none existed to copy.' },
-    worktreeListPorcelain: { type: 'string', description: '--worktree only (task 2): the COMPLETE, UNMODIFIED stdout of `git worktree list --porcelain` captured in STEP 2d, after the worktree was created/resolved. The engine parses this itself and treats it as ground truth for runDir/branchName rather than trusting the agent\'s own STEP 2/2b bookkeeping — a worktree absent from this listing, or one whose listed path/branch does not match what setup intended, is a bail. Empty string in in-place mode. "COMMAND_FAILED: <output>" if the listing command itself errored.' },
+    worktreeListPorcelain: { type: 'string', description: '--worktree only (task 2): the COMPLETE, UNMODIFIED stdout from the worktree list porcelain command captured in STEP 2d, after the worktree was created/resolved. The engine parses this itself and treats it as ground truth for runDir/branchName rather than trusting the agent\'s own STEP 2/2b bookkeeping — a worktree absent from this listing, or one whose listed path/branch does not match what setup intended, is a bail. Empty string in in-place mode. "COMMAND_FAILED: <output>" if the listing command itself errored.' },
     notes:          { type: 'string' }
   }
 }
@@ -2107,8 +2107,8 @@ if (useWorktree) {
   const worktreeEntries = parseWorktreeListPorcelain(worktreeListRaw)
   const listedEntry = worktreeEntries.find(e => e.path === runDir)
   if (!listedEntry) {
-    log(`WORKTREE FAIL-CLOSED for ${blockId}: expected worktree at runDir="${runDir}" is ABSENT from \`git worktree list --porcelain\` (listed paths: ${worktreeEntries.map(e => e.path).join(', ') || '(none)'}) — the setup agent's reported runDir does not correspond to a real worktree; bailing rather than running against it.`)
-    return { error: 'Worktree setup failed closed', reason: `expected runDir ${runDir} absent from git worktree list (listed: ${worktreeEntries.map(e => e.path).join(', ') || '(none)'})`, blockId }
+    log(`WORKTREE FAIL-CLOSED for ${blockId}: expected worktree at runDir="${runDir}" is ABSENT from the worktree list porcelain output (listed paths: ${worktreeEntries.map(e => e.path).join(', ') || '(none)'}) — the setup agent's reported runDir does not correspond to a real worktree; bailing rather than running against it.`)
+    return { error: 'Worktree setup failed closed', reason: `expected runDir ${runDir} absent from worktree list (listed: ${worktreeEntries.map(e => e.path).join(', ') || '(none)'})`, blockId }
   }
   if (listedEntry.branch !== branchName) {
     log(`WORKTREE FAIL-CLOSED for ${blockId}: worktree at runDir="${runDir}" is on branch "${listedEntry.branch}" per \`git worktree list --porcelain\`, but setup reported branchName="${branchName}" — expected vs. observed mismatch; bailing rather than trusting the mismatched self-report.`)
