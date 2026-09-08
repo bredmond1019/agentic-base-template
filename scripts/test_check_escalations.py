@@ -234,6 +234,22 @@ def check_negative_field_creep() -> None:
           f"problems: {nested_problems}")
 
 
+# --- host: additive optional field (BT.8.A task 2) ----------------------------------------------
+
+def check_host_field_accepted() -> None:
+    record = _valid_record("finding", host="mac-mini-01")
+    problems = check_escalations.check_escalation_record(record)
+    check("an escalation carrying `host` validates green",
+          problems == [], f"problems: {problems}")
+
+
+def check_hostt_field_rejected() -> None:
+    record = _valid_record("finding", hostt="mac-mini-01")
+    problems = check_escalations.check_escalation_record(record)
+    check("an escalation carrying `hostt` (typo) is rejected as an unknown key",
+          any("unknown key" in p and "hostt" in p for p in problems), f"problems: {problems}")
+
+
 # --- negative: malformed JSON on a line -----------------------------------------------------------
 
 def check_negative_malformed_json_line() -> None:
@@ -528,6 +544,8 @@ def main() -> int:
     check_negative_summary_too_long()
     check_negative_bare_adjective_verified_by()
     check_negative_field_creep()
+    check_host_field_accepted()
+    check_hostt_field_rejected()
     check_negative_malformed_json_line()
     check_negative_verified_at_sha()
     check_positive_control_cli_can_fail()

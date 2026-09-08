@@ -59,13 +59,13 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
 
 REGISTRY_REQUIRED = ["agent_name", "repo", "lane", "roadmap", "started_at", "heartbeat"]
-REGISTRY_OPTIONAL = ["current_block", "block_started_at"]
+REGISTRY_OPTIONAL = ["current_block", "block_started_at", "host"]
 REGISTRY_ALLOWED = set(REGISTRY_REQUIRED) | set(REGISTRY_OPTIONAL)
 REGISTRY_SLUG_FIELDS = ("repo", "lane", "roadmap")
 REGISTRY_TIMESTAMP_FIELDS = ("started_at", "heartbeat", "block_started_at")
 
 LEASE_REQUIRED = ["repo", "lane", "agent", "acquired_at", "kind"]
-LEASE_ALLOWED = set(LEASE_REQUIRED) | {"scope", "heartbeat"}
+LEASE_ALLOWED = set(LEASE_REQUIRED) | {"scope", "heartbeat", "host"}
 LEASE_SLUG_FIELDS = ("repo", "lane")
 LEASE_TIMESTAMP_FIELDS = ("acquired_at", "heartbeat")
 LEASE_KIND_VALUES = {"exclusive", "shared"}

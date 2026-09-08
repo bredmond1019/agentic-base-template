@@ -67,7 +67,7 @@ ESCALATION_REQUIRED = [
     "ts_utc", "repo", "lane", "kind", "severity", "channel", "gate_id", "summary",
     "verified_by", "durable_home", "verified_at_sha",
 ]
-ESCALATION_ALLOWED = set(ESCALATION_REQUIRED) | {"block", "clears_when", "options"}
+ESCALATION_ALLOWED = set(ESCALATION_REQUIRED) | {"block", "clears_when", "options", "host"}
 
 # options: the operator's response options for a `channel: notification` escalation -- declared
 # by the lane at gate-definition time, never composed by the sweep script (scripted-liaison-
