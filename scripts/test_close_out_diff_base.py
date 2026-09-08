@@ -235,8 +235,12 @@ def case_a_multi_block_merge_commit(tmp: Path) -> None:
         return
     rng = resolved_range(tmp)
     n_commits = commit_count(tmp, rng)
-    if n_commits != 6:
-        fail(shape, f"range spanning 6 commits (the whole chain), never HEAD^1..HEAD alone", f"range='{rng}' spanning {n_commits} commit(s)")
+    # 6 blocks' own commits (block1..block6) PLUS the --no-ff merge commit that lands block6 = 7
+    # commits total in a correctly-resolved range base_sha(block1)..HEAD. (Corrected from an
+    # off-by-one of 6 found while implementing task 2 -- the merge commit itself is also counted
+    # by `git rev-list --count`, and was omitted from the original tally.)
+    if n_commits != 7:
+        fail(shape, f"range spanning 7 commits (6 blocks + the merge commit), never HEAD^1..HEAD alone", f"range='{rng}' spanning {n_commits} commit(s)")
 
 
 # ---------------------------------------------------------------------------
