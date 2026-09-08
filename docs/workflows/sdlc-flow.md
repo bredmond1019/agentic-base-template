@@ -35,7 +35,7 @@ A **Claude Code slash command** — type it into a Claude Code session, not a te
 |---|---|
 | `planning/my-feature/tasks.md` (and ideally `tasks.json`) | Run `/generate-tasks`. The engine derives `tasks.json` from `tasks.md` rather than bailing. |
 | A configured `planning/harness.json` | See `docs/harness-json.md` — with no config the engine falls back to the spec's `## Validation Commands`. |
-| A clean working tree | Commit or stash. A fresh run refuses to start dirty. |
+| A clean working tree | Commit or stash. A fresh run refuses to start dirty — except at a brain root (`brain.toml` present), where dirt confined to a sibling repo's vaulted `_planning/` path doesn't count (see [Isolation mode](#isolation-mode--branch-by-default---worktree-for-true-isolation)). |
 
 Every flag is in [Usage](#usage). The two decisions worth making before you start are **isolation**
 (next section) and **`--test-depth`** (default `fast`, which runs only `gates: true` checks per task).
@@ -47,6 +47,13 @@ tree** — no `trees/` worktree, no sparse-checkout. This keeps a relative `plan
 (brain-vaulted repos) intact and is cheaper. `main` stays on the branch until the PR merges; a
 fresh run refuses to start on a **dirty** working tree (commit or stash first). Pass `--worktree`
 for a genuine isolated checkout under `trees/<spec>-flow/` instead.
+
+**Brain-root exception:** at a repo root where `brain.toml` is present (the HQ vault root, where
+`repoRoot` is the whole fleet and every sibling repo's `planning/` symlinks into HQ's own git index
+under a `_planning/<repo>/` path), dirt confined entirely to `_planning/` paths does **not** trip
+this guard — that dirt belongs to another lane's in-flight sibling-repo work, not this run. Dirt
+anywhere outside a `_planning/` path still blocks the run exactly as before, and at a non-brain root
+this exception never applies — any dirt, `_planning/`-shaped or not, still blocks.
 
 `--worktree` was suspended fleet-wide from 2026-08-23 to 2026-08-28 (brain decision
 `D81-worktree-moratorium`) after three separate whole-repo-deletion incidents behind a GREEN run.
