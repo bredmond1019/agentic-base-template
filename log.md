@@ -6,6 +6,34 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-07
 
 ---
+## 2026-09-07 — BT.8.A: optional `host` in the four coordination schemas; one heartbeat writer, one format
+
+Ran `/sdlc-flow BT.8.A`, three tasks, verdict PASS. Task 1 added an optional string `host` property
+to all four coordination schemas (`lane-agent.schema.json`, `lease.schema.json`,
+`message.schema.json`, `escalation.schema.json`), keeping each `additionalProperties: false` and
+`host` non-required — additive ahead of engine-rs's `EN.15.C` Rust writer, which will stamp it. Task
+2 taught the three hand-implemented Python checkers (`check_lane_agents.py`, `check_messages.py`,
+`check_escalations.py`) to accept `host` on the top-level allowed-key set while still rejecting an
+unknown `hostt`, with fixture coverage in all three test suites — since jsonschema is installed
+nowhere in this fleet, the checkers' own key lists are what actually gate behaviour, not the synced
+schema copies. Task 3 fixed `commander_drain.sh` to stop overwriting the heartbeat a successful
+turn's own step 6 already wrote (it now only stamps a fallback on a nonzero `bastion ask` exit), and
+extracted a shared `check_heartbeat_staleness()` function — also reachable via a new
+`--check-heartbeat <file> [threshold]` CLI mode for testing — that rejects a non-epoch-seconds (e.g.
+ISO-8601) heartbeat RED by name instead of silently mis-parsing it, per BT.6.D's one-format decision.
+`docs/workflows/lane-coordination.md` updated. No genuine deviations from the spec surfaced; no
+amendment log entries filed. Next: propagation to ~27 downstream repos is deliberately deferred to
+the operator errand `OP.sync-downstream-after-coord-verbs`, which runs only after BT.8.A and BT.8.B
+have both merged and every lane is quiet — per the block record's own notes.
+
+```
+a60ad1c docs: update docs for BT.8.A
+354101b feat: implement BT.8.A-task3
+6fa4926 feat: implement BT.8.A-task2
+3c2a0ff feat: implement BT.8.A-task1
+```
+
+---
 ## 2026-09-07 — Both SDLC engines were crashing at their final stage; fixed
 
 `5448cb9`, `b182ebf3c`, `952e0c50e`.
