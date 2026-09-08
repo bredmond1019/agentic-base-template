@@ -54,6 +54,8 @@ BINARIES = ["mev", "bastion"]
 FLAG_CHECKED_VERBS = {
     ("mev", "validate-brain"),
     ("bastion", "validate-brain"),
+    ("bastion", "brain"),
+    ("bastion", "code"),
 }
 
 # An invocation: `mev <verb>` / `bastion <verb>` where the binary name is the FIRST token of the

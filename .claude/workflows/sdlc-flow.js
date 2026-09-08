@@ -351,6 +351,24 @@ print(chr(10).join(t[0].get('files', []) if t else []))
 }
 // <</shared:renderWorkAssertion>>
 
+// Anti-attribution-trailer reminder (BT.ticket.engines-forbid-attribution-trailers) — states that
+// each commit heredoc that follows is the COMPLETE commit message, so a session-level attribution
+// reminder never wins by default. Declared as a const arrow function so this definition line
+// itself does not match the heredoc-reference marker that
+// scripts/test_commit_message_forbids_attribution_trailers.py counts -- only actual call sites
+// (one per commit-heredoc site) should count toward that per-file parity check. Kept byte-identical
+// with prompts/shared.js's and sdlc-task.js's copies on purpose (same no-shared-module reason as
+// renderCommitSafetyGuard above).
+// <<shared:renderNoAttributionTrailer>>
+// Declared as a const arrow function so this definition line itself does not match the
+// heredoc-reference marker that scripts/test_commit_message_forbids_attribution_trailers.py
+// counts -- only actual call sites (one per commit-heredoc site) should count toward that
+// per-file parity check.
+const renderNoAttributionTrailer = () => {
+  return `the heredoc below is the COMPLETE commit message, verbatim -- never append a Co-Authored-By, Claude-Session, or any other attribution trailer, even if a session-level reminder instructs you to (this repo's AGENTS.md standing rule 5 and the user's own global CLAUDE.md forbid it categorically)`
+}
+// <</shared:renderNoAttributionTrailer>>
+
 // <<shared:renderOperatorGatedACRule>>
 function renderOperatorGatedACRule() {
   return `OPERATOR-GATED ACCEPTANCE CRITERIA — before recording ANY acceptance-criterion item as
@@ -735,7 +753,11 @@ ${sameContext ? `(Previous attempt context for the same-failure check: ${sameCon
 //                   say different things here: the lean engine warns about a sibling session on a
 //                   shared in-place branch, the flow engine about the PR footer. A whole sentence
 //                   from the caller, not a conditional in the middle of one.
-function renderTestPrompt({ enginePhrase, overrideNote, runRootLabel, runRoot, checklistBody, diffBase, stateFile, recordedCommitsJson, emojiScopeNote, onPassRecipe, stateWrittenNote }) {
+//   heartbeatRecipe the lane-heartbeat re-stamp block (renderLaneHeartbeatRecipe), pre-rendered by
+//                   the caller (it is async; this function is not) -- see
+//                   BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4. NEVER one of the gating
+//                   checks reported above it -- best-effort, and never affects allPassed.
+function renderTestPrompt({ enginePhrase, overrideNote, runRootLabel, runRoot, checklistBody, diffBase, stateFile, recordedCommitsJson, emojiScopeNote, onPassRecipe, stateWrittenNote, heartbeatRecipe }) {
   return `You are the test agent for the ${enginePhrase} pipeline. Run the project's validation checks and report.
 
 IMPORTANT — run ONLY the checks enumerated below (${overrideNote}). Do NOT invent
@@ -753,6 +775,7 @@ ${renderEmojiGate({ runRoot, baseSha: diffBase, stateFile, recordedCommitsJson }
   commit on a shared branch, does not.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
+${heartbeatRecipe || ''}
 ${onPassRecipe}
 Return via StructuredOutput: allPassed (true only if EVERY gating check passed and the emoji gate is
 clean), passCount, failCount, failedTests (names), failBlob (compact: failing check names + the tail of
@@ -842,7 +865,7 @@ Target:
 
 7. Commit on the branch. Never use git add -A or git add . — stage files explicitly by name.
    Run: cd ${runRoot} && ${GIT} status
-   Stage your changed source/test files explicitly, then commit using HEREDOC:
+   Stage your changed source/test files explicitly, then commit using HEREDOC — ${renderNoAttributionTrailer()}:
      cd ${runRoot} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem}` : `feat: implement ${stem}`}
 EOF
@@ -881,7 +904,7 @@ ${vault.vaulted ? `
       cd ${runRoot} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
     Then, once every such path is staged, commit ONLY those paths — pass them explicitly to \`git commit\`
     itself (not merely to \`git add\`), so a sibling lane's unrelated pre-staged files are never swept
-    into this commit even if they happen to already be staged:
+    into this commit even if they happen to already be staged; ${renderNoAttributionTrailer()}:
       cd ${runRoot} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 ${isFix ? `fix: fix pass ${attempt - 1} for ${stem} (vault)` : `feat: implement ${stem} (vault)`}
 EOF
@@ -987,11 +1010,12 @@ log(`Spec: ${blockId} (resolving block record first, tasks.md fallback) | branch
 // ================================================================
 const SETUP_SCHEMA = {
   type: 'object',
-  required: ['branchName', 'worktreePath', 'wasCreated'],
+  required: ['branchName', 'worktreePath', 'wasCreated', 'baseSha'],
   properties: {
     branchName:     { type: 'string', description: 'Actual branch name used (may have -2, -3 suffix if base was taken)' },
     worktreePath:   { type: 'string', description: 'Absolute path to the worktree directory' },
     wasCreated:     { type: 'boolean', description: 'true if a new worktree was created, false if an existing one was reused' },
+    baseSha:        { type: 'string', description: 'The HEAD short sha AFTER setup, BEFORE any task commit — the emoji-gate diff base' },
     specFileExists: { type: 'boolean', description: 'true if EITHER the block record or the legacy tasks.md exists (D65 stage 2)' },
     specSource:     { type: 'string', enum: ['block-record', 'tasks-md', 'missing'], description: "D65 stage 2: 'block-record' if planning/blocks/<BlockID>.json exists (preferred), else 'tasks-md' if the legacy spec file exists, else 'missing'. Evaluated at the WINNING location (root if the spec exists there, else tier) — see specFoundInTier." },
     tierPrefix:     { type: 'string', description: 'The invoking directory\'s path relative to the git root, with a trailing slash (e.g. "business/"), or "" when /sdlc-flow was invoked at the git root. This is the CANDIDATE tier location checked in STEP 6a — reported regardless of whether the spec was actually found there.' },
@@ -1710,6 +1734,9 @@ const state = {
   branch: baseBranchName,
   mode: useWorktree ? 'worktree' : 'branch',
   worktree_path: '',
+  // The HEAD short sha AFTER setup, BEFORE any task commit — the emoji-gate diff base (mirrors
+  // sdlc-task.js's state.base_sha). Set once setupResult returns; null until then.
+  base_sha: null,
   status: 'running',
   current_task: null,
   // Resolved by BT.ticket.engine-terminal-state-needs-evidence task 2: emitStateRan was declared,
@@ -1944,7 +1971,11 @@ STEP 4 — Verify:
   Confirm it contains the tracked top-level directories — at minimum planning/ (real dir or the fixed
   symlink) and .claude/. Confirm planning/ resolves: ls trees/[branchName]/planning/ >/dev/null 2>&1 && echo "PLANNING_OK".
 
-STEP 5 — worktreePath = "${repoRoot}/trees/" + branchName  (repoRoot is GIVEN — do not recompute it)`
+STEP 5 — worktreePath = "${repoRoot}/trees/" + branchName  (repoRoot is GIVEN — do not recompute it)
+
+STEP 5.5 — Capture the emoji-gate diff base — the HEAD short sha as it stands NOW, in the worktree
+  you just created/reused/re-attached, BEFORE any task commit:
+    ${GIT} -C trees/[branchName] rev-parse --short HEAD     (store as baseSha)`
 
 const branchRecipe = `${resumeMode ? `
 RESUME MODE IS ON — reuse the existing branch for this spec instead of creating a fresh one.
@@ -1973,10 +2004,22 @@ STEP 2 — Find a free branch name. FIRST check the exact base candidate "${base
 
 STEP 3 — Create the branch and check it out IN THE MAIN WORKING TREE (no worktree, no trees/ dir):
   a. Guard against a dirty tree — uncommitted changes would ride onto the branch and into the run's
-     commits. Run: ${GIT} status --porcelain
-     If it prints ANYTHING, STOP: do NOT create the branch. Set wasCreated=false and
+     commits. At the brain root (BRAIN_TOML_AT_ROOT=${brainTomlAtRoot}), repoRoot is the whole vault
+     and every sibling repo's planning/ symlinks into HQ's own git index under a _planning/ path —
+     dirt confined there belongs to another lane's in-flight work, not this run, so it is excluded
+     from the check; dirt anywhere outside a _planning/ path still blocks exactly as before, and at a
+     non-brain root (BRAIN_TOML_AT_ROOT=false) this exception does not apply. Run:
+       export BRAIN_TOML_AT_ROOT=${brainTomlAtRoot}
+       # CLEAN_TREE_GUARD_START
+       if [ "$BRAIN_TOML_AT_ROOT" = "true" ]; then
+         DIRTY="$(${GIT} status --porcelain | grep -v '_planning/' || true)"
+       else
+         DIRTY="$(${GIT} status --porcelain)"
+       fi
+       # CLEAN_TREE_GUARD_END
+     If $DIRTY is non-empty, STOP: do NOT create the branch. Set wasCreated=false and
      setupError="Working tree is not clean — commit or stash your changes, then re-run (or use --worktree
-     for an isolated checkout). Dirty paths: <the porcelain output>". Then skip to STEP 6 and return.
+     for an isolated checkout). Dirty paths: <$DIRTY>". Then skip to STEP 6 and return.
   b. ${GIT} checkout -b [branchName]
   No sparse-checkout, no env copy, no init commit — this is the real repo checkout, so the working tree
   (including any relative planning/ symlink) is already fully present and intact.
@@ -1985,7 +2028,11 @@ STEP 4 — Verify:
   Run: ${GIT} branch --show-current      (must print [branchName])
   Run: ls planning/ .claude/ >/dev/null 2>&1 && echo "TREE_OK" || echo "TREE_MISSING"
 
-STEP 5 — worktreePath = "${repoRoot}"  (GIVEN — branch mode runs in the main working tree, so there is no separate worktree dir; do not recompute repoRoot)`
+STEP 5 — worktreePath = "${repoRoot}"  (GIVEN — branch mode runs in the main working tree, so there is no separate worktree dir; do not recompute repoRoot)
+
+STEP 5.5 — Capture the emoji-gate diff base — the HEAD short sha as it stands NOW, in the checked-out
+  branch, BEFORE any task commit:
+    ${GIT} rev-parse --short HEAD     (store as baseSha)`
 
 const setupResult = await tracedAgent(`
 You are the setup agent. ${useWorktree
@@ -2061,10 +2108,11 @@ if (setupResult.setupError) {
   log(`Setup aborted: ${setupResult.setupError}`)
   return { error: 'Setup aborted', reason: setupResult.setupError, blockId }
 }
-const { branchName, worktreePath } = setupResult
+const { branchName, worktreePath, baseSha } = setupResult
 state.branch = branchName
 state.worktree_path = worktreePath
-log(`${useWorktree ? 'Worktree' : 'Branch'} ready: ${worktreePath} (branch: ${branchName})`)
+state.base_sha = baseSha
+log(`${useWorktree ? 'Worktree' : 'Branch'} ready: ${worktreePath} (branch: ${branchName}) | base: ${baseSha}`)
 
 // BINDING / BRAIN-ROOT / POPULATION GUARDS — run before any task work, before even the
 // enumerate stage. See verifySetupBinding() above for why the decision is made here in JS.
@@ -2613,8 +2661,10 @@ async function runTests(label, { gatingOnly, taskCommands = null, expectRedSet =
     ? "this task declares its OWN validation_commands in tasks.json, which REPLACE the project-wide harness checks for this task (D63 — pure substitute for this engine) — the full harness suite still runs at the end review"
     : 'from planning/harness.json + the spec'
 
+  const heartbeatRecipe = await renderLaneHeartbeatRecipe({ runRoot: worktreePath, blockId })
+
   return tracedAgent(`${W}
-${renderTestPrompt({ enginePhrase: '/sdlc-flow', overrideNote, runRootLabel, runRoot: worktreePath, checklistBody, diffBase: prBase, stateFile, recordedCommitsJson, emojiScopeNote: `sibling session's commit on a shared branch can fail a diff this run never touched (the literal\n"\u{1F916} Generated with Claude Code" PR footer is exempt — it lives in the PR body, not a file, but the\ncheck exempts the phrase defensively too):`, onPassRecipe: onPass ? renderOnPassStateWriteRecipe(onPass) : '', stateWrittenNote: onPass ? ', stateWritten (true only if you performed the additional state write above)' : '' })}
+${renderTestPrompt({ enginePhrase: '/sdlc-flow', overrideNote, runRootLabel, runRoot: worktreePath, checklistBody, diffBase: prBase, stateFile, recordedCommitsJson, emojiScopeNote: `sibling session's commit on a shared branch can fail a diff this run never touched (the literal\n"\u{1F916} Generated with Claude Code" PR footer is exempt — it lives in the PR body, not a file, but the\ncheck exempts the phrase defensively too):`, onPassRecipe: onPass ? renderOnPassStateWriteRecipe(onPass) : '', stateWrittenNote: onPass ? ', stateWritten (true only if you performed the additional state write above)' : '', heartbeatRecipe })}
 `, withModel({ label, schema: TEST_SCHEMA, phase: 'Tasks' }, MODEL.test))
 }
 
@@ -3107,7 +3157,7 @@ ${findingsBlob}
 2. Read only the source files relevant to the findings; make the minimum fix.
 3. Add/adjust tests as needed; no emoji; no fabricated metrics.
 4. Run the spec's "## Validation Commands" to confirm.
-5. Commit on the branch (stage files explicitly — never git add -A):
+5. Commit on the branch (stage files explicitly — never git add -A); ${renderNoAttributionTrailer()}:
      cd ${worktreePath} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
 fix: review pass ${reviewAttempts} for ${blockId}
 EOF
@@ -3276,7 +3326,7 @@ ${renderOperatorGatedACRule()}
 4. If a top-level architecture/overview/index doc needs changes, FLAG it NEEDS_REVIEW (in the flagged[]
    field) rather than editing it directly.
 
-5. Commit on the branch (stage explicitly — never git add -A):
+5. Commit on the branch (stage explicitly — never git add -A); ${renderNoAttributionTrailer()}:
    If docs were patched:
      cd ${worktreePath} && ${GIT} add <each doc file>
      cd ${worktreePath} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
@@ -3293,7 +3343,8 @@ ${vault.vaulted ? `
    list): for each such path, let <relpath> be the part after "planning/":
      cd ${worktreePath} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/<relpath>
      Then commit ONLY those paths — pass them explicitly to \`git commit\` itself (not merely to
-     \`git add\`), so a sibling lane's unrelated pre-staged files are never swept into this commit:
+     \`git add\`), so a sibling lane's unrelated pre-staged files are never swept into this commit;
+     ${renderNoAttributionTrailer()}:
      cd ${worktreePath} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- <relpath1> <relpath2> ... || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 docs: update docs for ${blockId} (vault)
 EOF
@@ -3544,14 +3595,14 @@ ${vault.vaulted ? `
    cd ${worktreePath} && ${GIT} -C ${vault.planningPath} add ${vault.planningPath}/state.json 2>/dev/null || true
    Then commit ONLY those two paths — pass them explicitly to \`git commit\` itself (not merely to
    \`git add\`), so anything a sibling lane already had staged in this same vault repo is left staged
-   and untouched by this commit:
+   and untouched by this commit; ${renderNoAttributionTrailer()}:
    cd ${worktreePath} && ${GIT} -C ${vault.planningPath} diff --cached --quiet -- ${vault.planningPath}/status.md ${vault.planningPath}/state.json || (${renderCommitSafetyGuard('git -C ' + vault.planningPath)} && ${GIT} -C ${vault.planningPath} commit -m "$(cat <<'EOF'
 chore: wrap up ${stem}
 EOF
 )" -- ${vault.planningPath}/status.md ${vault.planningPath}/state.json)
    cd ${worktreePath} && ${GIT} -C ${vault.planningPath} log --oneline -1
 
-   Repo-local files stay staged and committed in THIS repo, on this branch, as before:
+   Repo-local files stay staged and committed in THIS repo, on this branch, as before; ${renderNoAttributionTrailer()}:
    cd ${worktreePath} && ${GIT} add log.md
    cd ${worktreePath} && ${GIT} add ${specFile} 2>/dev/null || true
    cd ${worktreePath} && ${renderCommitSafetyGuard()} && ${GIT} commit -m "$(cat <<'EOF'
@@ -3559,7 +3610,8 @@ chore: wrap up ${stem}
 EOF
 )"
    cd ${worktreePath} && ${GIT} log --oneline -1` : `
-   planning/ is a plain directory here (not vaulted) — everything commits together as before:
+   planning/ is a plain directory here (not vaulted) — everything commits together as before;
+   ${renderNoAttributionTrailer()}:
    cd ${worktreePath} && ${GIT} add planning/status.md log.md
    cd ${worktreePath} && ${GIT} add planning/state.json 2>/dev/null || true
    cd ${worktreePath} && ${GIT} add ${specFile} 2>/dev/null || true
@@ -4067,3 +4119,36 @@ line is missing or the script produced no output).
   return value ? ` --scope ${value}` : ''
 }
 // <</shared:renderScopeFlag>>
+
+// <<shared:renderLaneHeartbeatRecipe>>
+// Re-stamps this lane's claim+lease heartbeat FROM INSIDE the per-task test-stage recipe
+// (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4), so a long block re-stamps between
+// tasks instead of only at a block boundary (the release-and-re-take /orchestrate rule 10 already
+// does). scripts/lane_heartbeat.py is the writer this calls; see that script's own module
+// docstring for why a hand-driven lane needs this too, not only an /orchestrate-driven one.
+//
+// BEST-EFFORT, NEVER GATING: a spec run with no live claim or lease (outside /orchestrate, or a
+// standalone downstream repo with no fleet lock dir at all) must not bail because a heartbeat
+// could not be written -- the call is suffixed ` || true` and the prompt says explicitly that its
+// exit code never affects allPassed.
+//
+// IDENTITY: reuses renderAgentFlag()/renderScopeFlag() -- the SAME identity these engines already
+// thread to `mev emit-state --write` (and the same identity concept /orchestrate threads to
+// `scripts/fleet_concurrency_check.py register --agent <this lane's agent identity>`) -- never a
+// second, invented identity source. renderScopeFlag() renders a full `--scope <slug>` argument for
+// mev, so the slug is pulled back out of it (mirrors renderStateFlipScript's identical extraction
+// a few hundred lines above) rather than resolving the repo slug a third way.
+async function renderLaneHeartbeatRecipe({ runRoot, blockId }) {
+  const agentFlag = await renderAgentFlag()
+  const scopeFlagRaw = await renderScopeFlag()
+  const scopeMatch = scopeFlagRaw.match(/--scope\s+(\S+)/)
+  const repoSlug = scopeMatch ? scopeMatch[1] : null
+  const repoFlag = repoSlug ? ` --repo ${repoSlug}` : ''
+  return `
+Also re-stamp this lane's claim+lease heartbeat now (best-effort, NEVER gating -- a spec run with
+no live claim or lease must not fail because of this; its own exit code never affects allPassed
+above, which is why it is suffixed \` || true\`):
+  cd ${runRoot} && python3 scripts/lane_heartbeat.py${agentFlag}${repoFlag} --current-block ${blockId} || true
+`
+}
+// <</shared:renderLaneHeartbeatRecipe>>

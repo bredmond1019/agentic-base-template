@@ -84,6 +84,16 @@ class TestCheckCliInvocations(unittest.TestCase):
         # guards against.
         self.assertEqual(self.run_check("`mev refuses to start without a lock`\n"), 1)
 
+    def test_bastion_brain_real_flag_passes(self):
+        self.assertEqual(
+            self.run_check("`bastion brain --dependents X`\n"), 0
+        )
+
+    def test_bastion_brain_bad_flag_fails(self):
+        self.assertEqual(
+            self.run_check("`bastion brain --depends-on X`\n"), 1
+        )
+
     def test_unchecked_verb_flags_are_not_flagged(self):
         # frontier is a real verb but not in FLAG_CHECKED_VERBS -- an invented flag on it must not
         # be flagged, since this gate deliberately does not cover every verb's flags (see module

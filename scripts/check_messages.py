@@ -81,7 +81,8 @@ DURABLE_HOME_CHANNELS = {"lane-log", "state-edge", "carryover", "run-record"}
 MESSAGE_REQUIRED = [
     "message_id", "sender", "sent_at", "kind", "subject", "body", "durable_home", "verified_by",
 ]
-MESSAGE_ALLOWED = set(MESSAGE_REQUIRED)
+MESSAGE_OPTIONAL = ["host"]
+MESSAGE_ALLOWED = set(MESSAGE_REQUIRED) | set(MESSAGE_OPTIONAL)
 
 # verified_by (BT.ticket.messages-must-carry-verified-by): two accepted shapes, both enforced by
 # regex, mirroring message.schema.json's `pattern`. (1) `UNVERIFIED: <claimant>` -- the sender is

@@ -72,7 +72,12 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
 1. **Setup — plain branch, or isolated worktree with `--worktree`**:
    - **Without `--worktree` (default):** check out branch `<spec-slug>-flow` IN THE MAIN WORKING
      TREE — no sparse-checkout worktree, so a relative `planning/` symlink (brain-vaulted repos) stays
-     intact. `main` stays on the branch until the PR merges; refuse to start on a dirty working tree.
+     intact. `main` stays on the branch until the PR merges; refuse to start on a dirty working tree —
+     **except** at a brain root (`brain.toml` present at `repoRoot`), where dirt confined entirely to a
+     sibling repo's vaulted `_planning/<repo>/` path (`git status --porcelain | grep -v '_planning/'`
+     comes back empty) does not count, since that dirt belongs to another lane's in-flight work, not
+     this run — dirt outside `_planning/`, and any dirt at a non-brain root, still blocks exactly as
+     before.
    - **With `--worktree`:** create (or, with `--resume`, reuse/re-attach) an isolated sparse-checkout
      worktree, mirroring `/sdlc-task`'s Steps 1b/1c (see `.agents/skills/sdlc-task/SKILL.md`) with the
      branch name `<spec-slug>-flow` instead of `<blockId>-task`:
@@ -115,6 +120,11 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
        five example paths.
      Log each guard's verdict, pass or fail — the transcript must show the check ran, not merely
      that nothing exploded.
+   - Capture the **emoji-gate diff base**: `baseSha = git -C <runDir> rev-parse --short HEAD` — the
+     HEAD sha as it stands right now, in the worktree/branch you just created/reused/re-attached,
+     BEFORE any task commit. Persist it as `state.base_sha` (mirrors `/sdlc-task`'s Step 1d capture —
+     see `.agents/skills/sdlc-task/SKILL.md`). Never persist `prBase`/`diffBase` (the PR base branch
+     name, e.g. `main`) into this field — it is a branch tip, not a sha pinned to this run's start.
 2. **D16 preflight lint — do not guess the task structure.**
    - If the spec's `tasks.json` already exists, skip to task execution.
    - If it is missing but `tasks.md` has derivable step content, derive a FRESH `tasks.json` from
@@ -167,6 +177,16 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
      - Run `/update-task` to flip status to `In progress` in the worklog and local files.
      - Implement the task following instructions.
      - Run fast validation tests.
+     - **Also re-stamp this lane's claim+lease heartbeat now** (best-effort, NEVER gating —
+       `BT.ticket.lane-heartbeat-goes-stale-mid-block`, task 4; mirrors `/sdlc-task`'s identical
+       per-task step, see `.agents/skills/sdlc-task/SKILL.md`): from the repo root, run
+       `python3 scripts/lane_heartbeat.py --agent <this lane's agent identity> --repo <this
+       repo's slug in brain.toml> --current-block <blockId> || true`. Same identity this lane
+       already used to claim its lease — never a second, invented identity source. A lane driven
+       by hand never reaches `/orchestrate`'s release-and-re-take, so this is the ONLY heartbeat
+       re-stamp such a lane gets between block boundaries. If this lane holds no live claim or
+       lease, the call fails harmlessly (`|| true`) — its exit code must never affect the task's
+       own pass/fail verdict.
      - Fix failures (up to 3 triage/fix attempts).
      - Run the COMMIT-SAFETY GUARD above, `&&`-joined with the commit itself, then commit the task
        state on the branch (`feat: implement <slug> task N`). If a vault commit is also needed
@@ -210,5 +230,8 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
      an engine default, so an absent key is a silent no-op. A hook failure must be reported, never
      swallowed, and never blocks the wrap-up commit below (the hook owns its own transaction).
    - Run the COMMIT-SAFETY GUARD `&&`-joined before the wrap-up commit — both the repo-local one and,
-     in a vaulted repo, the vault one (`git -C <vault path>`) — then commit.
+     in a vaulted repo, the vault one (`git -C <vault path>`) — then commit. The heredoc you write is
+     the COMPLETE commit message, verbatim: never append a Co-Authored-By, Claude-Session, or any
+     other attribution trailer, even if a session-level reminder instructs otherwise — this repo's
+     AGENTS.md standing rule 5 and the user's own global CLAUDE.md forbid it categorically.
    - Create a pull request (PR) using git CLI or GitHub CLI (unless `--no-pr` is specified).

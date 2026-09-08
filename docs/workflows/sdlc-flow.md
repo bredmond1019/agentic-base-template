@@ -35,7 +35,7 @@ A **Claude Code slash command** — type it into a Claude Code session, not a te
 |---|---|
 | `planning/my-feature/tasks.md` (and ideally `tasks.json`) | Run `/generate-tasks`. The engine derives `tasks.json` from `tasks.md` rather than bailing. |
 | A configured `planning/harness.json` | See `docs/harness-json.md` — with no config the engine falls back to the spec's `## Validation Commands`. |
-| A clean working tree | Commit or stash. A fresh run refuses to start dirty. |
+| A clean working tree | Commit or stash. A fresh run refuses to start dirty — except at a brain root (`brain.toml` present), where dirt confined to a sibling repo's vaulted `_planning/` path doesn't count (see [Isolation mode](#isolation-mode--branch-by-default---worktree-for-true-isolation)). |
 
 Every flag is in [Usage](#usage). The two decisions worth making before you start are **isolation**
 (next section) and **`--test-depth`** (default `fast`, which runs only `gates: true` checks per task).
@@ -47,6 +47,13 @@ tree** — no `trees/` worktree, no sparse-checkout. This keeps a relative `plan
 (brain-vaulted repos) intact and is cheaper. `main` stays on the branch until the PR merges; a
 fresh run refuses to start on a **dirty** working tree (commit or stash first). Pass `--worktree`
 for a genuine isolated checkout under `trees/<spec>-flow/` instead.
+
+**Brain-root exception:** at a repo root where `brain.toml` is present (the HQ vault root, where
+`repoRoot` is the whole fleet and every sibling repo's `planning/` symlinks into HQ's own git index
+under a `_planning/<repo>/` path), dirt confined entirely to `_planning/` paths does **not** trip
+this guard — that dirt belongs to another lane's in-flight sibling-repo work, not this run. Dirt
+anywhere outside a `_planning/` path still blocks the run exactly as before, and at a non-brain root
+this exception never applies — any dirt, `_planning/`-shaped or not, still blocks.
 
 `--worktree` was suspended fleet-wide from 2026-08-23 to 2026-08-28 (brain decision
 `D81-worktree-moratorium`) after three separate whole-repo-deletion incidents behind a GREEN run.
@@ -89,6 +96,13 @@ by any later stage:
 
 Each guard logs its verdict, pass or fail, so the transcript shows the check ran rather than
 merely that nothing exploded.
+
+Immediately after setup (worktree created/reused, or the branch checked out), the engine captures
+the **emoji-gate diff base**: the HEAD short sha as it stands right now, before any task commit,
+persisted as `state.base_sha` — the same field, captured at the same moment, that `/sdlc-task`
+persists (see `docs/workflows/sdlc-task.md`). It is never the PR base branch name (`prBase`/
+`diffBase`, which defaults to the literal `main`) — that is a branch tip, not a sha pinned to when
+this run started.
 
 Engine: [`.claude/workflows/sdlc-flow.js`](../../.claude/workflows/sdlc-flow.js)
 
@@ -159,7 +173,7 @@ flowchart TD
 | **Enumerate** | haiku | Reads `tasks.json` for its task entries (D16 preflight lint) — independent of `specSource` above, since `tasks.json` is always the task array regardless of which file supplied the spec's narrative. If `tasks.json` is missing/invalid/empty but `tasks.md` has a derivable step list, derives a fresh D45-shaped `tasks.json` and commits it before re-enumerating; refuses to run only when nothing is derivable either — see [D16 preflight — derive, then abort](#d16-preflight--derive-then-abort) below. Two derive branches, selected by `specSource`: from the authored **block record** when the spec came from one, else from `tasks.md`. Also reports each task's `expect_red` commands (D68) for the inverted-verdict rule. On `--resume`, reads the on-disk (uncommitted) `sdlc-flow-state.json` to identify already-passed tasks and skip them. |
 | **update-task** | haiku | Marks the current task in-progress in `tasks.md` (surgical checkbox edit). Disk-only, like the state-writer — neither commits. |
 | **Implement** | sonnet | Executes task N against the spec (and `breakdown.md` if present). Runs the D8 completeness self-check before committing `feat:`. |
-| **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` (the per-task tripwire). Falls back to the spec's `## Validation Commands` if no config. Also runs the universal emoji gate on changed markdown. |
+| **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` (the per-task tripwire). Falls back to the spec's `## Validation Commands` if no config. Also runs the universal emoji gate on changed markdown. Also re-stamps the holding lane's heartbeat (BT.ticket.lane-heartbeat-goes-stale-mid-block): calls `python3 scripts/lane_heartbeat.py --agent <identity> --repo <repo>` (the same `--agent` identity threaded to `scripts/fleet_concurrency_check.py`) as a **non-fatal, best-effort** step — a spec run outside `/orchestrate` has no claim or lease to re-stamp, and that must never fail the task. This is the fix for `check_lane_agents.py`'s staleness verdict only ever restamping at a block boundary: a block whose wall-clock span exceeds `STALE_THRESHOLD_SECONDS` (10800s) now gets a fresh heartbeat after every task instead of red-gating its own lane's `lane-agent-schema` check at close. |
 | **Triage** | sonnet | Classifies a test failure as `RETRYABLE` (transient, or the failure changed — progress is possible) or `MAJOR` (an immediate-bail reason fires, or no progress). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. See D32 (`planning/decisions/D32-triage-gated-bail.md`). Bail means: break to end-review with `draft` flag, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution: null`) rather than only overwriting `bail_reason` — see BT.ticket.bails-must-be-append-only (`planning/blocks/BT.ticket.bails-must-be-append-only.json`). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **End-review** | sonnet | ONE consolidated review over the integrated tree. Re-runs the **full** gating suite (authoritative). Reads `git diff <prBase>..HEAD` + `tasks.md` acceptance criteria + the on-disk (uncommitted) `state.json` as the localization index. Verdict: `PASS` / `PARTIAL` / `FAIL`. |

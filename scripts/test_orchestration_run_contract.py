@@ -108,7 +108,21 @@ from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-VALID_LIFECYCLES = {"active", "lane-complete", "consolidated"}
+VALID_LIFECYCLES = {"active", "lane-complete", "consolidated", "paused"}
+
+# String forms `parse_frontmatter` can hand back for an explicit YAML null -- it is a
+# line-oriented scalar parser (see its docstring), so `run_ended: null` never becomes Python
+# `None`, it becomes the literal string "null". A live lane's own record must be able to write
+# either the bare field-absent form or this explicit-null form and have both read as "not set".
+_NULL_TOKENS = {"null", "none", "~"}
+
+
+def _run_ended_is_set(run_ended: Optional[str]) -> bool:
+    """True only when `run_ended` carries an actual date -- absent and explicit-null both read
+    as "not set" (the shape a live lane's own record must be able to hold)."""
+    if run_ended is None:
+        return False
+    return run_ended.strip().lower() not in _NULL_TOKENS
 
 # Path segment names that are vault/index plumbing, not a repo's own name -- skipped when
 # walking upward from an `orchestration-run/<roadmap-slug>/` record to find the repo slug.
@@ -124,6 +138,7 @@ class Record:
     doc_id: Optional[str]
     lifecycle: Optional[str]
     consolidated_by: Optional[str]
+    run_ended: Optional[str]
 
     @property
     def expected_doc_id(self) -> str:
@@ -220,6 +235,7 @@ def record_from_content(path: Path, text: str) -> Optional[Record]:
         doc_id=fm.get("doc_id"),
         lifecycle=fm.get("lifecycle"),
         consolidated_by=fm.get("consolidated_by"),
+        run_ended=fm.get("run_ended"),
     )
 
 
@@ -290,6 +306,18 @@ def check_records(records: list[Record]) -> list[str]:
         if rec.lifecycle not in VALID_LIFECYCLES:
             violations.append(
                 f"{loc}: lifecycle {rec.lifecycle!r} is not one of {sorted(VALID_LIFECYCLES)}"
+            )
+
+        # RULE C -- STAMP TIMING: `run_ended` is stamped at lane close, never at creation (D57 +
+        # the begin-orchestration template comment already say this; only the practice drifted).
+        # So while `lifecycle: active`, `run_ended` must be absent or explicitly null -- a live
+        # lane's own record has to be able to hold that shape. Only `active` forbids the field;
+        # `paused` (RULE D) may carry a `run_ended` date or not, no rule cares either way.
+        if rec.lifecycle == "active" and _run_ended_is_set(rec.run_ended):
+            violations.append(
+                f"{loc}: lifecycle {rec.lifecycle!r} forbids a non-null run_ended "
+                f"(found run_ended={rec.run_ended!r}) -- run_ended is stamped at lane close, "
+                f"not at record creation"
             )
 
         # RULE B -- only the "claims consolidated with no attribution" direction is a violation;
@@ -887,7 +915,9 @@ def self_test() -> int:
                 "roadmap": "demo-roadmap",
                 "lane": "C1",
                 "run_started": "2026-08-11",
-                "run_ended": "2026-08-11",
+                # run_ended intentionally absent -- lifecycle: active forbids a non-null
+                # run_ended as of RULE C; this fixture is testing repo-slug resolution, not the
+                # stamp-timing rule, so it must not trip on it.
                 "lifecycle": "active",
                 "doc_id": "agentic-portfolio-orchestration-run-demo-roadmap-review",
             },
@@ -901,11 +931,14 @@ def self_test() -> int:
     # (g) end-to-end discovery: -L -uu realpath-deduped sweep over a synthetic fleet.
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
+        # run_ended intentionally absent on both halves -- lifecycle: active forbids a
+        # non-null run_ended as of RULE C; this fixture is testing end-to-end discovery/dedup
+        # counts, not the stamp-timing rule, so it must not trip on it (RULE C, task 2).
         _write_record(
             base, "repo-a", "roadmap-x", "notes.md",
             {
                 "roadmap": "roadmap-x", "lane": "C1", "run_started": "2026-08-11",
-                "run_ended": "2026-08-11", "lifecycle": "active",
+                "lifecycle": "active",
                 "doc_id": "repo-a-orchestration-run-roadmap-x",
             },
         )
@@ -913,7 +946,7 @@ def self_test() -> int:
             base, "repo-a", "roadmap-x", "review.md",
             {
                 "roadmap": "roadmap-x", "lane": "C1", "run_started": "2026-08-11",
-                "run_ended": "2026-08-11", "lifecycle": "active",
+                "lifecycle": "active",
                 "doc_id": "repo-a-orchestration-run-roadmap-x-review",
             },
         )
@@ -1088,8 +1121,14 @@ def self_test() -> int:
 
         # Proven negative: baseline still unresolvable, but the corpus is well-formed -- fail
         # closed must not block UNCONDITIONALLY, only when there is an actual violation to find.
+        # `lifecycle: lane-complete` here (not `_WELL_FORMED_FM`'s default `active`) so the fixture
+        # stays RULE-C-clean regardless of `run_ended` -- this case is about baseline resolution,
+        # not stamp timing.
         base2 = Path(td) / "negative"
-        _write_record(base2, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
+        _write_record(
+            base2, "demo-repo", "demo-roadmap", "notes.md",
+            {**_WELL_FORMED_FM, "lifecycle": "lane-complete"},
+        )
         rc2, _ = _run_corpus_mode(base2)
         check("(l) negative: baseline-unresolvable with no violations still exits 0", rc2 == 0)
 
@@ -1210,10 +1249,10 @@ def self_test() -> int:
     # asserted as a violation above. This fixture is the carve-out's control, not new coverage.
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
-        path = _write_record(
-            base, "demo-repo", "demo-roadmap", "notes.md",
-            {**_WELL_FORMED_FM, "consolidated_by": "pattern-analysis-2026-09-03.md"},  # lifecycle stays "active"
-        )
+        fm = {**_WELL_FORMED_FM, "consolidated_by": "pattern-analysis-2026-09-03.md"}  # lifecycle stays "active"
+        del fm["run_ended"]  # RULE C forbids active + a non-null run_ended; orthogonal to this
+        # carve-out, which is specifically about consolidated_by, so keep the record RULE-C-clean.
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", fm)
         rec = load_record(path)
         assert rec is not None
         violations = check_records([rec])
@@ -1233,6 +1272,110 @@ def self_test() -> int:
         assert rec is not None
         violations = check_records([rec])
         check("(o) clean full stamp (consolidated + consolidated_by) passes (control)", violations == [])
+
+    # -------------------------------------------------------------------------------------------
+    # (p) Lifecycle stamp-timing fixtures (BT.ticket.run-record-lifecycle-must-be-gated-and-agree-
+    # across-its-pair task 1). TWO NEW RULES the checker does not implement yet -- that is task 2's
+    # job, not this one:
+    #
+    #   RULE C -- STAMP TIMING: `lifecycle: active` with a non-null `run_ended` date is REJECTED --
+    #   a live lane's own record must be able to hold `run_ended` absent or explicitly null.
+    #   RULE D -- VOCABULARY: `paused` becomes a valid lifecycle value and does not fail the check
+    #   on its own, whether or not it carries a `run_ended` date -- only `active` forbids the field.
+    #
+    # The three non-control cases below assert the rules' DESIRED end-state behavior against
+    # `check_records`/`Record`/`VALID_LIFECYCLES` as they exist TODAY (unfixed): `Record` has no
+    # `run_ended` field at all, `check_records` never inspects one, and `paused` is not a member of
+    # `VALID_LIFECYCLES`, so none of the three can pass yet. That failure is DELIBERATE -- it is the
+    # RED half of this ticket's red/green split across task 1 and task 2, and these fixtures turn
+    # GREEN in task 2 with no further change to them. The two control cases below
+    # (active-without-run_ended, active-with-explicit-null) pass both before and after -- they prove
+    # the new rule doesn't fire on the shape a live lane's own record must be able to hold, and are
+    # not new coverage. Do NOT touch VALID_LIFECYCLES or check_records in this task -- that is
+    # task 2's job; this task only proves the gap.
+    #
+    # OBSERVED RED (captured verbatim 2026-09-07 running
+    # `python3 scripts/test_orchestration_run_contract.py --self-test` against this file BEFORE
+    # task 2's fix landed) -- quoted verbatim into planning/harness.json in task 5:
+    #   FAIL (p) active with a run_ended date is rejected -- RULE C, unimplemented as of task 1 (watched RED; task 2 makes this GREEN)
+    #   FAIL (p) paused lifecycle passes -- RULE D, unimplemented as of task 1 (watched RED; task 2 makes this GREEN)
+    #   FAIL (p) paused lifecycle with a run_ended date passes -- RULE D, unimplemented as of task 1 (watched RED; task 2 makes this GREEN)
+    # (the two controls below -- active without run_ended, active with explicit null run_ended --
+    # passed in that same run, as expected of a control)
+    # -------------------------------------------------------------------------------------------
+
+    # RULE C, non-control: lifecycle: active WITH a run_ended date -> must be rejected, and the
+    # message names the file plus both field values (task 2's job; this task only proves the gap).
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", dict(_WELL_FORMED_FM))
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check(
+            "(p) active with a run_ended date is rejected -- RULE C, unimplemented as of task 1 "
+            "(watched RED; task 2 makes this GREEN)",
+            any("run_ended" in v for v in violations),
+        )
+
+    # Control: lifecycle: active with run_ended ABSENT -> the shape a live lane's own record must
+    # be able to hold. Passes now (check_records ignores run_ended entirely) and must still pass
+    # after task 2.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        fm = dict(_WELL_FORMED_FM)
+        del fm["run_ended"]
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", fm)
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check("(p) active without run_ended passes (control)", violations == [])
+
+    # Control: lifecycle: active with run_ended EXPLICITLY NULL -> the other shape a live lane's
+    # own record must be able to hold. Passes now and must still pass after task 2.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        fm = dict(_WELL_FORMED_FM)
+        fm["run_ended"] = "null"
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", fm)
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check("(p) active with explicit null run_ended passes (control)", violations == [])
+
+    # RULE D, non-control: lifecycle: paused, no run_ended -> valid vocabulary value, must be
+    # accepted. Currently rejected because `paused` is not yet in VALID_LIFECYCLES.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        fm = dict(_WELL_FORMED_FM)
+        fm["lifecycle"] = "paused"
+        del fm["run_ended"]
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", fm)
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check(
+            "(p) paused lifecycle passes -- RULE D, unimplemented as of task 1 "
+            "(watched RED; task 2 makes this GREEN)",
+            violations == [],
+        )
+
+    # RULE D, non-control: lifecycle: paused WITH a run_ended date -> only `active` forbids the
+    # field, so this must be accepted too. Currently rejected because `paused` is not yet in
+    # VALID_LIFECYCLES.
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        fm = dict(_WELL_FORMED_FM)
+        fm["lifecycle"] = "paused"  # run_ended stays populated
+        path = _write_record(base, "demo-repo", "demo-roadmap", "notes.md", fm)
+        rec = load_record(path)
+        assert rec is not None
+        violations = check_records([rec])
+        check(
+            "(p) paused lifecycle with a run_ended date passes -- RULE D, unimplemented as of "
+            "task 1 (watched RED; task 2 makes this GREEN)",
+            violations == [],
+        )
 
     if FAILURES:
         print(f"\n{len(FAILURES)} self-test case(s) failed: {FAILURES}")

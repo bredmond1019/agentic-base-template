@@ -74,7 +74,29 @@ ANCHORS = [
     # sdlc-task.js entirely ABOVE this anchor, shifting it 1860->1872, 1923->1935. Re-picked
     # from CONTENT at the new position (confirmed byte-identical to the pre-shift content via
     # diff), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1872, 1935,
+    # BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored, task 2: a parser helper +
+    # one SETUP_SCHEMA field inserted ABOVE this anchor shifted it 1875->1902, 1956->1983
+    # (+27 both ends) with NO content change to this region itself -- verified by diffing the
+    # old range against the new range: byte-identical text (confirmed at shift +27). The new
+    # STEP 2d (`git worktree list --porcelain` capture) landed just BELOW this anchor's end, so
+    # it is a real setup-stage behavior change the anchor's fixed window happens not to cover --
+    # documented anyway (not gate-forced) as Step 7b in .agents/skills/sdlc-task/SKILL.md, per
+    # base-template AGENTS.md's update-loop rule 6.
+        # RE-PICKED FROM CONTENT 2026-09-08 (BT.ticket.engines-forbid-attribution-trailers, lane
+    # base-template-75): a PURE SHIFT of +4 across ALL FOUR engine anchors, caused by
+    # `da72104 fix: rebuild engines from shared library`, not by this block's prompt edits --
+    # the renderNoAttributionTrailer() insertions all land OUTSIDE every hashed region. Located by
+    # searching the current tree for each manifest hash's exact content rather than by diffing
+    # against a guessed baseline commit (the first attempt used a pre-task-2 revision and got +18,
+    # which was wrong: the manifest hash, not some nearby commit, is the baseline). All four
+    # windows are byte-identical to what the manifest already records, so NO --update was run and
+    # no guide re-verification was owed -- the content never changed, only its line numbers.
+    # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
+    # renderTestPrompt() doc-comment + param shift (+5 net lines) landed ABOVE this anchor; the
+    # runTests() heartbeatRecipe call (+2 net lines) landed BELOW it, so only +5 applies here:
+    # 1906->1911, 1987->1992. Text unchanged -- verified by diffing the old range against the new
+    # range: byte-identical ("WORKTREE MODE (--worktree)" through the trailing content).
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1911, 1992,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -121,11 +143,45 @@ ANCHORS = [
     # shifting it 3351->3361 / 3520->3530 with NO content change: verified by diffing the old
     # range in the pre-fix file against the new range in the fixed file -- byte-identical in
     # both engines. Re-stamped on that evidence, not on a re-read.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3361, 3388,
+    # BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored, task 1: setup-stage worktree
+    # fail-closed logic (new SETUP_SCHEMA fields + prompt instructions + JS-side bail) inserted 51
+    # net lines ABOVE this anchor, shifting it 3361->3412 with NO content change to this region
+    # itself -- verified by diffing the old range against the new range: byte-identical text
+    # ("7. Commit your edits (stage explicitly" through the trailing `git log --oneline -1`).
+    # Re-stamped on that evidence, not on a re-read of the SKILL.md section.
+    # BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored, task 2: the STEP 2d capture +
+    # parser helper + JS-side worktree-list cross-check landed entirely ABOVE this anchor,
+    # shifting it 3412->3478 (+66) with NO content change to this region itself -- verified by
+    # diffing the old range against the new range: byte-identical text ("7. Commit your edits
+    # (stage explicitly" through the trailing `git log --oneline -1`). Re-stamped on that
+    # evidence, not on a re-read of the SKILL.md section.
+        # Same +4 shift, same evidence as the note above.
+    # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the new
+    # `heartbeatRecipe` doc-comment + param on the shared renderTestPrompt() region (+5 net lines)
+    # plus the new `const heartbeatRecipe = await renderLaneHeartbeatRecipe(...)` call in
+    # runTests() (+2 net lines) both landed ABOVE this anchor in sdlc-task.js, shifting it
+    # 3482->3489, 3509->3516 (+7 total). Text unchanged -- verified by diffing the old range
+    # against the new range: byte-identical ("7. Commit your edits (stage explicitly" through the
+    # trailing `git log --oneline -1`).
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3489, 3516,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
+        # Same +4 shift, same evidence.
+    # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
+    # renderTestPrompt() doc-comment + param shift (+5 net lines, same shared block as the
+    # sdlc-task.js note above) landed ABOVE this anchor but the runTests() heartbeatRecipe call
+    # (+2 net lines) landed BELOW it, so only +5 applies here: 1875->1880, 2005->2010. Text
+    # unchanged -- verified by diffing the old range against the new range: byte-identical.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1880, 2010,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3530, 3565,
+        # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
+    # whole thing -- its needle had slid out of the window entirely.
+    # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
+    # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
+    # anchor, shifting it 3547->3554, 3582->3589 (+7 total). Text unchanged -- verified by diffing
+    # the old range against the new range: byte-identical ("5. Commit (stage explicitly" through
+    # the trailing `git log --oneline -1`). This is the anchor check_skill_sync.py itself flagged
+    # as drifted onto unrelated code before this re-pin.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3554, 3589,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

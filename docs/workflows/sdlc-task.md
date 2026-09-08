@@ -88,7 +88,7 @@ flowchart TD
 |---|---|---|
 | **Scout / setup** | haiku | Reads the spec and existing report state (for `--resume`). In-place by default; with `--worktree`, creates (or re-attaches on `--resume`) a `trees/<branch>/` cone-mode sparse-checkout worktree — see [In-place vs. `--worktree`](#in-place-vs-worktree) above. Resolves the spec source (D65 stage 2): checks `planning/blocks/<BlockID>.json` first and prefers it when present; falls back to the legacy `planning/<spec>/tasks.md` only when no block record exists. `specSource` (`'block-record'` / `'tasks-md'` / `'missing'`) drives which file the run treats as the spec and, downstream, which D16 derive branch fires (see below). The D19 thin-spec check runs only when `specSource == 'tasks-md'`. |
 | **Implement** | sonnet | Executes every task (or the selected range) against `tasks.md` (and `breakdown.md` if present). Runs the D8 (`planning/decisions/D8-implement-completeness-self-check.md`) completeness self-check before committing `feat:`/`fix:`. |
-| **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` plus the universal emoji gate on changed markdown. Falls back to the spec's `## Validation Commands` if no config. |
+| **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` plus the universal emoji gate on changed markdown. Falls back to the spec's `## Validation Commands` if no config. Also re-stamps the holding lane's heartbeat (BT.ticket.lane-heartbeat-goes-stale-mid-block): calls `python3 scripts/lane_heartbeat.py --agent <identity> --repo <repo>` (the same `--agent` identity threaded to `scripts/fleet_concurrency_check.py`) as a **non-fatal, best-effort** step — a spec run outside `/orchestrate` has no claim or lease to re-stamp, and that must never fail the task. This is the fix for `check_lane_agents.py`'s staleness verdict only ever restamping at a block boundary: a block whose wall-clock span exceeds `STALE_THRESHOLD_SECONDS` (10800s) now gets a fresh heartbeat after every task instead of red-gating its own lane's `lane-agent-schema` check at close. |
 | **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. Stuck → commit the current state as `FAIL` and exit, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution: null`) rather than only overwriting `bail_reason` — see BT.ticket.bails-must-be-append-only (`planning/blocks/BT.ticket.bails-must-be-append-only.json`). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail that is later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **Commit + state** | haiku | Writes `sdlc-task-state.json` (per-task status + token usage) and commits all work + state: in-place, one final `chore:` commit; under `--worktree`, a per-phase-write commit shape on the throwaway branch. |
@@ -541,6 +541,35 @@ repo's decision log, not part of this repo).
 A Rust repo whose manifest uses `path = "../<crate>"` needs its `trees/` sibling symlinks present
 before a `--worktree` checkout is usable — see
 [`worktrees-in-rust-repos.md`](worktrees-in-rust-repos.md) for why and how to check.
+
+### Worktree fail-closed guard (BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored)
+
+Two independent, engine-decided (never model-self-reported-only) checks run right after the setup
+agent returns, before any state is recorded and before the binding/brain-root/population guards:
+
+1. **Self-reported failure.** If the setup agent could not find a free worktree name among the base
+   candidate through `-10`, or a `git worktree add`/creation command itself errored, it stops and
+   reports `worktreeFailed = true` with a reason — the engine aborts on that alone rather than
+   letting a fallback proceed.
+2. **Cause-independent cross-check.** Whether or not `worktreeFailed` was set, the engine compares
+   the reported `branchName`/`runDir` against the `currentBranch`/`repoRoot` captured at the start
+   of setup. If `--worktree` was requested and either value matches the main tree, the engine
+   aborts — `Worktree setup failed closed` — even if nothing self-reported a problem. This is what
+   makes the previously measured defect (`mode: "worktree"` reported while `branch: "main"` and
+   `runDir` was the main tree) structurally impossible rather than merely unlikely.
+3. **`git worktree list` ground truth (task 2).** The setup agent's own `runDir`/`branchName`
+   bookkeeping is never trusted as-is: after the worktree is created or resumed, the recipe's
+   STEP 2d runs `git worktree list --porcelain` and reports its complete, unmodified stdout as
+   `worktreeListPorcelain`. The engine parses that porcelain output itself (never the agent's own
+   summary of it) and requires an entry whose `worktree` path equals the reported `runDir` — its
+   absence is a bail (`expected runDir ... absent from git worktree list`) — and whose `branch`
+   line equals the reported `branchName` — a mismatch is a bail naming both the expected and
+   observed branch. Only once ground truth confirms the self-report does the engine re-assign
+   `runDir`/`branchName` from the listed entry, so downstream state is always derived from the
+   real listing rather than merely "assumed correct because it matched." This is the mechanism
+   that catches a setup agent that fabricates a plausible-looking `runDir`/`branchName` without
+   ever having actually created the worktree — check 2 above only catches a fallback to the
+   *main tree specifically*; this check catches any worktree that doesn't actually exist.
 
 ### Binding / brain-root / population guards (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root)
 

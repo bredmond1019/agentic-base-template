@@ -158,13 +158,41 @@ STANDALONE_SITE_RE = re.compile(
 # and 3785->3795 in sdlc-flow.js. Text unchanged -- verified by diffing each old line in a pre-fix
 # copy of the engine against the new line in the fixed file, byte-identical at all three. Only the
 # keys moved.
+# Re-pinned again 2026-09-07 (BT.ticket.sdlc-flow-records-no-base-sha, task 2): the STEP 5.5
+# emoji-gate-diff-base capture (both the worktreeRecipe and branchRecipe variants) plus a new
+# setupWorkdir const were inlined ABOVE both sdlc-flow.js sites, net +13 lines: 3506->3519 and
+# 3795->3808. Text unchanged (diffed the old line against the new line at both sites, byte-
+# identical) -- only the keys moved. sdlc-task.js unaffected (this task touches sdlc-flow.js only).
+# Re-pinned again 2026-09-08 (BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored,
+# tasks 1-2): the new currentBranch and worktreeListPorcelain SETUP_SCHEMA fields plus task 2's
+# parseWorktreeListPorcelain() helper and cross-check logic were inlined ABOVE this site in
+# sdlc-task.js, net +66 lines: 3396->3462. Text unchanged (diffed against the pre-shift content)
+# -- only the key moved. sdlc-flow.js unaffected.
+# Re-pinned again 2026-09-08 (BT.ticket.engines-forbid-attribution-trailers, task 2): the new
+# renderNoAttributionTrailer() function and its references at all 14 commit-heredoc sites were
+# inlined ABOVE these sites in all three engine files (prompts/shared.js plus sdlc-task.js and
+# sdlc-flow.js), net +14 lines in each: 3462->3476 in sdlc-task.js and 3531->3546 / 3820->3836
+# in sdlc-flow.js. The actual line text is unchanged from when renderAgentFlag was added --
+# task 2 added renderNoAttributionTrailer references and the commit-safety guard prompts, not
+# the emit-state interpolations themselves. Only the line numbers moved.
+# LINE NUMBERS RE-PICKED 2026-09-08 (lane base-template-75): +4 on all three sites, from
+# `da72104 fix: rebuild engines from shared library`. Verified by confirming each baseline STRING
+# is byte-identical at its new line before renumbering -- the numbers were moved to follow the
+# content, never the content adjusted to fit the numbers.
+# Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the new
+# `heartbeatRecipe` param + doc comment on the shared renderTestPrompt() region, inlined ABOVE
+# these sites in both engines, shifted all three by +7: 3480->3487 in sdlc-task.js and
+# 3550->3557 / 3840->3847 in sdlc-flow.js. Text unchanged (diffed against the pre-shift content,
+# byte-identical) -- only the keys moved. The new renderLaneHeartbeatRecipe() shared block that
+# same task added sits AFTER renderScopeFlag() (end of file, below all three sites), so it does
+# not shift these lines at all.
 FROZEN_BASELINE = {
     str(TASK_JS): {
-        3354: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
+        3487: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
     },
     str(FLOW_JS): {
-        3506: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
-        3795: "   mev emit-state --write",
+        3557: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
+        3847: "   mev emit-state --write",
     },
 }
 

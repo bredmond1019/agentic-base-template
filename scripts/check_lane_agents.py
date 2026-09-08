@@ -29,6 +29,16 @@ nicknames are currently live -- so it never decides "abandoned" vs. "slow." It r
 timestamp age and the agent name only; joining that against ListAgents liveness to tell "agent
 absent from ListAgents" (an abandoned lane, a named recovery item for BT.6.D) apart from "agent
 live but heartbeat old" (a merely slow lane, not an incident) is strictly the CALLER's job.
+STALENESS IS REPORTED, NEVER GATING (BT.ticket.lane-heartbeat-goes-stale-mid-block): a stale
+record that is otherwise structurally valid is printed under FAIL, tagged
+`[STALE -- reported, not gating]`, and counted into `stale_reported` -- but it never touches
+`failed` and can never flip the exit code, for both own-repo and foreign-repo records alike. A
+long-running block whose wall-clock span exceeds STALE_THRESHOLD_SECONDS is not a defect, and a
+gating exit code on a lane's own healthy, in-progress records was exactly the failure mode this
+change removes (measured 2026-09-05: a live lane's own claim tripped this exit code at close,
+28030s old, 2.6x the threshold). Every OTHER problem class -- missing/unknown keys, bad slug or
+timestamp grammar, an unparseable file, a duplicate exclusive lease -- still gates exactly as
+before; only the staleness finding was carved out.
 
 Usage:
     check_lane_agents.py [--lock-dir DIR] [--quiet]
@@ -59,13 +69,13 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
 
 REGISTRY_REQUIRED = ["agent_name", "repo", "lane", "roadmap", "started_at", "heartbeat"]
-REGISTRY_OPTIONAL = ["current_block", "block_started_at"]
+REGISTRY_OPTIONAL = ["current_block", "block_started_at", "host"]
 REGISTRY_ALLOWED = set(REGISTRY_REQUIRED) | set(REGISTRY_OPTIONAL)
 REGISTRY_SLUG_FIELDS = ("repo", "lane", "roadmap")
 REGISTRY_TIMESTAMP_FIELDS = ("started_at", "heartbeat", "block_started_at")
 
 LEASE_REQUIRED = ["repo", "lane", "agent", "acquired_at", "kind"]
-LEASE_ALLOWED = set(LEASE_REQUIRED) | {"scope", "heartbeat"}
+LEASE_ALLOWED = set(LEASE_REQUIRED) | {"scope", "heartbeat", "host"}
 LEASE_SLUG_FIELDS = ("repo", "lane")
 LEASE_TIMESTAMP_FIELDS = ("acquired_at", "heartbeat")
 LEASE_KIND_VALUES = {"exclusive", "shared"}
@@ -100,6 +110,16 @@ LEASE_SCOPE_VALUES = {"repo", "fleet"}
 # the exclusive-lease refusal to the requesting repo -- before that fix, a longer threshold would
 # have meant a longer fleet-wide stall instead of a longer single-repo stall. That ordering is why
 # this block depends on that one.
+#
+# WHY THE STALENESS VERDICT CHANGED INSTEAD OF THIS NUMBER (BT.ticket.lane-heartbeat-goes-stale-
+# mid-block): raising the threshold was the OTHER candidate fix and it was already tried here --
+# 180 minutes is itself the product of that exercise, derived from measurement, with an explicit
+# "do not bump it by feel" attached. The incident this later block exists to fix was a lane whose
+# own claim went 28030s (7.8h) stale -- 2.6x this already-generous threshold -- so no further
+# threshold bump is defensible; a normal block cannot run 2.6x the p90 by accident, and a block
+# that legitimately does should not be indistinguishable from an abandoned one by wall-clock time
+# alone. That is why `run()` now reports staleness without gating on it (see the module docstring's
+# STALENESS IS REPORTED, NEVER GATING paragraph) rather than raising this constant again.
 STALE_THRESHOLD_SECONDS = 180 * 60
 
 REGISTRY_FILE_RE = re.compile(r"^agent-.*\.json$")
@@ -358,6 +378,7 @@ def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None,
     total = 0
     failed = 0
     foreign_failed = 0
+    stale_reported = 0
     lines = []
 
     registry_files = discover_registry_files(lock_dir) if lock_dir else []
@@ -367,10 +388,11 @@ def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None,
         total += 1
         record, load_err = _load(path)
         problems = [load_err] if load_err else check_registry_record(record)
+        stale_msg = None
         if not problems and isinstance(record, dict):
             age = staleness_seconds(record.get("heartbeat", ""), now)
             if age is not None and age > STALE_THRESHOLD_SECONDS:
-                problems.append(
+                stale_msg = (
                     f"stale registry claim: agent `{record.get('agent_name')}` heartbeat is "
                     f"{age:.0f}s old (threshold {STALE_THRESHOLD_SECONDS}s) -- liveness against "
                     f"ListAgents is the caller's job, not this checker's"
@@ -384,6 +406,10 @@ def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None,
             tag = " [FOREIGN -- reported, not gating]" if foreign else ""
             lines.append(f"FAIL {path}{tag}")
             lines.extend(f"       {p}" for p in problems)
+        elif stale_msg:
+            stale_reported += 1
+            lines.append(f"FAIL {path} [STALE -- reported, not gating]")
+            lines.append(f"       {stale_msg}")
         elif not quiet:
             lines.append(f"ok   {path}")
 
@@ -392,11 +418,12 @@ def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None,
         total += 1
         record, load_err = _load(path)
         problems = [load_err] if load_err else check_lease_record(record)
+        stale_msg = None
         if not problems and isinstance(record, dict):
             liveness_field = "heartbeat" if record.get("heartbeat") else "acquired_at"
             age = staleness_seconds(lease_liveness_timestamp(record), now)
             if age is not None and age > STALE_THRESHOLD_SECONDS:
-                problems.append(
+                stale_msg = (
                     f"stale lease: agent `{record.get('agent')}` {liveness_field} is "
                     f"{age:.0f}s old (threshold {STALE_THRESHOLD_SECONDS}s) -- liveness against "
                     f"ListAgents is the caller's job, not this checker's"
@@ -412,7 +439,11 @@ def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None,
             lines.extend(f"       {p}" for p in problems)
         else:
             valid_leases.append((path, record))
-            if not quiet:
+            if stale_msg:
+                stale_reported += 1
+                lines.append(f"FAIL {path} [STALE -- reported, not gating]")
+                lines.append(f"       {stale_msg}")
+            elif not quiet:
                 lines.append(f"ok   {path}")
 
     # Duplicate-exclusive-lease detection, over records that individually validated. Both
@@ -445,11 +476,12 @@ def run(lock_dir: Optional[Path], quiet: bool, now: Optional[datetime] = None,
         print("no lane-agent records found (not a failure)")
         return 0
 
+    summary = f"\n{total} record(s) checked, {failed} failed"
     if foreign_failed:
-        print(f"\n{total} record(s) checked, {failed} failed (own-repo, gating) + "
-              f"{foreign_failed} failed (foreign repo, reported only, not gating)")
-    else:
-        print(f"\n{total} record(s) checked, {failed} failed")
+        summary += f" (own-repo, gating) + {foreign_failed} failed (foreign repo, reported only, not gating)"
+    if stale_reported:
+        summary += f" + {stale_reported} stale (reported only, not gating)"
+    print(summary)
     return 1 if failed else 0
 
 

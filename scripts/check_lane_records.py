@@ -67,7 +67,9 @@ TOP_LEVEL_REQUIRED = ["lane", "roadmap", "blocks"]
 TOP_LEVEL_ALLOWED = {
     "lane", "repo", "roadmap", "blocks", "budget", "notes",
     "held_until", "isolation", "exclusive_repos", "spec_source", "cut_blocks",
+    "lease_windows",
 }
+LEASE_WINDOW_ALLOWED = {"repo", "blocks"}
 BLOCK_ENTRY_REQUIRED = ["id", "origin_roadmap", "repo"]
 BLOCK_ENTRY_ALLOWED = {"id", "origin_roadmap", "repo"}
 BUDGET_ALLOWED = {"heavy", "not_with"}
@@ -257,10 +259,10 @@ def check(path, repo_paths: dict | None = None, repo_prefixes: dict | None = Non
             problems.append(f"`{field}` value `{v}` does not match slug pattern")
 
     blocks = record.get("blocks")
+    seen_ids = set()
     if isinstance(blocks, list):
         if len(blocks) == 0:
             problems.append("blocks[] must have at least one entry")
-        seen_ids = set()
         for i, b in enumerate(blocks):
             if not isinstance(b, dict):
                 problems.append(f"blocks[{i}] must be an object")
@@ -337,6 +339,41 @@ def check(path, repo_paths: dict | None = None, repo_prefixes: dict | None = Non
         v = record.get(field)
         if v is not None and not isinstance(v, list):
             problems.append(f"`{field}` must be an array")
+
+    # `lease_windows` (`MV.20.C`): a per-block lease window, a sibling of
+    # `exclusive_repos` rather than a replacement of it -- see LeaseWindow in mev's
+    # `src/brain/lane_segments.rs`. Each entry is `{repo: non-empty str, blocks: non-empty
+    # list of str}`, and every block id it names must appear in this SAME record's own
+    # top-level `blocks[]` -- the identical rule mev's Rust parser enforces, so the two
+    # halves agree on real data (the parity test in mev pins this).
+    lease_windows = record.get("lease_windows")
+    if isinstance(lease_windows, list):
+        for i, w in enumerate(lease_windows):
+            if not isinstance(w, dict):
+                problems.append(f"lease_windows[{i}] must be an object")
+                continue
+            unknown_w = sorted(set(w) - LEASE_WINDOW_ALLOWED)
+            if unknown_w:
+                problems.append(f"lease_windows[{i}] unknown key(s): {', '.join(unknown_w)}")
+
+            wrepo = w.get("repo")
+            if not (isinstance(wrepo, str) and wrepo):
+                problems.append(f"lease_windows[{i}] missing required non-empty field `repo`")
+
+            wblocks = w.get("blocks")
+            if not (isinstance(wblocks, list) and len(wblocks) > 0):
+                problems.append(f"lease_windows[{i}] missing required non-empty array `blocks`")
+            else:
+                for wb in wblocks:
+                    if not (isinstance(wb, str) and wb):
+                        problems.append(
+                            f"lease_windows[{i}].blocks entries must be non-empty strings")
+                    elif wb not in seen_ids:
+                        problems.append(
+                            f"lease_windows[{i}] names block `{wb}` which is not in this lane "
+                            f"record's own blocks[] (lane `{record.get('lane')}`)")
+    elif lease_windows is not None:
+        problems.append("`lease_windows` must be an array")
 
     return problems, warnings
 

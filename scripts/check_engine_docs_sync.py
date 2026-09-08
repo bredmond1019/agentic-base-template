@@ -63,6 +63,13 @@ MANIFEST_PATH = ROOT / "scripts" / "engine_docs_sync_manifest.json"
 # line ranges already stamped in scripts/skill_sync_manifest.json for the same engine + anchor
 # name — do not re-derive different ranges for the same region.
 ANCHORS = [
+    # RE-PICKED FROM CONTENT 2026-09-08 (BT.ticket.engines-forbid-attribution-trailers, lane
+    # base-template-75): PURE SHIFT of +4 on every anchor that moved, from
+    # `da72104 fix: rebuild engines from shared library` -- NOT from this block's prompt edits,
+    # which all land outside every hashed region. Located by searching the current tree for each
+    # manifest hash's exact content, so each window is byte-identical to what the manifest already
+    # records; no --update was run and no doc re-verification was owed. sdlc-task.js's
+    # flags-and-defaults (111-155) and stage-list (87-96) did not move and are untouched.
     # BT.ticket.emoji-gate-fallback-must-attribute-a-range-it-did-not-author, task 2: the
     # <<shared:renderEmojiGate>> fallback rewrite inserted 35 net lines into shared.js, which is
     # inlined into both engines at that exact position -- every anchor whose range sat AFTER the
@@ -90,7 +97,22 @@ ANCHORS = [
     # sdlc-task.js entirely ABOVE this anchor, shifting it 1860->1872, 1923->1935. Re-picked
     # from CONTENT at the new position (confirmed byte-identical to the pre-shift content via
     # diff), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1872, 1935,
+    # BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored, task 2: a parser helper +
+    # one SETUP_SCHEMA field inserted ABOVE this anchor shifted it 1875->1902, 1956->1983
+    # (+27 both ends) with NO content change to this region itself -- verified by diffing the
+    # old range against the new range: byte-identical text (confirmed at shift +27). The new
+    # STEP 2d (`git worktree list --porcelain` capture) landed just BELOW this anchor's end
+    # (which stops at the FAIL-CLOSED note preceding STEP 2c, before the worktree recipe's
+    # planning-symlink-fix / STEP 2d region), so it is a real setup-stage behavior change the
+    # anchor's fixed window happens not to cover -- documented anyway (not gate-forced) in
+    # docs/workflows/sdlc-task.md's "## In-place vs. `--worktree`" section (new "`git worktree
+    # list` ground truth (task 2)" subsection), per base-template AGENTS.md's update-loop rule 6.
+    # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
+    # renderTestPrompt() doc-comment + param shift (+5 net lines) landed ABOVE this anchor; the
+    # runTests() heartbeatRecipe call (+2 net lines) landed BELOW it, so only +5 applies here:
+    # 1906->1911, 1987->1992. Text unchanged -- verified by diffing the old range against the new
+    # range: byte-identical ("WORKTREE MODE (--worktree)" onward).
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1911, 1992,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -135,20 +157,47 @@ ANCHORS = [
     # Content byte-identical across the move (old range in the pre-fix file vs new range in the
     # fixed file diffed clean in both engines), so the docs pages still describe exactly what is
     # there. Re-stamped on that evidence.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3361, 3388,
+    # BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored, task 2: the STEP 2d capture +
+    # parser helper + JS-side worktree-list cross-check landed entirely ABOVE this anchor,
+    # shifting it 3412->3478 (+66) with NO content change to this region itself -- verified by
+    # diffing the old range against the new range: byte-identical text ("7. Commit your edits
+    # (stage explicitly" through the trailing `git log --oneline -1`). Re-stamped on that
+    # evidence, not on a re-read of the docs section.
+    # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the new
+    # `heartbeatRecipe` doc-comment + param on the shared renderTestPrompt() region (+5 net lines)
+    # plus the new `const heartbeatRecipe = await renderLaneHeartbeatRecipe(...)` call in
+    # runTests() (+2 net lines) both landed ABOVE this anchor in sdlc-task.js, shifting it
+    # 3482->3489, 3509->3516 (+7 total). Text unchanged -- verified by diffing the old range
+    # against the new range: byte-identical.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3489, 3516,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
     # stages, plus the related:-resolution rule in the implement-stage prompt), each ABOVE these
     # three sdlc-flow.js anchors -- re-picked from CONTENT (hash match against the manifest), not
     # blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 929, 946,
+    # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
+    # renderTestPrompt() doc-comment + param shift (+5 net lines) landed ABOVE this anchor;
+    # shifting it 933->938, 950->955. Text unchanged -- verified by diffing the old range against
+    # the new range: byte-identical ("const autoMergeFlag = hasFlag('--auto-merge')" onward).
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 938, 955,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
+    # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
+    # renderTestPrompt() doc-comment + param shift (+5 net lines) landed ABOVE this anchor; the
+    # runTests() heartbeatRecipe call (+2 net lines) landed BELOW it, so only +5 applies here:
+    # 1875->1880, 2005->2010. Text unchanged -- verified by diffing the old range against the new
+    # range: byte-identical.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1880, 2010,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3530, 3565,
+    # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
+    # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
+    # anchor, shifting it 3547->3554, 3582->3589 (+7 total). Text unchanged -- verified by diffing
+    # the old range against the new range: byte-identical ("5. Commit (stage explicitly" through
+    # the trailing `git log --oneline -1`). This is one of the two anchors
+    # check_engine_docs_sync.py itself flagged as drifted onto unrelated code before this re-pin.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3554, 3589,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

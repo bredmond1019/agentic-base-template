@@ -214,6 +214,22 @@ def check_negative_priority_field_present() -> None:
           f"problems: {nested_problems}")
 
 
+# --- host: additive optional field (BT.8.A task 2) ----------------------------------------------
+
+def check_host_field_accepted() -> None:
+    record = _valid_message("QUERY", host="mac-mini-01")
+    problems = check_messages.check_message_record(record)
+    check("a message carrying `host` validates green",
+          problems == [], f"problems: {problems}")
+
+
+def check_hostt_field_rejected() -> None:
+    record = _valid_message("QUERY", hostt="mac-mini-01")
+    problems = check_messages.check_message_record(record)
+    check("a message carrying `hostt` (typo) is rejected as an unknown key",
+          any("unknown key" in p and "hostt" in p for p in problems), f"problems: {problems}")
+
+
 # --- BT.ticket.messages-must-carry-verified-by: the evidence field ----------------------------
 #
 # One case per accepted shape and one per rejected shape. The bare-adjective case (b1) is the
@@ -653,6 +669,8 @@ def main() -> int:
     check_negative_unknown_kind()
     check_negative_missing_durable_home()
     check_negative_priority_field_present()
+    check_host_field_accepted()
+    check_hostt_field_rejected()
     check_verified_by_accepted_command_and_output()
     check_verified_by_accepted_unverified_prefix()
     check_verified_by_rejected_missing()
