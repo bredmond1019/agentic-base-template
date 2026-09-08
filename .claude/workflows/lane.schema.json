@@ -101,7 +101,7 @@
     },
     "lease_windows": {
       "type": "array",
-      "description": "Per-block lease windows (MV.20.C) — a sibling of `exclusive_repos`, not a replacement: `exclusive_repos` still means whole-lane exclusivity for the lane's entire chain, while a `lease_windows` entry narrows a repo's exclusivity to only the block ids it names. Every block id listed must also appear in this same record's own `blocks[]` array.",
+      "description": "Per-block lease windows (MV.20.C) — a sibling of `exclusive_repos`, not a replacement: `exclusive_repos` still means whole-lane exclusivity for the lane's entire chain, while a `lease_windows` entry narrows a repo's exclusivity to only the block ids it names. Every block id listed must also appear in this same record's own `blocks[]` array. Mirrors mev's `LeaseWindow` struct (`core/mev/src/brain/lane_segments.rs`) field-for-field — {repo, blocks}, deny_unknown_fields — and this exact shape is parity-tested against mev's parser by `live_corpus_lane_schema_agrees_with_mev_parser_about_lease_windows` (MV.20.C Task 2); if either side's shape changes, update both.",
       "items": {
         "type": "object",
         "additionalProperties": false,
