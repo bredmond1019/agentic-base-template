@@ -6,6 +6,66 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-08
 
 ---
+## 2026-09-08 — carryover-cleanup-continued wave 3: four harness-correctness blocks
+
+Lane `base-template-75`, one `/orchestrate` chain, four blocks closed. The two `/sdlc-task` blocks
+below have no entry of their own — that engine writes none — so this is where they are recorded.
+
+**`BT.ticket.engines-forbid-attribution-trailers`.** All 14 commit-heredoc sites across
+`prompts/shared.js` (2), `sdlc-task.js` (4) and `sdlc-flow.js` (8) now reference
+`renderNoAttributionTrailer()`, stating the heredoc is the complete commit message and that a
+`Co-Authored-By`/`Claude-Session` trailer must never be appended whatever a session-level reminder
+says. `scripts/test_commit_message_forbids_attribution_trailers.py` asserts count parity per file, so
+a 15th commit site cannot be added without the reminder — the guarantee does not rot back.
+
+The engine returned `criteriaRefuse` (not a bail) on `check_skill_sync.py`. Cause was **not** this
+block: `da72104` had shifted both engines by four lines, moving **12 pinned ranges** off their
+subjects — 4 `check_skill_sync` anchors, 5 `check_engine_docs_sync` anchors, and all 3
+`test_engines_pass_agent` `FROZEN_BASELINE` keys. Repaired by locating each manifest hash's exact
+content in the current tree; every window was byte-identical, so **no `--update` was run and no guide
+or doc re-verification was owed**. A first diagnosis against a guessed pre-change commit produced
+`+18` and a wrong conclusion — the manifest hash, not a nearby commit, is the baseline.
+
+**`BT.ticket.lane-heartbeat-goes-stale-mid-block`.** Staleness in `check_lane_agents.py` is now
+**reported, never gating**: a stale claim or lease still prints its agent name and age (tagged
+`[STALE -- reported, not gating]`) so a caller can still make the abandoned-vs-slow call against
+ListAgents, but it no longer sets the exit code; every structural failure gates exactly as before.
+Raising the threshold was not an option — 180 min was already derived on 2026-08-23 from 46 lane-log
+samples with "do not bump it by feel", and the measured incident was 28030s, 2.6x it.
+
+New `scripts/lane_heartbeat.py` re-stamps the claim's and lease's `heartbeat` (and
+`current_block`/`block_started_at` where present) while never touching `started_at`/`acquired_at`.
+It ships as a script rather than engine-only JS because a hand-driven lane never executes
+`/orchestrate` rule 10 at all — `bastion-36` sat un-re-stamped across two closed blocks, ~34 minutes
+from tripping the gate, and an engine-only fix would have left exactly that case unfixed.
+
+**`BT.3.F`.** `.claude/skills/brain-graph/SKILL.md` documents the `bastion brain` / `bastion code`
+verb surface, mirrored and registered. The record asked the skill to pin a minimum bastion version;
+`bastion --version` prints `0.1.0` for every build in this fleet, so a version pin cannot fail loudly
+on the thing that actually breaks. Replaced with a real instrument: `check_cli_invocations.py`'s
+`FLAG_CHECKED_VERBS` now covers both verbs, so a flag the installed binary lacks fails a gated check.
+Scoped to the verb surface and links to `check-blast-radius` for the wikilinks-vs-`related:` trap
+rather than restating it. PR #11, merged.
+
+**`BT.3.G`.** `scripts/generate_skill_surfaces.py`. Bailed first time on an acceptance bar this lane
+authored and could not meet, then was re-specced and closed clean — see the block's own entry below
+and `planning/BT.3.G/decision.md` for the body-only contract that resolved it.
+
+**Also:** `GEMINI.md`'s skills-table row for `brain-graph` was missing because the `BT.3.F` spec told
+the task not to hand-edit that file — true of its generated region only; `regenerate_gemini.py`
+preserves the `## Fleet & Core Skills` tail byte-for-byte and never authors it. No gate compares the
+two tables, so they drifted a row apart green; filed as carryover
+`agent-docs-gate-does-not-compare-the-two-skills-tables`.
+
+7 new gated checks registered; the repo now gates **107 of 110**. One gated check is red on `main`
+and is not this lane's: two block records from commit `1214c6169` are each missing four required
+fields, filed as `two-filed-tickets-red-gate-block-record-schema` and deliberately not fixed here,
+since completing them decides how two tickets this lane did not author should be built.
+
+Run record: `planning/orchestration-run/carryover-cleanup-continued/notes.md` (D-30 … D-41) and its
+`review.md`; handoff: `planning/handoff.md`.
+
+---
 ## 2026-09-08 — BT.3.G: skill mirrors are generated, and their divergence is gated
 
 Ran `/sdlc-flow BT.3.G`, four tasks, verdict PASS. This run re-specced the block after an earlier
