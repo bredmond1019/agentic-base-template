@@ -20,13 +20,13 @@
     "skill_md": ".agents/skills/sdlc-task/SKILL.md"
   },
   ".claude/workflows/sdlc-flow.js::isolation-and-branch-naming": {
-    "hash": "963d8062102b6f06463b070a09b6734809a9f661ce410ece3293d81f0b6b7e81",
-    "lines": "1867-1989",
+    "hash": "760cd1e7307610e5f6c94d91d843477adefb01f8a32bc479fdeb4b66cf3fd5e2",
+    "lines": "1871-2001",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   },
   ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
     "hash": "ce5c39e7332097784e3681ca9eb8b5c3d5843bffafb8952be6af1c03a996efe2",
-    "lines": "3530-3565",
+    "lines": "3543-3578",
     "skill_md": ".agents/skills/sdlc-flow/SKILL.md"
   }
 }

@@ -123,9 +123,9 @@ ANCHORS = [
     # both engines. Re-stamped on that evidence, not on a re-read.
     (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3361, 3388,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1871, 2001,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3530, 3565,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3543, 3578,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

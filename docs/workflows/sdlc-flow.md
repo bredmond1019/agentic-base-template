@@ -90,6 +90,13 @@ by any later stage:
 Each guard logs its verdict, pass or fail, so the transcript shows the check ran rather than
 merely that nothing exploded.
 
+Immediately after setup (worktree created/reused, or the branch checked out), the engine captures
+the **emoji-gate diff base**: the HEAD short sha as it stands right now, before any task commit,
+persisted as `state.base_sha` — the same field, captured at the same moment, that `/sdlc-task`
+persists (see `docs/workflows/sdlc-task.md`). It is never the PR base branch name (`prBase`/
+`diffBase`, which defaults to the literal `main`) — that is a branch tip, not a sha pinned to when
+this run started.
+
 Engine: [`.claude/workflows/sdlc-flow.js`](../../.claude/workflows/sdlc-flow.js)
 
 ---

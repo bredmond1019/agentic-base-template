@@ -146,9 +146,9 @@ ANCHORS = [
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1867, 1989,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1871, 2001,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3530, 3565,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3543, 3578,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 
