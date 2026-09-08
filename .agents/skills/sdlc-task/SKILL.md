@@ -236,6 +236,26 @@ re-attach, Steps 1b/1c).
    defect: reporting `mode: "worktree"` with `branch: "main"`, `runDir: <main tree>`). Do this check
    BEFORE Step 1d's binding/brain-root/population guards, so a failed-closed run never touches the
    main tree.
+7b. **`git worktree list` ground truth (`--worktree` only, task 2 — do not skip even after 7
+   passes).** Your own `branchName`/`runDir` bookkeeping from Steps 1b/1c is a claim, not a fact —
+   verify it against the real listing before trusting it for anything downstream:
+   ```
+   git worktree list --porcelain
+   ```
+   Parse the complete output yourself (do not eyeball just the entry you expect): it is a series of
+   blocks separated by a blank line, each starting with `worktree <path>` and (for a non-detached
+   worktree) containing a `branch refs/heads/<name>` line.
+   - If **no block's `worktree` path equals `runDir`**, abort — `Worktree setup failed closed`,
+     reason: `expected runDir <runDir> absent from git worktree list`, naming every path the listing
+     actually showed. This is the check that catches a fabricated-looking `runDir`/`branchName` that
+     was never backed by a real `git worktree add` — Step 7 alone cannot catch this, since a
+     completely invented path is neither `currentBranch` nor `repoRoot`.
+   - If the matching block's `branch` (with any `refs/heads/` prefix stripped) does **not** equal
+     `branchName`, abort — `Worktree setup failed closed`, reason naming both the expected
+     `branchName` and the observed branch from the listing.
+   - Otherwise, re-assign `runDir`/`branchName` to the exact values from the matched listing entry
+     (even though they should already be equal) before continuing — every later step must use these
+     ground-truth values, never the Step 1b/1c bookkeeping directly.
 8. **Report pipeline-start inputs**, all run from `runDir`:
    - **Spec source AND location (D65 stage 2 + tier resolution)** — the block record is checked
      FIRST and is preferred; `tasks.md` is only a fallback for a legacy spec that predates the

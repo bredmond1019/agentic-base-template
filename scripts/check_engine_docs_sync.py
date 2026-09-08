@@ -90,7 +90,17 @@ ANCHORS = [
     # sdlc-task.js entirely ABOVE this anchor, shifting it 1860->1872, 1923->1935. Re-picked
     # from CONTENT at the new position (confirmed byte-identical to the pre-shift content via
     # diff), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1875, 1956,
+    # BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored, task 2: a parser helper +
+    # one SETUP_SCHEMA field inserted ABOVE this anchor shifted it 1875->1902, 1956->1983
+    # (+27 both ends) with NO content change to this region itself -- verified by diffing the
+    # old range against the new range: byte-identical text (confirmed at shift +27). The new
+    # STEP 2d (`git worktree list --porcelain` capture) landed just BELOW this anchor's end
+    # (which stops at the FAIL-CLOSED note preceding STEP 2c, before the worktree recipe's
+    # planning-symlink-fix / STEP 2d region), so it is a real setup-stage behavior change the
+    # anchor's fixed window happens not to cover -- documented anyway (not gate-forced) in
+    # docs/workflows/sdlc-task.md's "## In-place vs. `--worktree`" section (new "`git worktree
+    # list` ground truth (task 2)" subsection), per base-template AGENTS.md's update-loop rule 6.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1902, 1983,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -135,7 +145,13 @@ ANCHORS = [
     # Content byte-identical across the move (old range in the pre-fix file vs new range in the
     # fixed file diffed clean in both engines), so the docs pages still describe exactly what is
     # there. Re-stamped on that evidence.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3412, 3439,
+    # BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored, task 2: the STEP 2d capture +
+    # parser helper + JS-side worktree-list cross-check landed entirely ABOVE this anchor,
+    # shifting it 3412->3478 (+66) with NO content change to this region itself -- verified by
+    # diffing the old range against the new range: byte-identical text ("7. Commit your edits
+    # (stage explicitly" through the trailing `git log --oneline -1`). Re-stamped on that
+    # evidence, not on a re-read of the docs section.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3478, 3505,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs

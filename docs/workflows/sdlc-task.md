@@ -557,6 +557,19 @@ agent returns, before any state is recorded and before the binding/brain-root/po
    aborts — `Worktree setup failed closed` — even if nothing self-reported a problem. This is what
    makes the previously measured defect (`mode: "worktree"` reported while `branch: "main"` and
    `runDir` was the main tree) structurally impossible rather than merely unlikely.
+3. **`git worktree list` ground truth (task 2).** The setup agent's own `runDir`/`branchName`
+   bookkeeping is never trusted as-is: after the worktree is created or resumed, the recipe's
+   STEP 2d runs `git worktree list --porcelain` and reports its complete, unmodified stdout as
+   `worktreeListPorcelain`. The engine parses that porcelain output itself (never the agent's own
+   summary of it) and requires an entry whose `worktree` path equals the reported `runDir` — its
+   absence is a bail (`expected runDir ... absent from git worktree list`) — and whose `branch`
+   line equals the reported `branchName` — a mismatch is a bail naming both the expected and
+   observed branch. Only once ground truth confirms the self-report does the engine re-assign
+   `runDir`/`branchName` from the listed entry, so downstream state is always derived from the
+   real listing rather than merely "assumed correct because it matched." This is the mechanism
+   that catches a setup agent that fabricates a plausible-looking `runDir`/`branchName` without
+   ever having actually created the worktree — check 2 above only catches a fallback to the
+   *main tree specifically*; this check catches any worktree that doesn't actually exist.
 
 ### Binding / brain-root / population guards (BT.ticket.worktree-setup-can-adopt-the-brain-root-as-repo-root)
 

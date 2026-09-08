@@ -74,7 +74,15 @@ ANCHORS = [
     # sdlc-task.js entirely ABOVE this anchor, shifting it 1860->1872, 1923->1935. Re-picked
     # from CONTENT at the new position (confirmed byte-identical to the pre-shift content via
     # diff), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1875, 1956,
+    # BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored, task 2: a parser helper +
+    # one SETUP_SCHEMA field inserted ABOVE this anchor shifted it 1875->1902, 1956->1983
+    # (+27 both ends) with NO content change to this region itself -- verified by diffing the
+    # old range against the new range: byte-identical text (confirmed at shift +27). The new
+    # STEP 2d (`git worktree list --porcelain` capture) landed just BELOW this anchor's end, so
+    # it is a real setup-stage behavior change the anchor's fixed window happens not to cover --
+    # documented anyway (not gate-forced) as Step 7b in .agents/skills/sdlc-task/SKILL.md, per
+    # base-template AGENTS.md's update-loop rule 6.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1902, 1983,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -127,7 +135,13 @@ ANCHORS = [
     # itself -- verified by diffing the old range against the new range: byte-identical text
     # ("7. Commit your edits (stage explicitly" through the trailing `git log --oneline -1`).
     # Re-stamped on that evidence, not on a re-read of the SKILL.md section.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3412, 3439,
+    # BT.ticket.sdlc-task-worktree-flag-is-intermittently-ignored, task 2: the STEP 2d capture +
+    # parser helper + JS-side worktree-list cross-check landed entirely ABOVE this anchor,
+    # shifting it 3412->3478 (+66) with NO content change to this region itself -- verified by
+    # diffing the old range against the new range: byte-identical text ("7. Commit your edits
+    # (stage explicitly" through the trailing `git log --oneline -1`). Re-stamped on that
+    # evidence, not on a re-read of the SKILL.md section.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3478, 3505,
      ".agents/skills/sdlc-task/SKILL.md"),
     (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1871, 2001,
      ".agents/skills/sdlc-flow/SKILL.md"),
