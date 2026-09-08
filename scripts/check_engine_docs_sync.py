@@ -63,6 +63,13 @@ MANIFEST_PATH = ROOT / "scripts" / "engine_docs_sync_manifest.json"
 # line ranges already stamped in scripts/skill_sync_manifest.json for the same engine + anchor
 # name — do not re-derive different ranges for the same region.
 ANCHORS = [
+    # RE-PICKED FROM CONTENT 2026-09-08 (BT.ticket.engines-forbid-attribution-trailers, lane
+    # base-template-75): PURE SHIFT of +4 on every anchor that moved, from
+    # `da72104 fix: rebuild engines from shared library` -- NOT from this block's prompt edits,
+    # which all land outside every hashed region. Located by searching the current tree for each
+    # manifest hash's exact content, so each window is byte-identical to what the manifest already
+    # records; no --update was run and no doc re-verification was owed. sdlc-task.js's
+    # flags-and-defaults (111-155) and stage-list (87-96) did not move and are untouched.
     # BT.ticket.emoji-gate-fallback-must-attribute-a-range-it-did-not-author, task 2: the
     # <<shared:renderEmojiGate>> fallback rewrite inserted 35 net lines into shared.js, which is
     # inlined into both engines at that exact position -- every anchor whose range sat AFTER the
@@ -100,7 +107,7 @@ ANCHORS = [
     # anchor's fixed window happens not to cover -- documented anyway (not gate-forced) in
     # docs/workflows/sdlc-task.md's "## In-place vs. `--worktree`" section (new "`git worktree
     # list` ground truth (task 2)" subsection), per base-template AGENTS.md's update-loop rule 6.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1902, 1983,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1906, 1987,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -151,20 +158,20 @@ ANCHORS = [
     # diffing the old range against the new range: byte-identical text ("7. Commit your edits
     # (stage explicitly" through the trailing `git log --oneline -1`). Re-stamped on that
     # evidence, not on a re-read of the docs section.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3478, 3505,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3482, 3509,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
     # stages, plus the related:-resolution rule in the implement-stage prompt), each ABOVE these
     # three sdlc-flow.js anchors -- re-picked from CONTENT (hash match against the manifest), not
     # blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 929, 946,
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 933, 950,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1871, 2001,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1875, 2005,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3543, 3578,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3547, 3582,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

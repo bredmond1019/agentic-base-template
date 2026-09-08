@@ -82,7 +82,16 @@ ANCHORS = [
     # it is a real setup-stage behavior change the anchor's fixed window happens not to cover --
     # documented anyway (not gate-forced) as Step 7b in .agents/skills/sdlc-task/SKILL.md, per
     # base-template AGENTS.md's update-loop rule 6.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1902, 1983,
+        # RE-PICKED FROM CONTENT 2026-09-08 (BT.ticket.engines-forbid-attribution-trailers, lane
+    # base-template-75): a PURE SHIFT of +4 across ALL FOUR engine anchors, caused by
+    # `da72104 fix: rebuild engines from shared library`, not by this block's prompt edits --
+    # the renderNoAttributionTrailer() insertions all land OUTSIDE every hashed region. Located by
+    # searching the current tree for each manifest hash's exact content rather than by diffing
+    # against a guessed baseline commit (the first attempt used a pre-task-2 revision and got +18,
+    # which was wrong: the manifest hash, not some nearby commit, is the baseline). All four
+    # windows are byte-identical to what the manifest already records, so NO --update was run and
+    # no guide re-verification was owed -- the content never changed, only its line numbers.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1906, 1987,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -141,11 +150,15 @@ ANCHORS = [
     # diffing the old range against the new range: byte-identical text ("7. Commit your edits
     # (stage explicitly" through the trailing `git log --oneline -1`). Re-stamped on that
     # evidence, not on a re-read of the SKILL.md section.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3478, 3505,
+        # Same +4 shift, same evidence as the note above.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3482, 3509,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1871, 2001,
+        # Same +4 shift, same evidence.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1875, 2005,
      ".agents/skills/sdlc-flow/SKILL.md"),
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3543, 3578,
+        # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
+    # whole thing -- its needle had slid out of the window entirely.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3547, 3582,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 
