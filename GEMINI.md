@@ -89,6 +89,29 @@ When a discovery in a downstream project improves the harness:
    the manifest alongside the doc change — **never run `--update` without having actually re-read
    the affected section first, or this tripwire becomes decorative too.** When writing or rewriting
    internal documentation under `docs/`, follow the **`write-repo-doc`** skill.
+7. **`sdlc-task`/`sdlc-flow` are the ONLY hand-edited Antigravity-facing skill mirrors — every
+   other one is generated.** For every other skill, the Claude-facing `SKILL.md` is the sole
+   authored source: edit that copy, never its Antigravity-facing mirror directly. The generator
+   (`scripts/generate_skill_surfaces.py`) replaces the mirror's **body only**, copied verbatim from
+   the authored source; it never authors or rewrites an existing mirror file's **frontmatter** —
+   that half is per-surface (wrap width, `>` vs `>-` folding all vary across the real mirrors) and
+   is preserved byte-for-byte, safe to hand-edit in place. Run it after any authored-skill body
+   change:
+   ```bash
+   python3 scripts/generate_skill_surfaces.py          # write mode
+   python3 scripts/generate_skill_surfaces.py --check   # report only; exits non-zero on drift
+   ```
+   `planning/harness.json`'s `skill-surfaces-generated` check runs `--check` and gates on it — a
+   hand-edited mirror body reds the suite until it is regenerated. **The two exclusions, and why
+   they are destructive if missed:** `sdlc-task` and `sdlc-flow` are registered skill slugs with
+   **no authored source at all** — they are the hand-authored manual-replication guides named in
+   item 6 above, hashed against the engines by `scripts/check_skill_sync.py`. A run fed the bare
+   registry (rather than the registry intersected with the skill slugs that actually have an
+   authored source) would overwrite and destroy both on its first pass — the generator reports them
+   `skipped-no-source` instead. Symmetrically, an authored skill with no registry entry (e.g.
+   `epic`, `write-operating-doc`) has deliberately no counterpart on the other surface and must
+   never gain a mirror. Full contract and the operator decision that settled the
+   frontmatter-preservation rule: `planning/BT.3.G/decision.md`.
 
 Downstream projects **do not auto-sync** — pulling is still a deliberate, reviewed step (the
 script never commits for you) — but it is no longer a fully manual copy-paste; `/sync-downstream-
