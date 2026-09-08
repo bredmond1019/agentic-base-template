@@ -49,6 +49,21 @@ or the string **`UNVERIFIED: <who claimed it>`** naming the claimant when you ar
 than independently checking. Neither an empty string nor a bare adjective such as `measured`
 satisfies it — that is the exact defect this field exists to catch.
 
+#### Bastion coord (preferred)
+
+If `bastion` is on PATH, write the envelope to a local JSON file (still shaped exactly like the
+worked examples below — the wire format does not change) and hand it off with `bastion coord send
+--repo <recipient-repo> --lane <recipient-lane> --file <path-to-envelope.json>`, which faces
+`engine_core::coord::write::send` — the same function `POST /api/coordination/send` calls. It
+writes the message into `--repo`/`--lane`'s inbox for you; verify `send` against `bastion coord
+send --help` before use if the shape here ever looks stale. `--repo`/`--lane` here are the
+**recipient's**, resolved from the BT.6.A registry as described above, not the sender's own.
+
+##### Fallback: hand-written JSON (no bastion binary)
+
+This fallback is permanent, not a placeholder for a future `bastion coord send` — write the
+envelope directly into the recipient's inbox path when the binary is unavailable:
+
 ```
 <lock_dir>/queue/<repo>/<lane>/inbox/<ts>-<uuid>.json
 ```
@@ -66,10 +81,10 @@ the dashes remain, and `scripts/check_messages.py`'s `FILENAME_RE` still rejects
 record's `message_id` (already stated by the checker's module docstring); `FILENAME_RE` in
 `scripts/check_messages.py` is the authority for the exact shape.
 
-**Validate before treating a message as sent**: after writing an envelope into a peer's inbox, run
-`python3 base-template/scripts/check_messages.py` from the brain root and confirm 0 own-repo gating
-failures. This catches the filename shape above and every other envelope field in one command — a
-hand-rolled sender guessing at any of them is the same defect.
+**Validate before treating a message as sent**: after writing an envelope into a peer's inbox
+(whichever path sent it), run `python3 base-template/scripts/check_messages.py` from the brain root
+and confirm 0 own-repo gating failures. This catches the filename shape above and every other
+envelope field in one command — a hand-rolled sender guessing at any of them is the same defect.
 
 **EDGE_RELEASED** — a dependency edge cleared on the sender's side and a waiting lane may be idling
 on it, unsignalled:
