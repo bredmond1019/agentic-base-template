@@ -275,6 +275,10 @@ chmod +x "$CASE5/brain/$FIXTURE_REPO/scripts/commander_drain.sh"
 FAKE_HOME="$CASE5/fake_home"
 mkdir -p "$FAKE_HOME/.cargo/bin"
 
+HEARTBEAT_DIR="$CASE5/brain/.fleet-locks/commander-heartbeats"
+HEARTBEAT_FILE="$HEARTBEAT_DIR/${FIXTURE_REPO}-main.heartbeat"
+mkdir -p "$HEARTBEAT_DIR"
+
 BASTION_LOG="$CASE5/bastion.log"
 : > "$BASTION_LOG"
 cat > "$FAKE_HOME/.cargo/bin/bastion" <<SH
@@ -289,14 +293,17 @@ if [ "\$1" = "ask" ]; then
     shift
   done
   [ -n "\$out" ] && echo '{"status":"ok"}' > "\$out"
+  # BT.8.A task 3: ONE heartbeat writer. In a real turn, step 6 (inside the Claude session
+  # bastion ask launches) stamps the heartbeat itself -- this shim stands in for that step so
+  # the case below still proves a successful drain ends up with a heartbeat, without the
+  # WRAPPER being the one that writes it (see the sequence case further down, which asserts the
+  # wrapper itself never overwrites what a completed turn already wrote).
+  date -u +%s > "$HEARTBEAT_FILE"
   exit 0
 fi
 exit 0
 SH
 chmod +x "$FAKE_HOME/.cargo/bin/bastion"
-
-HEARTBEAT_DIR="$CASE5/brain/.fleet-locks/commander-heartbeats"
-HEARTBEAT_FILE="$HEARTBEAT_DIR/${FIXTURE_REPO}-main.heartbeat"
 
 DRAIN_LOG_OUT="$CASE5/drain_stdout.log"
 ( cd "$CASE5/brain/$FIXTURE_REPO" && HOME="$FAKE_HOME" PATH="$FAKE_HOME/.cargo/bin:$PATH" \
@@ -307,7 +314,101 @@ r=0
 [ "$CASE5_EXIT" -eq 0 ] || r=1
 [ -f "$HEARTBEAT_FILE" ] || r=1
 grep -qi "empty" "$DRAIN_LOG_OUT" || r=1
-check "empty inbox: drain exits 0, stamps the heartbeat, and logs that it was empty" "$r"
+check "empty inbox: drain exits 0, ends up with a heartbeat, and logs that it was empty" "$r"
+
+# ==============================================================================================
+# Case: ONE HEARTBEAT WRITER (BT.8.A task 3) -- the drain no longer overwrites the heartbeat the
+# registry step (the turn's own step 6) already wrote. Sequence: pre-stamp the heartbeat file
+# with a known sentinel epoch (as if a turn's step 6 had already written it), then run the
+# wrapper with `bastion ask` shimmed to succeed WITHOUT touching the heartbeat file itself --
+# isolating exactly what changed in commander_drain.sh from what a real turn does internally.
+# Assert the heartbeat on disk afterward is still the sentinel, unchanged.
+# ==============================================================================================
+
+CASE_SEQ="$WORK/case_sequence"
+mkdir -p "$CASE_SEQ/brain/$FIXTURE_REPO/scripts" "$CASE_SEQ/brain/$FIXTURE_REPO/.claude/commands" "$CASE_SEQ/brain/scripts/sync" "$CASE_SEQ/bin"
+touch "$CASE_SEQ/brain/brain.toml"
+cp "$BRAIN_ROOT_REAL/scripts/sync/lib.sh" "$CASE_SEQ/brain/scripts/sync/lib.sh"
+cp "$REPO_ROOT/scripts/commander_drain.sh" "$CASE_SEQ/brain/$FIXTURE_REPO/scripts/commander_drain.sh"
+cp "$REPO_ROOT/.claude/commands/orchestration-commander.md" \
+   "$CASE_SEQ/brain/$FIXTURE_REPO/.claude/commands/orchestration-commander.md"
+chmod +x "$CASE_SEQ/brain/$FIXTURE_REPO/scripts/commander_drain.sh"
+
+SEQ_HEARTBEAT_DIR="$CASE_SEQ/brain/.fleet-locks/commander-heartbeats"
+SEQ_HEARTBEAT_FILE="$SEQ_HEARTBEAT_DIR/${FIXTURE_REPO}-main.heartbeat"
+mkdir -p "$SEQ_HEARTBEAT_DIR"
+
+# "the registry step" -- a FRESH (within-threshold) but deliberately offset epoch, so this
+# case never crosses the staleness-alert path (send_alert requires alerting env vars this
+# suite does not set, and exercising that path is not what this case is about) while still
+# being trivially distinguishable from an accidental overwrite (which would land within a
+# second or two of "now", not ~2 minutes behind it).
+REGISTRY_EPOCH="$(( $(date -u +%s) - 120 ))"
+printf '%s' "$REGISTRY_EPOCH" > "$SEQ_HEARTBEAT_FILE"
+
+SEQ_FAKE_HOME="$CASE_SEQ/fake_home"
+mkdir -p "$SEQ_FAKE_HOME/.cargo/bin"
+cat > "$SEQ_FAKE_HOME/.cargo/bin/bastion" <<'SH'
+#!/usr/bin/env bash
+if [ "$1" = "ask" ]; then
+  out=""
+  while [ $# -gt 0 ]; do
+    if [ "$1" = "--out" ]; then out="$2"; fi
+    shift
+  done
+  # Deliberately does NOT touch the heartbeat file -- this shim represents a successful ask
+  # call whose registry write already happened (the pre-stamped sentinel above); the point of
+  # this case is that commander_drain.sh itself must not touch the file on a successful exit.
+  [ -n "$out" ] && echo '{"status":"ok"}' > "$out"
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$SEQ_FAKE_HOME/.cargo/bin/bastion"
+
+SEQ_DRAIN_LOG_OUT="$CASE_SEQ/drain_stdout.log"
+( cd "$CASE_SEQ/brain/$FIXTURE_REPO" && HOME="$SEQ_FAKE_HOME" PATH="$SEQ_FAKE_HOME/.cargo/bin:$PATH" \
+    bash scripts/commander_drain.sh --repo "$FIXTURE_REPO" --lane main > "$SEQ_DRAIN_LOG_OUT" 2>&1 )
+CASE_SEQ_EXIT=$?
+
+SEQ_HEARTBEAT_AFTER="$(cat "$SEQ_HEARTBEAT_FILE" 2>/dev/null || echo "MISSING")"
+
+r=0
+[ "$CASE_SEQ_EXIT" -eq 0 ] || r=1
+[ "$SEQ_HEARTBEAT_AFTER" = "$REGISTRY_EPOCH" ] || r=1
+check "commander_drain.sh no longer overwrites the heartbeat the registry step already wrote" "$r"
+
+# ==============================================================================================
+# Case: heartbeat FORMAT/STALENESS -- an epoch-seconds heartbeat passes; an ISO-8601 heartbeat
+# (this script's own drain_started_at format, historically also used to stamp brain-commander's
+# heartbeat -- the real cross-format bug BT.6.D fixed) goes RED, naming the format, rather than
+# being silently mis-parsed by bash integer arithmetic. Exercises `--check-heartbeat` directly.
+# ==============================================================================================
+
+FMT_DIR="$(mktemp -d)"
+
+EPOCH_FILE="$FMT_DIR/epoch.heartbeat"
+date -u +%s > "$EPOCH_FILE"
+EPOCH_OUTPUT="$(bash "$REPO_ROOT/scripts/commander_drain.sh" --check-heartbeat "$EPOCH_FILE" 5400)"
+EPOCH_EXIT=$?
+
+r=0
+[ "$EPOCH_EXIT" -eq 0 ] || r=1
+printf '%s' "$EPOCH_OUTPUT" | grep -qi "FRESH" || r=1
+check "epoch-seconds heartbeat passes the staleness check" "$r"
+
+ISO_FILE="$FMT_DIR/iso.heartbeat"
+date -u +%Y-%m-%dT%H:%M:%SZ > "$ISO_FILE"
+ISO_OUTPUT="$(bash "$REPO_ROOT/scripts/commander_drain.sh" --check-heartbeat "$ISO_FILE" 5400)"
+ISO_EXIT=$?
+
+r=0
+[ "$ISO_EXIT" -eq 2 ] || r=1
+printf '%s' "$ISO_OUTPUT" | grep -qi "RED" || r=1
+printf '%s' "$ISO_OUTPUT" | grep -qi "epoch" || r=1
+check "ISO-8601 heartbeat goes RED, naming that it is not epoch seconds" "$r"
+
+rm -rf "$FMT_DIR"
 
 # ==============================================================================================
 # Cases 6-12: BT.ticket.commander-prompt-must-read-the-board — the command file must instruct
