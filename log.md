@@ -6,6 +6,35 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-08
 
 ---
+
+## 2026-09-08 — BT.3.G: BAILED — no deterministic transform reproduces the 17 real skill mirrors
+
+Ran `/sdlc-flow BT.3.G`, tasks 1-2 (of 4 planned), verdict BAILED. Task 1 added
+`scripts/test_generate_skill_surfaces.py`, a failing-fixture contract for the not-yet-built
+generator (`compute_mirror_content`/`fold_description`/`discover_slugs`/`run`), pinning a
+frontmatter-only transform, the `sdlc-task`/`sdlc-flow` no-source skip, and the
+`epic`/`write-operating-doc` claude-only exclusion, against synthetic fixture slugs rather than
+the real 17 mirrored pairs. Task 2 built `scripts/generate_skill_surfaces.py` to that contract
+(importing `AGENT_SKILL_SLUGS` from `sync_downstream_harness.py` rather than re-listing it,
+correctly protecting `sdlc-task`/`sdlc-flow` and excluding `epic`/`write-operating-doc`), passing
+all 9 of task 1's fixture tests — but running `--check` against the real repo showed 14 of 17 real
+`.agents/skills/` mirrors would change under the one canonical transform (width=95,
+`break_long_words=False`, `break_on_hyphens=False`) task 1's contract pins. Task 2's own
+investigation swept every `textwrap` width 70-105 across every
+`break_long_words`/`break_on_hyphens` combination against the real mirrors and found no single
+deterministic transform reproduces all of them byte-for-byte: 4 mirrors keep `description` as a
+single unfolded line, the other 13 fold at varying widths/styles (one uses `>-` chomping instead of
+`>`). This is genuine hand-editing history, not a generator bug, and neither the generator nor the
+real mirror files were touched to paper over it — no `.agents/skills/*.md` path is in this block's
+`files[]`. The run bailed rather than proceed to task 3 (wire the `--check` divergence gate into
+`harness.json`) against a check that would red-gate on day one. Next: a re-plan or operator
+decision — either regenerate the real mirrors in write mode (out of this block's scope) or
+relax/redefine what `--check` matches before task 4 wires it in.
+
+```
+eae37c5 feat: implement BT.3.G-task2
+5371f1b feat: implement BT.3.G-task1
+```
 ## 2026-09-08 — BT.3.F: `brain-graph` skill wraps `bastion brain` and `bastion code`
 
 Ran `/sdlc-flow BT.3.F`, four tasks, verdict PASS. Task 1 widened `scripts/check_cli_invocations.py`'s
