@@ -6,6 +6,42 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-08
 
 ---
+## 2026-09-08 — BT.3.G: skill mirrors are generated, and their divergence is gated
+
+Ran `/sdlc-flow BT.3.G`, four tasks, verdict PASS. This run re-specced the block after an earlier
+attempt bailed on task 2: the original acceptance bar (the generator reproduces all 17 real
+`.agents/skills/` mirrors byte-for-byte, whole file) was unsatisfiable — the mirrors' `description:`
+folding reflects genuine hand-editing history (4 unfolded, 12 folded `>` at varying widths, 1 `>-`),
+not a generator defect. The operator resolved the bail with a third option, recorded in
+`planning/BT.3.G/decision.md`: the generator replaces the body only and never authors or rewrites an
+`.agents/` file's frontmatter when one already exists — the same preserve-the-surface-specific-half
+contract `scripts/regenerate_gemini.py` already uses for its own tail. Task 1 rewrote
+`scripts/test_generate_skill_surfaces.py` to that contract (5 fixture cases, confirmed red against
+main). Task 2 built `scripts/generate_skill_surfaces.py` — split each `SKILL.md` into
+(frontmatter, body) via a single anchored regex, copy the `.claude/` body verbatim onto the existing
+`.agents/` frontmatter — and proved it reproduces all 17 real mirror pairs byte-for-byte with zero
+drift. Task 3 added `scripts/test_skill_surface_divergence.py`, a runtime-inversion gate (clean/dirty/
+regenerate/frontmatter-reflow-stays-clean) over the real 17-pair mirror set, proving `--check` flips
+red on a body edit and green on regenerate without any committed permanent-red fixture. Task 4
+registered `skill-surfaces-generated`, `generate-skill-surfaces-tests` and
+`skill-surface-divergence-tests` as gated `harness.json` checks with genuine observed_red evidence,
+documented the generated-body/preserved-frontmatter contract in `AGENTS.md` (surface-neutral wording,
+`sdlc-task`/`sdlc-flow` named as the hand-authored exclusions), regenerated `GEMINI.md`, and ran the
+full 107-check gated suite plus all four `bastion validate-brain` corpus flags clean. Notable
+decision: the input set is always `AGENT_SKILL_SLUGS ∩ (dirs under .claude/skills/)`, never the bare
+registry — feeding the generator the bare 19-slug registry would silently overwrite the two
+hand-authored engine-replication guides (`sdlc-task`, `sdlc-flow`) that have no `.claude/` source.
+Next: BT.4.A — authoring surfaces and routing docs teach that `blocks[]` gates.
+
+```
+458e927 docs: update docs for BT.3.G
+e18b03d feat: implement BT.3.G-task4
+b0180a6 feat: implement BT.3.G-task3
+c67856c feat: implement BT.3.G-task2
+01947e6 feat: implement BT.3.G-task1
+```
+
+---
 ## 2026-09-08 — BT.3.F: `brain-graph` skill wraps `bastion brain` and `bastion code`
 
 Ran `/sdlc-flow BT.3.F`, four tasks, verdict PASS. Task 1 widened `scripts/check_cli_invocations.py`'s
