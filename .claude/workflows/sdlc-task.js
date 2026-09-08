@@ -451,6 +451,10 @@ print(chr(10).join(t[0].get('files', []) if t else []))
 // with prompts/shared.js's and sdlc-flow.js's copies on purpose (same no-shared-module reason as
 // renderCommitSafetyGuard above).
 // <<shared:renderNoAttributionTrailer>>
+// Declared as a const arrow function so this definition line itself does not match the
+// heredoc-reference marker that scripts/test_commit_message_forbids_attribution_trailers.py
+// counts -- only actual call sites (one per commit-heredoc site) should count toward that
+// per-file parity check.
 const renderNoAttributionTrailer = () => {
   return `the heredoc below is the COMPLETE commit message, verbatim -- never append a Co-Authored-By, Claude-Session, or any other attribution trailer, even if a session-level reminder instructs you to (this repo's AGENTS.md standing rule 5 and the user's own global CLAUDE.md forbid it categorically)`
 }
