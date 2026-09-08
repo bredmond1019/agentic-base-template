@@ -3,7 +3,36 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-07
+**Last updated:** 2026-09-08
+
+---
+## 2026-09-08 — BT.3.F: `brain-graph` skill wraps `bastion brain` and `bastion code`
+
+Ran `/sdlc-flow BT.3.F`, four tasks, verdict PASS. Task 1 widened `scripts/check_cli_invocations.py`'s
+`FLAG_CHECKED_VERBS` to cover `(bastion, brain)` and `(bastion, code)`, with fixture coverage for both
+passing and failing `--dependents`/`--depends-on` cases. Task 2 authored
+`.claude/skills/brain-graph/SKILL.md`, documenting `bastion brain`'s and `bastion code`'s exactly-one-of
+query flags, output grammars, `--json` vs `--json-logs`, and a fail-loud preflight
+(`bastion brain --help` / `bastion code --help`) — every example command in the file was actually run
+against the installed `bastion` 0.1.0 before being written down. Task 3 mirrored the skill to
+`.agents/skills/brain-graph/SKILL.md`, registered it in `scripts/sync_downstream_harness.py`'s
+`AGENT_SKILL_SLUGS`, and added it to `CLAUDE.md`'s Fleet & Core Skills table. Task 4 added
+`scripts/test_brain_graph_skill_recipes.py` — a verb/flag/exactly-one-query-flag proof over every
+fenced `bastion brain`/`code` invocation in the new SKILL.md, skip-clean when `bastion` is absent from
+PATH — and registered it as gated check `brain-graph-recipes` in `planning/harness.json`; all 104
+gated checks and all four `bastion validate-brain` flags pass with 0 errors. No genuine deviations
+from the spec surfaced; no amendment log entries filed. Next: BT.ticket.block-origin-remediation-never-reached-the-schema — `origin.type` `remediation` is documented but absent from `block.schema.json`'s enum.
+
+```
+c139f8c feat: implement BT.3.F-task4
+f6f4e8d feat: implement BT.3.F-task3
+569e7b0 feat: implement BT.3.F-task2
+77eba7b feat: implement BT.3.F-task1
+0fe5354 feat: implement BT.ticket.lane-heartbeat-goes-stale-mid-block-task5
+1e4cd3a feat: implement BT.ticket.lane-heartbeat-goes-stale-mid-block-task4
+23c4c22 feat: implement BT.ticket.lane-heartbeat-goes-stale-mid-block-task3
+30caaa0 feat: implement BT.ticket.lane-heartbeat-goes-stale-mid-block-task2
+```
 
 ---
 ## 2026-09-07 — BT.8.A: optional `host` in the four coordination schemas; one heartbeat writer, one format
