@@ -16,6 +16,7 @@ the corresponding skill before executing high-stakes fleet operations:
 
 | Skill | Primary Focus | When to consult |
 |---|---|---|
+| **`brain-graph`** | `bastion brain`/`bastion code` verb surface — flags, output grammar, `--json` vs `--json-logs` | BEFORE running either verb by hand or writing a recipe/script that shells them |
 | **`commit-in-this-fleet`** | Safe git operations across multi-repo & vault symlinks | BEFORE any `git add`, `commit`, `stash`, `reset`, or `mv` |
 | **`derive-state-safely`** | Authored vs derived state and writer execution | BEFORE running `mev emit-state --write`, `set-block-status`, or other state writers |
 | **`edit-state-json`** | Canonical `planning/state.json` schema & graph edges | BEFORE hand-editing `state.json` or authoring `depends_on`/`carryover` |

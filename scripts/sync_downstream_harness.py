@@ -431,6 +431,10 @@ AGENT_SKILL_SLUGS: list[str] = [
     # hand and these two were simply missed.
     "fleet-push-discipline",
     "stamp-workflow-run-id",
+    # Added by BT.3.F-task3 (2026-09-08): mirror of .claude/skills/brain-graph/SKILL.md, the
+    # `bastion brain`/`bastion code` verb-surface reference. Same hand-mirror rule as the block
+    # above - no blind claude->antigravity substitution on path/filename literals.
+    "brain-graph",
 ]
 
 
