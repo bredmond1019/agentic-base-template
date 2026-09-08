@@ -17,10 +17,12 @@ Run: python3 scripts/test_check_lane_agents.py
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import subprocess
 import sys
 import tempfile
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -260,7 +262,8 @@ def check_negative_duplicate_exclusive_lease() -> None:
               "beta" in proc.stdout and "agent-beta" in proc.stdout, proc.stdout)
 
 
-# --- negative (c): stale heartbeat ----------------------------------------------------------
+# --- negative (c): stale heartbeat is REPORTED, never GATING (BT.ticket.lane-heartbeat-goes- --
+# stale-mid-block, task 2) -------------------------------------------------------------------
 
 def check_negative_stale_heartbeat() -> None:
     with tempfile.TemporaryDirectory() as td:
@@ -273,12 +276,82 @@ def check_negative_stale_heartbeat() -> None:
             [sys.executable, str(MODULE_PATH), "--lock-dir", str(lock_dir), "--quiet"],
             capture_output=True, text=True,
         )
-        check("a stale-heartbeat registry claim makes the CLI exit non-zero",
-              proc.returncode != 0, proc.stdout + proc.stderr)
-        check("the failure names the agent",
+        check("a stale-heartbeat registry claim does NOT make the CLI exit non-zero "
+              "(reported, not gating)",
+              proc.returncode == 0, proc.stdout + proc.stderr)
+        check("the report names the agent",
               "stale-agent" in proc.stdout, proc.stdout)
-        check("the failure reports the heartbeat age",
+        check("the report includes the heartbeat age",
               "stale" in proc.stdout.lower(), proc.stdout)
+
+
+# --- pinned from scripts/test_lane_staleness_verdict.py (task 1), now permanently gated here --
+# (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 2) -------------------------------------
+
+def check_stale_own_registry_claim_does_not_gate() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        now = _now()
+        stale_delta = timedelta(seconds=check_lane_agents.STALE_THRESHOLD_SECONDS + 60)
+        stale_heartbeat = now - stale_delta
+        agent_name = "base-template-pinned-stale-registry"
+        _write_json(
+            lock_dir / "lane-agents" / f"agent-{agent_name}.json",
+            _valid_registry(agent_name=agent_name, heartbeat=_iso(stale_heartbeat)),
+        )
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = check_lane_agents.run(lock_dir, quiet=True, now=now)
+        out = buf.getvalue()
+        check("an own-repo registry claim past the staleness threshold does not fail "
+              "the gating verdict (rc == 0)", rc == 0, f"rc: {rc}, output: {out}")
+        check("the stale registry claim's agent name still appears in the output",
+              agent_name in out, out)
+        expected_age = int(stale_delta.total_seconds())
+        check(f"the stale registry claim's age (~{expected_age}s) still appears in the output",
+              any(str(expected_age + d) in out for d in range(-2, 3)), out)
+
+
+def check_stale_own_lease_does_not_gate() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        now = _now()
+        stale_delta = timedelta(seconds=check_lane_agents.STALE_THRESHOLD_SECONDS + 60)
+        stale_heartbeat = now - stale_delta
+        agent_name = "base-template-pinned-stale-lease"
+        _write_json(
+            lock_dir / "leases" / "lease-base-template.json",
+            _valid_lease(agent=agent_name, heartbeat=_iso(stale_heartbeat)),
+        )
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = check_lane_agents.run(lock_dir, quiet=True, now=now)
+        out = buf.getvalue()
+        check("an own-repo lease past the staleness threshold does not fail "
+              "the gating verdict (rc == 0)", rc == 0, f"rc: {rc}, output: {out}")
+        check("the stale lease's agent name still appears in the output",
+              agent_name in out, out)
+
+
+def check_structurally_invalid_registry_claim_still_gates_positive_control() -> None:
+    """Positive control: a structurally invalid own-repo record still fails the gating verdict,
+    proving the exit-code assertions above are a real instrument."""
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        record = _valid_registry(agent_name="base-template-pinned-missing-roadmap")
+        del record["roadmap"]
+        _write_json(lock_dir / "lane-agents" / "agent-base-template-pinned-missing-roadmap.json",
+                    record)
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = check_lane_agents.run(lock_dir, quiet=True)
+        out = buf.getvalue()
+        check("POSITIVE CONTROL: an own-repo registry claim missing a required field "
+              "(`roadmap`) still fails the gating verdict (rc == 1)", rc == 1, f"rc: {rc}, output: {out}")
+        check("the missing-field failure names the missing field", "roadmap" in out, out)
 
 
 # --- negative (d): malformed JSON -----------------------------------------------------------
@@ -382,9 +455,13 @@ def check_lease_without_heartbeat_falls_back_to_acquired_at() -> None:
         no_heartbeat_stale = dict(real_lease_fixture)
         no_heartbeat_stale["acquired_at"] = _iso(stale_acquired)
         _write_json(lock_dir / "leases" / "lease-no-heartbeat.json", no_heartbeat_stale)
-        rc = check_lane_agents.run(lock_dir, quiet=True)
-        check("a lease with no heartbeat and a stale acquired_at is still flagged stale "
-              "(unchanged behavior)", rc == 1, f"rc: {rc}")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = check_lane_agents.run(lock_dir, quiet=True)
+        check("a lease with no heartbeat and a stale acquired_at is still DETECTED as stale, "
+              "but staleness alone no longer gates (rc == 0)", rc == 0, f"rc: {rc}")
+        check("the stale-acquired-at lease is still reported in the output",
+              "stale" in buf.getvalue().lower(), buf.getvalue())
 
 
 def check_lease_with_fresh_heartbeat_survives_stale_acquired_at() -> None:
@@ -466,9 +543,15 @@ def check_boundary_heartbeat_exactly_at_threshold() -> None:
         just_past = now - timedelta(seconds=check_lane_agents.STALE_THRESHOLD_SECONDS + 1)
         _write_json(lock_dir / "lane-agents" / "agent-past.json",
                     _valid_registry(agent_name="past-agent", heartbeat=_iso(just_past)))
-        rc = check_lane_agents.run(lock_dir, quiet=True, now=now)
-        check("a heartbeat one second PAST the threshold trips staleness",
-              rc == 1, f"rc: {rc}")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = check_lane_agents.run(lock_dir, quiet=True, now=now)
+        check("a heartbeat one second PAST the threshold trips staleness DETECTION, but "
+              "staleness alone does not gate (rc == 0)",
+              rc == 0, f"rc: {rc}")
+        check("the just-past-threshold heartbeat is still reported as stale in the output",
+              "stale" in buf.getvalue().lower() and "past-agent" in buf.getvalue(),
+              buf.getvalue())
 
 
 # --- BT.ticket.fleet-wide-gates-red-on-another-lanes-data: foreign vs. own verdict scope -----
@@ -478,8 +561,13 @@ def check_boundary_heartbeat_exactly_at_threshold() -> None:
 # as fatal as one belonging to this repo, which is the bug. These two functions assert the
 # TARGET (post-task-3) behavior, so they are expected to be RED until the verdict is scoped:
 #   - the foreign case asserts rc == 0 (not fatal) -- FAILS today, because today it is fatal.
-#   - the own case asserts rc != 0 (still fatal) -- PASSES today AND after the fix, proving the
-#     fix narrows the verdict rather than loosening it entirely.
+#   - the own case asserted rc != 0 (still fatal) at the time this block landed -- proving the
+#     ownership-scoping fix narrowed the verdict rather than loosening it entirely.
+#
+# UPDATED by BT.ticket.lane-heartbeat-goes-stale-mid-block (task 2): staleness alone no longer
+# gates AT ALL, own-repo or foreign -- see check_lane_agents.py's module docstring, "STALENESS IS
+# REPORTED, NEVER GATING". The own-repo case below is renamed and its assertion flipped
+# accordingly; the foreign case is unchanged (it already asserted non-fatal).
 #
 # The measured incident: BT.ticket.validate-brain-is-a-write-and-push-path bailed at task 1 on a
 # registry claim belonging to agent `agentic-portfolio-01` (repo `agentic-portfolio`, i.e. HQ,
@@ -521,10 +609,10 @@ def check_foreign_stale_registry_claim_reports_but_is_not_fatal() -> None:
               proc.returncode == 0, f"rc: {proc.returncode}, output: {proc.stdout + proc.stderr}")
 
 
-def check_own_stale_registry_claim_is_still_fatal() -> None:
+def check_own_stale_registry_claim_reports_but_is_not_fatal() -> None:
     """The other direction of the same fixture: a stale registry claim belonging to THIS repo
-    (base-template) must still fail the gating verdict, both today and after task 3 -- proving
-    the eventual fix narrows the verdict rather than loosening it for everyone."""
+    (base-template) is still reported, but -- per BT.ticket.lane-heartbeat-goes-stale-mid-block
+    task 2 -- no longer fails the gating verdict either, matching the foreign case above."""
     with tempfile.TemporaryDirectory() as td:
         lock_dir = Path(td) / ".fleet-locks"
         stale_seconds = check_lane_agents.STALE_THRESHOLD_SECONDS + 1039
@@ -544,9 +632,9 @@ def check_own_stale_registry_claim_is_still_fatal() -> None:
         )
         check("a stale registry claim belonging to THIS repo is REPORTED in the output",
               "base-template-own" in proc.stdout, proc.stdout + proc.stderr)
-        check("a stale registry claim belonging to THIS repo still fails the gating verdict "
-              "(rc != 0), both today and after task 3",
-              proc.returncode != 0, f"rc: {proc.returncode}, output: {proc.stdout + proc.stderr}")
+        check("a stale registry claim belonging to THIS repo does NOT fail the gating verdict "
+              "(rc == 0) -- staleness is report-only, own-repo included",
+              proc.returncode == 0, f"rc: {proc.returncode}, output: {proc.stdout + proc.stderr}")
 
 
 # --- positive: no records is not a failure ----------------------------------------------------
@@ -580,6 +668,9 @@ def main() -> int:
     check_negative_missing_required_field()
     check_negative_duplicate_exclusive_lease()
     check_negative_stale_heartbeat()
+    check_stale_own_registry_claim_does_not_gate()
+    check_stale_own_lease_does_not_gate()
+    check_structurally_invalid_registry_claim_still_gates_positive_control()
     check_negative_malformed_json()
     check_negative_nonexistent_path_is_named_error()
     check_shared_vs_exclusive_asymmetry()
@@ -590,7 +681,7 @@ def main() -> int:
     check_lease_cross_script_agreement_with_fleet_concurrency_check()
     check_boundary_heartbeat_exactly_at_threshold()
     check_foreign_stale_registry_claim_reports_but_is_not_fatal()
-    check_own_stale_registry_claim_is_still_fatal()
+    check_own_stale_registry_claim_reports_but_is_not_fatal()
     check_no_records_is_not_a_failure()
 
     if FAILURES:
