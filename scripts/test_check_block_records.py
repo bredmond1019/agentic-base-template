@@ -246,6 +246,30 @@ def planning_path_checks():
           any("files" in m for m in warns), f"warnings: {warns}")
 
 
+def origin_type_checks():
+    """origin.type validation against ORIGIN_TYPES (BT.ticket.block-origin-remediation
+    -never-reached-the-schema, task 3). `origin` is optional-object provenance, warn-only --
+    matches this checker's posture for other backfill-era gaps.
+    """
+
+    def origin_msgs(msgs):
+        return [m for m in msgs if "origin.type" in m]
+
+    # A newly-added value (one of the 9 the enum gained in task 1) is clean.
+    errs, warns = run("planning/HQ.9.A/",
+                       origin={"type": "roadmap", "slug": "some-roadmap"})
+    check("a newly-added origin.type value (roadmap) produces no origin warning",
+          not origin_msgs(errs) and not origin_msgs(warns), f"errors: {errs} warnings: {warns}")
+
+    # An invented value is flagged by name, as a warning (never an error).
+    errs, warns = run("planning/HQ.9.A/",
+                       origin={"type": "bogus", "slug": "x"})
+    check("an invented origin.type is not an error", not origin_msgs(errs), f"errors: {errs}")
+    check("an invented origin.type warns and names the offending value",
+          len(origin_msgs(warns)) == 1 and "bogus" in origin_msgs(warns)[0],
+          f"warnings: {warns}")
+
+
 def main():
     # 1. The HQ.9.A case: legacy name, directory really exists.
     errs, warns = run("planning/chore-fleet-parking-pass/", ("chore-fleet-parking-pass",))
@@ -279,6 +303,7 @@ def main():
 
     prefix_and_operator_checks()
     planning_path_checks()
+    origin_type_checks()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed:")

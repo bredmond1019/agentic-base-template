@@ -128,14 +128,16 @@ WORKFLOWS = {"none", "patch", "task", "run", "flow"}
 MODELS = {"sonnet", "gemini-pro", "gemini-flash", "either"}
 
 # Mirrors block.schema.json's origin.type enum exactly (BT.ticket.block-origin-remediation
-# -never-reached-the-schema) -- the 2026-09-08 fleet audit's 13 live values. Kept as a WARNING,
-# not a hard error, matching this checker's posture for other backfill-era gaps (WARN_IF_MISSING
-# above): existing records predate the expanded enum and an unrecognized value here is debt to
-# surface, not a block to fail outright.
+# -never-reached-the-schema) -- the 2026-09-08 fleet audit's 13 live values, plus `decision`
+# (added task 3, after a live check_block_records.py run against this repo's own
+# planning/blocks/ tree found 3 records already using it -- the audit's list was incomplete).
+# Kept as a WARNING, not a hard error, matching this checker's posture for other backfill-era
+# gaps (WARN_IF_MISSING above): existing records predate the expanded enum and an unrecognized
+# value here is debt to surface, not a block to fail outright.
 ORIGIN_TYPES = {
     "backlog", "carryover", "capture", "mechanism", "remediation", "roadmap",
     "known_issue", "operator", "finding", "deferred", "run", "defect",
-    "cross-repo", "message",
+    "cross-repo", "message", "decision",
 }
 
 
