@@ -20,7 +20,7 @@ Spawn a subagent (Agent tool) to execute all steps below; pass the resolved targ
 3. For each target repository path (e.g. `core/mev/planning/` or root `planning/`):
    - **CRITICAL: Follow symlinks during directory scanning (`find -L` or `os.walk(..., followlinks=True)`).** Leaf repositories' `planning/` directories are symlinks into `_planning/` vaults (`core/_planning/<repo>`, etc.). Skipping symlinks will omit sub-project planning folders.
    - Scan all top-level subdirectories inside every discovered `planning/` folder.
-   - Ignore metadata/system directories named `archive`, `artifacts`, `decisions`, `archive-report`, `.playwright-cli`, or worktree paths (`trees/*`). **Do not ignore `sdlc/`** — it is read in this step, not skipped (see below).
+   - Ignore metadata/system directories named `archive`, `artifacts`, `decisions`, `archive-report`, `archive-report-baseline-*`, `blocks`, `epics`, `roadmaps`, `orchestration-run`, `doc-graph`, `carryover-follow-up-routine`, `reports`, `evidence`, `handoffs`, `lane-agents`, `.playwright-cli`, or worktree paths (`trees/*`) — these are machine containers, not spec/ticket folders, and scanning them as candidates just produces false "Unmatched" noise (confirmed in the 2026-08-28 HQ run; see `planning/archive-report/report-2026-08-28.md` line 30, where the agent had to improvise this exact exclusion by hand). **Do not ignore `sdlc/`** — it is read in this step, not skipped (see below).
    - For each directory, inspect for:
      - `sdlc/sdlc-task-state.json` or `sdlc/sdlc-flow-state.json`: read the top-level `"status"` field. This is the **engine's own authoritative completion record** and is frequently the *only* completion signal a folder has — most closed tickets have no `tasks.json`/`tasks.md` at all. If `"status"` is `"done"`, mark tasks as complete. If `"blocked"` or `"failed"`, mark incomplete regardless of any other signal (a blocked engine run is not done work).
      - `tasks.json`: Check statuses. If `"status"` is `"done"`, `"closed"`, or `"PASS"`, or if all items in `tasks[]` are marked complete, mark tasks as complete.
@@ -46,7 +46,7 @@ Prose substring-matching against `state.json` by hand is what causes this audit 
 
 ### Step 3 — Write the Report
 
-9. Write the audit findings to `planning/archive-report/report.md` in the current planning scope:
+9. Write the audit findings to `planning/archive-report/report-<YYYY-MM-DD>.md` (today's date, in the current planning scope) — **never overwrite a prior run's `report-*.md`**; each run is a new dated file:
    - **OKF Frontmatter**: Type `Note`, title `Archive Candidates Report`, status `active`, layer `[meta]`.
    - **Match-rate summary line**: e.g. "187/202 folders matched a state.json/master-plan record (92%); 15 unmatched." A run with a low match rate is a signal the scan itself is unreliable, not that the fleet is unusually incomplete.
    - **Archive Candidates table**: candidate folder path, block/subject, matched `state.json` status (or "no tier state.json"), which signal fired (sdlc-state / tasks / frontmatter / state.json), and a brief gist of knowledge to harvest.
@@ -59,10 +59,10 @@ Prose substring-matching against `state.json` by hand is what causes this audit 
 ### Step 4 — Directory Index Integrity (Rule 7)
 
 10. Create or update `planning/archive-report/index.md` in OKF format:
-    - Type `Index`, title `Archive Report Directory Index`, layer `[meta]`, listing `report.md`.
+    - Type `Index`, title `Archive Report Directory Index`, layer `[meta]`, adding a row for this run's `report-<YYYY-MM-DD>.md` (do not remove rows for prior dated reports).
 11. Update the parent `planning/index.md`:
     - Add a row for `archive-report/` to the active folders list.
 
 ### Step 5 — Report Findings
 
-12. Present the final summary table of archive candidates to the user, highlighting the path of the generated `report.md`.
+12. Present the final summary table of archive candidates to the user, highlighting the path of the generated `report-<YYYY-MM-DD>.md`.

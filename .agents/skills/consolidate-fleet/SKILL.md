@@ -55,7 +55,7 @@ three independent audits found 32%/32%/26% of filed carryover already dead.
   they keep appearing.
 - **Not `/triage-carryover`** (HQ) — that *works* the carryover backlog: one fan-out round of
   read-only per-repo audits, applied by a single writer, evidence written into the repo. This
-  command **reads the evidence it leaves** (`planning/carryover-triage-*/`) and asks what the rot
+  command **reads the evidence it leaves** (`planning/carryover-triage/*/`) and asks what the rot
   rate across rounds says about authoring. Do not audit entries here, and never dispose of one:
   `/triage-carryover` owns that, and bans bulk `--dispose` for reasons this command must not
   second-guess.
@@ -138,7 +138,7 @@ honours it rather than adding a second one for the same files.
 | Commander retros | `$BRAIN_ROOT/planning/open-work/orchestration-runs/retros/*.md` | Instrument failures; the highest-transfer material there is |
 | Commander chronology | `$BRAIN_ROOT/planning/open-work/orchestration-runs/retros/commander-retro-*.md` and `liaison-retro-*.md` | Drain-by-drain timeline. (Was `run-log-*.md`, retired 2026-09-07 — the chronology now lives with the retros.) |
 | **The open-work board** | `$BRAIN_ROOT/planning/open-work/orchestration-runs/new-work-log.md` | **Every finding a drain surfaced and left open.** The one input that was missing: `orchestration-commander` writes every finding here and closes a row only "when a human resolves it or a later drain observes it gone", and until 2026-09-07 nothing read it — so findings accumulated with no promotion path. Measured that day: 60 findings, exactly **one** marked CLOSED. Treat each open row as a candidate for Step 4's disposal rows. |
-| Carryover triage | `planning/carryover-triage-*/` (per-repo files + `evidence/`) | Per-repo rot rates and their causes |
+| Carryover triage | `planning/carryover-triage/*/` (per-repo files + `evidence/`) | Per-repo rot rates and their causes |
 | Prior analyses | `retros/pattern-analysis-*.md`, `roadmaps/*/consolidated-review*.md` | So a known mechanism is reported as another instance, not rediscovered |
 
 **Read the prior analyses first.** The commander's own retro records the cost of skipping this: a
