@@ -96,7 +96,7 @@ ANCHORS = [
     # runTests() heartbeatRecipe call (+2 net lines) landed BELOW it, so only +5 applies here:
     # 1906->1911, 1987->1992. Text unchanged -- verified by diffing the old range against the new
     # range: byte-identical ("WORKTREE MODE (--worktree)" through the trailing content).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1911, 1992,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1920, 2001,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -163,7 +163,7 @@ ANCHORS = [
     # 3482->3489, 3509->3516 (+7 total). Text unchanged -- verified by diffing the old range
     # against the new range: byte-identical ("7. Commit your edits (stage explicitly" through the
     # trailing `git log --oneline -1`).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3489, 3516,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3498, 3525,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the

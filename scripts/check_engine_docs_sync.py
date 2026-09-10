@@ -112,7 +112,12 @@ ANCHORS = [
     # runTests() heartbeatRecipe call (+2 net lines) landed BELOW it, so only +5 applies here:
     # 1906->1911, 1987->1992. Text unchanged -- verified by diffing the old range against the new
     # range: byte-identical ("WORKTREE MODE (--worktree)" onward).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1911, 1992,
+    # BT.ticket.sdlc-state-status-vocabulary, task 3: the renderStateFlipScript doc-comment
+    # rewrite (FLIP_REFUSED contract) + the mev-absent fallback's refusal rewrite inserted 9 net
+    # lines into sdlc-task.js entirely ABOVE this anchor, shifting it 1911->1920, 1992->2001.
+    # Re-picked from CONTENT at the new position (confirmed byte-identical to the pre-shift
+    # content via hash match against the manifest), not blindly renumbered.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1920, 2001,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -169,7 +174,11 @@ ANCHORS = [
     # runTests() (+2 net lines) both landed ABOVE this anchor in sdlc-task.js, shifting it
     # 3482->3489, 3509->3516 (+7 total). Text unchanged -- verified by diffing the old range
     # against the new range: byte-identical.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3489, 3516,
+    # BT.ticket.sdlc-state-status-vocabulary, task 3: same +9 net-line insertion noted above
+    # (ABOVE both this anchor and isolation-and-branch-naming) shifted it 3489->3498, 3516->3525.
+    # Re-picked from CONTENT at the new position (confirmed byte-identical to the pre-shift
+    # content via hash match against the manifest), not blindly renumbered.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3498, 3525,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs

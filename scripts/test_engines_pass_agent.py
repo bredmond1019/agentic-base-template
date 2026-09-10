@@ -186,9 +186,15 @@ STANDALONE_SITE_RE = re.compile(
 # byte-identical) -- only the keys moved. The new renderLaneHeartbeatRecipe() shared block that
 # same task added sits AFTER renderScopeFlag() (end of file, below all three sites), so it does
 # not shift these lines at all.
+# Re-pinned again 2026-09-10 (BT.ticket.sdlc-state-status-vocabulary, task 3): the
+# renderStateFlipScript doc-comment rewrite (FLIP_REFUSED contract) + the mev-absent fallback's
+# refusal rewrite inserted 9 net lines into sdlc-task.js entirely ABOVE this site, shifting it
+# 3487->3496. Text unchanged once the flag interpolation is stripped (verified by diffing the old
+# line against the new line, byte-identical) -- only the key moved. sdlc-flow.js is untouched by
+# this block (out of scope) and needs no re-pick.
 FROZEN_BASELINE = {
     str(TASK_JS): {
-        3487: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
+        3496: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
     },
     str(FLOW_JS): {
         3557: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",

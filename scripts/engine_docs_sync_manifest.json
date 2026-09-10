@@ -13,7 +13,7 @@
   },
   ".claude/workflows/sdlc-task.js::isolation-and-branch-naming": {
     "hash": "ba7651bee5d4c55cc58c22d5b73caf6656d8e169740d776044bd75016ba9643a",
-    "lines": "1902-1983",
+    "lines": "1920-2001",
     "docs_md": "docs/workflows/sdlc-task.md",
     "section": "## In-place vs. `--worktree`"
   },
@@ -31,13 +31,13 @@
   },
   ".claude/workflows/sdlc-task.js::bookkeep-vault-commit": {
     "hash": "0419ea2765465ede1852a7dcfb1782e98af0b866d91c2cfbc0cf20cf5fc57d13",
-    "lines": "3478-3505",
+    "lines": "3498-3525",
     "docs_md": "docs/workflows/sdlc-task.md",
     "section": "## Vaulted `planning/` writes in the per-task loop"
   },
   ".claude/workflows/sdlc-flow.js::flags-and-defaults": {
     "hash": "9d36cc18226f4b295387f80bda3f1ee459a264f08de0e451e6d849a7a830c42b",
-    "lines": "929-946",
+    "lines": "938-955",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Usage"
   },
@@ -49,13 +49,13 @@
   },
   ".claude/workflows/sdlc-flow.js::isolation-and-branch-naming": {
     "hash": "6646b982062f12c9175ce3bfc12a9ff95393b968433e68c0439aab9bd19762cf",
-    "lines": "1871-2001",
+    "lines": "1880-2010",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Isolation mode \u2014 branch by default, `--worktree` for true isolation"
   },
   ".claude/workflows/sdlc-flow.js::bookkeep-vault-commit": {
     "hash": "96b9b6bbbc7989217ac429ee094ef2db653adf3e03c83dc9f0d2179818115b4c",
-    "lines": "3543-3578",
+    "lines": "3554-3589",
     "docs_md": "docs/workflows/sdlc-flow.md",
     "section": "## Vaulted planning directories (D46)"
   }
