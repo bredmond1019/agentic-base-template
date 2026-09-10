@@ -7,7 +7,7 @@ layer: [factory]
 project: base-template
 status: active
 keywords: [SDLC workflows, engines, orchestration, harness, pipeline reference]
-related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-prompt-parity, base-template-orchestration-guide, base-template-orchestration-runbook]
+related: [base-template-docs-index, sdlc-task, sdlc-flow, sdlc-prompt-parity, base-template-orchestration-guide, base-template-orchestration-runbook, sdlc-state-vocabulary]
 ---
 
 # SDLC Workflows
@@ -337,6 +337,9 @@ each engine's committed state file — check the state JSON for real figures fro
 - **[sdlc-task.md](sdlc-task.md)** — lean single-unit engine (D38). In-place or `--worktree`, implement→test→fix→commit, pairs with `/chore`/`/ticket`.
 - **[prompt-parity.md](prompt-parity.md)** — where the two engines' stage prompts and the matching
   one-off commands agree, where they deliberately differ, and the open drift register between them.
+- **[sdlc-state-vocabulary.md](sdlc-state-vocabulary.md)** — the closed, gated enum of `status`
+  values `sdlc-task-state.json` / `sdlc-flow-state.json` may carry, and the terminal-status →
+  `state.json` block-status mapping table.
 - **[orchestration.md](orchestration.md)** — the lane lifecycle: what a lane is, the phases from
   `/begin-orchestration` through the terminal `review.md`, the mandatory artifacts (including the
   escalation record), and the traps.
