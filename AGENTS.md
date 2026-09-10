@@ -106,7 +106,7 @@ When a discovery in a downstream project improves the harness:
    `skipped-no-source` instead. Symmetrically, an authored skill with no registry entry (e.g.
    `epic`, `write-operating-doc`) has deliberately no counterpart on the other surface and must
    never gain a mirror. Full contract and the operator decision that settled the
-   frontmatter-preservation rule: `planning/BT.3.G/decision.md`.
+   frontmatter-preservation rule: `planning/archive/BT.3.G/decision.md`.
 
 Downstream projects **do not auto-sync** — pulling is still a deliberate, reviewed step (the
 script never commits for you) — but it is no longer a fully manual copy-paste; `/sync-downstream-
