@@ -4949,3 +4949,19 @@ fresh sync commit) — no new drift class introduced. All five task-2 validation
 
 Full evidence (dry-run report, both conformance captures, per-repo commit hashes, cargo check
 output): `planning/orchestration-run/runs-that-can-be-believed/notes.md`.
+
+## 2026-09-10 — Ticket authored: closed vocabulary for sdlc-state status
+
+Operator asked, while cleaning up HQ's noisy `planning/` and scoping a deterministic
+`/audit-archive`: `state.json` block status is already a closed, gated enum, but
+`sdlc-task-state.json`/`sdlc-flow-state.json`'s own `status` field has zero enforcement, and a
+fleet audit this session found a dead value (`completed`) hand-written in several repos even
+though neither current engine emits it. Filed
+[D86](planning/decisions/D86-sdlc-state-status-is-a-closed-enforced-vocabulary.md) and
+`BT.ticket.sdlc-state-status-vocabulary`: one documented enum for both engines' status values, a
+new gating check modelled on `check_prompt_templates.py`, closing the `sdlc-task.js:641`
+unvalidated direct-write fallback, and a documented sdlc-state→state.json status mapping. Directory
+restructure (`planning/blocks/<slug>/` with no `sdlc/` subdirectory) and the `engine-rs` vocabulary
+port are explicitly sequenced as separate follow-up tickets, after a fleet-wide `/audit-archive`
+run and archive pass. `mev validate-brain --state` after registration: 0 errors fleet-wide. Not yet
+implemented — next step is `/sdlc-task BT.ticket.sdlc-state-status-vocabulary` in a fresh session.
