@@ -30,3 +30,20 @@ the corresponding skill before executing high-stakes fleet operations:
 | **`stop-or-continue`** | Session restart vs continuation correctness criteria | When an underlying binary/engine changes; never restart for token budget |
 | **`write-okf-markdown`** | OKF YAML frontmatter & index.md row maintenance | BEFORE creating or editing any `.md` under `docs/` or `planning/` |
 | **`write-repo-doc`** | Reader-first internal documentation standards | BEFORE writing or restructuring docs under `docs/` or guides |
+
+## Launching an engine you just edited (standing rule 10)
+
+A launch by name — `Workflow({name: 'sdlc-task', args})`, which is what `/sdlc-task` does — runs a
+cached copy of the engine whose revision cannot be predicted mid-session: it can lag the tree for
+hours, or jump to a revision that has since been reverted. To run the engine actually on disk, pass
+the file instead:
+
+```js
+Workflow({ scriptPath: '<repo>/.claude/workflows/sdlc-task.js', args: '<spec-slug> ...' })
+```
+
+Check the tool result: its `Script file:` line must name that same path, not a
+`workflows/scripts/sdlc-task-wf_<runid>.js` copy. `resumeFromRunId` works alongside `scriptPath`,
+and `stamp-workflow-run-id` still applies afterwards. Observed 2026-09-10: this form ran the
+post-revert engine and found the spec, where a launch by name a few minutes earlier in the same
+session ran the reverted `81e9740` and failed `Missing spec`.

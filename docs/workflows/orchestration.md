@@ -321,9 +321,11 @@ an error, which is why they are worth knowing in advance.
 - **`validate-brain`'s flags do not compose.** First flag wins (if/else-if chain). One per invocation.
 - **Every `planning/` is a symlink.** `rg`/`find` need `-L`. **At the brain root also pass `-uu`** —
   every sub-repo is gitignored there, so `-L` alone reports a false clean over the whole fleet.
-- **Command and engine files are launch-time snapshots.** Editing `.claude/commands/*.md` or
-  `.claude/workflows/*.js` mid-session does not change what the running session executes. A re-run
-  against a stale snapshot proves nothing.
+- **Command and engine files run from cached copies, not the working tree.** Editing
+  `.claude/commands/*.md` or `.claude/workflows/*.js` mid-session does not decide what the next run
+  executes — the cached engine can stay stale for hours or jump to a different revision, including a
+  reverted one (standing rule 10 in `AGENTS.md`). A run whose engine copy you have not hashed proves
+  nothing about the tree.
 - **A lane record reads as a chain but behaves as a queue of one.** Its value is the `depends_on`
   edges, not array order. Never start a `blocked` block — pull the next `open` one and say what the
   blocked one waits on.

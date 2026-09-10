@@ -236,25 +236,34 @@ finding you will describe from memory, less precisely, if at all.
    measured version of this. Rules 7 and 8 are two instances of it. Where a document and the graph
    disagree, the graph wins.
 
-10. **The running engine is a snapshot — editing `.claude/` mid-session does not change the session.**
-    The Workflow harness copies the engine `.js` into
+10. **The running engine is a cached copy — editing `.claude/` mid-session does not decide what the
+    next run executes.**
+    A launch by name copies the engine `.js` into
     `~/.claude/projects/<proj>/<session>/workflows/scripts/sdlc-<engine>-wf_<runid>.js` and executes
-    that copy. Committing an engine fix to `main` — even rebasing the running worktree onto it —
-    does **not** change what the next run executes. The same holds for
-    `.claude/commands/*.md`. **Only restarting the session picks the change up, and a long
-    `/orchestrate` chain cannot restart itself.** Consult the **`stop-or-continue`** skill for
-    the exact trigger rules.
+    that copy — and the copy comes from a cache, not from the working tree at launch time. Committing
+    an engine fix to `main` — even rebasing the running worktree onto it — does **not** determine
+    what the next run executes. `.claude/commands/*.md` are likewise resolved once, not re-read on
+    demand, and a long `/orchestrate` chain cannot restart itself. Consult the **`stop-or-continue`**
+    skill for the exact trigger rules.
 
-    **The snapshot is per-SESSION, not per-launch — the `-wf_<runid>` filename invites the wrong
-    inference and is the single most misleading thing about this rule.** A second Workflow call in
-    the same session does not re-read the source; it re-executes the same cached bytes, however many
-    times the engine was edited and committed in between. Measured by md5 on 2026-08-24: two launches
-    one session apart, separated by two commits that provably changed `sdlc-task.js`, produced
-    **byte-identical** snapshots (`071241e01a07ddc0e727f2d50d7a36cc` both times) against a working
-    tree at `457eb3dda65f9969307cc204734d830f` — 3 `new Date()` calls in each snapshot versus 2 in
-    the tree. So the operative consequence is stronger than "not reliably": **a block whose subject
-    IS the engine can never verify its own fix in the session that wrote it.** The fix will be on
-    disk, committed, and provably absent from the engine actually executing.
+    **The cache is neither fixed for the session nor refreshed per launch, so which engine a launch
+    runs cannot be predicted — only measured.** (Corrected 2026-09-10: this rule previously said the
+    copy was fixed for the whole session, and that re-launching never refreshes it. Both are false.)
+    Two measurements, each by md5 against git blobs:
+    - **2026-08-24:** two launches one session apart, separated by two commits that changed
+      `sdlc-task.js`, produced **byte-identical** copies (`071241e01a07ddc0e727f2d50d7a36cc`) against
+      a working tree at `457eb3dda65f9969307cc204734d830f`.
+    - **2026-09-10, one session:** launches at 11:54, 12:12, 12:56 and 13:34 all ran the
+      session-start engine (`d4d81e9`, `ccab5fedf850773dda6749370ed0faeb`), although engine commits
+      had landed at 13:08 and 13:22. The 13:51 launch then ran `81e9740`
+      (`5241d9cb89eaf8c48b666e32d05361ae`) — a revision that was on disk only from 13:39 to 13:50 and
+      **had already been reverted** when the launch happened. It failed `Missing spec` on a path the
+      tree no longer used. The cache refreshed mid-session, to an in-between revision, on a trigger
+      nobody has identified.
+
+    So "it stays stale for the session" and "a re-launch picks up the fix" are **both** wrong, and
+    **a block whose subject IS the engine cannot count on a launch by name to run its own fix — or to
+    not run a reverted one.**
 
     **Why this rule exists rather than a note: the failure is self-concealing.** A stale engine
     emits the pre-fix command, the stage runs it faithfully, and the pre-fix failure comes back —
@@ -268,17 +277,21 @@ finding you will describe from memory, less precisely, if at all.
     1. **Fix it somewhere that takes effect immediately** — the spec, `tasks.json`, `harness.json`,
        or a script the engine shells out to. Rescoping a task's `files[]` is what finally unblocked
        the block above; the two engine-side fixes for the same bug did not.
-    2. **If it must be the engine, verify the snapshot before re-running**, and read an unchanged
-       snapshot as "this re-run proves nothing" rather than as evidence about the fix. Prefer md5
-       over grep — a count can match by coincidence, and an identical hash is unarguable:
+    2. **If it must be the engine, launch it from its file rather than by name** — each tool's own
+       file carries the recipe. Observed 2026-09-10: a launch from the file wrote no cached copy and
+       ran the engine on disk, where the same session's launch by name minutes earlier had run an
+       already-reverted revision.
+    3. **After any launch by name, hash the copy before trusting the run** — after every launch, not
+       only the first, because the cache can move in either direction mid-session. Prefer md5 over
+       grep — a count can match by coincidence, and an identical hash is unarguable:
        ```bash
        md5 -q .claude/workflows/sdlc-task.js
        md5 -q ~/.claude/projects/<proj>/<session>/workflows/scripts/sdlc-*-wf_<runid>.js
+       git show <rev>:.claude/workflows/sdlc-task.js | md5 -q   # names the revision a copy came from
        ```
-       Equal hashes mean the snapshot IS the tree. Unequal means it is stale, and per the
-       per-session note above it will stay stale for the rest of this session — re-launching does
-       not refresh it, so go to step 3.
-    3. **Otherwise record the fix as pending** in the run record and let a fresh session take it.
+       Equal hashes mean the copy IS the tree. Unequal means the run is not evidence about the
+       tree — relaunch from the file (step 2), or go to step 4.
+    4. **Otherwise record the fix as pending** in the run record and let a fresh session take it.
 
     Never conclude an engine fix "did not work" from a run whose snapshot predates it. Full evidence:
     `planning/knowledge.md` (Gotchas) and
