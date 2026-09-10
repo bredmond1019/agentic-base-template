@@ -429,6 +429,38 @@ class WorkAssertionTaskTwoTests(unittest.TestCase):
             f"{result.stdout}{result.stderr}",
         )
 
+    # -- (5b) BT.ticket.work-assertion-exempts-diffless-tasks: a task declaring files: [] (a
+    # pure validation-only task) with an honest, non-empty, non-deleting diff must PASS --
+    # condition 2's intersection check is exempted when the task's own declared files[] is
+    # empty, since WA_DECLARED is then empty and WA_MATCH can never reach 1 by construction.
+    # Conditions 1 (empty diff) and 3 (undeclared deletion) are untouched by this fixture (no
+    # empty commit, no deletion), so this isolates condition 2 specifically.
+
+    def test_05b_empty_declared_files_with_honest_diff_passes(self):
+        root = self._scratch()
+        repo = root / "repo"
+        init_repo(repo)
+        (repo / "a.txt").write_text("a\n")
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "init"], cwd=repo)
+        write_tasks_json(repo, 8, [])
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "declare files"], cwd=repo)
+
+        (repo / "a.txt").write_text("edited by a validation-only task\n")
+        run(["git", "add", "-A"], cwd=repo)
+        run(["git", "commit", "-qm", "validation-only task, files: [] declared"], cwd=repo)
+
+        guard = render_work_assertion(self.fn_task, 8, "tasks.json")
+        result = run(guard, cwd=repo, check=False)
+        self.assertEqual(
+            result.returncode, 0,
+            f"a files:[] task with an honest, non-empty, non-deleting diff must PASS "
+            f"(condition 2 exempted when declared files[] is empty): "
+            f"{result.stdout}{result.stderr}",
+        )
+        self.assertNotIn("WORK_ASSERTION_ABORT", result.stdout)
+
     # -- (6) exemptions: engine source never calls the new guard at these commit sites ---------
 
     def test_06_worktree_init_and_d16_fallback_commits_are_exempt(self):
