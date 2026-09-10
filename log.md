@@ -4965,3 +4965,12 @@ restructure (`planning/blocks/<slug>/` with no `sdlc/` subdirectory) and the `en
 port are explicitly sequenced as separate follow-up tickets, after a fleet-wide `/audit-archive`
 run and archive pass. `mev validate-brain --state` after registration: 0 errors fleet-wide. Not yet
 implemented — next step is `/sdlc-task BT.ticket.sdlc-state-status-vocabulary` in a fresh session.
+
+## 2026-09-10 — begin-orchestration: surfaced decide-yourself + four-artifact rules up front
+
+Operator noticed a lane could read the whole command and still miss that it may decide ordinary
+things itself and must keep four run artifacts (`notes.md`, `review.md`,
+`verification-ledger.json`, `verification-ledger.md`) — both were already the substance of Rules 5
+and 6, ~550 lines in, easy to miss on a first read. Added a short upfront section right after the
+intro restating both points and pointing forward to Rules 5/6 for the full contract, rather than
+duplicating it. No behavior change — the underlying rules are unchanged.
