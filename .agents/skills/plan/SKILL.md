@@ -530,3 +530,4 @@ No lane record (--lane not passed). This initiative's <M> blocks are sequential,
 /begin-orchestration can drive them; to add the record without re-planning:
   /plan --lane "<the same description>"
 ```
+

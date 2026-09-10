@@ -260,6 +260,8 @@ results row and every `remediation` ref points at.
 **An id already in the catalogue is a merge, not a skip and not an overwrite.** 47 of the first
 pass's ledger ids already existed there from an earlier hand-consolidation; the catalogue row was the
 curated one and the ledger row carried the provenance and the finding flag. Enrich, keeping both.
+Check whether an id already exists with `python3 scripts/query_test_catalogue.py --id <id>` (from
+`BRAIN_ROOT`) rather than reading the whole file.
 
 **Statuses in a ledger are results, not catalogue data.** A ledger's `status`/`last_verified` say
 what happened when that lane checked it, in that place. They go to
@@ -268,6 +270,44 @@ carries no verdicts by design and whose checker rejects those fields outright.
 
 **Validate before finishing:** `python3 scripts/check_test_catalogue.py` from `BRAIN_ROOT`, exit 0.
 It is `gates: true` in HQ's `harness.json`, so a malformed write here red-gates every lane.
+
+### Promoting a ledger entry's `remediation` object into HQ's `remediation.json`
+
+A **failing** ledger entry (`status: failed` or `blocked`) may carry an optional run-local
+`remediation` object — `{block, opened_at, note}` — per
+[`run-verification-ledger-prompt.md`](../../../docs/sandbox/run-verification-ledger-prompt.md)
+(cited, not restated). Where one is present, promote it into
+[`docs/sandbox/remediation.json`](../../../docs/sandbox/remediation.json):
+
+- **Assign the global `finding` integer.** This step is the **single writer** of that number —
+  never the ledger entry itself. `finding` is a required, unique integer pointing at a `### N.`
+  heading in HQ's `findings.md`; if a lane could mint its own, every concurrent lane appending a
+  numbered heading to that one shared HQ file would be exactly the contention this fleet has
+  already been bitten by repeatedly (CLAUDE.md standing rule 10). Deferring the number to this one
+  consolidating writer is the whole point of keeping the ledger-side object un-numbered.
+- **Write `coverage: [{test_id, env}]`** from the ledger entry's own `id`/`env` (the test_id must
+  already resolve in `test-catalogue.json` — promote the ledger entry there first, per Step 5b
+  above, if it is not yet catalogued). Check resolution with
+  `python3 scripts/query_test_catalogue.py --id <id>` (from `BRAIN_ROOT`) rather than reading the
+  whole file.
+- **Set `status`** to `filed` when the `remediation.block` is still OPEN in that repo's
+  `planning/state.json`, and `fixed` when it is CLOSED. `status: filed` has never been used across
+  the existing entries, and `scripts/check_remediation.py` check 7 only demands a *closed* block
+  for `fixed` — it imposes nothing on `filed` — so `filed` against an open block is a valid,
+  gate-passing state, not a special case to work around.
+- **Add the reverse link**: the matching `test-catalogue.json` entry's `remediation` list must name
+  the new remediation id (check 10 validates this both ways). Find that entry with
+  `python3 scripts/query_test_catalogue.py --id <id>` (from `BRAIN_ROOT`) rather than reading the
+  whole file.
+- Carry `remediation.note` into the new entry's `issue`, and `remediation.opened_at` forward
+  verbatim; do not invent a `verify` recipe beyond what the ledger entry's own `how_to_verify`
+  already gives.
+
+Do not alter `scripts/check_remediation.py`'s ten checks, `remediation.json`'s schema, or
+`findings.md`'s numbering scheme — this step consumes that contract, it does not change it.
+
+**Validate after promoting:** `python3 scripts/check_remediation.py` from `BRAIN_ROOT`, exit 0. It is
+`gates: true` in HQ's `harness.json`.
 
 ## Step 6 — Write boundary: no `state.json`, anywhere
 

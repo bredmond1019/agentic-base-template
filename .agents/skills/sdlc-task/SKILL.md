@@ -65,7 +65,7 @@ description: >
      substituted (fastCommand) or skipped (perTask:false) → on failure, status
      "reconcile_failed" — bookkeep is skipped, the block is NOT flipped to done.
 
- STATE (NOT gitignored, but deliberately never committed — at planning/<spec>/sdlc/)
+ STATE (NOT gitignored, but deliberately never committed — at planning/blocks/<spec>/)
    sdlc-task-state.json   the authoritative run index (per-task summary/issues/fixes/commit +
                           the Block-A `tokens` block, plus `base_sha` — the pre-task HEAD this
                           run's own emoji gate diffs from). Written to disk after every task and
