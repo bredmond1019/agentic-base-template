@@ -65,7 +65,13 @@ flowchart TD
     R2 --> R3["/dispose-run\nfile blocks, carryover, edges"]
     R3 -->|"enough for lanes?"| P2
     R3 -->|"usually not"| P3
+    P3 --> CR["/consolidate-run\nledger -> test catalogue"]
 ```
+
+**`/consolidate-run` runs parallel to the retro/consolidate/dispose chain above, not inside it** — it
+promotes each lane's `verification-ledger.json` into HQ's fleet-wide test catalogue, a different
+input and output from the notes/carryover pipeline the other three steps form. See
+[After the run](#after-the-run--the-harvest) below.
 
 **In words:**
 
@@ -81,7 +87,9 @@ flowchart TD
 4. **Run** — one Claude Code session per repo, each becoming a lane.
 5. **Watch**, while they run — the sweep decides whether anything needs waking; the commander drains
    what has piled up.
-6. **Harvest**, once they end — the retro, then consolidation, then disposal.
+6. **Harvest**, once they end — the retro, then consolidation, then disposal. Separately (it does
+   not feed disposal), [`/consolidate-run`](../../.claude/commands/consolidate-run.md) promotes each
+   lane's ledger into HQ's fleet-wide test catalogue.
 7. **The loop closes** at phase 2 or 3: disposal usually produces a handful of blocks that want an
    `/orchestrate` chain, not a whole roadmap.
 
@@ -96,7 +104,7 @@ unattended once started.
 | **1. Pre-plan** | New work on an existing system and the cut is **not** obvious | `/assess` · `/seams` · `/sequence` | `agentic-portfolio/docs/how-to-plan-with-agents.md` |
 | **2. Plan** | You know what to build and need it as blocks | [`/generate-roadmap`](../../.claude/commands/generate-roadmap.md) · [`/plan`](../../.claude/commands/plan.md) · [`/ticket`](../../.claude/commands/ticket.md) · [`/chore`](../../.claude/commands/chore.md) | [What you can orchestrate](#what-you-can-orchestrate) |
 | **3. Run** | Blocks are registered and you want them done | [`/begin-orchestration`](../../.claude/commands/begin-orchestration.md) · [`/orchestrate`](../../.claude/commands/orchestrate.md) · [`/roadmap-status`](../../.claude/commands/roadmap-status.md) · [`/orchestration-commander`](../../.claude/commands/orchestration-commander.md) | [`orchestration.md`](orchestration.md) · [`lane-coordination.md`](lane-coordination.md) · [`roadmap-sweep.md`](roadmap-sweep.md) |
-| **4. Harvest** | The run has ended | [`/commander-retro`](../../.claude/commands/commander-retro.md) · [`/consolidate-fleet`](../../.claude/commands/consolidate-fleet.md) · [`/dispose-run`](../../.claude/commands/dispose-run.md) | [After the run](#after-the-run--the-harvest) |
+| **4. Harvest** | The run has ended | [`/commander-retro`](../../.claude/commands/commander-retro.md) · [`/consolidate-fleet`](../../.claude/commands/consolidate-fleet.md) · [`/dispose-run`](../../.claude/commands/dispose-run.md) · [`/consolidate-run`](../../.claude/commands/consolidate-run.md) (ledger → test catalogue, parallel to the other three) | [After the run](#after-the-run--the-harvest) |
 
 **Two words you will meet in phases 3 and 4.** A **block** is one unit of work with an ID
 (`BT.ticket.fix-the-thing`); a **lane** is one repo, one Claude Code session, one ordered chain of
@@ -293,6 +301,14 @@ it exists; that is the whole exception.
 log is reported as `DRIFTED` and **refuses** to advance rather than silently re-basing — a broken
 cursor otherwise resumes at the wrong offset and reports a clean pass over data it never read.
 `lifecycle: consolidated` on a run record is the same mechanism for the records themselves.
+
+**A fifth command, [`/consolidate-run <roadmap>`](../../.claude/commands/consolidate-run.md), runs
+outside this four-step order** — it has no numbered slot above because it does not feed
+`/dispose-run` or `/generate-roadmap`. Where the table above harvests `notes.md`/`review.md` into
+proposed `carryover[]` entries, `/consolidate-run` harvests each lane's `verification-ledger.json`
+(detail: [`orchestration.md` § Artifacts](orchestration.md#artifacts)) and promotes it into HQ's
+fleet-wide `docs/sandbox/test-catalogue.json` — a different input, a different output, and safe to
+run any time after lanes have written ledger entries, in either order relative to steps 1–4.
 
 **What a lane writes down is governed by [`finding-discipline.md`](../../.claude/workflows/finding-discipline.md).**
 Evidence travels with the finding, one occurrence is an instance rather than a pattern, and an odd

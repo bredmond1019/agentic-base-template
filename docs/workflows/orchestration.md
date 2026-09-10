@@ -233,20 +233,29 @@ unreleased lock blocks the next lane, and an unrecorded loose end is simply lost
 > the finding, a pattern is a counted set, and an unexplained thing is an **observation**, not a
 > defect. Measured over nine records: nine different section sets and six status vocabularies, which
 > is why the extraction is model-driven and why absent evidence cannot be recovered later.
+> A separate command, [`/consolidate-run`](../../.claude/commands/consolidate-run.md), does the
+> matching job for the ledger instead of the notes: it promotes `verification-ledger.json` entries
+> into HQ's fleet-wide test catalogue. Different input, different output — see
+> [the runbook](orchestration-runbook.md#the-four-phases-at-a-glance) for how the two harvest
+> commands relate.
 
 
-A lane leaves three files behind. They have different jobs, and the difference matters — the first
-is how *other lanes* find out what happened, the second and third are for *you*.
+A lane leaves the following files behind. They have different jobs, and the difference matters —
+some are how *other lanes* find out what happened, one is promoted into HQ's fleet-wide record
+later, and the rest are for *you*.
 
 | Artifact | Scope | Written |
 |---|---|---|
 | `<roadmap_dir>/lane-log.jsonl` | **Cross-lane.** One line per block, append-only. Sibling lanes read this. | Per block |
 | `planning/orchestration-run/<slug>/notes.md` | **Local.** Everything the log line can't carry: defects found in passing, decisions and why, traps re-confirmed. | Per block, append-only |
+| `planning/orchestration-run/<slug>/verification-ledger.json` (+ its thin `verification-ledger.md` wrapper) | **Local, then promoted fleet-wide.** One entry per shipped capability — what it is, how to check it, `call_site`. Appended **as each block closes**, so a bailed run still leaves a usable ledger; never mark your own entry verified. `docs/sandbox/run-verification-ledger-prompt.md` (bare path — HQ's own file, not this repo's) is the authority for the entry schema; cite it, don't restate it. Before handoff, `scripts/check_verification_ledger.py` (also HQ's, bare path) is an optional, non-gating sanity check on your own ledger's shape — unusually large per-block entry counts, likely-duplicate entries, overlong prose. [`/consolidate-run`](../../.claude/commands/consolidate-run.md) Step 5b is the only promoter into HQ's fleet-wide `docs/sandbox/test-catalogue.json`. | Per block, append-only |
 | `planning/roadmaps/<roadmap>/escalations.jsonl` | **Cross-lane, machine-diffable.** One line per must-not-decide-alone item — see [Escalation records](#escalation-records). | Per occurrence, append-only |
 | `planning/orchestration-run/<slug>/review.md` | **Terminal.** Plain-English summary + hand-verification recipes. Every recipe must have been **run** before the file is written. | Once, at close |
 
 Frontmatter, the `doc_id` rule, `lifecycle`, and the ledger's `origin_roadmap` column are specified
-in D57 — the orchestration-run artifact contract (`planning/decisions/D57-orchestration-run-artifact-contract.md`). Cited, not restated.
+in D57 — the orchestration-run artifact contract (`planning/decisions/D57-orchestration-run-artifact-contract.md`). Cited, not restated. D57 predates the ledger and only names `notes.md`/`review.md`
+directly — the ledger's own contract is [`begin-orchestration.md`](../../.claude/commands/begin-orchestration.md)
+Rule 5's "a run leaves four artifacts, not two" paragraph.
 
 ---
 
