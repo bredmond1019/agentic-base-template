@@ -30,7 +30,7 @@
     "section": "## Pipeline"
   },
   ".claude/workflows/sdlc-task.js::bookkeep-vault-commit": {
-    "hash": "0419ea2765465ede1852a7dcfb1782e98af0b866d91c2cfbc0cf20cf5fc57d13",
+    "hash": "fdc57dd37176e257dfb4d2559caddcf7329ea96671f553a527aaf244864dde92",
     "lines": "3499-3526",
     "docs_md": "docs/workflows/sdlc-task.md",
     "section": "## Vaulted `planning/` writes in the per-task loop"
