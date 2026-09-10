@@ -32,10 +32,11 @@ REQUIRED CASES (BT.ticket.sdlc-bookkeep-writes-block-status-deterministically, t
       the `<repo>:<id>` key, `closed`, `--write`, and an `--agent <lane>` flag.
   (b) fake `mev` exits nonzero -- the script reports refusal (FLIP_REFUSED + MEV_OUTPUT lines,
       exit 1) and never prints a FLIPPED line for that key.
-  (c) `mev` ABSENT from PATH -- the script degrades to the validated fallback, exits 0, and never
-      raises (matches test_state_write_validation.py's own Case6, exercised here specifically
-      with `USE_DETERMINISTIC=True` to prove the ABSENCE of `mev`, not the worktree/no-repo-slug
-      gate, is what triggers the degrade).
+  (c) `mev` ABSENT from PATH -- the script falls to the fallback, which REFUSES (FLIP_REFUSED:<id>
+      + MEV_OUTPUT:, exit 1) and leaves state.json byte-unchanged rather than writing an
+      unvalidated status (D86; matches test_state_write_validation.py's own Case6), exercised here
+      specifically with `USE_DETERMINISTIC=True` to prove the ABSENCE of `mev`, not the
+      worktree/no-repo-slug gate, is what triggers it.
   (d) THE OMITS-THE-BLOCK-FROM-STATE REPRO (AC3): state.json ends the run with the block actually
       flipped, verified by READING THE FILE, independent of anything the script printed to
       stdout -- the exact failure class this ticket exists to close (mev:sdlc-task-bookkeep-omits-
@@ -297,12 +298,13 @@ class CaseBNonzeroExitRefusesAndNeverClaimsFlip(unittest.TestCase):
                     )
 
 
-class CaseCMevAbsentDegradesToFallback(unittest.TestCase):
-    """(c) mev ABSENT from PATH -> the script degrades to the validated fallback, exits 0, and
-    never raises -- exercised with USE_DETERMINISTIC=True to prove ABSENCE of mev (not the
+class CaseCMevAbsentRefusesInFallback(unittest.TestCase):
+    """(c) mev ABSENT from PATH -> the script falls to the fallback, which refuses (exit 1,
+    FLIP_REFUSED:<id>) and leaves state.json byte-unchanged instead of writing an unvalidated
+    status (D86) -- exercised with USE_DETERMINISTIC=True to prove ABSENCE of mev (not the
     worktree/no-repo-slug gate) is what triggers the fallback."""
 
-    def test_absent_mev_degrades_without_raising(self):
+    def test_absent_mev_refuses_without_writing(self):
         for engine in ENGINE_FILES:
             with self.subTest(engine=engine):
                 with tempfile.TemporaryDirectory() as td:
@@ -315,16 +317,17 @@ class CaseCMevAbsentDegradesToFallback(unittest.TestCase):
                         mev_bin_dir=None,  # PATH scrubbed of any real mev
                     )
                     self.assertEqual(
-                        result.returncode, 0,
-                        f"{engine}: absent mev must not raise/fail the run: "
+                        result.returncode, 1,
+                        f"{engine}: absent mev must refuse, not write unvalidated: "
                         f"{result.stdout}{result.stderr}",
                     )
-                    self.assertNotIn("FLIP_REFUSED", result.stdout)
-                    self.assertIn("FLIPPED:BT.1.a", result.stdout)
-                    self.assertIn("UNVALIDATED: mev not on PATH", result.stdout)
+                    self.assertIn("FLIP_REFUSED:BT.1.a", result.stdout)
+                    self.assertIn("MEV_OUTPUT: mev is not on PATH", result.stdout)
+                    self.assertNotIn("FLIPPED", result.stdout)
+                    self.assertNotIn("UNVALIDATED:", result.stdout)
 
                     on_disk = json.loads((run_dir / "planning" / "state.json").read_bytes())
-                    self.assertEqual(on_disk["tracks"][0]["blocks"][0]["status"], "closed")
+                    self.assertEqual(on_disk["tracks"][0]["blocks"][0]["status"], "open")
 
 
 class CaseDOmitsBlockFromStateRepro(unittest.TestCase):

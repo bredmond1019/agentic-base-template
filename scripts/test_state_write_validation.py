@@ -39,7 +39,8 @@ REQUIRED CASES (each demonstrably able to fail; see the docstring on each test m
   5. Worktree mode: the mutation script contains no worktree-conditional branch -- task 1 decided
      this validation step runs identically in place and in a worktree (only `mev emit-state
      --write`, which this script never calls, is deferred).
-  6. Absent `mev` degrades to a stated warning (UNVALIDATED:, exit 0), never a run failure.
+  6. Absent `mev` REFUSES (FLIP_REFUSED:<id> + MEV_OUTPUT:, exit 1) and leaves state.json
+     byte-unchanged -- never a silent unvalidated write (D86, BT.ticket.sdlc-state-status-vocabulary).
 
 Run: python3 scripts/test_state_write_validation.py
 """
@@ -85,11 +86,10 @@ def extract_mutation_script(engine_filename: str) -> str:
             f"(marker {SCRIPT_START_MARKER!r} not present) -- has the validate-then-commit "
             f"contract been removed or rewritten?"
         )
-    # SCRIPT_END_MARKER ("print('FLIPPED:' + bid)") appears TWICE in the live script: once inside
-    # the "mev not on PATH" early-return branch, and once as the script's final line after the
-    # net-new diff. The genuine end is the LAST occurrence before the script's closing quote (which
-    # is what a plain .find() from `start` would miss) -- anchor off the diff line instead and take
-    # the next end-marker occurrence after that, which is unambiguous.
+    # SCRIPT_END_MARKER ("print('FLIPPED:' + bid)") historically appeared TWICE in the live script
+    # (once in the "mev not on PATH" early-return branch, which since D86 refuses instead of
+    # writing, and once as the script's final line after the net-new diff). Anchoring off the diff
+    # line and taking the next end-marker occurrence after it stays unambiguous either way.
     diff_marker_pos = source.find("net_new = after - baseline", start)
     if diff_marker_pos == -1:
         raise AssertionError(
@@ -111,7 +111,7 @@ def extract_mutation_script(engine_filename: str) -> str:
         "'mev', 'validate-brain', '--state'",
         "net_new = after - baseline",
         "print('REJECTED:' + bid)",
-        "print('UNVALIDATED:",
+        "print('FLIP_REFUSED:' + bid)",
     ):
         if required not in script:
             raise AssertionError(
@@ -468,11 +468,12 @@ class Case5WorktreeModeIsNotConditional(unittest.TestCase):
                     self.assertNotIn("UNVALIDATED:", result.stdout)
 
 
-class Case6MevAbsentDegrades(unittest.TestCase):
-    """Absent mev must degrade to a stated warning and exit 0 (the write still lands, unchecked),
-    never a hard failure -- matching how the harness treats other absent tooling."""
+class Case6MevAbsentRefuses(unittest.TestCase):
+    """Absent mev must REFUSE the write (FLIP_REFUSED + MEV_OUTPUT, exit 1) and leave state.json
+    byte-unchanged -- D86 / BT.ticket.sdlc-state-status-vocabulary task 3 closed the former silent
+    unvalidated-write fallback. Fails if that direct write is ever reintroduced."""
 
-    def test_absent_mev_writes_unvalidated_and_exits_zero(self):
+    def test_absent_mev_refuses_and_leaves_state_unchanged(self):
         for engine in ENGINE_FILES:
             with self.subTest(engine=engine):
                 pre_bytes = state_json_bytes([{"id": "BT.1.a", "status": "open"}])
@@ -485,16 +486,16 @@ class Case6MevAbsentDegrades(unittest.TestCase):
                         engine, run_dir, "BT.1.a", mev_bin_dir=None  # PATH scrubbed of real mev
                     )
                     self.assertEqual(
-                        result.returncode, 0,
-                        f"{engine}: absent mev must not fail the run: {result.stdout}{result.stderr}",
+                        result.returncode, 1,
+                        f"{engine}: absent mev must refuse (exit 1): {result.stdout}{result.stderr}",
                     )
-                    self.assertIn("FLIPPED:BT.1.a", result.stdout)
-                    self.assertIn("UNVALIDATED: mev not on PATH", result.stdout)
-
-                    on_disk = json.loads((run_dir / "planning" / "state.json").read_bytes())
+                    self.assertIn("FLIP_REFUSED:BT.1.a", result.stdout)
+                    self.assertIn("MEV_OUTPUT: mev is not on PATH", result.stdout)
+                    self.assertNotIn("FLIPPED:", result.stdout)
+                    self.assertNotIn("UNVALIDATED:", result.stdout)
                     self.assertEqual(
-                        on_disk["tracks"][0]["blocks"][0]["status"], "closed",
-                        f"{engine}: the write should still land (unchecked) when mev is absent",
+                        (run_dir / "planning" / "state.json").read_bytes(), pre_bytes,
+                        f"{engine}: state.json must stay byte-unchanged when mev is absent",
                     )
 
 

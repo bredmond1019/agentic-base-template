@@ -104,9 +104,17 @@ ANCHORS = [
     # have left this tripwire hashing a one-line function CALL: green forever, blind to every change
     # in the text it exists to guard. Two entries because both replication guides describe the
     # taxonomy and each must be re-verified when it moves.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 650, 698,
+    # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
+    # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
+    # engine) shifted this anchor 650->659, 698->707. Re-picked from CONTENT (sha256 match against the
+    # manifest at the new position), not blindly renumbered.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 659, 707,
      ".agents/skills/sdlc-task/SKILL.md"),
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 650, 698,
+    # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
+    # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
+    # engine) shifted this anchor 650->659, 698->707. Re-picked from CONTENT (sha256 match against the
+    # manifest at the new position), not blindly renumbered.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 659, 707,
      ".agents/skills/sdlc-flow/SKILL.md"),
     # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: the
     # loadHarnessConfig() unwrap + bail additions inserted 52 net lines into sdlc-task.js and
@@ -163,7 +171,11 @@ ANCHORS = [
     # 3482->3489, 3509->3516 (+7 total). Text unchanged -- verified by diffing the old range
     # against the new range: byte-identical ("7. Commit your edits (stage explicitly" through the
     # trailing `git log --oneline -1`).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3498, 3525,
+    # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
+    # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
+    # engine) shifted this anchor 3498->3499, 3525->3526. Re-picked from CONTENT (sha256 match against the
+    # manifest at the new position), not blindly renumbered.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3499, 3526,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
@@ -171,7 +183,11 @@ ANCHORS = [
     # sdlc-task.js note above) landed ABOVE this anchor but the runTests() heartbeatRecipe call
     # (+2 net lines) landed BELOW it, so only +5 applies here: 1875->1880, 2005->2010. Text
     # unchanged -- verified by diffing the old range against the new range: byte-identical.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1880, 2010,
+    # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
+    # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
+    # engine) shifted this anchor 1880->1889, 2010->2019. Re-picked from CONTENT (sha256 match against the
+    # manifest at the new position), not blindly renumbered.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1889, 2019,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -181,7 +197,11 @@ ANCHORS = [
     # the old range against the new range: byte-identical ("5. Commit (stage explicitly" through
     # the trailing `git log --oneline -1`). This is the anchor check_skill_sync.py itself flagged
     # as drifted onto unrelated code before this re-pin.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3554, 3589,
+    # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
+    # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
+    # engine) shifted this anchor 3554->3564, 3589->3599. Re-picked from CONTENT (sha256 match against the
+    # manifest at the new position), not blindly renumbered.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3564, 3599,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 
