@@ -3,7 +3,22 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-08
+**Last updated:** 2026-09-10
+
+---
+## 2026-09-10 — coordination-layer-port lane: two tickets, scoped and stopped
+
+### Message envelope field caps + harness check failureClass
+- **What:** `BT.ticket.message-envelope-field-caps` — `message.schema.json` gained a measured
+  per-field `maxLength` on every free-text envelope field, enforced by `check_messages.py` (new
+  envelopes gate, pre-effective-date ones tag only). `BT.ticket.harness-check-failure-class` —
+  `harness.schema.json`'s check `$defs` gained an optional `failureClass: fixable | escalate`; no
+  JS engine reads it yet, the intended reader is `engine-rs`'s `EN.17.G`. Both closed via
+  `/sdlc-task` (3/3 and 4/4 tasks, all AC `met`), both `workflow_run_id`s stamped.
+- **Why:** operator scoped `/begin-orchestration --roadmap coordination-layer-port` to exactly
+  these two tickets from the roadmap, then `/close-out` — not a full lane sweep.
+- **Refs:** `planning/orchestration-run/coordination-layer-port/notes.md`, `planning/handoff.md`,
+  `planning/roadmaps/coordination-layer-port/roadmap.md` (HQ).
 
 ---
 ## 2026-09-08 — carryover-cleanup-continued wave 3: four harness-correctness blocks
