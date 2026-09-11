@@ -78,6 +78,120 @@ FILENAME_RE = re.compile(r"^(\d{8}T\d{6}(?:\.\d+)?Z)-(.+)\.json$")
 KIND_VALUES = ["EDGE_RELEASED", "FINDING", "RENDEZVOUS", "LEASE_RELEASE", "QUERY"]
 DURABLE_HOME_CHANNELS = {"lane-log", "state-edge", "carryover", "run-record"}
 
+# --- BT.ticket.message-envelope-field-caps: schema-derived maxLength enforcement -------------
+#
+# The cap VALUES live only in message.schema.json (each field's `maxLength`, derived per the
+# measurement rule recorded in that field's `description`) -- this module reads them rather than
+# re-declaring the numbers, so schema and checker cannot drift on the number. The set of field
+# PATHS the checker enforces is declared here explicitly (CAPPED_FIELD_PATHS), not derived from
+# the schema walk, precisely so a schema edit that adds/removes a `maxLength` and forgets to
+# update this list is DETECTABLE -- test_schema_capped_fields_equal_checker_fields asserts the two
+# sets are equal by independently walking the schema.
+SCHEMA_PATH = Path(__file__).resolve().parent.parent / ".claude" / "workflows" / "message.schema.json"
+
+CAPPED_FIELD_PATHS = [
+    "subject.repo",
+    "subject.block",
+    "body",
+    "durable_home.channel",
+    "durable_home.ref",
+    "verified_by",
+]
+
+# The date this ticket's change lands (BT.ticket.message-envelope-field-caps). An envelope whose
+# `sent_at` predates this date was written before any cap existed and cannot be held to it -- an
+# over-cap field on such an envelope is TAGGED (reported, not gating), mirroring the existing
+# LEGACY `verified_by` tolerance below. An envelope sent on or after this date is held to the cap
+# normally.
+FIELD_CAP_EFFECTIVE_DATE = "2026-09-10"
+
+_SCHEMA_CACHE: Optional[dict] = None
+
+
+def _load_schema() -> dict:
+    """Parse and cache message.schema.json. Raises if the schema file is missing or malformed --
+    a checker that can't read its own schema must not silently validate nothing."""
+    global _SCHEMA_CACHE
+    if _SCHEMA_CACHE is None:
+        with open(SCHEMA_PATH) as fh:
+            _SCHEMA_CACHE = json.load(fh)
+    return _SCHEMA_CACHE
+
+
+def _walk_schema_caps(node, prefix: str = "") -> dict:
+    """Recursively collect {dotted.path: maxLength} for every property carrying `maxLength`,
+    anywhere in the schema's `properties` tree (top-level and nested objects alike)."""
+    caps: dict = {}
+    if not isinstance(node, dict):
+        return caps
+    props = node.get("properties")
+    if isinstance(props, dict):
+        for key, sub in props.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if isinstance(sub, dict) and "maxLength" in sub:
+                caps[path] = sub["maxLength"]
+            caps.update(_walk_schema_caps(sub, path))
+    return caps
+
+
+def schema_field_caps(schema: Optional[dict] = None) -> dict:
+    """{dotted.path: maxLength} for every schema property carrying `maxLength`. Values only --
+    this is what the checker reads instead of re-declaring the numbers."""
+    return _walk_schema_caps(schema if schema is not None else _load_schema())
+
+
+def schema_capped_field_paths(schema: Optional[dict] = None) -> set:
+    """The set of dotted field paths message.schema.json declares a `maxLength` on. Used by the
+    test suite to assert equality against CAPPED_FIELD_PATHS, independent of this module's own
+    enforcement logic."""
+    return set(schema_field_caps(schema))
+
+
+def _get_path(record, dotted_path: str):
+    """Resolve a dotted path (e.g. `subject.repo`) against a nested dict. Returns None if any
+    segment is absent or the record isn't shaped as expected -- never raises."""
+    node = record
+    for part in dotted_path.split("."):
+        if not isinstance(node, dict):
+            return None
+        node = node.get(part)
+    return node
+
+
+def _check_field_caps(record) -> list:
+    """Report any CAPPED_FIELD_PATHS field whose value exceeds its schema-declared `maxLength`,
+    naming the field, its cap and its actual length. Effective-date gating (the LEGACY tag for an
+    envelope written before FIELD_CAP_EFFECTIVE_DATE) is applied by the caller (_check_one_queue),
+    which decides gating per-problem the same way it already does for the `verified_by` LEGACY
+    tolerance -- this function only detects and reports the over-cap condition."""
+    problems = []
+    caps = schema_field_caps()
+    for path in CAPPED_FIELD_PATHS:
+        cap = caps.get(path)
+        if cap is None:
+            continue
+        value = _get_path(record, path)
+        if isinstance(value, str) and len(value) > cap:
+            problems.append(
+                f"`{path}` is {len(value)} character(s), exceeding its cap of {cap} "
+                f"(BT.ticket.message-envelope-field-caps)"
+            )
+    return problems
+
+
+def _is_cap_violation(problem: str) -> bool:
+    return "exceeding its cap of" in problem
+
+
+def _sent_before_effective_date(sent_at) -> bool:
+    """True if `sent_at` is a string whose date portion sorts before FIELD_CAP_EFFECTIVE_DATE.
+    ISO-8601 dates compare correctly as plain strings. A malformed/missing `sent_at` is never
+    treated as before the effective date -- that would silently exempt a garbage timestamp from
+    the cap instead of gating it on the (separate) `sent_at` format problem."""
+    if not isinstance(sent_at, str) or len(sent_at) < 10:
+        return False
+    return sent_at[:10] < FIELD_CAP_EFFECTIVE_DATE
+
 MESSAGE_REQUIRED = [
     "message_id", "sender", "sent_at", "kind", "subject", "body", "durable_home", "verified_by",
 ]
@@ -336,6 +450,8 @@ def check_message_record(record) -> list:
     if verified_by is not None:
         problems.extend(_check_verified_by(verified_by))
 
+    problems.extend(_check_field_caps(record))
+
     return problems
 
 
@@ -533,10 +649,24 @@ def _check_one_queue(queue_dir: Path, quiet: bool, own_repo: Optional[str]) -> t
                 and all("`verified_by`" in p for p in problems)
             )
 
+            # BT.ticket.message-envelope-field-caps: an over-cap field on an envelope written
+            # before FIELD_CAP_EFFECTIVE_DATE is TAGGED, not gating -- unlike the verified_by
+            # exemption above, this is decided per-problem (not all-or-nothing), so a cap
+            # violation on a pre-effective-date envelope is exempted even alongside an unrelated,
+            # still-gating problem on the same record.
+            legacy_cap_violation = (
+                not load_err
+                and isinstance(record, dict)
+                and _sent_before_effective_date(record.get("sent_at"))
+            )
+
             def _gating(probs: list) -> list:
+                out = probs
                 if legacy_missing_verified_by:
-                    return [p for p in probs if "`verified_by`" not in p]
-                return probs
+                    out = [p for p in out if "`verified_by`" not in p]
+                if legacy_cap_violation:
+                    out = [p for p in out if not _is_cap_violation(p)]
+                return out
 
             m = FILENAME_RE.match(path.name)
             if not m:
@@ -596,8 +726,15 @@ def _check_one_queue(queue_dir: Path, quiet: bool, own_repo: Optional[str]) -> t
                 lines.append(f"FAIL {path}{tag}")
                 lines.extend(f"       {p}" for p in problems)
             elif problems:
-                # legacy_missing_verified_by, and nothing else wrong: reported, not gating.
-                lines.append(f"FAIL {path}{tag} [LEGACY -- pre-dates verified_by, not gating]")
+                # Every remaining problem was exempted by a LEGACY rule above: reported, not
+                # gating. Name which rule(s) applied so the tag is never ambiguous about why.
+                legacy_tags = []
+                if legacy_missing_verified_by:
+                    legacy_tags.append("pre-dates verified_by")
+                if legacy_cap_violation and any(_is_cap_violation(p) for p in problems):
+                    legacy_tags.append("pre-dates field-cap effective date")
+                tag_detail = "; ".join(legacy_tags) or "legacy"
+                lines.append(f"FAIL {path}{tag} [LEGACY -- {tag_detail}, not gating]")
                 lines.extend(f"       {p}" for p in problems)
             elif not quiet:
                 lines.append(f"ok   {path}")

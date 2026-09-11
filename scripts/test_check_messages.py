@@ -651,6 +651,93 @@ def check_interleaved_drain_race() -> None:
               f"counts: {counts}")
 
 
+# --- BT.ticket.message-envelope-field-caps: schema-derived maxLength enforcement --------------
+#
+# One field is enough to exercise the cap logic without tripping unrelated pattern/enum checks:
+# `durable_home.ref` (cap 400, free text, no pattern restriction). OBSERVED RED: run
+# check_field_over_cap_fails_after_effective_date against the pre-task-2 checker (before
+# _check_field_caps existed) -- it exits 0 (does not detect the over-cap field). Recorded here and
+# in the task commit message per the task's OBSERVED RED requirement.
+
+def check_field_at_cap_passes() -> None:
+    cap = check_messages.schema_field_caps()["durable_home.ref"]
+    record = _valid_message(
+        "QUERY",
+        durable_home={"channel": "lane-log", "ref": "x" * cap},
+    )
+    problems = check_messages.check_message_record(record)
+    check(f"a `durable_home.ref` value at exactly its cap ({cap} chars) has no cap violation",
+          not any(check_messages._is_cap_violation(p) for p in problems),
+          f"problems: {problems}")
+
+
+def check_field_over_cap_fails_after_effective_date() -> None:
+    cap = check_messages.schema_field_caps()["durable_home.ref"]
+    on_or_after = check_messages.FIELD_CAP_EFFECTIVE_DATE + "T00:00:00Z"
+    record = _valid_message(
+        "QUERY",
+        sent_at=on_or_after,
+        durable_home={"channel": "lane-log", "ref": "x" * (cap + 1)},
+    )
+    problems = check_messages.check_message_record(record)
+    check("a `durable_home.ref` one character over its cap is reported, naming the field",
+          any("durable_home.ref" in p and "exceeding its cap" in p for p in problems),
+          f"problems: {problems}")
+
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        queue_dir = lock_dir / "queue" / "base-template" / "lane-coordination"
+        _write_message_file(queue_dir / "inbox", record)
+
+        proc = _run_cli(lock_dir)
+        output = proc.stdout + proc.stderr
+        check("an over-cap envelope sent on/after the effective date makes "
+              "`check_messages.py --quiet` exit non-zero",
+              proc.returncode != 0, output)
+        check("the failure names `durable_home.ref`", "durable_home.ref" in output, output)
+
+
+def check_over_cap_before_effective_date_is_tagged_not_gating() -> None:
+    cap = check_messages.schema_field_caps()["durable_home.ref"]
+    before = "2026-01-01T00:00:00Z"
+    assert before[:10] < check_messages.FIELD_CAP_EFFECTIVE_DATE, \
+        "fixture must genuinely predate the effective date"
+    record = _valid_message(
+        "QUERY",
+        sent_at=before,
+        durable_home={"channel": "lane-log", "ref": "x" * (cap + 1)},
+    )
+    problems = check_messages.check_message_record(record)
+    check("check_message_record still reports the over-cap field even before the effective date "
+          "(gating is decided by the CLI/_check_one_queue layer, not here)",
+          any("durable_home.ref" in p and "exceeding its cap" in p for p in problems),
+          f"problems: {problems}")
+
+    with tempfile.TemporaryDirectory() as td:
+        lock_dir = Path(td) / ".fleet-locks"
+        queue_dir = lock_dir / "queue" / "base-template" / "lane-coordination"
+        _write_message_file(queue_dir / "inbox", record)
+
+        proc = _run_cli(lock_dir)
+        output = proc.stdout + proc.stderr
+        check("an over-cap envelope sent BEFORE the effective date does NOT change the exit code "
+              "(rc == 0)", proc.returncode == 0, output)
+        check("the report still names the field and tags it LEGACY / pre-dates field-cap "
+              "effective date",
+              "durable_home.ref" in output and "LEGACY" in output
+              and "field-cap effective date" in output,
+              output)
+
+
+def check_schema_capped_fields_equal_checker_fields() -> None:
+    schema_paths = check_messages.schema_capped_field_paths()
+    checker_paths = set(check_messages.CAPPED_FIELD_PATHS)
+    check("the set of fields carrying `maxLength` in message.schema.json equals the set "
+          "check_message_record enforces",
+          schema_paths == checker_paths,
+          f"schema: {sorted(schema_paths)}, checker: {sorted(checker_paths)}")
+
+
 # --- no records is not a failure ----------------------------------------------------------------
 
 def check_no_records_is_not_a_failure() -> None:
@@ -688,6 +775,10 @@ def main() -> int:
     check_own_malformed_filename_is_still_fatal()
     check_concurrent_drain_exactly_once()
     check_interleaved_drain_race()
+    check_field_at_cap_passes()
+    check_field_over_cap_fails_after_effective_date()
+    check_over_cap_before_effective_date_is_tagged_not_gating()
+    check_schema_capped_fields_equal_checker_fields()
     check_no_records_is_not_a_failure()
 
     if FAILURES:
