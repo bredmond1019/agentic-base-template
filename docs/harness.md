@@ -94,6 +94,25 @@ implement it this way:
 See [`scripts/check_lane_agents.py`](../scripts/check_lane_agents.py) and [`scripts/check_messages.py`](../scripts/check_messages.py) for a worked implementation
 (`resolve_own_repo`, `is_foreign`), and their test files for the both-directional fixtures.
 
+## The `failureClass` check key (BT.ticket.harness-check-failure-class)
+
+`.claude/workflows/harness.schema.json`'s `$defs.check` carries an optional per-check key,
+`failureClass`, alongside the other check keys (`kind`, `command`, `gates`, `perTask`,
+`fastCommand`, `failOn`, `observed_red`, ...; the full field table lives in
+[harness-json.md](harness-json.md)). It takes exactly two values:
+
+| Value | Meaning |
+|---|---|
+| *(absent)* | `fixable` — the default. A failure of this check is expected to be addressable by editing code. |
+| `"escalate"` | A failure of this check is **not** addressable by editing code — a flaky external tool, a missing credential, an upstream advisory. An engine that honours the key should bail on it rather than spend fix retries. |
+
+**No JS engine reads this key today.** `sdlc-task.js` and `sdlc-flow.js` have zero references to
+`failureClass` (verified 2026-09-10) — setting it on a check changes nothing about how either
+engine runs today. The only planned reader is engine-rs's `EN.17.G` (`CheckResult.failure_class`),
+which is open and depends on this ticket landing first so it implements against a published,
+schema-validated key instead of inventing one every repo's `additionalProperties: false` harness
+schema would refuse.
+
 ## The FAIL line format (BT.ticket.checks-must-name-their-failing-artifact)
 
 **A gated check reporting a failure prints a line of the shape:**
