@@ -3,7 +3,36 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-10
+**Last updated:** 2026-09-13
+
+---
+## 2026-09-13 — runs-that-finish-cheaply Wave 0: three inline engine and authoring fixes
+
+- **What:**
+  - **Implement prompt** (`prompts/shared.js` `renderImplementPrompt`, rebuilt into both engines):
+    new step 3c reads source with Read/Grep, not `cat`/`sed`/`grep` through Bash; step 6 confirms
+    with the narrowest commands covering the task's own change, never the full suite, which the
+    test stage runs right after.
+  - **Harness-config model:** the literal `'sonnet'` moved into each engine's `MODEL` map as
+    `MODEL.harnessConfig`. It is **not** downgraded: `9cbca7b` moved it to sonnet because haiku
+    fails that nested `StructuredOutput` schema.
+  - **`/generate-tasks`:** a named FE.7.D case (a changed return value or literal → fix stale test
+    assertions in the same task); `perTask: false` named as the alternative to merging tasks;
+    `max_attempts`/`dependsOn` marked informational under both engines.
+  - **Supporting edits:** `.agents/skills/sdlc-task/SKILL.md` implement step mirrored. Skill-sync
+    and engine-docs-sync anchors relocated by hash match, content byte-identical. The
+    `engines-pass-agent` baseline keys moved +10.
+- **Why:** the 2026-09-13 bail and token analyses (HQ
+  `planning/open-work/orchestration-runs/retros/`). Implement agents averaged 15 Bash read calls
+  and 4.2 test runs each.
+- **Gates:** 105 of 110 pass. The 5 red are pre-existing:
+  - `close-out-diff-base-tests` and `close-out-multi-block-evidence` fail identically on a clean
+    HEAD worktree;
+  - the three rg discovery suites die on broken symlinks under `portfolio/Healthie/web/.qlty` and
+    a bella fixture.
+- **Not propagated yet:** `/sync-downstream-harness` is the operator gate
+  `OP.operator-sync-harness-work-assertion`.
+- **Refs:** HQ `planning/roadmaps/runs-that-finish-cheaply/roadmap.md` § Wave 0 items 1–3.
 
 ---
 ## 2026-09-10 — coordination-layer-port lane: two tickets, scoped and stopped

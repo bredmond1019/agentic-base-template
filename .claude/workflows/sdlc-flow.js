@@ -859,6 +859,11 @@ Target:
    this one. Load the \`write-okf-markdown\` skill for the full procedure, including the cross-repo
    \`<scope>:<doc_id>\` prefix form a target outside this file's own scope needs.
 
+3c. READ WITH THE READ TOOL, NOT WITH BASH. Open source files with Read (use offset/limit on a large
+   file) and search with Grep/Glob. Do not read or search source through Bash (\`cat\`, \`sed -n\`,
+   \`head\`, \`grep\`, \`rg\`): every Bash result stays in context for the rest of this task and is
+   re-sent on every later turn. Bash is for running commands, not for reading files.
+
 4. Follow every CLAUDE.md standing rule; add/update tests for new code/logic; verify any model ids /
    package names via the claude-api skill — never from memory.
 
@@ -870,7 +875,11 @@ Target:
      cd ${runRoot} && grep -nE 'todo!\\(|unimplemented!\\(|unreachable!\\(|NotImplementedError|not implemented|FIXME' <those paths> 2>/dev/null
    If something required is incomplete, finish it now — do not commit a partial task.
 
-6. Run the spec's "## Validation Commands" for Task ${taskNum} to confirm correctness.
+6. Confirm correctness with the NARROWEST commands that exercise this task's own change: the tests
+   for the files and modules Task ${taskNum} touched (one test file, one module, or one test-name
+   filter), plus the build/typecheck those files need. Do NOT run the project's whole test suite or
+   the full gating set here. The test stage runs every gating check right after you commit, so a
+   full run here pays for the same suite twice on every attempt.
 
 7. Commit on the branch. Never use git add -A or git add . — stage files explicitly by name.
    Run: cd ${runRoot} && ${GIT} status
@@ -1326,6 +1335,7 @@ const MODEL = {
   prVerify:      'haiku',    // ONE `gh pr view` call + report its exit code — mechanical, not judgment
   merge:         'sonnet',   // --auto-merge: merge the PR + clean up + emit-state on the base
   stateWriter:   'haiku',    // stamps timestamps, writes state.json + worklog.md, commits
+  harnessConfig: 'sonnet',   // copies planning/harness.json into a nested StructuredOutput — haiku fails that schema after 2 nudges (9cbca7b); the real fix is a deterministic loader, not a cheaper model (BT.ticket.prepare-run-replaces-setup-agents)
 }
 
 // Final per-task fix pass and final review attempt before the loop gives up run on a stronger model.
@@ -1507,7 +1517,7 @@ STEP 2 — Decide:
     fields verbatim; ignore any other fields.
 
 Return your findings using the StructuredOutput tool.
-`, { label: 'harness-config', schema: HARNESS_CONFIG_SCHEMA, model: 'sonnet' })
+`, { label: 'harness-config', schema: HARNESS_CONFIG_SCHEMA, model: MODEL.harnessConfig })
 
   // "__HARNESS_ABSENT__" or present-but-invalid-JSON both come back as present=false (STEP 2 above)
   // — both degrade to the spec's `## Validation Commands`, never a bail (D5 / standing rule 1: the

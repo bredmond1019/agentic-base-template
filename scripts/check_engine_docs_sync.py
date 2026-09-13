@@ -117,7 +117,7 @@ ANCHORS = [
     # lines into sdlc-task.js entirely ABOVE this anchor, shifting it 1911->1920, 1992->2001.
     # Re-picked from CONTENT at the new position (confirmed byte-identical to the pre-shift
     # content via hash match against the manifest), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1920, 2001,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1930, 2011,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -190,7 +190,7 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 3498->3499, 3525->3526. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3499, 3526,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3509, 3536,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
@@ -205,7 +205,7 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 938->947, 955->964. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 947, 964,
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 956, 973,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
@@ -218,7 +218,7 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 1880->1889, 2010->2019. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1889, 2019,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1899, 2029,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
     # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
@@ -230,7 +230,7 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 3554->3564, 3589->3599. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3564, 3599,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3574, 3609,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

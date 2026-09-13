@@ -96,7 +96,7 @@ ANCHORS = [
     # runTests() heartbeatRecipe call (+2 net lines) landed BELOW it, so only +5 applies here:
     # 1906->1911, 1987->1992. Text unchanged -- verified by diffing the old range against the new
     # range: byte-identical ("WORKTREE MODE (--worktree)" through the trailing content).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1920, 2001,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1930, 2011,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -175,7 +175,7 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 3498->3499, 3525->3526. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3499, 3526,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3509, 3536,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
@@ -187,7 +187,7 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 1880->1889, 2010->2019. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1889, 2019,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1899, 2029,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -201,7 +201,7 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 3554->3564, 3589->3599. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3564, 3599,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3574, 3609,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 
