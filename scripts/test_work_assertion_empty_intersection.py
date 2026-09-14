@@ -83,6 +83,29 @@ byte-identical relocation of `check_engine_docs_sync.py`'s ANCHORS table, both m
 re-stamped, and `scripts/test_engines_pass_agent.py`'s FROZEN_BASELINE re-pinned to the same three
 invocation sites at their new line numbers -- content unchanged in every case, confirmed by each
 tool's own drift/hash check before and after.
+
+TASK 6 -- REPLAY THE RECOVERED BAILS AS GREEN FIXTURES (registered as a gated harness check):
+`RecoveredBailReplayTests` loads every `scripts/fixtures/bail_meta/work_assertion/*.json` fixture
+task 5 recovered from the HQ bail-classification retro, reconstructs each one's exact recorded
+`declared_files`/`name_status` shape into its own throwaway `mktemp` sandbox (same technique as
+`WorkAssertionCasesMixin`), and runs the FIXED `renderWorkAssertion` (extracted from whichever real
+engine file the fixture's own `engine` field names -- `task` or `flow`) against it. A fixture whose
+recorded `name_status` is empty is reconstructed with `expect_no_diff: true` on its sandboxed task
+entry -- this is precisely case (a)'s vocabulary fix: a historical bail recorded as "diff is EMPTY"
+is, under the fixed gate, expressible as a declared no-op rather than indistinguishable from a task
+that did nothing. A fixture with a real recorded diff is reconstructed by creating/modifying/
+deleting a file per `name_status` line, verbatim.
+
+31 of the 32 recovered fixtures replay green this way. The one that does not --
+`bastion-task-1.json` -- is a genuine task-scope mismatch, not a work-assertion defect: its
+recorded diff (`90ee9fa..d0ee42e` in `core/bastion`'s own real git history, independently
+confirmed via `git diff --name-status 90ee9fa..d0ee42e`) touches three files entirely unrelated to
+its two declared files, so no scope rule this block adds (sibling, prefix, or exact match) should
+ever make it pass -- forcing it green would be exactly the "weakened gate" the block's own
+regression control (case 3) exists to catch. It is named explicitly in `EXPECTED_STILL_BAIL` below,
+with its reason, rather than silently excluded or synthesized into a passing shape; if it ever
+starts passing without a corresponding engine change, that is itself worth investigating, not a
+welcome side effect.
 """
 
 from __future__ import annotations
@@ -463,6 +486,142 @@ class ParityTests(unittest.TestCase):
             self.fail(
                 "the <<shared:renderWorkAssertion>> regions of sdlc-task.js and sdlc-flow.js have "
                 f"diverged (D83 parity broken):\n{diff}"
+            )
+
+
+# ----------------------------------------------------------------------------
+# Task 6: replay every recovered work-assertion bail (scripts/extract_bail_meta_fixtures.py's
+# output) through the FIXED renderWorkAssertion and confirm it now reaches PASS -- no engine
+# launch, no model call, just the same real extracted function run against a reconstructed sandbox.
+# ----------------------------------------------------------------------------
+
+BAIL_FIXTURES_DIR = REPO_ROOT / "scripts" / "fixtures" / "bail_meta" / "work_assertion"
+
+ENGINE_FILE_BY_KIND = {"task": TASK_ENGINE, "flow": FLOW_ENGINE}
+
+# Fixtures that are KNOWN, and expected, to still BAIL after the fix -- named explicitly, with why,
+# rather than silently excluded or forced green. Each entry documents the real, independently
+# re-confirmed evidence that the underlying bail is a DIFFERENT bug class than the one this block
+# fixes (see the module docstring's "TASK 6" section). If a listed fixture starts passing without a
+# corresponding engine change, that is worth investigating -- not a reason to grow this list further
+# without the same standard of evidence.
+EXPECTED_STILL_BAIL = {
+    "bastion-task-1.json": (
+        "genuine task-scope mismatch, not a work-assertion defect -- the recorded diff "
+        "(90ee9fa..d0ee42e in core/bastion's own real git history, independently reconfirmed via "
+        "`git diff --name-status 90ee9fa..d0ee42e`) touches three files "
+        "(src/serve/notify/stale_run_alarm.rs, src/serve/notify/tests.rs, "
+        "src/serve/session_qa/tests.rs) entirely unrelated to its two declared files "
+        "(src/serve/handlers/status.rs, src/serve/mod.rs); no sibling/prefix/exact-match rule this "
+        "block adds should ever make this pass without weakening the gate this block exists to fix."
+    ),
+}
+
+
+def load_bail_fixture(path: Path) -> dict:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("kind") != "bail" or "bail" not in data:
+        raise AssertionError(f"{path} is not a kind='bail' meta.schema.json record")
+    return data["bail"]
+
+
+def build_bail_sandbox(tmp_root: Path, bail: dict) -> tuple:
+    """Reconstructs one recorded bail's exact declared_files/name_status shape into a throwaway
+    sandbox, and returns (sandbox, tasks_json_rel, task_id, prev_sha) ready for
+    render_work_assertion_script(). An empty recorded name_status is reconstructed as a declared
+    no-op (expect_no_diff: true) -- the historical shape this block's vocabulary fix (case 1)
+    targets. A non-empty name_status is reconstructed literally, one create/modify/delete per line."""
+    declared_files = bail["declared_files"]
+    name_status = bail["name_status"]
+    raw_task_id = bail["task_id"]
+    try:
+        task_id = int(raw_task_id)
+    except (TypeError, ValueError):
+        task_id = raw_task_id
+
+    sandbox = init_sandbox(tmp_root)
+    task_entry = {"task_id": task_id, "files": declared_files}
+    if not name_status:
+        task_entry["expect_no_diff"] = True
+    tasks_json_rel = write_tasks_json(sandbox, [task_entry])
+    copy_sync_manifests(sandbox)
+    commit_all(sandbox, "base: seed tasks.json + manifests")
+    prev_sha = git(sandbox, "rev-parse", "HEAD").strip()
+
+    for line in name_status:
+        parts = line.split("\t")
+        status, path = parts[0], parts[-1]
+        fpath = sandbox / path
+        if status.startswith("D"):
+            if fpath.exists():
+                fpath.unlink()
+        else:
+            fpath.parent.mkdir(parents=True, exist_ok=True)
+            fpath.write_text(f"replayed content for {path} (recovered bail fixture)\n", encoding="utf-8")
+
+    commit_all(sandbox, f"task {task_id}: replayed recorded bail diff")
+    return sandbox, tasks_json_rel, task_id, prev_sha
+
+
+class RecoveredBailReplayTests(unittest.TestCase):
+    """Replays every scripts/fixtures/bail_meta/work_assertion/*.json fixture through the FIXED
+    renderWorkAssertion and asserts it now reaches PASS -- except the small, explicitly-named
+    EXPECTED_STILL_BAIL set, which must keep bailing (a fixture entering or leaving that set without
+    a corresponding evidence update or engine change is itself a signal to investigate)."""
+
+    def test_recovered_bails_replay_against_fixed_assertion(self):
+        fixture_paths = sorted(BAIL_FIXTURES_DIR.glob("*.json"))
+        self.assertTrue(fixture_paths, f"no fixtures found under {BAIL_FIXTURES_DIR}")
+
+        tmp_root = Path(tempfile.mkdtemp(prefix="wa_bail_replay_root_"))
+        self.addCleanup(shutil.rmtree, tmp_root, ignore_errors=True)
+
+        unexpected_fail = []
+        unexpected_pass = []
+        green = 0
+
+        for fixture_path in fixture_paths:
+            bail = load_bail_fixture(fixture_path)
+            engine_path = ENGINE_FILE_BY_KIND.get(bail["engine"])
+            if engine_path is None:
+                self.fail(f"{fixture_path.name}: unrecognized engine {bail['engine']!r}")
+
+            sandbox, tasks_json_rel, task_id, prev_sha = build_bail_sandbox(tmp_root, bail)
+            script = render_work_assertion_script(engine_path, "git", task_id, tasks_json_rel, prev_sha)
+            result = run_bash(sandbox, script)
+
+            name = fixture_path.name
+            if name in EXPECTED_STILL_BAIL:
+                if result.returncode == 0:
+                    unexpected_pass.append(name)
+                continue
+
+            if result.returncode == 0:
+                green += 1
+            else:
+                unexpected_fail.append((name, result.stdout.strip() + result.stderr.strip()))
+
+        total = len(fixture_paths)
+        excluded = len(EXPECTED_STILL_BAIL)
+        print(
+            f"replayed {green}/{total - excluded} recovered bails green "
+            f"({excluded} known non-applicable case(s) excluded: {', '.join(sorted(EXPECTED_STILL_BAIL))}), "
+            f"0 required an engine re-run."
+        )
+
+        if unexpected_fail:
+            details = "\n".join(f"  - {n}: {o}" for n, o in unexpected_fail)
+            self.fail(
+                f"{len(unexpected_fail)} recovered bail fixture(s) still BAIL against the fixed "
+                f"renderWorkAssertion -- the fix does not actually cover that historical shape and "
+                f"must be revisited, not this test loosened:\n{details}"
+            )
+        if unexpected_pass:
+            self.fail(
+                f"{len(unexpected_pass)} fixture(s) in EXPECTED_STILL_BAIL now PASS without a "
+                f"corresponding engine change or updated evidence: {', '.join(unexpected_pass)} -- "
+                "update EXPECTED_STILL_BAIL's documented reasoning (or remove the entry) rather than "
+                "leaving stale evidence behind."
             )
 
 
