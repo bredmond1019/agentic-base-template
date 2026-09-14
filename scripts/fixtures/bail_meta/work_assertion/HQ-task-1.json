@@ -1,0 +1,17 @@
+{
+  "bail": {
+    "declared_files": [
+      "scripts/sandbox/build-v2.sh"
+    ],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "HQ",
+    "source": "planning/HQ.ticket.build-v2-brain-root-project-vocab/sdlc/sdlc-task-state.json",
+    "specific_rule": "Task's work was already implemented and committed in a prior run (aa3b0774); resume/reconciliation should recognize an already-satisfied task against HEAD instead of requiring a fresh diff/commit from the current attempt before workAssertionPassed can be true.",
+    "task_id": "1",
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

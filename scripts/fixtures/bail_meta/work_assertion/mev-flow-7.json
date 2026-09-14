@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "flow",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "mev",
+    "source": "core/_planning/mev/archive/MV.19.A/sdlc/sdlc-flow-state.json",
+    "specific_rule": "Task 7 is a files:[] full-suite Validate task (title 'Validate: full gates...'); its diff-based workAssertionPassed check structurally cannot confirm a task whose own scope is validation, not a commit. Exempt files:[] validate tasks from the commit-diff work-assertion and accept validation_commands success instead.",
+    "task_id": "7",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

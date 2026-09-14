@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "HQ",
+    "source": "planning/archive/HQ.11.F/sdlc/sdlc-task-state.json",
+    "specific_rule": "Task 6 declares files: [] (validate-only) but renderWorkAssertion requires a positive commit-based signal it can never produce. Exempt files:[] validate tasks from the diff-based work assertion.",
+    "task_id": "6",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

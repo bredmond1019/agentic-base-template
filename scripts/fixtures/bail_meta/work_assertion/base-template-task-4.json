@@ -1,0 +1,17 @@
+{
+  "bail": {
+    "declared_files": [
+      "planning/harness.json"
+    ],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "base-template",
+    "source": "_planning/base-template/archive/BT.ticket.consolidate-fleet-since-filter/sdlc/sdlc-task-state.json",
+    "specific_rule": "Task 4's sole declared file (planning/harness.json) is a D46 vault symlink, so the repo's own git history never touches it even when the vault-side commit satisfies the AC. Step 7a's diff-based work assertion must resolve files[] through the vault symlink target's git history, not only this repo's, before declaring WORK_ASSERTION_NOT_CONFIRMED.",
+    "task_id": "4",
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

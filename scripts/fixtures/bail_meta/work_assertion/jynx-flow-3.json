@@ -1,0 +1,17 @@
+{
+  "bail": {
+    "declared_files": [
+      "crates/jynx-core/src/carryover.rs"
+    ],
+    "engine": "flow",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "jynx",
+    "source": "core/_planning/jynx/archive/JX.ticket.carryover-reader-silently-drops-24-of-25-repos/sdlc/sdlc-flow-state.json",
+    "specific_rule": "Task 3's work (deleting the skip guard, adding the positive control) actually landed and was later confirmed correct; the flow's work-assertion/attempt-tracking logic produced a false-negative blocked status instead of recognizing the completed work.",
+    "task_id": "3",
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

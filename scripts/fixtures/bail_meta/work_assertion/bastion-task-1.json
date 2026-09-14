@@ -1,0 +1,23 @@
+{
+  "bail": {
+    "commit_range": "90ee9fa..d0ee42e",
+    "declared_files": [
+      "src/serve/handlers/status.rs",
+      "src/serve/mod.rs"
+    ],
+    "engine": "task",
+    "name_status": [
+      "M\tsrc/serve/notify/stale_run_alarm.rs",
+      "M\tsrc/serve/notify/tests.rs",
+      "M\tsrc/serve/session_qa/tests.rs"
+    ],
+    "primary_class": "ENGINE-BUG",
+    "repo": "bastion",
+    "source": "core/_planning/bastion/archive/BA.ticket.batch-repo-status/sdlc/sdlc-task-state.json",
+    "specific_rule": "Same work-assertion reporting bug as HQ.ticket.v2-build-root-git-init: renderWorkAssertion's outcome went unreported for a second consecutive attempt with no progress noted, instead of surfacing why.",
+    "task_id": 1,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

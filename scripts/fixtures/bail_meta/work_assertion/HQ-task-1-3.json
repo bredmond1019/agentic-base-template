@@ -1,0 +1,28 @@
+{
+  "bail": {
+    "commit_range": "e1354d87a..a47eccaa2",
+    "declared_files": [
+      "planning/HQ.7.C/enforcement-flip-run-report.md",
+      "planning/HQ.7.C/index.md"
+    ],
+    "engine": "task",
+    "name_status": [
+      "M\tbusiness/docs/brand.md",
+      "M\tbusiness/docs/operating-plan.md",
+      "M\tbusiness/docs/product/competitive-landscape.md",
+      "M\tbusiness/docs/product/orchestrator-product-plan.md",
+      "M\tbusiness/docs/us-gtm-icp-brief.md",
+      "M\tbusiness/docs/why-me.md",
+      "A\tplanning/HQ.7.C/enforcement-flip-run-report.md",
+      "M\tplanning/HQ.7.C/index.md"
+    ],
+    "primary_class": "ENGINE-BUG",
+    "repo": "HQ",
+    "source": "planning/HQ.7.C/sdlc/sdlc-task-state.json",
+    "specific_rule": "renderWorkAssertion refused to confirm work (workAssertionPassed=false) twice in a row despite underlying deliverables and checks passing, with no diagnostic detail surfaced \u2014 the work-assertion confirmation step needs to expose why it disagrees with passing checks instead of failing silently.",
+    "task_id": 1,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

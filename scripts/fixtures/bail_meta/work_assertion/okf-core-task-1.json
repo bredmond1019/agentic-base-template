@@ -1,0 +1,25 @@
+{
+  "bail": {
+    "commit_range": "3d17483..71ad555",
+    "declared_files": [
+      "src/state.rs",
+      "tests/state_preservation.rs",
+      "tests/struct_defaults.rs",
+      "../../docs/state/state-schema.md"
+    ],
+    "engine": "task",
+    "name_status": [
+      "M\tsrc/state.rs",
+      "M\ttests/state_preservation.rs",
+      "M\ttests/struct_defaults.rs"
+    ],
+    "primary_class": "ENGINE-BUG",
+    "repo": "okf-core",
+    "source": "core/_planning/okf-core/archive/OK.ticket.backlog-entries-carry-an-epic/sdlc/sdlc-task-state.json",
+    "specific_rule": "Work-assertion has no path for 'investigated and confirmed already-correct, no code change needed' \u2014 it requires a positive diff even when the correct task outcome is verifying a defect doesn't reproduce; this also let the fix agent go chasing a foreign check_consumers error outside its own task scope instead of stopping cleanly.",
+    "task_id": 1,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

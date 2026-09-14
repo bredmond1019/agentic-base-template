@@ -1,0 +1,18 @@
+{
+  "bail": {
+    "declared_files": [
+      "docs/sandbox/index.md",
+      "scripts/README.md"
+    ],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "HQ",
+    "source": "planning/archive/HQ.11.A/sdlc/sdlc-task-state.json",
+    "specific_rule": "The terminal work-assertion (step 7a) requires a fresh HEAD~1..HEAD diff on resume, but if the task's work was already committed in a prior attempt (no diff left to make), the resumed attempt has nothing to produce and workAssertionPassed is spuriously false; resume logic should check whether the task's declared output already exists/is committed, not only whether *this* attempt made a new commit.",
+    "task_id": "7",
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

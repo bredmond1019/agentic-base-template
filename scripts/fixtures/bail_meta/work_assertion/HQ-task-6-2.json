@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "HQ",
+    "source": "planning/archive/HQ.11.G/sdlc/sdlc-task-state.json",
+    "specific_rule": "Task 6 declares files: [] and made no commit (validation-only); the terminal write recipe still requires a positive workAssertionPassed. Exempt files:[] validate tasks from the diff-based work assertion.",
+    "task_id": "6",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

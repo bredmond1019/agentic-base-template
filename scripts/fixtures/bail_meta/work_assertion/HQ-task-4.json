@@ -1,0 +1,29 @@
+{
+  "bail": {
+    "commit_range": "c9099e2..3357c03",
+    "declared_files": [
+      "scripts/README.md"
+    ],
+    "engine": "task",
+    "name_status": [
+      "A\tcore/_planning/bastion/BA.26.A/tasks.json",
+      "M\tcore/_planning/bastion/blocks/BA.26.A.json",
+      "M\tcore/_planning/bastion/orchestration-run/operator-console/notes.md",
+      "A\tcore/_planning/engine-rs/EN.14.G/tasks.json",
+      "M\tcore/_planning/engine-rs/blocks/EN.14.G.json",
+      "A\tcore/_planning/mev/MV.20.B/tasks.json",
+      "M\tcore/_planning/mev/orchestration-run/coordination-layer-port/notes.md",
+      "M\tcore/_planning/mev/orchestration-run/coordination-layer-port/verification-ledger.json",
+      "M\tplanning/roadmaps/coordination-layer-port/lane-log.jsonl",
+      "M\tscripts/README.md"
+    ],
+    "primary_class": "ENGINE-BUG",
+    "repo": "HQ",
+    "source": "planning/archive/HQ.10.A/sdlc/sdlc-task-state.json",
+    "specific_rule": "Work-assertion/test-stage reporting must not return null/malformed or silently omit the renderWorkAssertion outcome on a passing doc-only task (scripts/README.md edit) \u2014 the engine failed to surface a signal, not the task that failed to produce one.",
+    "task_id": 4,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

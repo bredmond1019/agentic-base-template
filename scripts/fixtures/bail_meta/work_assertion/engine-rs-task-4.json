@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "SPEC-SEQUENCING",
+    "repo": "engine-rs",
+    "source": "core/_planning/engine-rs/archive/EN.ticket.content-pipeline-payload-missing-okf-title-description/sdlc/sdlc-task-state.json",
+    "specific_rule": "Same files:[] validation-only task pattern: 'Task 4 (Validate) is a validation-only task with an empty files[] list; ran all four validation_commands and all pass cleanly with zero code changes needed', yet workAssertionPassed stayed false across two attempts.",
+    "task_id": "4",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

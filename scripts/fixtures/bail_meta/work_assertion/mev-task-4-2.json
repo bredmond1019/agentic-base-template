@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "SPEC-SEQUENCING",
+    "repo": "mev",
+    "source": "core/_planning/mev/archive/MV.ticket.superseded-block-status/sdlc/sdlc-task-state.json",
+    "specific_rule": "Same files:[] validation-only task vs. renderWorkAssertion mismatch as the general pattern; task 4 verifies another repo's (synapse) state.json with no local artifact to assert against.",
+    "task_id": "4",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

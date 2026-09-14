@@ -1,0 +1,23 @@
+{
+  "bail": {
+    "commit_range": "fa6aeb7..0a21000",
+    "declared_files": [
+      ".claude/workflows/sdlc-task.js"
+    ],
+    "engine": "task",
+    "name_status": [
+      "M\t.agents/skills/sdlc-task/SKILL.md",
+      "M\t.claude/workflows/sdlc-task.js",
+      "M\tscripts/engine_docs_sync_manifest.json",
+      "M\tscripts/skill_sync_manifest.json"
+    ],
+    "primary_class": "ENGINE-BUG",
+    "repo": "base-template",
+    "source": "_planning/base-template/BT.chore.planning-blocks-slug-directory-restructure/sdlc/sdlc-task-state.json",
+    "specific_rule": "work assertion returned false despite a real commit (0a21000) with files_changed recorded, and the second failure surfaced no check_id/artifact at all -- work-assertion failures must always carry the specific check_id/condition that failed so the run isn't left undeterminable.",
+    "task_id": 1,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

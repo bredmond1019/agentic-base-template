@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "mev",
+    "source": "core/_planning/mev/archive/MV.ticket.toolchain-freshness-keys-on-build-inputs-not-head/sdlc/sdlc-task-state.json",
+    "specific_rule": "The terminal work-assertion step must not require a positive diff-bound workAssertionPassed for a validation-only task (files: []) run against an already-clean tree \u2014 that shape can structurally never produce a diff, so the same false failure would reproduce on every retry.",
+    "task_id": "4",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

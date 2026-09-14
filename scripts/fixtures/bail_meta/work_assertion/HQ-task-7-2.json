@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "HQ",
+    "source": "planning/archive/HQ.11.B/sdlc/sdlc-task-state.json",
+    "specific_rule": "Task 7 is a files:[] pure validation gate; step 7a's diff-based workAssertionPassed can never be satisfied with no commit. Exempt files:[] validate tasks from the diff-based work assertion.",
+    "task_id": "7",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

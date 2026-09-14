@@ -1,0 +1,18 @@
+{
+  "bail": {
+    "declared_files": [
+      "celia.toml",
+      "tests/scenes"
+    ],
+    "engine": "flow",
+    "name_status": [],
+    "primary_class": "ENGINE-STRICTNESS",
+    "repo": "bella",
+    "source": "core/_planning/bella/archive/BE.7.I/sdlc/sdlc-flow-state.json",
+    "specific_rule": "files[] entries must be literal committed file paths, never a directory, because the work-assertion check does an exact-path match; /generate-tasks should reject directory-shaped files[] entries, and/or the engine's assertion should support directory-prefix matching.",
+    "task_id": 3,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

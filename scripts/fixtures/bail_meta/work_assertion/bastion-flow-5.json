@@ -1,0 +1,17 @@
+{
+  "bail": {
+    "declared_files": [
+      "src/openwork/mod.rs"
+    ],
+    "engine": "flow",
+    "name_status": [],
+    "primary_class": "ENGINE-STRICTNESS",
+    "repo": "bastion",
+    "source": "core/_planning/bastion/archive/BA.26.C/sdlc/sdlc-flow-state.json",
+    "specific_rule": "Same structural gap as EN.ticket.parallel-node-partial-success task 5: a validation-only task has no commit to diff, so the work-assertion gate can never receive a positive workAssertionPassed; /generate-tasks should not author validation-only terminal tasks under this gate, or the engine should accept a clean-validation pass with zero declared files as sufficient.",
+    "task_id": 5,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

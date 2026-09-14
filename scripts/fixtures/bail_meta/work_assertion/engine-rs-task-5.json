@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "SPEC-SEQUENCING",
+    "repo": "engine-rs",
+    "source": "core/_planning/engine-rs/archive/EN.ticket.wire-shipped-but-unreachable-seams/sdlc/sdlc-task-state.json",
+    "specific_rule": "Same files:[] validation-only task vs. renderWorkAssertion mismatch: cargo fmt/clippy/nextest/release-build all passed clean with no code changes required.",
+    "task_id": "5",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

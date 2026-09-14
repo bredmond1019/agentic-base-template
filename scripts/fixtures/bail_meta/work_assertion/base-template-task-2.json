@@ -1,0 +1,27 @@
+{
+  "bail": {
+    "commit_range": "6b04705..e182a06",
+    "declared_files": [
+      ".claude/workflows/sdlc-flow.js"
+    ],
+    "engine": "task",
+    "name_status": [
+      "M\t.agents/skills/sdlc-flow/SKILL.md",
+      "M\t.claude/workflows/sdlc-flow.js",
+      "M\tdocs/workflows/sdlc-flow.md",
+      "M\tscripts/check_engine_docs_sync.py",
+      "M\tscripts/check_skill_sync.py",
+      "M\tscripts/engine_docs_sync_manifest.json",
+      "M\tscripts/skill_sync_manifest.json",
+      "M\tscripts/test_engines_pass_agent.py"
+    ],
+    "primary_class": "SPEC-SCOPE",
+    "repo": "base-template",
+    "source": "_planning/base-template/archive/BT.ticket.sdlc-flow-records-no-base-sha/sdlc/sdlc-task-state.json",
+    "specific_rule": "When a task's spec text says 'edit X ONLY' but the sync-manifest ecosystem (guides/docs/test-baselines kept in lockstep with X) requires companion edits, files[] must list those sibling files too, or the work-assertion gate will structurally refuse the task regardless of retries.",
+    "task_id": 2,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

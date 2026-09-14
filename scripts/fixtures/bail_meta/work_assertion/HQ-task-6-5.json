@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "HQ",
+    "source": "planning/archive/HQ.11.J/sdlc/sdlc-task-state.json",
+    "specific_rule": "Task 6 is validation-only and declares files: [] (no diff produced); step 7a structurally requires a positive commit-diff-based workAssertionPassed even though all six sandbox suites and validate-brain flags reported green. Exempt files:[] validate tasks from the diff-based work assertion.",
+    "task_id": "6",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

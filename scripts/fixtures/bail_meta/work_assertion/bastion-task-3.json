@@ -1,0 +1,17 @@
+{
+  "bail": {
+    "declared_files": [
+      "planning/decisions/index.md"
+    ],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "bastion",
+    "source": "core/_planning/bastion/archive/BA.26.I/sdlc/sdlc-task-state.json",
+    "specific_rule": "Same as EN.ticket.orchestration-close-block-node-not-wired / BT.chore.roadmap-paths: work-assertion gate has no path for a task whose real work already landed and committed in a prior attempt, leaving nothing to assert on this pass.",
+    "task_id": 3,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

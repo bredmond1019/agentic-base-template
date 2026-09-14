@@ -1,0 +1,18 @@
+{
+  "bail": {
+    "declared_files": [
+      ".claude/commands/begin-orchestration.md",
+      ".claude/commands/orchestrate.md"
+    ],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "base-template",
+    "source": "_planning/base-template/archive/BT.chore.roadmap-paths-must-resolve-at-brain-root/sdlc/sdlc-task-state.json",
+    "specific_rule": "Work-assertion gate needs an explicit no-op/verification-task path: a legitimate zero-diff task (all AC already satisfied by earlier tasks) must be able to close without a positive workAssertionPassed derived from a fresh commit.",
+    "task_id": 4,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

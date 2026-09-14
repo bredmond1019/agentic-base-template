@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "SPEC-SEQUENCING",
+    "repo": "jynx",
+    "source": "core/_planning/jynx/archive/JX.ticket.worktree-planning-symlink-starves-the-direct-route/sdlc/sdlc-task-state.json",
+    "specific_rule": "Same files:[] validation-only task vs. renderWorkAssertion mismatch.",
+    "task_id": "2",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

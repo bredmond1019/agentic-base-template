@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "SPEC-SEQUENCING",
+    "repo": "okf-core",
+    "source": "core/_planning/okf-core/archive/OK.ticket.learning-artifact-missing-title-description/sdlc/sdlc-task-state.json",
+    "specific_rule": "Same files:[] validation-only task vs. renderWorkAssertion mismatch: fmt/clippy/test/release-build/check_consumers all passed with no diff, so the gate structurally cannot pass.",
+    "task_id": "2",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "HQ",
+    "source": "planning/archive/HQ.11.I/sdlc/sdlc-task-state.json",
+    "specific_rule": "Task 5 is a no-op verification task (files: []) that produced no commit by design, yet step 7a requires a positive workAssertionPassed before writing done/passed. Exempt files:[] validate tasks from the diff-based work assertion.",
+    "task_id": "5",
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

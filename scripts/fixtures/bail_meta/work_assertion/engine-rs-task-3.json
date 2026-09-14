@@ -1,0 +1,15 @@
+{
+  "bail": {
+    "declared_files": [],
+    "engine": "task",
+    "name_status": [],
+    "primary_class": "ENGINE-BUG",
+    "repo": "engine-rs",
+    "source": "core/_planning/engine-rs/archive/EN.ticket.orchestration-close-block-node-not-wired/sdlc/sdlc-task-state.json",
+    "specific_rule": "Work-assertion gate must accept a positive confirmation for a task whose files[] is legitimately empty (validation-only task, all checks already pass against prior tasks' committed work) instead of requiring a fresh code diff to exist.",
+    "task_id": 3,
+    "task_kind": "validate-only"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}

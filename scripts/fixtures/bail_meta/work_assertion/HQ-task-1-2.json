@@ -1,0 +1,21 @@
+{
+  "bail": {
+    "commit_range": "ed9b7a2c7..bae4699",
+    "declared_files": [
+      "scripts/sandbox/build-v2.sh",
+      "scripts/sandbox/tests/test_build_v2.sh"
+    ],
+    "engine": "task",
+    "name_status": [
+      "M\tscripts/sandbox/tests/test_build_v2.sh"
+    ],
+    "primary_class": "ENGINE-BUG",
+    "repo": "HQ",
+    "source": "planning/archive/HQ.ticket.v2-build-root-git-init/sdlc/sdlc-task-state.json",
+    "specific_rule": "Resume flow must accept a prior attempt's already-landed, validated commit as satisfying the work-assertion when the tree is clean this attempt, instead of requiring a fresh commit every attempt (renderWorkAssertion incorrectly reports workAssertionPassed=false and fires WORK_ASSERTION_ABORT on a clean tree with completed work).",
+    "task_id": 1,
+    "task_kind": "code-change"
+  },
+  "kind": "bail",
+  "schema_version": 1
+}
