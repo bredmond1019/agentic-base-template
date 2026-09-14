@@ -3,7 +3,32 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-13
+**Last updated:** 2026-09-14
+
+---
+## 2026-09-14 — AGENTS.md standing rule 10: documented the resumeFromRunId per-agent-result cache
+
+Closed `BT.ticket.work-assertion-cannot-express-a-correct-empty-intersection` (both engines'
+`renderWorkAssertion` now accept a declared no-op, sync-manifest siblings, directory-prefix
+`files[]`, and a persisted `prevSha` instead of a literal `HEAD~1`; new
+`.claude/workflows/meta.schema.json` + `scripts/extract_bail_meta_fixtures.py` replay 30 recorded
+historical work-assertion bails green with zero engine launches). The run itself twice hit a
+hazard not previously named in rule 10: after manually reordering commits / hand-repairing
+`sdlc-task-state.json` mid-run to fix the exact `HEAD~1` bug this ticket exists to close, a
+`--resume` passing `resumeFromRunId` replayed a stale cached `implement`/`triage` result computed
+against the PRE-edit repo state, and its terminal write overwrote a correct, hand-verified state
+file with a stale one (task 1 regressed from `passed` back to `failed`). Rule 10 covered the
+engine-script snapshot being stale; it said nothing about this second, Workflow-tool-level
+per-agent-call cache. Added a documented sub-case: once repo state or a run's own state file has
+been hand-edited mid-run, launch the next attempt WITHOUT `resumeFromRunId` (a fresh run has no
+cache to replay from), and reserve `resumeFromRunId` for resuming a run where nothing was changed
+underneath it (e.g. recovering from a harness-level crash such as a subagent never calling
+`StructuredOutput`). Also fixed, along the way and unrelated to this ticket's own scope: two
+time-bombed `close-out` diff-base fixtures (hardcoded 2026-09 dates aged past the 7-day
+`SESSION_TIE_HOURS` window), three fleet-discovery scripts' over-strict `rg -L` exit-code handling
+(a genuinely dangling symlink fixture in `core/bella` makes `rg` exit 2 while still emitting a
+complete, correct sweep), and a pre-existing `scripts/test_work_assertion.py` regex hardcoded to
+the pre-fix 3-argument `renderWorkAssertion` signature.
 
 ---
 ## 2026-09-13 — runs-that-finish-cheaply Wave 0: three inline engine and authoring fixes
