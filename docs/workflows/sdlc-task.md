@@ -425,11 +425,16 @@ check in `planning/harness.json`.
 The guard above only catches a *totally* empty index. It does not catch a commit whose index is
 non-empty but whose content is still wrong — a mass-deletion commit with one surviving file, for
 instance, which is exactly the shape that shipped as a green PASS in EN.11.O (443 files changed,
-177,867 deletions, zero insertions). `renderWorkAssertion(gitCmd='git', taskNum, tasksJsonPath)`
-(D81 lift condition 2 — `BT.ticket.a-run-must-prove-its-commits-contain-the-work`) is the
-complement: it runs immediately *after* the per-task work commit in both engines' per-task loop
-(never before — it inspects the commit it is checking via `git diff --name-status HEAD~1 HEAD`),
-reading `tasksJsonPath` at run time to get task `taskNum`'s declared `files[]`, and aborts
+177,867 deletions, zero insertions).
+`renderWorkAssertion(gitCmd='git', taskNum, tasksJsonPath, prevSha)`
+(D81 lift condition 2 — `BT.ticket.a-run-must-prove-its-commits-contain-the-work`, range-bound by
+`BT.ticket.work-assertion-cannot-express-a-correct-empty-intersection`) is the complement: it runs
+immediately *after* the per-task work commit in both engines' per-task loop (never before — it
+inspects the commit it is checking via `git diff --name-status <range> HEAD`, where `<range>` is
+`prevSha` when the caller passes one — the previous task's own recorded commit, or the run's
+`base_sha` for task 1, both persisted in state and therefore identical whether the engine is
+running fresh or resuming — and only the literal `HEAD~1` for a caller that passes none), reading
+`tasksJsonPath` at run time to get task `taskNum`'s declared `files[]`, and aborts
 
  VAULT-ONLY TASKS (D46): if EVERY path in the task's declared files[] begins with `planning/`,
  the work landed in the VAULT repo, not this one, and this repo's history structurally cannot
@@ -441,11 +446,20 @@ reading `tasksJsonPath` at run time to get task `taskNum`'s declared `files[]`, 
  diff is non-empty AND corresponds. A task with a MIX of vaulted and non-vaulted files is NOT
  this case and must still pass the ordinary assertion.
 
-(`WORK_ASSERTION_ABORT`, nonzero exit) when: (1) the commit's diff is empty; (2) no changed path
-intersects the declared `files[]`; (3) the commit **deletes** a path that is *not* declared — the
-EN.11.O shape. Deleting a file the task *did* declare passes cleanly; deletion is not itself the
-signal, undeclared deletion is. It is exempt — never invoked — at the worktree-init commit, the
-D16 fallback commits, and the vault commit (a different repo, with its own `HEAD~1` and
+(`WORK_ASSERTION_ABORT`, nonzero exit) when: (1) the commit's diff is empty **and** the task does
+not declare `expect_no_diff: true` in `tasks.json` — a task whose correct outcome IS no diff (a
+read-back/verification task, or one whose ACs were already satisfied by an earlier task) declares
+this explicitly rather than being indistinguishable from a task that simply did nothing; (2) no
+changed path intersects the declared `files[]` **or one of its resolved siblings/prefixes** — the
+match set includes any changed path that is a sync-manifest sibling of a declared file (read at
+run time from `scripts/skill_sync_manifest.json` and `scripts/engine_docs_sync_manifest.json`,
+never a hardcoded list — the SKILL.md replication guides and `docs/workflows/*.md` pages the
+engines themselves require re-stamping whenever the file they mirror changes) or a path beneath a
+declared file that is itself a directory (prefix match); (3) the commit **deletes** a path that is
+*not* declared — the EN.11.O shape. Deleting a file the task *did* declare passes cleanly;
+deletion is not itself the signal, undeclared deletion is. It is exempt — never invoked — at the
+worktree-init commit, the D16 fallback commits, and the vault commit (a different repo, with its
+own `HEAD~1` and
 `planning/`-prefixed paths, that other concurrent lanes also write to). `renderCommitSafetyGuard()`
 itself is unchanged — the two guards are complements, not a replacement. `sdlc-flow.js` defines a
 byte-identical copy; `scripts/test_work_assertion.py` pins the two engines' function source and
