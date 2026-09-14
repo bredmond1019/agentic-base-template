@@ -39,10 +39,15 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# See scripts/test_close_out_diff_base.py's identical NOW anchor: Step 0.5's resolver rejects a
+# state-file candidate whose updated_at is more than SESSION_TIE_HOURS old, so a hardcoded
+# absolute "recent" date is a time bomb once real time carries it past that window.
+NOW = datetime.now(timezone.utc)
 CLOSE_OUT_MD = REPO_ROOT / ".claude" / "commands" / "close-out.md"
 
 STEP_05_RE = re.compile(r"### Step 0\.5.*?\n```bash\n(.*?)\n```", re.S)
@@ -164,7 +169,7 @@ def build_six_block_merge_commit_fixture(tmp: Path) -> None:
             spec=f"spec{n}",
             branch="main",
             base_sha=prev,
-            updated_at=datetime(2026, 9, 4, 10, n, 0),
+            updated_at=NOW - timedelta(minutes=BLOCK_COUNT - n),
         )
         run_git(["add", "-A"], tmp)
         run_git(["commit", "--amend", "--no-edit"], tmp)
@@ -179,7 +184,7 @@ def build_six_block_merge_commit_fixture(tmp: Path) -> None:
         spec=f"spec{BLOCK_COUNT}",
         branch="block6-branch",
         base_sha=b6_pre_base,
-        updated_at=datetime(2026, 9, 4, 10, BLOCK_COUNT, 0),
+        updated_at=NOW,
     )
     commit_all(tmp, f"block {BLOCK_COUNT}")
 

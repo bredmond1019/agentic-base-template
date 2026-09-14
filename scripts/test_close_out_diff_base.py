@@ -59,11 +59,21 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CLOSE_OUT_MD = REPO_ROOT / ".claude" / "commands" / "close-out.md"
+
+# Step 0.5's resolver only accepts a state-file candidate whose own `updated_at` is within
+# SESSION_TIE_HOURS (24*7) of wall-clock "now" (.claude/commands/close-out.md:146,177). A fixture
+# that hardcodes an absolute date to mean "recent, tied to this session" is a time bomb: it reads
+# as recent only until real time carries it past that window, then the fixture itself starts
+# failing the resolver it is meant to exercise -- for a reason unrelated to the code under test.
+# Anchor "recent" fixture timestamps to this module's own import-time NOW instead, so the suite
+# stays valid indefinitely. Only case (b)'s deliberately-stale sibling keeps a fixed past date --
+# a fixed date already in the past stays in the past forever, so it is not time-bombed the same way.
+NOW = datetime.now(timezone.utc)
 
 STEP_05_RE = re.compile(r"### Step 0\.5.*?\n```bash\n(.*?)\n```", re.S)
 BASE_ARG_LINE_RE = re.compile(r'^BASE_ARG="<value of --base, or empty>"$', re.M)
@@ -212,7 +222,7 @@ def case_a_multi_block_merge_commit(tmp: Path) -> None:
             spec=f"spec{n}",
             branch="main",
             base_sha=prev,
-            updated_at=datetime(2026, 9, 4, 10, n, 0),
+            updated_at=NOW - timedelta(minutes=6 - n),
         )
         run_git(["add", "-A"], tmp)
         run_git(["commit", "--amend", "--no-edit"], tmp)
@@ -223,7 +233,7 @@ def case_a_multi_block_merge_commit(tmp: Path) -> None:
     run_git(["checkout", "-b", "block6-branch"], tmp)
     write_file(tmp, "block6.txt", "block 6\n")
     b6_pre_base = rev_parse(tmp, "HEAD")
-    write_task_state(tmp, spec="spec6", branch="block6-branch", base_sha=b6_pre_base, updated_at=datetime(2026, 9, 4, 10, 6, 0))
+    write_task_state(tmp, spec="spec6", branch="block6-branch", base_sha=b6_pre_base, updated_at=NOW)
     commit_all(tmp, "block 6")
 
     run_git(["checkout", "main"], tmp)
@@ -295,7 +305,7 @@ def case_c_single_block(tmp: Path) -> None:
 
     write_file(tmp, "block1.txt", "block 1\n")
     commit_all(tmp, "block 1")
-    write_task_state(tmp, spec="spec1", branch="main", base_sha=c0, updated_at=datetime(2026, 9, 6, 9, 0, 0))
+    write_task_state(tmp, spec="spec1", branch="main", base_sha=c0, updated_at=NOW - timedelta(minutes=5))
     run_git(["add", "-A"], tmp)
     run_git(["commit", "--amend", "--no-edit"], tmp)
 
@@ -320,11 +330,11 @@ def case_d_absent_base_sha_flow_state(tmp: Path) -> None:
 
     write_file(tmp, "block1.txt", "block 1\n")
     commit_all(tmp, "block 1")
-    write_task_state(tmp, spec="spec1", branch="main", base_sha=c0, updated_at=datetime(2026, 9, 6, 9, 0, 0))
+    write_task_state(tmp, spec="spec1", branch="main", base_sha=c0, updated_at=NOW - timedelta(minutes=5))
     # A flow-state sibling in the shape every historical one on disk is in: no base_sha key.
     # Must be treated as "no candidate from this file" -- never an error -- and must not stop
     # resolution from succeeding off spec1's valid task-state candidate.
-    write_flow_state_no_base_sha(tmp, spec="spec2", branch="main", updated_at=datetime(2026, 9, 6, 9, 5, 0))
+    write_flow_state_no_base_sha(tmp, spec="spec2", branch="main", updated_at=NOW - timedelta(minutes=2))
     run_git(["add", "-A"], tmp)
     run_git(["commit", "--amend", "--no-edit"], tmp)
 
