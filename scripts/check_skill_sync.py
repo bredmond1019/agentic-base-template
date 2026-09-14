@@ -96,7 +96,7 @@ ANCHORS = [
     # runTests() heartbeatRecipe call (+2 net lines) landed BELOW it, so only +5 applies here:
     # 1906->1911, 1987->1992. Text unchanged -- verified by diffing the old range against the new
     # range: byte-identical ("WORKTREE MODE (--worktree)" through the trailing content).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 1930, 2011,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2005, 2086,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -108,13 +108,13 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 650->659, 698->707. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 659, 707,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 712, 760,
      ".agents/skills/sdlc-task/SKILL.md"),
     # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 650->659, 698->707. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 659, 707,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 712, 760,
      ".agents/skills/sdlc-flow/SKILL.md"),
     # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: the
     # loadHarnessConfig() unwrap + bail additions inserted 52 net lines into sdlc-task.js and
@@ -175,7 +175,7 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 3498->3499, 3525->3526. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3509, 3536,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3592, 3619,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
@@ -187,7 +187,7 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 1880->1889, 2010->2019. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1899, 2029,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1960, 2090,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -201,7 +201,7 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 3554->3564, 3589->3599. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3574, 3609,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3635, 3670,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

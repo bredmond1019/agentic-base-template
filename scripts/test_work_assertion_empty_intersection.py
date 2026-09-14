@@ -62,6 +62,17 @@ also loosening case 3 has removed the gate rather than fixed it.
 
 Registered in planning/harness.json (task 6) as a new gated check --
 run directly: python3 scripts/test_work_assertion_empty_intersection.py [engine-file]
+
+Note (task 3 fix pass, 2026-09-13): case 2's sibling entries live in `SKILL_MANIFEST` /
+`DOCS_MANIFEST` (scripts/skill_sync_manifest.json, scripts/engine_docs_sync_manifest.json) --
+this task's own edits to `.claude/workflows/sdlc-task.js` shifted the load-bearing anchors those
+manifests track (their content, not their line ranges, is what this suite's sibling lookup
+actually reads via `skill_md`/`docs_md`, so the shift itself does not change what counts as a
+sibling). The anchors were re-picked from CONTENT via `check_skill_sync.py --relocate` and a
+byte-identical relocation of `check_engine_docs_sync.py`'s ANCHORS table, both manifests
+re-stamped, and `scripts/test_engines_pass_agent.py`'s FROZEN_BASELINE re-pinned to the same three
+invocation sites at their new line numbers -- content unchanged in every case, confirmed by each
+tool's own drift/hash check before and after.
 """
 
 from __future__ import annotations
