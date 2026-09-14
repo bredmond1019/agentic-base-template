@@ -298,6 +298,28 @@ finding you will describe from memory, less precisely, if at all.
     `planning/orchestration-run/command-hardening/review.md`. This is a standing argument for moving
     orchestration into `engine-rs`, where the executing engine's version is explicit.
 
+    **A second, distinct cache sits above the engine snapshot: `resumeFromRunId` can replay a
+    stale per-agent RESULT even when the engine script itself is current.** Launching by
+    `scriptPath` (step 2 above) only guarantees the *engine .js* being executed is fresh — it says
+    nothing about the Workflow tool's own cache of completed `agent()` calls, keyed by
+    `(prompt, opts)` under that run id. If you manually change repository state (reorder/rebase
+    commits, hand-edit a `sdlc-*-state.json`) BETWEEN a bail and a `--resume`, a stage whose prompt
+    text didn't change (e.g. `implement-<task>-<attempt>`, `triage:task N ...`) can replay its OLD
+    cached result — computed against the repo state *before* your edit — instead of re-executing
+    against the state you just fixed. Measured 2026-09-13/14 on
+    `BT.ticket.work-assertion-cannot-express-a-correct-empty-intersection`: after reordering two
+    local commits to fix a `HEAD~1` boundary issue, a `--resume` passing `resumeFromRunId` replayed
+    a cached `implement-1-1`/`triage` pair from BEFORE the reorder, and the run's own terminal write
+    then overwrote a correct, verified `sdlc-task-state.json` (tasks 1-2 `passed`) with a stale one
+    (task 1 `failed`, `current_task: 1`) — a real state-file regression, not just a wasted turn.
+    **Rule: once you have manually touched repo state or a run's own state file mid-run, do not pass
+    `resumeFromRunId` on the next launch** — omit it so the Workflow tool allocates a fresh run (no
+    cache to replay from) and lets the engine's own on-disk `state.json` (which you've hand-verified)
+    drive where `--resume` picks up. Reserve `resumeFromRunId` for resuming a run you have NOT
+    hand-edited anything around (e.g. recovering from a harness-level crash like a subagent never
+    calling `StructuredOutput`, where cached prior-task results are still valid because nothing
+    about the repo changed underneath them).
+
 11. **A command that creates a new `.md` must seed it with OKF frontmatter — and a command that
     edits one must not displace or orphan its frontmatter.** A file created under `planning/`
     without frontmatter reports the same missing-fence error on `--graph`, `--state`, `--links`
