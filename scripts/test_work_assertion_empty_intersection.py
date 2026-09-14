@@ -147,15 +147,22 @@ def extract_render_work_assertion(engine_path: Path) -> str:
     return extract_function(read_source(engine_path), "renderWorkAssertion")
 
 
-def render_work_assertion_script(engine_path: Path, git_cmd: str, task_num: int, tasks_json_path: str) -> str:
+def render_work_assertion_script(
+    engine_path: Path, git_cmd: str, task_num: int, tasks_json_path: str, prev_sha: str = None,
+) -> str:
     """Calls the REAL, unmodified renderWorkAssertion() (extracted from engine_path) through a
     real `node` process with the given arguments, and returns the bash script string it produces.
-    Never re-types the shell logic -- only ever executes the function's own return value."""
+    Never re-types the shell logic -- only ever executes the function's own return value.
+
+    `prev_sha`, when given, is the persisted commit the assertion's range should start from (the
+    previous task's own recorded commit, or the run's base_sha for task 1) -- omitting it exercises
+    the pre-fix/no-caller-context fallback to a literal `HEAD~1`."""
     fn_src = extract_render_work_assertion(engine_path)
+    prev_sha_arg = json.dumps(prev_sha) if prev_sha else "undefined"
     node_script = (
         fn_src
         + "\n"
-        + f"process.stdout.write(renderWorkAssertion({json.dumps(git_cmd)}, {task_num}, {json.dumps(tasks_json_path)}))\n"
+        + f"process.stdout.write(renderWorkAssertion({json.dumps(git_cmd)}, {task_num}, {json.dumps(tasks_json_path)}, {prev_sha_arg}))\n"
     )
     result = subprocess.run(["node", "-e", node_script], capture_output=True, text=True)
     if result.returncode != 0:
@@ -309,29 +316,33 @@ class WorkAssertionEmptyIntersectionTests(unittest.TestCase):
         ]
 
         # Sandbox A ("fresh"): exactly one commit separates task 2's final state from task 3's own
-        # commit, so the engine's literal 'HEAD~1' correctly isolates task 3's own diff.
+        # commit. The assertion is bounded by the PERSISTED prevSha (task 2's own recorded commit)
+        # rather than a literal 'HEAD~1', which happens to coincide with it here.
         sandbox_a = self._sandbox()
         tasks_json_a = write_tasks_json(sandbox_a, declared_files)
         commit_all(sandbox_a, "task 2: final state")
+        prev_sha_a = git(sandbox_a, "rev-parse", "HEAD").strip()
         (sandbox_a / "scripts").mkdir(parents=True, exist_ok=True)
         (sandbox_a / "scripts" / "foo.py").write_text("print('hi')\n", encoding="utf-8")
         commit_all(sandbox_a, "task 3: add foo.py")
-        script_a = render_work_assertion_script(self.engine_path, "git", 3, tasks_json_a)
+        script_a = render_work_assertion_script(self.engine_path, "git", 3, tasks_json_a, prev_sha_a)
         result_a = run_bash(sandbox_a, script_a)
 
         # Sandbox B ("resume, with a wrap-up commit landing on top"): the IDENTICAL task-3 diff,
         # but a synthetic reconcile/wrap-up commit lands AFTER task 3's own commit, before the
-        # assertion runs. The literal 'HEAD~1' now isolates the wrap-up commit's diff instead of
-        # task 3's -- same underlying work, different code path, different verdict.
+        # assertion runs. Bounding the range by the SAME persisted prevSha (task 2's own recorded
+        # commit -- unaffected by the wrap-up commit landing on top) is what makes A and B converge;
+        # a literal 'HEAD~1' would instead isolate the wrap-up commit's diff in B, not task 3's.
         sandbox_b = self._sandbox()
         tasks_json_b = write_tasks_json(sandbox_b, declared_files)
         commit_all(sandbox_b, "task 2: final state")
+        prev_sha_b = git(sandbox_b, "rev-parse", "HEAD").strip()
         (sandbox_b / "scripts").mkdir(parents=True, exist_ok=True)
         (sandbox_b / "scripts" / "foo.py").write_text("print('hi')\n", encoding="utf-8")
         commit_all(sandbox_b, "task 3: add foo.py")
         (sandbox_b / "unrelated.txt").write_text("resume-time reconcile note\n", encoding="utf-8")
         commit_all(sandbox_b, "chore: wrap-up commit landed on top of task 3")
-        script_b = render_work_assertion_script(self.engine_path, "git", 3, tasks_json_b)
+        script_b = render_work_assertion_script(self.engine_path, "git", 3, tasks_json_b, prev_sha_b)
         result_b = run_bash(sandbox_b, script_b)
 
         self.assertEqual(

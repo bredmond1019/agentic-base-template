@@ -341,13 +341,66 @@ function renderCommitSafetyGuard(gitCmd = 'git') {
 // to, so a false WORK_ASSERTION_ABORT there would block an honest vault commit on a shared repo it does not
 // fully control. Exempted outright rather than compared.
 // <<shared:renderWorkAssertion>>
-function renderWorkAssertion(gitCmd = 'git', taskNum, tasksJsonPath) {
-  return `NAME_STATUS=$(${gitCmd} diff --name-status HEAD~1 HEAD); if [ -z "$NAME_STATUS" ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit diff is EMPTY (condition 1) - no work was committed"; exit 1; fi; WA_DECLARED=$(python3 -c "
+function renderWorkAssertion(gitCmd = 'git', taskNum, tasksJsonPath, prevSha) {
+  const range = prevSha ? prevSha : 'HEAD~1'
+  return `NAME_STATUS=$(${gitCmd} diff --name-status ${range} HEAD); WA_EXPECT_NO_DIFF=$(python3 -c "
+import json
+d = json.load(open('${tasksJsonPath}'))
+t = [x for x in d if x.get('task_id') == ${taskNum}]
+print('1' if (t and t[0].get('expect_no_diff')) else '0')
+"); if [ -z "$NAME_STATUS" ]; then if [ "$WA_EXPECT_NO_DIFF" = "1" ]; then exit 0; fi; echo "WORK_ASSERTION_ABORT: task ${taskNum} commit diff is EMPTY (condition 1) - no work was committed"; exit 1; fi; WA_RESULT=$(printf '%s' "$NAME_STATUS" | python3 -c "
+import sys, json
+name_status = sys.stdin.read()
+d = json.load(open('${tasksJsonPath}'))
+t = [x for x in d if x.get('task_id') == ${taskNum}]
+declared = t[0].get('files', []) if t else []
+def load_manifest(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+siblings = set()
+for manifest_path in ('scripts/skill_sync_manifest.json', 'scripts/engine_docs_sync_manifest.json'):
+    manifest = load_manifest(manifest_path)
+    for key, entry in manifest.items():
+        prefix = key.split('::', 1)[0]
+        if prefix in declared and isinstance(entry, dict):
+            for field in ('skill_md', 'docs_md'):
+                val = entry.get(field)
+                if val:
+                    siblings.add(val)
+def is_allowed(path):
+    if path in declared or path in siblings:
+        return True
+    for entry in declared:
+        if entry.endswith('/') and path.startswith(entry):
+            return True
+        if not entry.endswith('/') and path.startswith(entry + '/'):
+            return True
+    return False
+match = False
+bad_del = ''
+for line in name_status.splitlines():
+    if not line.strip():
+        continue
+    parts = line.split(chr(9))
+    status = parts[0]
+    chk = parts[-1]
+    if is_allowed(chk):
+        match = True
+    elif status.startswith('D'):
+        bad_del = chk
+if not declared:
+    match = True
+print('MATCH=' + ('1' if match else '0'))
+print('BADDEL=' + bad_del)
+"); WA_MATCH=$(printf '%s\n' "$WA_RESULT" | sed -n 's/^MATCH=//p'); WA_BADDEL=$(printf '%s\n' "$WA_RESULT" | sed -n 's/^BADDEL=//p'); WA_DECLARED=$(python3 -c "
 import json
 d = json.load(open('${tasksJsonPath}'))
 t = [x for x in d if x.get('task_id') == ${taskNum}]
 print(chr(10).join(t[0].get('files', []) if t else []))
-"); WA_MATCH=0; WA_BADDEL=""; while IFS=$'\t' read -r WA_ST WA_P1 WA_P2; do WA_CHK="$WA_P1"; case "$WA_ST" in R*) WA_CHK="$WA_P2" ;; esac; if printf '%s\n' "$WA_DECLARED" | grep -qFx "$WA_CHK"; then WA_MATCH=1; else case "$WA_ST" in D*) WA_BADDEL="$WA_CHK" ;; esac; fi; done <<< "$NAME_STATUS"; if [ -z "$WA_DECLARED" ]; then WA_MATCH=1; fi; if [ "$WA_MATCH" -eq 0 ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit's changed paths do not intersect declared files[] (condition 2) - declared: [$WA_DECLARED] - changed: [$NAME_STATUS]"; exit 1; fi; if [ -n "$WA_BADDEL" ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit deletes undeclared file '$WA_BADDEL' not present in files[] (condition 3) - declared: [$WA_DECLARED]"; exit 1; fi`
+"); if [ "$WA_MATCH" != "1" ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit's changed paths do not intersect declared files[] (condition 2) - declared: [$WA_DECLARED] - changed: [$NAME_STATUS]"; exit 1; fi; if [ -n "$WA_BADDEL" ]; then echo "WORK_ASSERTION_ABORT: task ${taskNum} commit deletes undeclared file '$WA_BADDEL' not present in files[] (condition 3) - declared: [$WA_DECLARED]"; exit 1; fi`
 }
 // <</shared:renderWorkAssertion>>
 
@@ -804,7 +857,7 @@ their output; empty when allPassed)${stateWrittenNote}.`
 //   runRootLabel       what to call the run directory in prose.
 //   extraReturnFields  StructuredOutput fields this engine wants that the other does not
 //                      (/sdlc-flow's reportFile). Empty string in the lean engine.
-function renderImplementPrompt({ roleIntro, runRootLabel, runRoot, extraReturnFields, isFix, taskNum, attempt, stem, blockId, specFile, specDesc, tasksJsonFile, breakdownFile, prevFailBlob, vault, GIT, renderCommitSafetyGuard, renderWorkAssertion }) {
+function renderImplementPrompt({ roleIntro, runRootLabel, runRoot, extraReturnFields, isFix, taskNum, attempt, stem, blockId, specFile, specDesc, tasksJsonFile, breakdownFile, prevFailBlob, vault, GIT, renderCommitSafetyGuard, renderWorkAssertion, prevSha }) {
   return `${roleIntro}
 
 Target:
@@ -891,8 +944,16 @@ EOF
    Run: cd ${runRoot} && ${GIT} log --oneline -1   (capture the short hash)
 
 7a. Post-commit work assertion (D81 lift condition 2) — prove this commit actually contains Task
-   ${taskNum}'s declared work, not the absence of it:
-   Run: cd ${runRoot} && ${renderWorkAssertion('git', taskNum, tasksJsonFile)}
+   ${taskNum}'s declared work, not the absence of it. The check's range runs from this task's own
+   start point (the previous task's recorded commit, or the run's base_sha for task 1 — never a
+   literal "one commit back") through HEAD, so a wrap-up or resume commit landing on top does not
+   change the verdict. It PASSES when the changed paths intersect declared files[] (a directory
+   entry in files[] matches as a prefix), OR when the diff lands only in a declared file's
+   sync-manifest sibling (a SKILL.md replication guide or docs/workflows/*.md page), OR when this
+   task's tasks.json entry declares \`expect_no_diff: true\` and the diff is genuinely empty (the
+   task's correct outcome IS no diff — say so via that field rather than leaving an empty diff to
+   be read as work-not-done):
+   Run: cd ${runRoot} && ${renderWorkAssertion('git', taskNum, tasksJsonFile, prevSha)}
    If this prints WORK_ASSERTION_ABORT, the commit failed the check — treat this as a task failure
    (investigate, fix, and re-commit) before proceeding; do NOT report success with a failing assertion.
    Capture the outcome as a STRUCTURED field, not only prose: this command's FINAL run this attempt
