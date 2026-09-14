@@ -65,7 +65,8 @@ COMMIT_SAFETY_GUARD_FN_RE = re.compile(
 # unlike renderCommitSafetyGuard()'s single-line one -- hence DOTALL + non-greedy up to the first
 # closing backtick immediately followed by a newline and the function's closing brace.
 WORK_ASSERTION_FN_RE = re.compile(
-    r"function renderWorkAssertion\(gitCmd = 'git', taskNum, tasksJsonPath\) \{\n"
+    r"function renderWorkAssertion\(gitCmd = 'git', taskNum, tasksJsonPath, prevSha\) \{\n"
+    r".*?"
     r"  return `.*?`\n"
     r"\}",
     re.DOTALL,

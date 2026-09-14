@@ -49,6 +49,11 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, field, asdict
+
+# A dangling symlink under `rg -L` reports "No such file or directory (os error 2)" for that one
+# path and still exits 2 even though every OTHER path's discovery succeeded and lands on stdout
+# correctly -- see _sweep_with_rg's exit-code handling.
+_BROKEN_SYMLINK_RE = re.compile(r"^rg: .*: No such file or directory \(os error 2\)$")
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -161,8 +166,13 @@ def _sweep_with_rg(root: Path, glob: str, follow_symlinks: bool, hidden: bool) -
         args.append("-uu")
     args += ["--files", "-g", glob]
     result = subprocess.run(args, cwd=root, capture_output=True, text=True)
-    # rg exits 1 when it finds nothing, 0 when it finds matches, >1 on a real error.
-    if result.returncode not in (0, 1):
+    # rg exits 1 when it finds nothing, 0 when it finds matches, >1 on a real error -- EXCEPT
+    # exit 2 under -L can also mean "encountered a broken symlink and kept going", which still
+    # produces a complete, correct stdout. Only tolerate that specific shape.
+    if result.returncode not in (0, 1) and not (
+        result.returncode == 2
+        and all(_BROKEN_SYMLINK_RE.search(line) for line in result.stderr.splitlines() if line.strip())
+    ):
         raise RuntimeError(f"rg discovery failed (exit {result.returncode}): {result.stderr}")
     return [line for line in result.stdout.splitlines() if line.strip()]
 

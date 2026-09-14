@@ -81,12 +81,18 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Optional
+
+# A dangling symlink under `rg -L` reports "No such file or directory (os error 2)" for that one
+# path and still exits 2 even though every OTHER path's discovery succeeded and lands on stdout
+# correctly -- see _sweep_with_rg's exit-code handling.
+_BROKEN_SYMLINK_RE = re.compile(r"^rg: .*: No such file or directory \(os error 2\)$")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -119,8 +125,17 @@ def _sweep_with_rg(root: Path, follow_symlinks: bool, hidden: bool) -> Optional[
         args.append("-uu")
     args += ["--files", "-g", "**/orchestration-run/**/*.md"]
     result = subprocess.run(args, cwd=root, capture_output=True, text=True)
-    # rg exits 1 when it finds nothing, 0 when it finds matches, >1 on a real error.
-    if result.returncode not in (0, 1):
+    # rg exits 1 when it finds nothing, 0 when it finds matches, >1 on a real error -- EXCEPT
+    # exit 2 under -L can also mean "encountered a broken symlink and kept going", which still
+    # produces a complete, correct stdout (verified: a real broken-symlink fixture under
+    # core/bella/scripts/vhs/fixtures/ produces exit 2 with all real matches still on stdout).
+    # Only tolerate that specific shape -- every stderr line naming a dangling-symlink read
+    # failure -- so an unrelated real error (a bad glob, a permissions failure, rg crashing)
+    # still raises.
+    if result.returncode not in (0, 1) and not (
+        result.returncode == 2
+        and all(_BROKEN_SYMLINK_RE.search(line) for line in result.stderr.splitlines() if line.strip())
+    ):
         raise RuntimeError(f"rg discovery failed (exit {result.returncode}): {result.stderr}")
     return [line for line in result.stdout.splitlines() if line.strip()]
 
