@@ -6,6 +6,28 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-14
 
 ---
+## 2026-09-14 — /close-out on the work-assertion fix: coverage gap, doc drift, and a live base_sha defect found
+
+Ran `/close-out` after closing `BT.ticket.work-assertion-cannot-express-a-correct-empty-intersection`
+(see the entry below for the block itself). Step 0.5's auto-resolved diff base was WRONG —
+`sdlc-task-state.json`'s `base_sha` had been overwritten from the true `63005c7` to `4ccda98` by a
+later bookkeep write mid-run, which would have silently scoped the emoji gate and coverage sweep to
+1 commit instead of the session's real 11. Caught by cross-checking the recovered candidate's commit
+distance against the real count; overrode with `--base 63005c7`. Filed as a new, unticketed
+`carryover[]` defect (`sdlc-task-state-base-sha-overwritten-on-resume`) rather than fixed blind — a
+different bug from the already-closed `BT.ticket.close-out-diff-base-underscopes-a-multi-block-run`
+(that one fixed the *resolver*; this is the *source value* going bad). Also: one gating check
+(`agent-docs`) failed because `GEMINI.md` had drifted from the AGENTS.md rule-10 edit — regenerated.
+Coverage scan found one real blocking gap (`scripts/extract_bail_meta_fixtures.py` had no dedicated
+test of its own) and filled it (`scripts/test_extract_bail_meta_fixtures.py`, registered as a gated
+check with an observed_red record). Docs scan found `docs/workflows/sdlc-task.md`/`sdlc-flow.md`
+still describing `renderWorkAssertion`'s pre-fix 3-arg signature and a fixed `HEAD~1` — patched
+surgically; also fixed a stale rule-10 summary in `planning/context.md` that still claimed the
+engine-snapshot cache "does not change... not even across repeated Workflow() calls," contradicted
+by rule 10's own 2026-09-10 correction. Removed one now-resolved carryover entry
+(`sdlc-task-work-assertion-rejects-no-op-attempt`) whose clears_when this block satisfied.
+
+---
 ## 2026-09-14 — AGENTS.md standing rule 10: documented the resumeFromRunId per-agent-result cache
 
 Closed `BT.ticket.work-assertion-cannot-express-a-correct-empty-intersection` (both engines'
@@ -17,9 +39,14 @@ hazard not previously named in rule 10: after manually reordering commits / hand
 `sdlc-task-state.json` mid-run to fix the exact `HEAD~1` bug this ticket exists to close, a
 `--resume` passing `resumeFromRunId` replayed a stale cached `implement`/`triage` result computed
 against the PRE-edit repo state, and its terminal write overwrote a correct, hand-verified state
-file with a stale one (task 1 regressed from `passed` back to `failed`). Rule 10 covered the
+file with a stale one (task 1 regressed from `passed` back to `failed`). **This is the same
+mechanism as the already-open `BT.ticket.resume-replays-cached-stage-over-hand-edited-state`**
+(filed 2026-09-13 by a different lane's near-identical incident) — this session's occurrence is a
+second, corroborating incident, not a new discovery; that ticket's own engine-side fix (a
+content-derived cache-buster) and `SKILL.md` warning are still unimplemented. Rule 10 covered the
 engine-script snapshot being stale; it said nothing about this second, Workflow-tool-level
-per-agent-call cache. Added a documented sub-case: once repo state or a run's own state file has
+per-agent-call cache, so this session added a documented sub-case on the AGENTS.md/context.md
+surface as a complementary (not a substitute) fix: once repo state or a run's own state file has
 been hand-edited mid-run, launch the next attempt WITHOUT `resumeFromRunId` (a fresh run has no
 cache to replay from), and reserve `resumeFromRunId` for resuming a run where nothing was changed
 underneath it (e.g. recovering from a harness-level crash such as a subagent never calling
