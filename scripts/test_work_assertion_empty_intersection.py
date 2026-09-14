@@ -63,6 +63,16 @@ also loosening case 3 has removed the gate rather than fixed it.
 Registered in planning/harness.json (task 6) as a new gated check --
 run directly: python3 scripts/test_work_assertion_empty_intersection.py [engine-file]
 
+TASK 4 (D83 parity): the five cases above are parameterized over BOTH engines --
+`.claude/workflows/sdlc-task.js` and `.claude/workflows/sdlc-flow.js` -- run automatically, with
+no CLI argument, as two independent `unittest.TestCase` subclasses sharing one mixin. Passing an
+explicit engine-file argument narrows the run to that one engine only (unchanged from tasks 1-3).
+A third, engine-independent check (`ParityTests`) extracts both real files' own
+`<<shared:renderWorkAssertion>>` ... `<</shared:renderWorkAssertion>>` regions (the exact function
+body, via the same balanced-brace scan) and asserts they are byte-identical text, printing a
+unified diff when they are not -- this is what the marker comment's own "shared" contract means,
+and it must hold regardless of which engine-file argument (if any) was passed on the command line.
+
 Note (task 3 fix pass, 2026-09-13): case 2's sibling entries live in `SKILL_MANIFEST` /
 `DOCS_MANIFEST` (scripts/skill_sync_manifest.json, scripts/engine_docs_sync_manifest.json) --
 this task's own edits to `.claude/workflows/sdlc-task.js` shifted the load-bearing anchors those
@@ -89,7 +99,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-DEFAULT_ENGINE = REPO_ROOT / ".claude" / "workflows" / "sdlc-task.js"
+TASK_ENGINE = REPO_ROOT / ".claude" / "workflows" / "sdlc-task.js"
+FLOW_ENGINE = REPO_ROOT / ".claude" / "workflows" / "sdlc-flow.js"
+DEFAULT_ENGINE = TASK_ENGINE  # kept for callers/imports written against tasks 1-3
 SKILL_MANIFEST = REPO_ROOT / "scripts" / "skill_sync_manifest.json"
 DOCS_MANIFEST = REPO_ROOT / "scripts" / "engine_docs_sync_manifest.json"
 
@@ -105,18 +117,20 @@ GIT_ISOLATION_VARS = [
 ]
 
 
-def _resolve_target_engine() -> Path:
-    """Accepts an optional CLI arg naming the engine file to test (default: sdlc-task.js for this
-    task). Pops it out of sys.argv first so unittest.main() never sees an argument it doesn't
-    understand."""
+def _resolve_target_engines() -> list:
+    """Accepts an optional CLI arg naming ONE engine file to test, narrowing the run to just it
+    (the behavior tasks 1-3 relied on). With NO argument, the suite exercises BOTH real engines --
+    sdlc-task.js and sdlc-flow.js -- since identical cases must pass identically on each (D83
+    parity). Pops the arg out of sys.argv first so unittest.main() never sees an argument it
+    doesn't understand."""
     if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
         raw = sys.argv.pop(1)
         candidate = Path(raw)
-        return candidate if candidate.is_absolute() else (REPO_ROOT / raw)
-    return DEFAULT_ENGINE
+        return [candidate if candidate.is_absolute() else (REPO_ROOT / raw)]
+    return [TASK_ENGINE, FLOW_ENGINE]
 
 
-TARGET_ENGINE = _resolve_target_engine()
+TARGET_ENGINES = _resolve_target_engines()
 
 
 def _sandbox_env() -> dict:
@@ -231,11 +245,14 @@ def copy_sync_manifests(sandbox: Path) -> None:
         shutil.copy(DOCS_MANIFEST, scripts_dir / "engine_docs_sync_manifest.json")
 
 
-class WorkAssertionEmptyIntersectionTests(unittest.TestCase):
-    """Exercises renderWorkAssertion() from TARGET_ENGINE (default: sdlc-task.js)."""
+class WorkAssertionCasesMixin:
+    """The five cases, written once against `self.engine_path` -- set by each concrete
+    per-engine subclass below, never by this mixin itself (it carries no engine_path and is never
+    instantiated directly; unittest only collects unittest.TestCase subclasses)."""
+
+    engine_path: Path
 
     def setUp(self) -> None:
-        self.engine_path = TARGET_ENGINE
         self._tmp_root = tempfile.mkdtemp(prefix="wa_root_")
         self.addCleanup(shutil.rmtree, self._tmp_root, ignore_errors=True)
 
@@ -388,6 +405,65 @@ class WorkAssertionEmptyIntersectionTests(unittest.TestCase):
             "any changed path beneath it as a prefix, not only via exact whole-line equality -- "
             f"got exit {result.returncode}:\n{result.stdout}{result.stderr}",
         )
+
+
+# ----------------------------------------------------------------------------
+# Parameterization -- one concrete unittest.TestCase per target engine, sharing the mixin's five
+# case methods verbatim. Built dynamically from TARGET_ENGINES so a narrowing CLI arg (tasks 1-3's
+# existing behavior) still runs exactly one class, while the no-arg default runs both engines.
+# ----------------------------------------------------------------------------
+
+def _engine_class_suffix(engine_path: Path) -> str:
+    return re.sub(r"[^0-9A-Za-z]+", "_", engine_path.stem).strip("_") or "engine"
+
+
+_ENGINE_TEST_CLASSES = {}
+for _engine in TARGET_ENGINES:
+    _cls_name = f"WorkAssertionEmptyIntersectionTests_{_engine_class_suffix(_engine)}"
+    _ENGINE_TEST_CLASSES[_cls_name] = type(
+        _cls_name,
+        (WorkAssertionCasesMixin, unittest.TestCase),
+        {"engine_path": _engine, "__doc__": f"Exercises renderWorkAssertion() from {_engine}."},
+    )
+globals().update(_ENGINE_TEST_CLASSES)
+
+
+# ----------------------------------------------------------------------------
+# Parity (task 4, D83): the two real engines' <<shared:renderWorkAssertion>> regions must be
+# byte-identical text -- that identity is the marker comment's own contract. Engine-independent of
+# any CLI narrowing above; always compares the two real on-disk files.
+# ----------------------------------------------------------------------------
+
+def extract_shared_marker_block(engine_path: Path, marker: str) -> str:
+    text = read_source(engine_path)
+    open_marker = f"// <<shared:{marker}>>"
+    close_marker = f"// <</shared:{marker}>>"
+    start = text.index(open_marker) + len(open_marker)
+    end = text.index(close_marker, start)
+    return text[start:end]
+
+
+class ParityTests(unittest.TestCase):
+    """D83 parity: sdlc-task.js and sdlc-flow.js must carry a byte-identical
+    <<shared:renderWorkAssertion>> region, regardless of which engine(s) the rest of this run was
+    narrowed to via an explicit CLI argument."""
+
+    def test_shared_render_work_assertion_block_is_byte_identical_across_engines(self):
+        task_block = extract_shared_marker_block(TASK_ENGINE, "renderWorkAssertion")
+        flow_block = extract_shared_marker_block(FLOW_ENGINE, "renderWorkAssertion")
+        if task_block != flow_block:
+            import difflib
+
+            diff = "".join(difflib.unified_diff(
+                task_block.splitlines(keepends=True),
+                flow_block.splitlines(keepends=True),
+                fromfile=str(TASK_ENGINE),
+                tofile=str(FLOW_ENGINE),
+            ))
+            self.fail(
+                "the <<shared:renderWorkAssertion>> regions of sdlc-task.js and sdlc-flow.js have "
+                f"diverged (D83 parity broken):\n{diff}"
+            )
 
 
 if __name__ == "__main__":
