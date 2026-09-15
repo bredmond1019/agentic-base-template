@@ -19,6 +19,10 @@ target repo:
                                        linters that resolve $schema; the engines never validate
                                        planning/harness.json against it at runtime, they just cat
                                        + JSON.parse it as data. Mechanism, not policy.)
+      - workflows/*.md               (shared procedures, incl. agent-rules.md - the engine-owned
+                                       rules file minimal-context agents receive)
+      - workflows/bin/**/*.py        (prepare_run.py, check_tasks_json.py, lint_rules/* - the
+                                       prepare-run tooling both engines shell out to)
       - workflows/templates/*.md
   - from base-template/.agents/skills/ (base-template -> target's .agents/skills/), one slug at a
     time via AGENT_SKILL_SLUGS (explicit, like HOOK_FILENAMES - not a directory glob, so a new
@@ -306,6 +310,16 @@ def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
         # Gating them on engines_only would leave HQ's producers pointing at a file that does
         # not exist there, and HQ now runs real SDLC work (D63).
         files.extend(p for p in workflows_dir.glob("*.md") if p.is_file())
+    # workflows/bin/**/*.py — the prepare-run tooling both engines shell out to
+    # (prepare_run.py, check_tasks_json.py, lint_rules/*.py). Globbed recursively rather than
+    # enumerated like SCRIPT_FILENAMES because, unlike scripts/, everything under workflows/bin/
+    # IS mechanism the engines invoke directly — there is no base-template-only tooling mixed in
+    # here that would need excluding. Before this, harness_files() never shipped this directory at
+    # all, which is why the lint-rule registry (task 3) reached zero of 60+ downstream harness.json
+    # files (block's `why`).
+    bin_dir = workflows_dir / "bin"
+    if bin_dir.is_dir():
+        files.extend(p for p in bin_dir.rglob("*.py") if p.is_file())
     templates_dir = workflows_dir / "templates"
     if templates_dir.is_dir():
         files.extend(p for p in templates_dir.glob("*.md") if p.is_file())
