@@ -10,12 +10,23 @@ target spec's tasks.json enumeration (task_id + dependsOn per task). It makes NO
 call — every fact below is read straight off the filesystem or a `git`/`python3` subprocess, the
 same mechanism the setup agents were instructed to run verbatim and merely transcribe.
 
-Lint verdict, runnability probes, and refusal are added in task 4 — out of scope here.
+Task 4 adds: the check_tasks_json.py lint verdict (folded in under the `lint` key), runnability
+probes for every harness.json validation.checks[] entry carrying a `probeCommand`, and a refusal
+contract — a missing `requires.bins`/`requires.env`/`requires.services` or a failing
+`probeCommand` makes this script exit non-zero and print ONLY `{"refused": true, "reason": ...}`,
+before any other setup fact is computed or printed. This is what lets an engine skip spinning up
+an implement agent against an unrunnable spec (block AC5/AC6).
 
 Usage:
   python3 .claude/workflows/bin/prepare_run.py --spec-slug <slug> [--repo-root <path>]
+                                                [--simulate-missing-env VAR ...]
 
-Prints one JSON object to stdout:
+  --simulate-missing-env VAR   Test-only hook: treat VAR as a required environment variable (as
+                                if some check declared `requires.env: [VAR]`) and refuse if it is
+                                unset, WITHOUT needing a real harness.json check to declare it.
+                                Repeatable. Checked before any real harness.json requires/probe.
+
+Prints one JSON object to stdout. On success:
   {
     "repo_root": "<abs path>",
     "is_vaulted": true|false,
@@ -23,15 +34,31 @@ Prints one JSON object to stdout:
     "agent_flag": " --agent <slug>" | "",
     "scope_flag": " --scope <slug>" | "",
     "harness_config": <planning/harness.json parsed, or null if absent/invalid>,
-    "tasks_enumeration": [{"task_id": 1, "dependsOn": [...]}, ...]
+    "tasks_enumeration": [{"task_id": 1, "dependsOn": [...]}, ...],
+    "lint": {"passed": bool, "findings": [...], "enabled_rules": int, "total_rules": int},
+    "probes": [{"check": "<name>", "command": "<probeCommand>", "passed": true}, ...],
+    "refused": false
   }
+
+On refusal (nonzero exit), ONLY:
+  {"refused": true, "reason": "<what failed, naming the check/command/variable and any stderr>"}
 """
 
 import argparse
 import json
 import os
+import shutil
+import socket
 import subprocess
 import sys
+from pathlib import Path
+
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+if _BIN_DIR not in sys.path:
+    sys.path.insert(0, _BIN_DIR)
+
+import check_tasks_json  # noqa: E402 — task 3's umbrella (load_harness_config, resolve_enabled)
+import lint_rules  # noqa: E402 — task 3's registry
 
 
 def _run_git_show_toplevel(cwd):
@@ -208,7 +235,131 @@ def enumerate_tasks(repo_root, spec_slug):
     return enumeration
 
 
-def prepare_run(spec_slug, explicit_repo_root=None, cwd=None):
+def run_lint(repo_root, spec_slug):
+    """Fold check_tasks_json.py's own verdict into prepare_run.py's output. Reimplements its
+    main() loop field-for-field (same registry, same resolve_enabled(), same per-finding
+    rule_id/fix_hint/message triple) via direct import rather than a subprocess, so this MUST
+    equal `check_tasks_json.py <tasks.json>` run standalone on the same input (task 4 AC4). A
+    missing spec_slug or tasks.json is not a lint failure — there is nothing to lint yet."""
+    if not spec_slug:
+        return {'passed': True, 'findings': [], 'enabled_rules': 0, 'total_rules': len(lint_rules.REGISTRY)}
+    tasks_json_path = Path(repo_root) / 'planning' / spec_slug / 'tasks.json'
+    if not tasks_json_path.exists():
+        return {'passed': True, 'findings': [], 'enabled_rules': 0, 'total_rules': len(lint_rules.REGISTRY)}
+
+    harness_path = Path(repo_root) / 'planning' / 'harness.json'
+    harness_config = check_tasks_json.load_harness_config(harness_path)
+    lint_rules_config = harness_config.get('lintRules') or {}
+    enabled_rules = check_tasks_json.resolve_enabled(lint_rules.REGISTRY, lint_rules_config)
+
+    findings = []
+    for rule in enabled_rules:
+        for f in rule['check'](tasks_json_path, harness_config):
+            message = f.get('message', str(f)) if isinstance(f, dict) else str(f)
+            findings.append({'rule_id': rule['id'], 'fix_hint': rule['fix_hint'], 'message': message})
+
+    return {
+        'passed': len(findings) == 0,
+        'findings': findings,
+        'enabled_rules': len(enabled_rules),
+        'total_rules': len(lint_rules.REGISTRY),
+    }
+
+
+def _service_reachable(service):
+    """Best-effort `requires.services` check. A `host:port` shaped name gets a short TCP connect
+    probe; anything else has no defined protocol to probe, so it is treated as unverifiable and
+    never refuses on it (a named check with no way to confirm it is not the same as a check that
+    failed)."""
+    host, sep, port_str = service.rpartition(':')
+    if not sep:
+        return True
+    try:
+        port = int(port_str)
+    except ValueError:
+        return True
+    try:
+        with socket.create_connection((host, port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+def _missing_requirement(requires):
+    """Return (kind, name) for the first unmet requirement in a `requires` object, or None if all
+    are satisfied. Checked in bins -> env -> services order."""
+    for name in requires.get('bins') or []:
+        if shutil.which(name) is None:
+            return ('bin', name)
+    for name in requires.get('env') or []:
+        if name not in os.environ:
+            return ('env', name)
+    for name in requires.get('services') or []:
+        if not _service_reachable(name):
+            return ('service', name)
+    return None
+
+
+def verify_requires_and_probes(repo_root, harness_config, simulate_missing_env=None):
+    """Verify every harness.json validation.checks[] entry's `requires` is satisfied and every
+    `probeCommand` runs clean, BEFORE any other prepare_run.py output is computed. Returns
+    (reason, probes): `reason` is a refusal string (None if nothing refused); `probes` is the
+    list of probe results recorded so far (only populated when nothing refused).
+
+    --simulate-missing-env is checked first, ahead of any real harness.json entry, so a caller
+    can exercise the refusal contract deterministically without needing a fixture check that
+    declares `requires.env` (task 4 AC1 / the FE.7.B FELI_TEST_DATABASE_URL shape)."""
+    for var in simulate_missing_env or []:
+        if var not in os.environ:
+            return (
+                f"required environment variable '{var}' is not set (requires.env, simulated)",
+                [],
+            )
+
+    checks = []
+    if isinstance(harness_config, dict):
+        checks = harness_config.get('validation', {}).get('checks', []) or []
+
+    for check in checks:
+        requires = check.get('requires') if isinstance(check, dict) else None
+        if not requires:
+            continue
+        missing = _missing_requirement(requires)
+        if missing:
+            kind, name = missing
+            return (
+                f"check '{check.get('name')}' requires {kind} '{name}', which is not present",
+                [],
+            )
+
+    probes = []
+    for check in checks:
+        probe_command = check.get('probeCommand') if isinstance(check, dict) else None
+        if not probe_command:
+            continue
+        name = check.get('name')
+        try:
+            result = subprocess.run(
+                probe_command, shell=True, cwd=repo_root,
+                capture_output=True, text=True, timeout=30,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return (
+                f"check '{name}''s probeCommand `{probe_command}` timed out: {exc}",
+                [],
+            )
+        if result.returncode != 0:
+            return (
+                f"check '{name}''s probeCommand `{probe_command}` failed "
+                f"(exit {result.returncode}): {result.stderr.strip()}",
+                [],
+            )
+        probes.append({'check': name, 'command': probe_command, 'passed': True})
+
+    return (None, probes)
+
+
+def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_env=None):
     cwd = cwd or os.getcwd()
     repo_root = resolve_repo_root(explicit_repo_root)
     if not repo_root:
@@ -216,11 +367,17 @@ def prepare_run(spec_slug, explicit_repo_root=None, cwd=None):
             'refused': True,
             'reason': 'could not resolve repo root via `git rev-parse --show-toplevel`',
         }
+
+    harness_config = load_harness_config(repo_root)
+    reason, probes = verify_requires_and_probes(repo_root, harness_config, simulate_missing_env)
+    if reason:
+        return {'refused': True, 'reason': reason}
+
     is_vaulted, vault_root = detect_vault(repo_root)
     agent_flag = render_agent_flag(cwd)
     scope_flag = render_scope_flag(cwd)
-    harness_config = load_harness_config(repo_root)
     tasks_enumeration = enumerate_tasks(repo_root, spec_slug) if spec_slug else []
+    lint = run_lint(repo_root, spec_slug)
     return {
         'repo_root': repo_root,
         'is_vaulted': is_vaulted,
@@ -229,6 +386,9 @@ def prepare_run(spec_slug, explicit_repo_root=None, cwd=None):
         'scope_flag': scope_flag,
         'harness_config': harness_config,
         'tasks_enumeration': tasks_enumeration,
+        'lint': lint,
+        'probes': probes,
+        'refused': False,
     }
 
 
@@ -236,9 +396,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--spec-slug', default=None, help='spec slug under planning/<slug>/tasks.json')
     parser.add_argument('--repo-root', default=None, help='override repo root instead of resolving via git')
+    parser.add_argument(
+        '--simulate-missing-env', action='append', default=None, metavar='VAR',
+        help='test-only: refuse if VAR is unset, as if a check declared requires.env: [VAR]',
+    )
     args = parser.parse_args(argv)
 
-    result = prepare_run(args.spec_slug, explicit_repo_root=args.repo_root)
+    result = prepare_run(
+        args.spec_slug,
+        explicit_repo_root=args.repo_root,
+        simulate_missing_env=args.simulate_missing_env,
+    )
     print(json.dumps(result, indent=2))
     return 1 if result.get('refused') else 0
 
