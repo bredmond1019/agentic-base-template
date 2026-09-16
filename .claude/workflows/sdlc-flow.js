@@ -1727,7 +1727,7 @@ function renderEngineParseChecks(files, cd, startIndex) {
 // engine ships NO stack defaults. Handles all D6 check kinds. `engineFiles` (the .claude/workflows/
 // paths in scope for this render, if any) is additive on top of everything below — see
 // renderEngineParseChecks.
-function renderCheckList(cfg, { gatingOnly = false, cwd, engineFiles = [] } = {}) {
+function renderCheckList(cfg, { gatingOnly = false, cwd, engineFiles = [], baseSha = '' } = {}) {
   let checks = cfg?.validation?.checks ?? []
   if (gatingOnly) checks = checks.filter(c => c.gates && c.perTask !== false)
   const cd = cwd ? `cd ${cwd} && ` : ''
@@ -1751,32 +1751,9 @@ function renderCheckList(cfg, { gatingOnly = false, cwd, engineFiles = [] } = {}
     const header = `CHECK ${n} — ${c.name} (${c.purpose}) [${gate}]`
 
     if (kind === 'baseline-diff') {
-      const baselinePath = `${reportsDir}/${slug}-baseline.json`
+      const baselinePath = `${cwd ? cwd + '/' : ''}${reportsDir}/${slug}-baseline.json`
       const currentPath = `/tmp/${blockId}-flow-${slug}-current.json`
-      const keysLiteral = JSON.stringify(c.compareKeys || [])
-      return `${header} — baseline-diff (fail ONLY on net-new items vs the baseline snapshotted before the run):
-  ${cd}${c.command} > ${currentPath} 2>/dev/null; true
-  python3 << 'PYEOF'
-import json, sys
-try:
-    b = json.load(open('${cwd ? cwd + '/' : ''}${baselinePath}', encoding='utf-8'))
-except Exception as e:
-    print(f'WARNING: could not load baseline ({e}) — treating all current items as pre-existing'); b = []
-try:
-    c = json.load(open('${currentPath}', encoding='utf-8'))
-except Exception:
-    c = []
-keys = ${keysLiteral}
-def k(v): return tuple(str(v.get(x, '')) for x in keys) if isinstance(v, dict) else (str(v),)
-seen = set(k(v) for v in b)
-new = [v for v in c if k(v) not in seen]
-if new:
-    print(f'NET-NEW ({len(new)} introduced by this run, absent from baseline):')
-    for v in new[:20]: print('  ' + json.dumps(v)[:200])
-    sys.exit(1)
-print(f'CHECK ${n} PASSED: no net-new items (baseline {len(b)}, current {len(c)})'); sys.exit(0)
-PYEOF
-  echo "CHECK${n}_EXIT:$?"`
+      return renderBaselineDiffCheck({ header, n, cd, command: c.command, currentPath, baselinePath, baseSha, compareKeys: c.compareKeys })
     }
 
     if (kind === 'skip-count-regression') {
@@ -1840,23 +1817,35 @@ ${ruleLines}
 // Resume-safe: only writes a baseline that does not already exist. No-op when no such checks are
 // configured. skip-count-regression writes a bare-integer count file (not JSON) at a sibling path.
 // <<shared:snapshotBaselines>>
-async function snapshotBaselines(cfg, cwd) {
+// `baseSha` (BT.ticket.failure-attribution-and-gate-cache, task 5): stamped alongside every NEWLY
+// written baseline-diff snapshot as `<path>.sha`, so the fail-closed reconcile-time check
+// (renderBaselineDiffCheck below) can tell a baseline taken against THIS run's base commit from a
+// stale one taken against some earlier base. An EXISTING baseline is kept as-is (resume-safe) and
+// is deliberately NOT backfilled with a sidecar it never had -- a baseline that predates base-SHA
+// stamping must surface as its own named failure at reconcile time, not be silently repaired here.
+async function snapshotBaselines(cfg, cwd, baseSha) {
   const checks = (cfg?.validation?.checks || [])
     .filter(c => (c.kind === 'baseline-diff' || c.kind === 'skip-count-regression') && c.baselineCommand)
   if (!checks.length) return
   const steps = checks.map(c => {
     const slug = (c.name || 'check').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-    const path = c.kind === 'skip-count-regression'
-      ? `${reportsDir}/${slug}-skip-baseline.txt`
-      : `${reportsDir}/${slug}-baseline.json`
-    return `Baseline "${c.name}" -> ${path}:
+    if (c.kind === 'skip-count-regression') {
+      const path = `${reportsDir}/${slug}-skip-baseline.txt`
+      return `Baseline "${c.name}" -> ${path}:
   cd ${cwd} && mkdir -p ${reportsDir}
   cd ${cwd} && { [ -f ${path} ] && echo "BASELINE EXISTS (kept): ${path}" || { ${c.baselineCommand} > ${path} 2>/dev/null; echo "BASELINE WRITTEN: ${path}"; } ; }`
+    }
+    const path = `${reportsDir}/${slug}-baseline.json`
+    const shaPath = `${path}.sha`
+    return `Baseline "${c.name}" -> ${path} (base-SHA sidecar: ${shaPath}):
+  cd ${cwd} && mkdir -p ${reportsDir}
+  cd ${cwd} && { [ -f ${path} ] && echo "BASELINE EXISTS (kept): ${path}" || { ${c.baselineCommand} > ${path} 2>/dev/null; printf '%s' '${baseSha}' > ${shaPath}; echo "BASELINE WRITTEN: ${path} (base_sha ${baseSha})"; } ; }`
   }).join('\n\n')
   await agent(`
 You are the baseline-snapshot agent for the SDLC pipeline. Capture the pre-run baseline for each
 baseline-diff / skip-count-regression validation check BEFORE any implementation runs. Run each block
-exactly as written. Do NOT modify source. Existing baselines are kept (resume-safe).
+exactly as written. Do NOT modify source. Existing baselines are kept (resume-safe) -- including
+their SHA sidecar, if any; never (re)write a sidecar for a baseline you did not just create.
 
 ${steps}
 
@@ -1864,6 +1853,86 @@ Return using StructuredOutput: done=true, and note which baselines were written 
 `, { label: 'baseline-snapshot', schema: { type: 'object', required: ['done'], properties: { done: { type: 'boolean' }, notes: { type: 'string' } } }, model: 'haiku' })
 }
 // <</shared:snapshotBaselines>>
+
+// <<shared:renderBaselineDiffCheck>>
+// BT.ticket.failure-attribution-and-gate-cache, task 5: the baseline-diff check kind, fail-CLOSED,
+// for the terminal reconcile / end-review stage (D64 -- by delta, never path-scoped; one check per
+// flag, flags never compose). Every failure names its own specific cause; nothing here is silently
+// treated as zero items or skipped. `baselinePath`'s sidecar `<baselinePath>.sha` is stamped by
+// snapshotBaselines with the run's base_sha at the moment a baseline is first written -- a baseline
+// with no sidecar predates that stamping and fails closed rather than being assumed compatible.
+function renderBaselineDiffCheck({ header, n, cd, command, currentPath, baselinePath, baseSha, compareKeys }) {
+  const shaPath = `${baselinePath}.sha`
+  const keysLiteral = JSON.stringify(compareKeys || [])
+  return `${header} — baseline-diff (fails CLOSED: net-new items vs the baseline FAIL naming them; a
+non-array/empty/unparseable current output, a missing baseline, a base-SHA mismatch, or a baseline
+with no .sha sidecar all FAIL naming the specific cause -- D64: by delta, never path-scoped):
+  ${cd}${command} > ${currentPath} 2>/dev/null; true
+  python3 << 'PYEOF'
+import json, sys
+
+def fail(msg):
+    print(f'BASELINE-DIFF FAILED: {msg}')
+    sys.exit(1)
+
+BASELINE_PATH = '${baselinePath}'
+BASELINE_SHA_PATH = '${shaPath}'
+RUN_BASE_SHA = '${baseSha}'
+
+try:
+    with open(BASELINE_PATH, encoding='utf-8') as f:
+        baseline_raw = f.read()
+except FileNotFoundError:
+    fail(f'missing baseline at {BASELINE_PATH}')
+except Exception as e:
+    fail(f'could not read baseline at {BASELINE_PATH}: {e}')
+
+try:
+    with open(BASELINE_SHA_PATH, encoding='utf-8') as f:
+        baseline_sha = f.read().strip()
+except FileNotFoundError:
+    fail('baseline predates base-SHA stamping')
+except Exception as e:
+    fail(f'could not read baseline SHA sidecar at {BASELINE_SHA_PATH}: {e}')
+
+if baseline_sha != RUN_BASE_SHA:
+    fail(f'base-SHA mismatch: baseline={baseline_sha} run={RUN_BASE_SHA}')
+
+try:
+    baseline_items = json.loads(baseline_raw)
+except Exception as e:
+    fail(f'baseline at {BASELINE_PATH} is not valid JSON: {e}')
+if not isinstance(baseline_items, list):
+    fail(f'baseline at {BASELINE_PATH} is not a JSON array (got {type(baseline_items).__name__})')
+
+try:
+    with open('${currentPath}', encoding='utf-8') as f:
+        current_raw = f.read()
+except Exception as e:
+    fail(f'could not read current output at ${currentPath}: {e}')
+if not current_raw.strip():
+    fail('current output is empty')
+try:
+    current_items = json.loads(current_raw)
+except Exception as e:
+    fail(f'current output is not valid JSON ({e}) -- unparseable output fails closed, never treated as zero items')
+if not isinstance(current_items, list):
+    fail(f'current output is not a JSON array (got {type(current_items).__name__}) -- non-array output fails closed')
+
+keys = ${keysLiteral}
+def k(v): return tuple(str(v.get(x, '')) for x in keys) if isinstance(v, dict) else (str(v),)
+seen = set(k(v) for v in baseline_items)
+new = [v for v in current_items if k(v) not in seen]
+if new:
+    print(f'NET-NEW ({len(new)} introduced by this run, absent from baseline):')
+    for v in new[:20]: print('  ' + json.dumps(v)[:200])
+    sys.exit(1)
+print(f'CHECK ${n} PASSED: no net-new items (baseline {len(baseline_items)}, current {len(current_items)}, base_sha {RUN_BASE_SHA})')
+sys.exit(0)
+PYEOF
+  echo "CHECK${n}_EXIT:$?"`
+}
+// <</shared:renderBaselineDiffCheck>>
 
 // ----------------------------------------------------------------
 // COMMITTED AUTHORITATIVE STATE (D31)
@@ -2717,7 +2786,7 @@ const extraBailReasons = Array.isArray(flowCfg.bailReasons) ? flowCfg.bailReason
 log(`Policy: testDepth=${testDepth} | autoMerge=${autoMerge} | prBase=${prBase} | PR=${noPr ? 'disabled' : 'enabled'}`)
 
 // Snapshot baselines once (resume-safe; no-op without baseline-diff checks).
-await snapshotBaselines(harnessCfg, worktreePath)
+await snapshotBaselines(harnessCfg, worktreePath, baseSha)
 
 // The immediate-bail reason set the triage agent enforces (plan.md). "When unsure, prefer bail."
 // <<shared:BAIL_REASONS>>
@@ -2841,7 +2910,7 @@ async function runTests(label, { gatingOnly, taskCommands = null, expectRedSet =
         renderTaskCheckList(taskCommands, worktreePath, expectRedSet),
         renderEngineParseChecks(engineFiles, cd, taskCommands.length + 1),
       ].filter(Boolean).join('\n\n')
-    : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath, engineFiles })
+    : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath, engineFiles, baseSha })
 
   // Named here rather than inlined in the prompt so the prompt itself can be the shared master
   // (D83). The TEXT is unchanged and stays this engine's own: D63 makes a per-task override a pure
