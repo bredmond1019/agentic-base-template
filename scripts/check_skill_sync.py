@@ -103,7 +103,12 @@ ANCHORS = [
     # 2005->2080, 2086->2161. Re-verified: the WORKTREE MODE text itself onward is byte-identical
     # to before; only the ~18 lines before it changed. .agents/skills/sdlc-task/SKILL.md Step 1
     # updated with the prepare_run.py-direct-invocation + refusal + --resume-from-meta note.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2107, 2188,
+    # BT.ticket.failure-attribution-and-gate-cache, task 9: the attribution look-back (task 3),
+    # removed-literal scan (task 4) and baseline-diff fail-closed rewrite (task 5) all landed
+    # entirely ABOVE this anchor in sdlc-task.js, shifting it 2107->2176, 2188->2257 (+69) with NO
+    # content change to this region itself -- verified by diffing the old range against the new
+    # range: byte-identical ("WORKTREE MODE (--worktree)" through the trailing IN-PLACE MODE text).
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2176, 2257,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -120,7 +125,13 @@ ANCHORS = [
     # with NO content change to this region itself -- verified by diffing the old range against
     # the new range: byte-identical text ("function renderTriagePrompt(" through the trailing
     # "<</shared:renderTriagePrompt>>" boundary).
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 800, 848,
+    # BT.ticket.failure-attribution-and-gate-cache, task 9: buildTaskGateHistory/decideAttribution/
+    # ATTRIBUTION_CACHE_SCHEMA/renderAttributionCacheLookup/attributionLookback (task 3) plus the
+    # removed-literal-scan region (task 4) all landed entirely ABOVE this anchor in shared.js,
+    # shifting it 800->892, 848->940 (+92) with NO content change to this region itself -- verified
+    # by diffing the old range against the new range: byte-identical ("function
+    # renderTriagePrompt(" through the trailing "<</shared:renderTriagePrompt>>" boundary).
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 892, 940,
      ".agents/skills/sdlc-task/SKILL.md"),
     # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
@@ -128,7 +139,9 @@ ANCHORS = [
     # manifest at the new position), not blindly renumbered.
     # Same shift, same evidence as the sdlc-task entry immediately above (one shared.js region,
     # two guides). BT.ticket.prepare-run-replaces-setup-agents, task 6: 712->800, 760->848.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 800, 848,
+    # Same shift, same evidence as the sdlc-task entry immediately above (one shared.js region,
+    # two guides). BT.ticket.failure-attribution-and-gate-cache, task 9: 800->892, 848->940.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 892, 940,
      ".agents/skills/sdlc-flow/SKILL.md"),
     # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: the
     # loadHarnessConfig() unwrap + bail additions inserted 52 net lines into sdlc-task.js and
@@ -194,7 +207,12 @@ ANCHORS = [
     # this region itself -- verified by diffing the old range against the new range:
     # byte-identical text ("7. Commit your edits (stage explicitly" through the trailing
     # `git log --oneline -1`).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3787, 3814,
+    # BT.ticket.failure-attribution-and-gate-cache, task 9: same cause as the isolation-and-branch-
+    # naming entry above -- the attribution/scan/baseline-diff regions landed entirely ABOVE this
+    # anchor, shifting it 3787->3917, 3814->3944 (+130) with NO content change -- verified
+    # byte-identical ("7. Commit your edits (stage explicitly" through the trailing
+    # `git log --oneline -1`).
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3917, 3944,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
@@ -212,7 +230,12 @@ ANCHORS = [
     # `const worktreeRecipe =`, shifting this anchor 1960->2011, 2090->2141. Re-verified: the
     # worktreeRecipe text itself onward is byte-identical to before.
     # .agents/skills/sdlc-flow/SKILL.md's setup step updated with the same prepare_run.py note.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2047, 2177,
+    # BT.ticket.failure-attribution-and-gate-cache, task 9: same cause as the sdlc-task.js
+    # isolation-and-branch-naming entry above -- the attribution/scan/baseline-diff regions landed
+    # entirely ABOVE this anchor in sdlc-flow.js, shifting it 2047->2116, 2177->2246 (+69) with NO
+    # content change -- verified byte-identical ("const worktreeRecipe =" through the trailing
+    # content).
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2116, 2246,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -230,7 +253,11 @@ ANCHORS = [
     # bookkeep-vault-commit entry above, shifting this anchor 3635->3705, 3670->3740 with NO
     # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
     # trailing `git log --oneline -1`).
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3863, 3898,
+    # BT.ticket.failure-attribution-and-gate-cache, task 9: same cause as the sdlc-flow.js
+    # isolation-and-branch-naming entry above -- shifted 3863->3993, 3898->4028 (+130) with NO
+    # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
+    # trailing `git log --oneline -1`).
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3993, 4028,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

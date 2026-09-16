@@ -1408,7 +1408,7 @@ IS the answer -- report it as cacheStatus directly, do NOT re-run anything.
 
 ${checkCommand ? `If ${checkIdJson} appears under "misses" instead (a cache miss), re-run ONLY this
 one check id at base_sha -- never the whole suite, and NEVER against this run's own branch/tree. Use
-an isolated, throwaway git worktree so nothing here touches the shared branch:
+an isolated git worktree (throwaway, removed again immediately) so nothing here touches the shared branch:
   cd ${runRoot} && WT=$(mktemp -d) && ${GIT} worktree add --detach "$WT" ${baseSha} >/dev/null 2>&1 && (cd "$WT" && ${checkCommand}); CHECK_EXIT=$?; ${GIT} worktree remove --force "$WT" >/dev/null 2>&1
 CHECK_EXIT 0 means the check PASSED at base_sha; non-zero means it FAILED. Then warm the cache with
 exactly what you found (a manual verb, never scheduled -- out_of_scope):
@@ -1539,13 +1539,13 @@ def is_own(path):
     return False
 
 test_re = re.compile(TEST_GLOB_REGEX)
-candidates = [l for l in sh('git ls-files').splitlines() if test_re.search(l)]
+candidates = [l for l in sh('${GIT} ls-files').splitlines() if test_re.search(l)]
 if not candidates:
     print('INSTRUMENT_BROKEN:no candidate test files matched TEST_GLOB_REGEX=%r under this repo' % TEST_GLOB_REGEX)
     sys.exit(0)
 print('CANDIDATE_TEST_COUNT:%d' % len(candidates))
 
-diff = sh('git diff --unified=0 %s HEAD -- .' % RANGE)
+diff = sh('${GIT} diff --unified=0 %s HEAD -- .' % RANGE)
 removed_lines = [l[1:] for l in diff.splitlines() if l.startswith('-') and not l.startswith('---')]
 # Quoted-string literals gate on MIN_LEN. Bare identifiers gate on EITHER containing an underscore
 # (a real snake_case/CONST_CASE symbol, reported at any length) OR being at least IDENT_MIN_LEN chars
