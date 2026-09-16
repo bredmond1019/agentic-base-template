@@ -3,7 +3,7 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-16
+**Last updated:** 2026-09-16T15:23:52Z
 
 ---
 ## 2026-09-16 — BT.ticket.failure-attribution-and-gate-cache: BLOCKED (9 of 9 tasks implemented, review FAIL)
@@ -51,6 +51,39 @@ a57c145 feat: implement BT.ticket.failure-attribution-and-gate-cache-task6
 ```
 
 ---
+## 2026-09-16 — Close-out: 5 pre-existing/regressed test defects fixed, engines lane handed off
+
+Ran `/close-out` after `BT.ticket.gate-results-and-failure-attribution` merged (PR #16). Its full
+`planning/harness.json` gating suite surfaced 6 red checks; positive-controlled all 6 against the
+pre-session commit (`04b6114`) by exact failing sub-test name, not just exit code — one
+(`validation-commands-override-tests`) turned out to be a real regression (two structural test pins
+gone stale against the merged `gate_results` field and the intentionally-superseded "review always
+re-runs the full suite" behavior), fixed and cherry-picked to `main` directly (`d894e4a`). The other
+4 (`harness-config-payload-tests`, `build-engines-tests`, `engines-pass-agent`,
+`engines-scope-emit-state`) were confirmed pre-existing — all four root-caused by
+`BT.ticket.prepare-run-replaces-setup-agents`'s (task 6) refactor moving harness-config parsing and
+repo-root resolution onto `runPrepareRun()`'s cache, never followed by these test scripts'
+structural regex/probe-generation logic — fixed by a delegated agent in an isolated worktree, merged
+as PR #17 (`f1881f9`). Both fixes shifted the `skill-guide-sync`/`engine-docs-sync` anchor windows;
+verified via full commit diffs that the shift was purely positional before re-stamping both
+manifests (`24b73a6`). Final gating suite: 111/112 pass — the one remaining
+(`escalations-schema`) is a schema violation in a concurrent peer session's own bail record, not
+this session's to fix.
+
+A concurrent peer session (`base-template-20`) started driving `BT.ticket.failure-attribution-and-gate-cache`
+in this same shared working tree mid-session, holding the exclusive `base-template` lease — one
+commit briefly landed on their branch instead of `main` before being cherry-picked over cleanly, no
+actual file conflict. Filed feedback on two real gaps: `/close-out` has no concurrency-claim step
+(invisible to a peer's own concurrency check), and `sync-global-skills`'s `rsync --delete` wipes any
+global skill not sourced from base-template (hit earlier this session, unrelated pi_agent_rust/Notion
+skills, restored).
+
+```
+24b73a6 chore: re-stamp skill/docs sync manifests after PR #17's line shift
+f1881f9 chore: fix 4 pre-existing test defects (prepare-run refactor fallout) (#17)
+d894e4a fix(close-out): update stale regression guards after gate-results landed
+```
+
 ## 2026-09-16 — BT.ticket.gate-results-and-failure-attribution: done (5 of 5 tasks, PASS)
 
 Ran `/sdlc-flow` tasks 1-5 to PASS. Both engines now record per-task `gate_results`

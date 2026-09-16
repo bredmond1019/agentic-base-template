@@ -100,19 +100,6 @@ const VAULT_DETECT_SCHEMA = {
 }
 // <</shared:VAULT_DETECT_SCHEMA>>
 
-// <<shared:RESOLVE_REPO_ROOT_SCHEMA>>
-const RESOLVE_REPO_ROOT_SCHEMA = {
-  type: 'object',
-  required: ['repoRoot', 'gitCommonDir', 'tierPrefix', 'brainTomlAtRoot'],
-  properties: {
-    repoRoot:        { type: 'string', description: 'Absolute repo root from the REPO_ROOT: line' },
-    gitCommonDir:    { type: 'string', description: 'Absolute --git-common-dir from the GIT_COMMON_DIR: line' },
-    tierPrefix:      { type: 'string', description: 'The invoking directory\'s path relative to repoRoot, with a trailing slash (e.g. "business/"), or "" at the repo root, from the TIER_PREFIX: line' },
-    brainTomlAtRoot: { type: 'boolean', description: 'true iff the BRAIN_TOML: line reads "yes" — a brain.toml exists at repoRoot' }
-  }
-}
-// <</shared:RESOLVE_REPO_ROOT_SCHEMA>>
-
 // <<shared:PREPARE_RUN_SCHEMA>>
 // BT.ticket.prepare-run-replaces-setup-agents, task 6: the schema for the ONE 'prepare-run' agent
 // turn that replaces the eight mechanical setup-phase agents (resolve-repo-root, detect-vault,

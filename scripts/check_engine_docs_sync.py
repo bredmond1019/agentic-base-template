@@ -137,7 +137,7 @@ ANCHORS = [
     # "WORKTREE MODE (--worktree)" sat at line 2152 inside the old range (offset 45 from 2107); the
     # same text now sits at line 2221, a +69 shift. New range 2176-2257 diffed byte-identical
     # against the pre-shift 2107-2188 window (git show 2d3a918:.claude/workflows/sdlc-task.js).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2176, 2257,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2181, 2262,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -158,10 +158,10 @@ ANCHORS = [
     # line 821 inside the old range (offset 21 from 800); the same text now sits at line 913, a +92
     # shift. New range 892-940 diffed byte-identical against the pre-shift 800-848 window (git show
     # 2d3a918:.claude/workflows/prompts/shared.js).
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 892, 940,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 879, 927,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
     # Same shift, same evidence as the entry immediately above (one shared.js region, two docs).
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 892, 940,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 879, 927,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
     # BT.ticket.sdlc-bookkeep-writes-block-status-deterministically, tasks 1-3: the new
     # renderStateFlipScript deterministic `mev set-block-status` dispatch was inlined ABOVE these
@@ -235,7 +235,7 @@ ANCHORS = [
     # (stage explicitly" sat at line 3801 inside the old range (offset 14 from 3787); the same text
     # now sits at line 3931, a +130 shift. New range 3917-3944 diffed byte-identical against the
     # pre-shift 3787-3814 window (git show 2d3a918:.claude/workflows/sdlc-task.js).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3917, 3944,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3922, 3949,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs

@@ -141,23 +141,30 @@ def extract_shared_block(name: str) -> str | None:
 
 
 # See test_engines_pass_agent.py's identical constant for why `agent()` is stubbed to execute the
-# prompt's own fenced script for real (via bash/python3) rather than being reimplemented, and why
-# a bare `node` subprocess with unmodified source is the wrong sandbox entirely -- it has
+# prompt's own command for real (via bash/python3) rather than being reimplemented, and why a bare
+# `node` subprocess with unmodified source is the wrong sandbox entirely -- it has
 # `process`/`require`, which the real Workflow runtime does NOT have, and lacks `agent()`, which
 # is the ONLY thing the real runtime provides for file/env inspection.
+#
+# RECONCILED 2026-09-16 (BT.chore.fix-pre-existing-test-defects), mirroring
+# test_engines_pass_agent.py: renderScopeFlag() no longer calls agent() itself -- it reads
+# runPrepareRun()'s cache (BT.ticket.prepare-run-replaces-setup-agents task 6), and
+# runPrepareRun()'s own agent() prompt is a single literal 2-space-indented `REPO_ROOT=...` Bash
+# line, not a fenced ```...``` block, which is why the old regex never matched and
+# `runPrepareRun is not defined` crashed the node subprocess (the schema+resolver-only extraction
+# never pulled in runPrepareRun() itself -- see main()'s dep_names below).
 AGENT_STUB_JS = r"""
 global.agent = async function (prompt, opts) {
   const { execSync } = require('child_process')
-  const m = prompt.match(/```\n([\s\S]*?)\n```/)
-  if (!m) return { value: '' }
+  const m = prompt.match(/^  (REPO_ROOT=.*)$/m)
+  if (!m) return { rawOutput: '' }
   let out
   try {
     out = execSync(m[1], { shell: '/bin/bash' }).toString()
   } catch (e) {
     out = (e.stdout || '').toString()
   }
-  const vm = out.match(/^VALUE:(.*)$/m)
-  return { value: vm ? vm[1] : '' }
+  return { rawOutput: out }
 };
 """
 
@@ -172,7 +179,10 @@ def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, st
     Run with `cwd` set to a hermetic scratch directory with no `brain.toml` anywhere in its
     ancestry (never this repo's own cwd) -- mirrors test_engines_pass_agent.py's
     node_eval_resolver() reasoning: the no-identity case must not depend on whether this suite
-    happens to run inside a real repo with a live fleet lease/registration.
+    happens to run inside a real repo with a live fleet lease/registration. The stubbed agent()
+    (see AGENT_STUB_JS) runs the real `REPO_ROOT=$(git rev-parse --show-toplevel) && ...` line, so
+    the scratch dir must be its own git toplevel (`git init -q`) with `.claude` symlinked in so
+    `prepare_run.py` (and its sibling imports) are reachable at the resolved `$REPO_ROOT`.
     """
     import os
 
@@ -185,6 +195,10 @@ def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, st
         f.write(script)
         tmp_path = f.name
     scratch_dir = tempfile.mkdtemp(prefix="render-scope-flag-eval-")
+    subprocess.run(
+        ["git", "init", "-q"], cwd=scratch_dir, capture_output=True, text=True, timeout=15
+    )
+    os.symlink(REPO_ROOT / ".claude", Path(scratch_dir) / ".claude")
     try:
         env = dict(os.environ)
         env.pop("FLEET_LANE_REPO", None)
@@ -208,7 +222,9 @@ def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, st
     finally:
         Path(tmp_path).unlink(missing_ok=True)
         try:
-            os.rmdir(scratch_dir)
+            import shutil as _shutil
+
+            _shutil.rmtree(scratch_dir, ignore_errors=True)
         except OSError:
             pass
 
@@ -263,6 +279,18 @@ def main() -> int:
     # identically into both engines (build_engines.py parity), and actually behaves per contract.
     resolver_src = extract_shared_block(RESOLVER_NAME)
     schema_src = extract_shared_block("RENDER_IDENTITY_SCHEMA")
+    # BT.chore.fix-pre-existing-test-defects: mirrors test_engines_pass_agent.py -- renderScopeFlag()
+    # depends on runPrepareRun(), which needs its own dependencies to run at all in the probe. Not
+    # part of the byte-identity contract this suite polices (scoped to RESOLVER_NAME + identity
+    # schema, unchanged).
+    dep_names = ["GIT", "PREPARE_RUN_SCHEMA", "parsePrepareRunOutput", "runPrepareRun"]
+    dep_srcs = {name: extract_shared_block(name) for name in dep_names}
+    missing_deps = [name for name, src in dep_srcs.items() if src is None]
+    if missing_deps:
+        failures.append(
+            f"shared.js is missing `<<shared:NAME>>` block(s) {missing_deps} -- runPrepareRun() "
+            f"(which {RESOLVER_NAME}() now depends on) cannot be assembled without them"
+        )
     if resolver_src is None:
         failures.append(
             f"shared.js has no `<<shared:{RESOLVER_NAME}>>` block -- the resolver referenced at "
@@ -273,8 +301,10 @@ def main() -> int:
             f"shared.js has no `<<shared:RENDER_IDENTITY_SCHEMA>>` block -- {RESOLVER_NAME}() "
             "references it as an agent() schema and cannot run without it"
         )
+    elif missing_deps:
+        pass  # already reported above; nothing more to evaluate
     else:
-        shared_src = schema_src + "\n" + resolver_src
+        shared_src = "\n".join(dep_srcs[name] for name in dep_names) + "\n" + schema_src + "\n" + resolver_src
         for engine_path in (TASK_JS, FLOW_JS):
             engine_text = engine_path.read_text()
             if resolver_src not in engine_text:

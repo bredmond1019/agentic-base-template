@@ -108,7 +108,7 @@ ANCHORS = [
     # entirely ABOVE this anchor in sdlc-task.js, shifting it 2107->2176, 2188->2257 (+69) with NO
     # content change to this region itself -- verified by diffing the old range against the new
     # range: byte-identical ("WORKTREE MODE (--worktree)" through the trailing IN-PLACE MODE text).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2176, 2257,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2181, 2262,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -131,7 +131,7 @@ ANCHORS = [
     # shifting it 800->892, 848->940 (+92) with NO content change to this region itself -- verified
     # by diffing the old range against the new range: byte-identical ("function
     # renderTriagePrompt(" through the trailing "<</shared:renderTriagePrompt>>" boundary).
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 892, 940,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 879, 927,
      ".agents/skills/sdlc-task/SKILL.md"),
     # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
@@ -141,7 +141,7 @@ ANCHORS = [
     # two guides). BT.ticket.prepare-run-replaces-setup-agents, task 6: 712->800, 760->848.
     # Same shift, same evidence as the sdlc-task entry immediately above (one shared.js region,
     # two guides). BT.ticket.failure-attribution-and-gate-cache, task 9: 800->892, 848->940.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 892, 940,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 879, 927,
      ".agents/skills/sdlc-flow/SKILL.md"),
     # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: the
     # loadHarnessConfig() unwrap + bail additions inserted 52 net lines into sdlc-task.js and
@@ -212,7 +212,7 @@ ANCHORS = [
     # anchor, shifting it 3787->3917, 3814->3944 (+130) with NO content change -- verified
     # byte-identical ("7. Commit your edits (stage explicitly" through the trailing
     # `git log --oneline -1`).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3917, 3944,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3922, 3949,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
