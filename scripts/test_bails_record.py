@@ -128,6 +128,24 @@ def build_bail_payload_src(engine: str) -> str:
     return extract_function(read_source(engine), "buildBailPayload")
 
 
+# BT.ticket.gate-results-and-failure-attribution (review fix): buildBailPayload() and the
+# task-loop/resume bail sites now call the two shared check_id-resolution helpers added by that
+# ticket's task 2, and read a `harnessCfg` global. They must be extracted and declared alongside
+# every generated script below, or the extracted bail code throws `ReferenceError` -- it no
+# longer runs standalone.
+def last_failing_check_id_src(engine: str) -> str:
+    return extract_function(read_source(engine), "lastFailingCheckId")
+
+
+def resolve_check_id_src(engine: str) -> str:
+    return extract_function(read_source(engine), "resolveCheckId")
+
+
+CHECK_ID_HELPERS_PRELUDE = """
+const harnessCfg = null
+"""
+
+
 def bail_site_task_loop(engine: str) -> str:
     """The task-loop bail assignment, identical text at sdlc-task.js:1936 / sdlc-flow.js:2052."""
     return extract_line_containing(
@@ -238,8 +256,12 @@ class BailsRecordTests(unittest.TestCase):
                 merge_line = resume_merge_line(engine)
                 script = f"""
 {PRELUDE}
+{CHECK_ID_HELPERS_PRELUDE}
+{last_failing_check_id_src(engine)}
+{resolve_check_id_src(engine)}
 function run1() {{
 {lit}
+  const t = {{}}
   let bailed = true, taskPassed = false, bailReason = 'foreign-state gate failed on a file this task never declared'
   {site1}
   state.tasks['1'] = {{ status: 'failed' }}
@@ -323,10 +345,14 @@ console.log(JSON.stringify({{ run1: run1State, run2: run2State }}))
                 ]
                 script = f"""
 {PRELUDE}
+{CHECK_ID_HELPERS_PRELUDE}
+{last_failing_check_id_src(engine)}
+{resolve_check_id_src(engine)}
 function run2(priorState) {{
 {lit}
   const priorTasks = priorState.tasks
   {merge_line}
+  const t = {{}}
   let bailed = true, taskPassed = false, bailReason = 'third bail on resume'
   {site1}
   state.tasks['3'] = {{ status: 'failed' }}
@@ -406,6 +432,9 @@ console.log(JSON.stringify(run2State))
         t_obj = {"status": "running", "files": files}
         script = f"""
 {PRELUDE}
+{CHECK_ID_HELPERS_PRELUDE}
+{last_failing_check_id_src(engine)}
+{resolve_check_id_src(engine)}
 function buildTokensBlock() {{ return {{ stages: [], total: {{}} }} }}
 const stateFile = 'state.json'
 {worklog_global}let state = {{

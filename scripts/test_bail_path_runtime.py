@@ -172,6 +172,27 @@ def build_bail_payload_src(engine: str) -> str:
     return extract_function(read_source(engine), "buildBailPayload")
 
 
+# BT.ticket.gate-results-and-failure-attribution (review fix): the extracted bail sites below now
+# call the two shared check_id-resolution helpers added by that ticket's task 2 (plus, for
+# sdlc-task.js's terminal site, mostRecentRecordedGateResults) and read a `harnessCfg` global --
+# mirrors scripts/test_bails_record.py's identical fix.
+def last_failing_check_id_src(engine: str) -> str:
+    return extract_function(read_source(engine), "lastFailingCheckId")
+
+
+def resolve_check_id_src(engine: str) -> str:
+    return extract_function(read_source(engine), "resolveCheckId")
+
+
+def most_recent_recorded_gate_results_src(engine: str) -> str:
+    return extract_function(read_source(engine), "mostRecentRecordedGateResults")
+
+
+CHECK_ID_HELPERS_PRELUDE = """
+const harnessCfg = null
+"""
+
+
 def bail_site_task_loop(engine: str) -> str:
     """The task-loop bail assignment, identical text at sdlc-task.js:1975 / sdlc-flow.js:2091
     (once occurred_at stops calling new Date(), the surrounding text stays a stable anchor)."""
@@ -183,11 +204,17 @@ def bail_site_task_loop(engine: str) -> str:
 
 
 def bail_site_terminal(engine: str) -> str:
-    """The engine-specific terminal bail-append site: sdlc-task.js's D56 reconcile bail
-    (check_id: 'terminal-reconcile', :2098) or sdlc-flow.js's consolidated-review bail
-    (check_id: 'review', :2205). Anchored on the check_id literal, not on occurred_at, so the
-    anchor survives the fix that removes new Date() from this exact line."""
-    needle = "check_id: 'terminal-reconcile'" if engine == "sdlc-task.js" else "check_id: 'review'"
+    """The engine-specific terminal bail-append site: sdlc-task.js's D56 reconcile bail or
+    sdlc-flow.js's consolidated-review bail. BT.ticket.gate-results-and-failure-attribution
+    (task 2/3) replaced both sites' literal `check_id: 'terminal-reconcile'` / `check_id: 'review'`
+    with a resolveCheckId()-derived value, so the anchor now keys on the resolved-variable name
+    each site assigns instead of the retired literal -- still not on occurred_at, so the anchor
+    survives the fix that removes new Date() from this exact line."""
+    needle = (
+        "check_id: reconcileResolvedCheckId.check_id"
+        if engine == "sdlc-task.js"
+        else "check_id: reviewResolvedCheckId.check_id"
+    )
     return extract_line_containing(read_source(engine), needle, f"{engine} terminal bail site")
 
 
@@ -257,6 +284,9 @@ class BailPathRuntimeTests(unittest.TestCase):
                 script = f"""
 {DATE_SHIM}
 {PRELUDE}
+{CHECK_ID_HELPERS_PRELUDE}
+{last_failing_check_id_src(engine)}
+{resolve_check_id_src(engine)}
 function buildTokensBlock() {{ return {{ stages: [], total: {{}} }} }}
 const stateFile = 'state.json'
 {worklog_global}let state = {{
@@ -296,7 +326,11 @@ console.log(result.stateJson)
                 script = f"""
 {DATE_SHIM}
 {PRELUDE}
+{CHECK_ID_HELPERS_PRELUDE}
+{last_failing_check_id_src(engine)}
+{resolve_check_id_src(engine)}
 {lit}
+const t = {{}}
 let bailed = true, taskPassed = false, bailReason = 'a bail happened'
 state.current_task = 1
 {site}
@@ -323,12 +357,31 @@ console.log(JSON.stringify(state))
                 lit = state_literal(engine)
                 site = bail_site_terminal(engine)
                 if engine == "sdlc-task.js":
-                    extra = "const reconcileBailReason = 'terminal reconcile failed'\n"
+                    extra = (
+                        "const reconcileBailReason = 'terminal reconcile failed'\n"
+                        "const reconcileCheckIdCandidate = "
+                        "lastFailingCheckId(mostRecentRecordedGateResults(state.tasks))\n"
+                        "const reconcileResolvedCheckId = "
+                        "resolveCheckId(reconcileCheckIdCandidate, harnessCfg)\n"
+                    )
+                    helpers = (
+                        f"{most_recent_recorded_gate_results_src(engine)}\n"
+                        f"{last_failing_check_id_src(engine)}\n"
+                        f"{resolve_check_id_src(engine)}\n"
+                    )
                 else:
-                    extra = "const bailReason = 'review bailed'\nconst tr = { class: 'MAJOR' }\n"
+                    extra = (
+                        "const bailReason = 'review bailed'\n"
+                        "const tr = { class: 'MAJOR' }\n"
+                        "const lastReview = { gapKind: 'design' }\n"
+                        "const reviewResolvedCheckId = resolveCheckId('review', harnessCfg)\n"
+                    )
+                    helpers = f"{resolve_check_id_src(engine)}\n"
                 script = f"""
 {DATE_SHIM}
 {PRELUDE}
+{CHECK_ID_HELPERS_PRELUDE}
+{helpers}
 {lit}
 {extra}{site}
 console.log(JSON.stringify(state))
