@@ -1033,11 +1033,21 @@ ${renderEmojiGate({ runRoot, baseSha: diffBase, stateFile, recordedCommitsJson }
   commit on a shared branch, does not.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
+
+ALSO populate \`gate_results\` — one entry per check you ran above (same set, same order), each
+\`{check_id, status, failing_ids}\`: check_id is the check's own name exactly as it appears in its
+"CHECK N — <name>" header (or the harness.json check name, when the checklist is driven by one);
+status is \`"pass"\` or \`"fail"\`; failing_ids is an array of the specific ids that failed FOR THAT
+CHECK — derive it from the check's own structured runner output where one exists (nextest's JUnit
+XML, pytest's \`--junitxml\` or \`-rf\` flag output: use the individual failing test/case ids), and
+when the check produces no such structured per-item output, fall back to a single-element array
+holding the check's own check_id as the one failing id. A passing check still gets an entry (status
+\`"pass"\`, failing_ids \`[]\`).
 ${heartbeatRecipe || ''}
 ${onPassRecipe}
 Return via StructuredOutput: allPassed (true only if EVERY gating check passed and the emoji gate is
 clean), passCount, failCount, failedTests (names), failBlob (compact: failing check names + the tail of
-their output; empty when allPassed)${stateWrittenNote}.`
+their output; empty when allPassed), gate_results (the per-check array described above)${stateWrittenNote}.`
 }
 // <</shared:renderTestPrompt>>
 
@@ -1379,6 +1389,23 @@ const TEST_SCHEMA = {
     failedTests: { type: 'array', items: { type: 'string' } },
     failBlob:    { type: 'string', description: 'Compact failure output (failing check names + the tail of their output) for triage; empty when allPassed' },
     stateWritten: { type: 'boolean', description: 'true if the agent ALSO persisted sdlc-task-state.json this same turn (the per-task pass-path state-write fold); false/omitted when it did not (no onPass instructions given, a check failed, or the write was not attempted/completed)' },
+    // BT.ticket.gate-results-and-failure-attribution (task 1): per-check structured output, one
+    // entry per gating check run this turn, driving triage-only-on-red and (in sdlc-flow) review's
+    // gate_results-based pass loop instead of a suite re-run.
+    gate_results: {
+      type: 'array',
+      description: 'One entry per check run this turn, from the rendered checklist',
+      items: {
+        type: 'object',
+        required: ['check_id', 'status', 'failing_ids'],
+        properties: {
+          check_id:    { type: 'string', description: "The check's own name, as it appeared in its CHECK N header (or the harness.json check name)" },
+          status:      { type: 'string', enum: ['pass', 'fail'] },
+          failing_ids: { type: 'array', items: { type: 'string' }, description: 'Specific failing ids from structured runner output (nextest JUnit, pytest --junitxml/-rf) where available; otherwise a single-element array holding check_id' }
+        }
+      }
+    },
+    check_id_raw: { type: 'string', description: 'Raw agent-reported check identifier when check_id validation could not match it to a real planning/harness.json check name' },
     notes:       { type: 'string' }
   }
 }
@@ -2819,10 +2846,13 @@ STEP W1 — run this as ONE Bash call, exactly as written. Do not split it into 
   when there is none. If that file exists and has a "started_at" value, REUSE it verbatim for
   started_at below. Otherwise started_at = NOW.
 
-STEP W2 — write ${onPass.stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
-  "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch". Valid
-  JSON only (double quotes, no trailing commas, no markdown fences). The object to write (verbatim
-  except for adding those two timestamp keys):
+STEP W2 — write ${onPass.stateFile} with EXACTLY this JSON, but: (a) inserting two extra top-level
+  keys "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch",
+  and (b) replacing the quoted placeholder value "__GATE_RESULTS__" (this task's own "gate_results"
+  field under "tasks") with the JSON ARRAY you populated as your own gate_results field in this
+  StructuredOutput, inserted verbatim as a JSON array (never re-quoted as a string) — or \`[]\` if
+  you populated none. Valid JSON only (double quotes, no trailing commas, no markdown fences). The
+  object to write (verbatim except for those substitutions):
 ${onPass.stateJson}
 
 STEP W3 — use the Write tool for the file. Do NOT run \`git add\`, \`git commit\`, \`git checkout\`,
@@ -2883,9 +2913,51 @@ STEP W3 — use the Write tool for the file. Do NOT run \`git add\`, \`git commi
 // CANDIDATE outcome.
 function buildPassPayload(taskNum, t, validatedLabel) {
   const snapshot = JSON.parse(JSON.stringify(state))
-  snapshot.tasks[String(taskNum)] = { ...t, status: 'passed', validated: validatedLabel }
+  // BT.ticket.gate-results-and-failure-attribution (task 2): this snapshot is built BEFORE the
+  // test call runs (see the caller), so the real gate_results array isn't known yet — carry a
+  // sentinel the SAME test agent (which computes both the checks AND, per onPassRecipe, this
+  // write) substitutes with its own gate_results field in the same turn. See
+  // renderOnPassStateWriteRecipe's STEP W2.
+  snapshot.tasks[String(taskNum)] = { ...t, status: 'passed', validated: validatedLabel, gate_results: '__GATE_RESULTS__' }
   snapshot.tokens = buildTokensBlock()
   return { stateFile, stateJson: JSON.stringify(snapshot, null, 2) }
+}
+
+// BT.ticket.gate-results-and-failure-attribution (task 2): single shared lookup so the three
+// bail-fold sites below agree on how a candidate check_id resolves against
+// planning/harness.json's real check names, rather than three hand-rolled comparisons drifting
+// apart. A candidate that matches a real check name is used verbatim; anything else (unmatched,
+// or absent entirely) resolves to check_id: null with the raw candidate preserved in
+// check_id_raw (never silently dropped).
+function resolveCheckId(candidate, cfg) {
+  const names = new Set((cfg?.validation?.checks || []).map(c => c.name).filter(Boolean))
+  if (candidate && names.has(candidate)) return { check_id: candidate, check_id_raw: null }
+  return { check_id: null, check_id_raw: candidate || null }
+}
+
+// Most-recent-first: the last 'fail' entry in a gate_results array is the best-effort attribution
+// candidate (mirrors the existing t.issues[t.issues.length - 1] "most recent" convention this
+// replaces at the per-task bail site).
+function lastFailingCheckId(gateResults) {
+  const fails = (gateResults || []).filter(g => g && g.status === 'fail' && g.check_id)
+  return fails.length ? fails[fails.length - 1].check_id : null
+}
+
+// The reconcile and acceptance-criteria bail sites fire AFTER every task already passed its own
+// test stage (D56 / BT.ticket.sdlc-task-must-verify-its-blocks-acceptance-criteria) — there is no
+// live testResult in scope at either site, so fall back to the most recently recorded gate_results
+// anywhere in state.tasks (highest task number carrying a non-empty gate_results array).
+function mostRecentRecordedGateResults(tasksState) {
+  const nums = Object.keys(tasksState || {})
+    .filter(k => k !== '__pendingBails')
+    .map(Number)
+    .filter(n => Number.isFinite(n))
+    .sort((a, b) => a - b)
+  for (let i = nums.length - 1; i >= 0; i--) {
+    const entry = tasksState[String(nums[i])]
+    if (entry && Array.isArray(entry.gate_results) && entry.gate_results.length) return entry.gate_results
+  }
+  return []
 }
 
 // Precompute the exact state.json content for the case where THIS triage call turns out to be
@@ -2907,14 +2979,22 @@ function buildBailPayload(taskNum, t, majorFallback, exhaustionFallback = null) 
   // not-mint-time-in-the-engine) — a JS-side clock call is illegal under the Workflow runtime
   // shim, so the writing agent substitutes NOW (already obtained via STEP W1's `date -u` call)
   // for this sentinel in the SAME turn it substitutes __BAIL_REASON__; see (c) in
-  // renderBailStateWriteRecipe's STEP W2 below. check_id best-effort from
-  // the task's own recorded issues (the harness check name already on `t`, never reimplemented);
-  // failing_artifact/ownership/bail_class stay null here — not yet derivable at this call site
-  // (see out_of_scope: checks-must-name-their-failing-artifact is separate work).
+  // renderBailStateWriteRecipe's STEP W2 below. check_id (task 2, resolveCheckId): the last
+  // 'fail' entry in `t.gate_results` (folded onto `t` by the caller alongside t.issues, from
+  // this attempt's testResult when one exists), validated against planning/harness.json's real
+  // check names — falls back to the task's own recorded issues (the old best-effort source) only
+  // when no gate_results entry exists at all (e.g. a non-test bail, such as NULL_RESULT). A
+  // candidate that does not match a real check name resolves to null with the raw value kept in
+  // check_id_raw, never silently dropped. failing_artifact/ownership/bail_class stay null here —
+  // not yet derivable at this call site (see out_of_scope: checks-must-name-their-failing-
+  // artifact is separate work).
+  const bailCheckIdCandidate = lastFailingCheckId(t.gate_results) || ((t.issues && t.issues.length) ? t.issues[t.issues.length - 1] : null)
+  const bailResolvedCheckId = resolveCheckId(bailCheckIdCandidate, harnessCfg)
   snapshot.bails = [...(snapshot.bails || []), {
     occurred_at: '__BAIL_OCCURRED_AT__',
     task_id: taskNum,
-    check_id: (t.issues && t.issues.length) ? t.issues[t.issues.length - 1] : null,
+    check_id: bailResolvedCheckId.check_id,
+    check_id_raw: bailResolvedCheckId.check_id_raw,
     failing_artifact: null,
     ownership: null,
     bail_class: null,
@@ -3137,6 +3217,12 @@ ${renderImplementPrompt({ roleIntro, runRootLabel: 'run root', runRoot: runDir, 
       : (harnessGatingCheckCount > 0 ? VALIDATED_LABEL.substitutedSubset : VALIDATED_LABEL.ranNoneOfHarnessList)
     const passPayload = buildPassPayload(taskNum, t, passValidatedLabel)
     const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum), expectRedSet: expectRedFor(taskNum), onPass: passPayload, engineFiles: engineFilesFor(taskNum) })
+    // BT.ticket.gate-results-and-failure-attribution (task 2): fold into the IN-MEMORY task entry
+    // regardless of outcome — mirrors t.issues/t.fixes below. This is what lets a later dedicated
+    // writeTaskState() call (the taskStateWritten=false fallback) and the reconcile/acceptance-
+    // criteria bail sites (which read state.tasks after this loop, in-memory, never off disk) see
+    // this attempt's gate_results even when the folded onPass/onBail disk write already happened.
+    t.gate_results = (testResult && testResult.gate_results) || t.gate_results || []
     if (testResult && testResult.allPassed) {
       t.validated = passValidatedLabel
       // D63 — a task that ran ZERO harness.json gating checks must be VISIBLE in terminal output,
@@ -3195,7 +3281,10 @@ ${renderImplementPrompt({ roleIntro, runRootLabel: 'run root', runRoot: runDir, 
   // resume merge below can recover this run's bail even on the rare path where the dedicated
   // `bails` read comes back empty; the merge deletes it the moment it is consumed, so it is
   // transient scaffolding, never load-bearing on its own.
-  if (bailed && !taskPassed) { state.status = 'blocked'; state.bail_reason = bailReason }; if (bailed && !taskPassed) { const bailEntry = { occurred_at: '__BAIL_OCCURRED_AT__', task_id: state.current_task, check_id: null, failing_artifact: null, ownership: null, bail_class: null, reason: bailReason, resolution: null }; state.bails = [...state.bails, bailEntry]; state.tasks.__pendingBails = [...(state.tasks.__pendingBails || []), bailEntry] }
+  // BT.ticket.gate-results-and-failure-attribution (task 2): check_id resolved from this task's
+  // own gate_results (folded onto `t` above) via the shared resolveCheckId/lastFailingCheckId
+  // lookup, falling back to t.issues only when no gate_results entry exists at all.
+  if (bailed && !taskPassed) { state.status = 'blocked'; state.bail_reason = bailReason }; if (bailed && !taskPassed) { const terminalCheckIdCandidate = lastFailingCheckId(t.gate_results) || ((t.issues && t.issues.length) ? t.issues[t.issues.length - 1] : null); const terminalResolvedCheckId = resolveCheckId(terminalCheckIdCandidate, harnessCfg); const bailEntry = { occurred_at: '__BAIL_OCCURRED_AT__', task_id: state.current_task, check_id: terminalResolvedCheckId.check_id, check_id_raw: terminalResolvedCheckId.check_id_raw, failing_artifact: null, ownership: null, bail_class: null, reason: bailReason, resolution: null }; state.bails = [...state.bails, bailEntry]; state.tasks.__pendingBails = [...(state.tasks.__pendingBails || []), bailEntry] }
   // Reliability net: either the pass-path fold (runTests' onPass) or the terminal-bail fold
   // (triage's onBail) already wrote sdlc-task-state.json in the SAME turn as the resolving
   // test/triage call when taskStateWritten is true — skip the dedicated writer in that case.
@@ -3318,7 +3407,15 @@ if (reconcileFailed) {
   const reconcileBailReason = `Terminal reconcile failed (D56): ${reconcileFailBlob}`
   // APPEND-ONLY (BT.ticket.bails-must-be-append-only) — no task to attribute this to (D56: it
   // fires after every task already passed its own tripwire), so task_id stays null.
-  state.bails = [...state.bails, { occurred_at: '__BAIL_OCCURRED_AT__', task_id: null, check_id: 'terminal-reconcile', failing_artifact: null, ownership: null, bail_class: null, reason: reconcileBailReason, resolution: null }]
+  // BT.ticket.gate-results-and-failure-attribution (task 2): no live testResult in scope at this
+  // call site (the reconcile agent's own result isn't gate_results-shaped) — fall back to the
+  // most recently recorded gate_results anywhere in state.tasks, same shared resolveCheckId
+  // lookup as the per-task bail site. The old literal 'terminal-reconcile' was never a real
+  // planning/harness.json check name; under the new rule it would only ever have resolved to
+  // check_id: null with check_id_raw holding it, so it is dropped as a candidate entirely.
+  const reconcileCheckIdCandidate = lastFailingCheckId(mostRecentRecordedGateResults(state.tasks))
+  const reconcileResolvedCheckId = resolveCheckId(reconcileCheckIdCandidate, harnessCfg)
+  state.bails = [...state.bails, { occurred_at: '__BAIL_OCCURRED_AT__', task_id: null, check_id: reconcileResolvedCheckId.check_id, check_id_raw: reconcileResolvedCheckId.check_id_raw, failing_artifact: null, ownership: null, bail_class: null, reason: reconcileBailReason, resolution: null }]
   state.bail_reason = reconcileBailReason
 }
 
@@ -3508,7 +3605,11 @@ if (criteriaRefuse) {
   // APPEND-ONLY (BT.ticket.bails-must-be-append-only) — no task to attribute this to (it fires
   // after every task already passed its own tripwire, exactly like the reconcile bail above), so
   // task_id stays null.
-  state.bails = [...state.bails, { occurred_at: '__BAIL_OCCURRED_AT__', task_id: null, check_id: 'acceptance-criteria', failing_artifact: null, ownership: null, bail_class: null, reason: state.bail_reason, resolution: null }]
+  // BT.ticket.gate-results-and-failure-attribution (task 2): same fallback as the reconcile bail
+  // — the most recently recorded gate_results in state.tasks, through the shared lookup.
+  const criteriaCheckIdCandidate = lastFailingCheckId(mostRecentRecordedGateResults(state.tasks))
+  const criteriaResolvedCheckId = resolveCheckId(criteriaCheckIdCandidate, harnessCfg)
+  state.bails = [...state.bails, { occurred_at: '__BAIL_OCCURRED_AT__', task_id: null, check_id: criteriaResolvedCheckId.check_id, check_id_raw: criteriaResolvedCheckId.check_id_raw, failing_artifact: null, ownership: null, bail_class: null, reason: state.bail_reason, resolution: null }]
 }
 // BT.ticket.bookkeep-leaves-derived-output-uncommitted (task 4): OPTIONAL post-emit commit hook,
 // project policy only (mechanism: run it if configured; never a default, never a fact about where

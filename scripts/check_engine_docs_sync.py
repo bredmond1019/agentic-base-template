@@ -123,7 +123,13 @@ ANCHORS = [
     # sdlc-task.md's "## In-place vs. `--worktree`" section updated with the prepare-run-refusal
     # paragraph; the rest of the section (the in-place/worktree table, the fail-closed guard) is
     # unaffected.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2080, 2161,
+    # BT.ticket.gate-results-and-failure-attribution, tasks 1-3: unrelated gate_results/check_id
+    # plumbing landed entirely ABOVE this anchor, shifting it 2080->2107, 2161->2188 with NO
+    # content change to this region itself -- the old fixed window still happened to contain the
+    # "WORKTREE MODE (--worktree)" needle at its shifted position, so the bracket check did not
+    # flag it; caught only by the hash mismatch. Verified byte-identical against the manifest hash
+    # at the new offset, same shift as check_skill_sync.py's twin anchor (--relocate).
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2107, 2188,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -201,7 +207,12 @@ ANCHORS = [
     # entirely ABOVE this anchor, shifting it 3592->3686, 3619->3713 with NO content change --
     # verified byte-identical ("7. Commit your edits (stage explicitly" through the trailing
     # `git log --oneline -1`).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3686, 3713,
+    # BT.ticket.gate-results-and-failure-attribution, tasks 1-3: the gate_results/check_id
+    # schema fields, fold logic and resolveCheckId lookup helper landed entirely ABOVE this
+    # anchor, shifting it 3686->3787, 3713->3814 with NO content change to this region itself --
+    # verified byte-identical ("7. Commit your edits (stage explicitly" through the trailing
+    # `git log --oneline -1`), same shift as check_skill_sync.py's twin anchor (--relocate).
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3787, 3814,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
@@ -219,7 +230,11 @@ ANCHORS = [
     # BT.ticket.prepare-run-replaces-setup-agents, task 6: setup-collapse changes landed entirely
     # ABOVE this anchor, shifting it 1017->1085, 1034->1102 with NO content change -- verified
     # byte-identical ("const autoMergeFlag = hasFlag('--auto-merge')" onward).
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1085, 1102,
+    # BT.ticket.gate-results-and-failure-attribution, tasks 1-3: the gate_results TEST_SCHEMA
+    # field plus the shared renderTestPrompt gate_results instructions landed entirely ABOVE this
+    # anchor, shifting it 1085->1095, 1102->1112 with NO content change to this region itself --
+    # verified byte-identical ("const autoMergeFlag = hasFlag('--auto-merge')" onward).
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1095, 1112,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
@@ -242,7 +257,11 @@ ANCHORS = [
     # by direct diff against the pre-task-6 baseline (f54c1b0), not by the tool's own drift
     # message. docs/workflows/sdlc-flow.md's isolation-mode section updated with the same
     # prepare-run-refusal paragraph as sdlc-task.md's.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2011, 2141,
+    # BT.ticket.gate-results-and-failure-attribution, tasks 1-3: same cause as the sdlc-task.js
+    # isolation-and-branch-naming entry above, shifting it 2011->2047, 2141->2177 with NO content
+    # change -- verified byte-identical against the manifest hash at the new offset, same shift
+    # as check_skill_sync.py's twin anchor.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2047, 2177,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
     # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
@@ -258,7 +277,11 @@ ANCHORS = [
     # bookkeep-vault-commit entry above, shifting this anchor 3635->3705, 3670->3740 with NO
     # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
     # trailing `git log --oneline -1`).
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3705, 3740,
+    # BT.ticket.gate-results-and-failure-attribution, tasks 1-3: same cause as the sdlc-task.js
+    # bookkeep-vault-commit entry above, shifting this anchor 3705->3863, 3740->3898 with NO
+    # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
+    # trailing `git log --oneline -1`), same shift as check_skill_sync.py's twin anchor.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3863, 3898,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

@@ -598,8 +598,15 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
        downstream repo), the call fails harmlessly — its exit code (hence the trailing `|| true`)
        must NEVER affect this task's own pass/fail verdict.
      - The task PASSES this attempt only if every gating check passed AND the emoji gate is clean.
+     - **Record `gate_results`** — one entry per check actually run this turn (same set, same
+       order as the checklist above): `{check_id, status: 'pass'|'fail', failing_ids}`. Derive
+       `failing_ids` from structured runner output where the check's own command produces one
+       (nextest JUnit XML, pytest `--junitxml`/`-rf`); otherwise fall back to a single-element
+       array holding `check_id`. This array is what drives triage-only-on-red below and, in
+       `/sdlc-flow`, the end-review stage's aggregated read instead of a suite re-run.
    - **On pass**: mark the task `passed`, record which check set validated it, and stop the attempt
-     loop for this task (do not run further attempts).
+     loop for this task (do not run further attempts). Triage is never invoked on this path — it is
+     called ONLY from the failure branch immediately below, so a green task spawns no triage agent.
    - **On failure**: **triage** the failure before deciding whether to retry:
      - Classify **RETRYABLE** (transient/infra flake, OR the failure visibly changed from the previous
        attempt — evidence of progress, a bounded fix can plausibly close it) vs **MAJOR** (bail to a
@@ -633,13 +640,19 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
        record the bail reason, mark the run blocked, and stop the whole per-task loop (subsequent
        tasks in `taskList` do not run this pass). **Also append a fully-populated entry to
        `state.bails`** (append-only, never overwritten — BT.ticket.bails-must-be-append-only):
-       `{occurred_at, task_id, check_id, failing_artifact, ownership, bail_class, reason, resolution:
-       null}`. `reason` carries the same bail-reason text as `bail_reason`; `check_id` is the harness
-       check name already available from this task's recorded issues, best-effort; `failing_artifact`,
-       `ownership`, and `bail_class` are set when derivable at this call site and `null` otherwise
-       (deriving them from the check output is separate work, out of scope here). `bail_reason` stays
-       set too, as a plain mirror of this entry's `reason` — it is never independently authoritative
-       once `bails` is non-empty.
+       `{occurred_at, task_id, check_id, check_id_raw, failing_artifact, ownership, bail_class,
+       reason, resolution: null}`. `reason` carries the same bail-reason text as `bail_reason`.
+       **`check_id`** is resolved, not copied verbatim: take the last `status: 'fail'` entry from
+       this task's own recorded `gate_results` (falling back to the last entry of this task's
+       `issues[]` only when no `gate_results` entry exists at all, e.g. a non-test bail), then
+       validate that candidate against `planning/harness.json`'s `validation.checks[].name` list —
+       a match is stored in `check_id` verbatim; a non-match (or an absent/malformed
+       `planning/harness.json`) stores `check_id: null` with the raw candidate preserved in
+       `check_id_raw`, never silently dropped. `failing_artifact`, `ownership`, and `bail_class` are
+       set when derivable at this call site and `null` otherwise (deriving them from the check
+       output is separate work, out of scope here). `bail_reason` stays set too, as a plain mirror
+       of this entry's `reason` — it is never independently authoritative once `bails` is
+       non-empty.
      - If RETRYABLE and this is attempt 3 (the last one): the loop is naturally exhausted — bail
        anyway, with a fallback reason noting all 3 attempts failed, appending its own `bails` entry the
        same way. This is a different bail path from
@@ -902,7 +915,13 @@ Skip this entire step if the run bailed OR Step 3.5 set `reconcileFailed = true`
   `"done"` (otherwise), capturing the final token roll-up. On `"reconcile_failed"`, also set
   `bail_reason` to the reconcile's failing check names + a tail of their output, and append a `bails[]`
   entry for it (`task_id: null` — D56: this fires after every task already passed its own tripwire, so
-  there is no single task to attribute it to; `check_id: "terminal-reconcile"`).
+  there is no single task to attribute it to). **`check_id`** here is resolved the same way as every
+  other bail-fold site: take the last `status: 'fail'` entry from the most recently recorded
+  `gate_results` anywhere in `state.tasks` (no live test result is in scope at this call site) and
+  validate it against `planning/harness.json`'s check names — a match is stored verbatim, a
+  non-match stores `check_id: null` with the raw candidate in `check_id_raw`. There is no hardcoded
+  `"terminal-reconcile"` literal — that string was never a real `planning/harness.json` check name
+  and would only ever have resolved to `null` under this rule anyway.
 - Report to the user:
   - Which tasks passed / bailed, and the final branch (plus the worktree path, under `--worktree`).
   - **On bail**: point the user at `<stateFile>` for the per-task detail, tell them to fix the

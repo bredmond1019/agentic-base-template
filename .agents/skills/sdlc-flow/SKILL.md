@@ -44,8 +44,13 @@ description: >
      straight to wrap-up (draft PR) — it does NOT burn three attempts.
 
    End-review: ONE review over the integrated tree, fed state.json as the index but
-   reading `git diff <prBase>..HEAD` + tasks.md criteria directly + re-running the
-   FULL gating suite (authoritative). PASS → docs; FAIL/PARTIAL → triage findings:
+   reading `git diff <prBase>..HEAD` + tasks.md criteria directly + the AGGREGATED
+   gate_results already recorded by every task's own fast-test stage (latest entry
+   per check_id wins) instead of re-running the full gating suite from scratch — a
+   check with no recorded entry is run directly, and on the FINAL review pass every
+   still-failing check is re-run fresh as the authoritative last word before a bail.
+   PASS → docs; FAIL/PARTIAL → a `gapKind` of 'design'/'operator' stops the loop
+   immediately (no further review/suite pass); otherwise triage findings:
    small/localized → bounded fix→test→review (≤2, Opus last); broad → bail.
 
  COMMIT STRATEGY (crash recovery — everything lands on the branch)
@@ -186,7 +191,12 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
    - For each task in the specified range (or all if not specified):
      - Run `/update-task` to flip status to `In progress` in the worklog and local files.
      - Implement the task following instructions.
-     - Run fast validation tests.
+     - Run fast validation tests. **Record `gate_results`** — one entry per check actually run
+       this turn (same set, same order as the checklist): `{check_id, status: 'pass'|'fail',
+       failing_ids}`, deriving `failing_ids` from structured runner output (nextest JUnit XML,
+       pytest `--junitxml`/`-rf`) where available, else a single-element array holding `check_id`.
+       This is what drives triage-only-on-red (triage is called ONLY from the failure branch — a
+       green task spawns no triage agent) and the end-review stage's aggregated read below.
      - **Also re-stamp this lane's claim+lease heartbeat now** (best-effort, NEVER gating —
        `BT.ticket.lane-heartbeat-goes-stale-mid-block`, task 4; mirrors `/sdlc-task`'s identical
        per-task step, see `.agents/skills/sdlc-task/SKILL.md`): from the repo root, run
@@ -203,9 +213,17 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
        (D46), run the same guard against `git -C <vault path>` before that commit too.
      - **If this task's fix loop ended in a triage MAJOR or an exhausted-attempts bail
        (BT.ticket.bails-must-be-append-only):** append one fully-populated entry to the committed
-       `state.json`'s top-level `bails` array — `{occurred_at, task_id, check_id, failing_artifact,
-       ownership, bail_class, reason, resolution: null}` — never overwrite or truncate the array; a
-       second bail in the same run appends a second entry, the first stays byte-identical.
+       `state.json`'s top-level `bails` array — `{occurred_at, task_id, check_id, check_id_raw,
+       failing_artifact, ownership, bail_class, reason, resolution: null}` — never overwrite or
+       truncate the array; a second bail in the same run appends a second entry, the first stays
+       byte-identical. **`check_id`** is resolved, not copied verbatim: take the last `status:
+       'fail'` entry from this task's own recorded `gate_results` (falling back to this task's
+       last `issues[]` entry only when no `gate_results` entry exists at all), then validate that
+       candidate against `planning/harness.json`'s check names — a match is stored verbatim; a
+       non-match stores `check_id: null` with the raw candidate preserved in `check_id_raw`, never
+       silently dropped. The end-review bail site follows the identical rule but always candidates
+       the literal `'review'` (its own pipeline-stage name, never a real harness check), so it
+       always resolves to `check_id: null, check_id_raw: 'review'` by construction.
        `bail_reason` is still set too, as a plain mirror of the newest entry's `reason`. On
        `--resume`, read `state.json`'s prior `bails` array and carry it forward verbatim before
        appending anything new — re-initialising it instead of merging silently deletes a bail that
@@ -214,9 +232,14 @@ When the user asks you to run `/sdlc-flow <spec-slug> [range]`, do NOT run `sdlc
        the commit). A `WORK_ASSERTION_ABORT` means the commit did not actually contain the task's
        declared work — treat the task as failed and fix/re-commit before proceeding.
 4. **Consolidated End-Review**:
-   - Once all tasks are complete, run the full validation/test suite.
+   - Once all tasks are complete, read the aggregated `gate_results` already recorded by every
+     task's own fast-test stage (latest entry per `check_id` wins) instead of re-running the full
+     suite from scratch; run directly any check with no recorded entry, and on the FINAL review
+     pass re-run every still-failing check fresh as the authoritative last word.
    - Run the acceptance criteria check.
-   - If PASS -> proceed to docs. If FAIL/PARTIAL -> run targeted fix loop.
+   - If PASS -> proceed to docs. If FAIL/PARTIAL: a `gapKind` of 'design' or 'operator' stops the
+     loop immediately (no further review/suite pass); otherwise run a targeted fix loop
+     (capped at 2 review passes total, Opus on the last).
 5. **Docs & Wrap-up**:
    - If PASS, run `/update-docs --patch` to update documentation, running the COMMIT-SAFETY GUARD
      `&&`-joined before the docs commit (and its vault counterpart, if any patched/created doc lives

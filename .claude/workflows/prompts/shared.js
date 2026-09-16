@@ -898,11 +898,21 @@ ${renderEmojiGate({ runRoot, baseSha: diffBase, stateFile, recordedCommitsJson }
   commit on a shared branch, does not.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
+
+ALSO populate \`gate_results\` — one entry per check you ran above (same set, same order), each
+\`{check_id, status, failing_ids}\`: check_id is the check's own name exactly as it appears in its
+"CHECK N — <name>" header (or the harness.json check name, when the checklist is driven by one);
+status is \`"pass"\` or \`"fail"\`; failing_ids is an array of the specific ids that failed FOR THAT
+CHECK — derive it from the check's own structured runner output where one exists (nextest's JUnit
+XML, pytest's \`--junitxml\` or \`-rf\` flag output: use the individual failing test/case ids), and
+when the check produces no such structured per-item output, fall back to a single-element array
+holding the check's own check_id as the one failing id. A passing check still gets an entry (status
+\`"pass"\`, failing_ids \`[]\`).
 ${heartbeatRecipe || ''}
 ${onPassRecipe}
 Return via StructuredOutput: allPassed (true only if EVERY gating check passed and the emoji gate is
 clean), passCount, failCount, failedTests (names), failBlob (compact: failing check names + the tail of
-their output; empty when allPassed)${stateWrittenNote}.`
+their output; empty when allPassed), gate_results (the per-check array described above)${stateWrittenNote}.`
 }
 // <</shared:renderTestPrompt>>
 

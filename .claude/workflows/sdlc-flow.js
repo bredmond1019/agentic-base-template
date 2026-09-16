@@ -904,11 +904,21 @@ ${renderEmojiGate({ runRoot, baseSha: diffBase, stateFile, recordedCommitsJson }
   commit on a shared branch, does not.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
+
+ALSO populate \`gate_results\` — one entry per check you ran above (same set, same order), each
+\`{check_id, status, failing_ids}\`: check_id is the check's own name exactly as it appears in its
+"CHECK N — <name>" header (or the harness.json check name, when the checklist is driven by one);
+status is \`"pass"\` or \`"fail"\`; failing_ids is an array of the specific ids that failed FOR THAT
+CHECK — derive it from the check's own structured runner output where one exists (nextest's JUnit
+XML, pytest's \`--junitxml\` or \`-rf\` flag output: use the individual failing test/case ids), and
+when the check produces no such structured per-item output, fall back to a single-element array
+holding the check's own check_id as the one failing id. A passing check still gets an entry (status
+\`"pass"\`, failing_ids \`[]\`).
 ${heartbeatRecipe || ''}
 ${onPassRecipe}
 Return via StructuredOutput: allPassed (true only if EVERY gating check passed and the emoji gate is
 clean), passCount, failCount, failedTests (names), failBlob (compact: failing check names + the tail of
-their output; empty when allPassed)${stateWrittenNote}.`
+their output; empty when allPassed), gate_results (the per-check array described above)${stateWrittenNote}.`
 }
 // <</shared:renderTestPrompt>>
 
@@ -1147,7 +1157,10 @@ let worklogFile   = `${blockDir}/sdlc/worklog.md`            // COMMITTED human-
 const baseBranchName = `${blockId}-flow`                        // one shared branch for the whole spec
 
 const MAX_TASK_ATTEMPTS   = 3   // implement→test→fix attempts per task before bail
-const MAX_REVIEW_ATTEMPTS = 3   // consolidated-review fix passes before bail
+// BT.ticket.gate-results-and-failure-attribution (task 3): capped at 2 — review now reads the
+// aggregated per-task gate_results instead of re-running the full gating suite on every pass (the
+// 2026-09-13 token analysis measured the suite re-running 4.0 times per agent under the old cap).
+const MAX_REVIEW_ATTEMPTS = 2   // consolidated-review fix passes before bail
 
 log(`Target: ${blockId} (${selectedTasks ? [...selectedTasks].sort((a, b) => a - b).join(', ') : 'all tasks'})`)
 log(`Spec: ${blockId} (resolving block record first, tasks.md fallback) | branch: ${baseBranchName} | mode: ${useWorktree ? 'worktree' : 'branch'}${resumeMode ? ' | RESUME' : ''}`)
@@ -1306,6 +1319,23 @@ const TEST_SCHEMA = {
     failedTests: { type: 'array', items: { type: 'string' } },
     failBlob:    { type: 'string', description: 'Compact failure output (failing check names + the tail of their output) for triage; empty when allPassed' },
     stateWritten: { type: 'boolean', description: 'true if the agent ALSO persisted sdlc-flow-state.json + worklog.md this same turn (the per-task pass-path state-write fold); false/omitted when it did not (no onPass instructions given, a check failed, or the write was not attempted/completed)' },
+    // BT.ticket.gate-results-and-failure-attribution (task 1): per-check structured output, one
+    // entry per gating check run this turn, driving triage-only-on-red and review's gate_results-
+    // based pass loop instead of a suite re-run.
+    gate_results: {
+      type: 'array',
+      description: 'One entry per check run this turn, from the rendered checklist',
+      items: {
+        type: 'object',
+        required: ['check_id', 'status', 'failing_ids'],
+        properties: {
+          check_id:    { type: 'string', description: "The check's own name, as it appeared in its CHECK N header (or the harness.json check name)" },
+          status:      { type: 'string', enum: ['pass', 'fail'] },
+          failing_ids: { type: 'array', items: { type: 'string' }, description: 'Specific failing ids from structured runner output (nextest JUnit, pytest --junitxml/-rf) where available; otherwise a single-element array holding check_id' }
+        }
+      }
+    },
+    check_id_raw: { type: 'string', description: 'Raw agent-reported check identifier when check_id validation could not match it to a real planning/harness.json check name' },
     notes:       { type: 'string' }
   }
 }
@@ -1318,6 +1348,12 @@ const REVIEW_SCHEMA = {
     failureReasons: { type: 'array', items: { type: 'string' } },
     unmetCriteria:  { type: 'array', items: { type: 'string' } },
     localized:      { type: 'boolean', description: 'true if FAIL/PARTIAL failures are small/localized (a bounded fix can address them); false if broad/structural (needs a human re-plan)' },
+    // BT.ticket.gate-results-and-failure-attribution (task 3): only meaningful when verdict is
+    // FAIL/PARTIAL. 'fixable' (the default when omitted) means a bounded fix pass can close the
+    // gap; 'design' or 'operator' means the remaining gap is a decision only a human can make (a
+    // design tradeoff, or a credential/judgement call), not a defect — the run stops IMMEDIATELY
+    // on either value, without looping back for a further review/suite pass.
+    gapKind:        { type: 'string', enum: ['fixable', 'design', 'operator'], description: "Only meaningful when verdict is FAIL/PARTIAL: 'fixable' (default) if a bounded fix can close the gap; 'design' or 'operator' if the gap is a human decision, not a defect — stops the review loop immediately." },
     reportFile:     { type: 'string' },
     notes:          { type: 'string' }
   }
@@ -2753,10 +2789,13 @@ STEP W1 — run this as ONE Bash call, exactly as written. Do not split it into 
   when there is none. If that file exists and has a "started_at" value, REUSE it verbatim for
   started_at below. Otherwise started_at = NOW.
 
-STEP W2 — write ${onPass.stateFile} with EXACTLY this JSON, but inserting two extra top-level keys
-  "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch". Valid
-  JSON only (double quotes, no trailing commas, no markdown fences). The object to write (verbatim
-  except for adding those two timestamp keys):
+STEP W2 — write ${onPass.stateFile} with EXACTLY this JSON, but: (a) inserting two extra top-level
+  keys "started_at" (preserved or NOW, per STEP W1) and "updated_at" (NOW) right after "branch",
+  and (b) replacing the quoted placeholder value "__GATE_RESULTS__" (this task's own "gate_results"
+  field under "tasks") with the JSON ARRAY you populated as your own gate_results field in this
+  StructuredOutput, inserted verbatim as a JSON array (never re-quoted as a string) — or \`[]\` if
+  you populated none. Valid JSON only (double quotes, no trailing commas, no markdown fences). The
+  object to write (verbatim except for those substitutions):
 ${onPass.stateJson}
 
 STEP W3 — append to ${onPass.worklogFile}. If the file does not exist, first write a header line
@@ -2872,6 +2911,59 @@ STEP W4 — use the Write tool for both files. Do NOT run \`git add\`, \`git com
 `
 }
 
+// BT.ticket.gate-results-and-failure-attribution (task 3, byte-comparable to sdlc-task.js task 2):
+// single shared lookup so every bail-fold site in THIS engine agrees on how a candidate check_id
+// resolves against planning/harness.json's real check names, rather than hand-rolled comparisons
+// drifting apart. A candidate that matches a real check name is used verbatim; anything else
+// (unmatched, or absent entirely) resolves to check_id: null with the raw candidate preserved in
+// check_id_raw (never silently dropped).
+function resolveCheckId(candidate, cfg) {
+  const names = new Set((cfg?.validation?.checks || []).map(c => c.name).filter(Boolean))
+  if (candidate && names.has(candidate)) return { check_id: candidate, check_id_raw: null }
+  return { check_id: null, check_id_raw: candidate || null }
+}
+
+// Most-recent-first: the last 'fail' entry in a gate_results array is the best-effort attribution
+// candidate (mirrors the existing t.issues[t.issues.length - 1] "most recent" convention this
+// replaces at the per-task bail site).
+function lastFailingCheckId(gateResults) {
+  const fails = (gateResults || []).filter(g => g && g.status === 'fail' && g.check_id)
+  return fails.length ? fails[fails.length - 1].check_id : null
+}
+
+// Folds every task's own recorded gate_results into one per-check_id map, latest task wins — the
+// authoritative source the review stage reads INSTEAD of re-running the full gating suite on every
+// pass (BT.ticket.gate-results-and-failure-attribution, task 3's `why`: review re-ran the suite 4.0
+// times per agent in the 2026-09-13 token analysis).
+function aggregateGateResults(tasksState) {
+  const nums = Object.keys(tasksState || {})
+    .filter(k => k !== '__pendingBails')
+    .map(Number)
+    .filter(n => Number.isFinite(n))
+    .sort((a, b) => a - b)
+  const byCheck = {}
+  for (const n of nums) {
+    const entry = tasksState[String(n)]
+    for (const g of (entry?.gate_results || [])) {
+      if (g && g.check_id) byCheck[g.check_id] = { status: g.status, failing_ids: g.failing_ids || [] }
+    }
+  }
+  return byCheck
+}
+
+// Renders the aggregated gate_results (one line per gates:true check) for the review prompt — a
+// check with no recorded entry must be run directly by the reviewer (never guessed).
+function renderAggregatedGateResults(tasksState, cfg) {
+  const agg = aggregateGateResults(tasksState)
+  const gating = gatingChecks(cfg)
+  if (!gating.length) return '  (no gates:true checks configured in planning/harness.json)'
+  return gating.map(c => {
+    const rec = agg[c.name]
+    if (!rec) return `  - ${c.name}: NO RECORDED ENTRY — run its own command directly (see planning/harness.json) before judging it.`
+    return `  - ${c.name}: ${rec.status}${rec.status === 'fail' ? ` (failing: ${(rec.failing_ids || []).join(', ') || c.name})` : ''}`
+  }).join('\n')
+}
+
 // Precompute the exact state.json + worklog.md content for the case where THIS triage call turns
 // out to be terminal (class=MAJOR, or — only at call sites that pass exhaustionFallback — this is
 // the final allowed attempt) — content that is fully known BEFORE the triage call is made, except
@@ -2891,14 +2983,22 @@ function buildBailPayload(taskNum, t, attempt, majorFallback, exhaustionFallback
   // not-mint-time-in-the-engine) — a JS-side clock call is illegal under the Workflow runtime
   // shim, so the writing agent substitutes NOW (already obtained via STEP W1's `date -u` call)
   // for this sentinel in the SAME turn it substitutes __BAIL_REASON__; see (c) in
-  // renderBailStateWriteRecipe's STEP W2 below. check_id best-effort from
-  // the task's own recorded issues (the harness check name already on `t`, never reimplemented);
-  // failing_artifact/ownership/bail_class stay null here — not yet derivable at this call site
-  // (see out_of_scope: checks-must-name-their-failing-artifact is separate work).
+  // renderBailStateWriteRecipe's STEP W2 below. check_id (task 3, resolveCheckId): the last 'fail'
+  // entry in `t.gate_results` (folded onto `t` by the caller alongside t.issues, from this
+  // attempt's testResult when one exists), validated against planning/harness.json's real check
+  // names — falls back to the task's own recorded issues (the old best-effort source) only when no
+  // gate_results entry exists at all (e.g. a non-test bail, such as NULL_RESULT). A candidate that
+  // does not match a real check name resolves to null with the raw value kept in check_id_raw,
+  // never silently dropped. failing_artifact/ownership/bail_class stay null here — not yet
+  // derivable at this call site (see out_of_scope: checks-must-name-their-failing-artifact is
+  // separate work).
+  const bailCheckIdCandidate = lastFailingCheckId(t.gate_results) || ((t.issues && t.issues.length) ? t.issues[t.issues.length - 1] : null)
+  const bailResolvedCheckId = resolveCheckId(bailCheckIdCandidate, harnessCfg)
   snapshot.bails = [...(snapshot.bails || []), {
     occurred_at: '__BAIL_OCCURRED_AT__',
     task_id: taskNum,
-    check_id: (t.issues && t.issues.length) ? t.issues[t.issues.length - 1] : null,
+    check_id: bailResolvedCheckId.check_id,
+    check_id_raw: bailResolvedCheckId.check_id_raw,
     failing_artifact: null,
     ownership: null,
     bail_class: null,
@@ -2941,7 +3041,12 @@ ${renderTriagePrompt({ engineName: '/sdlc-flow', context, attempt, maxAttempts, 
 // agent. Does NOT mutate the live `state`/`t` objects — this is a snapshot for the CANDIDATE outcome.
 function buildPassPayload(taskNum, t, attempt, validatedLabel) {
   const snapshot = JSON.parse(JSON.stringify(state))
-  snapshot.tasks[String(taskNum)] = { ...t, status: 'passed', validated: validatedLabel }
+  // BT.ticket.gate-results-and-failure-attribution (task 3, mirrors sdlc-task.js task 2): this
+  // snapshot is built BEFORE the test call runs (see the caller), so the real gate_results array
+  // isn't known yet — carry a sentinel the SAME test agent (which computes both the checks AND,
+  // per onPassRecipe, this write) substitutes with its own gate_results field in the same turn.
+  // See renderOnPassStateWriteRecipe's STEP W2.
+  snapshot.tasks[String(taskNum)] = { ...t, status: 'passed', validated: validatedLabel, gate_results: '__GATE_RESULTS__' }
   snapshot.tokens = buildTokensBlock()
   const worklogEntry = [
     `## Task ${taskNum} — PASSED (${attempt} attempt${attempt === 1 ? '' : 's'})`,
@@ -3114,12 +3219,19 @@ ${renderImplementPrompt({ roleIntro, runRootLabel: runRootLabel, runRoot: worktr
     const passValidatedLabel = hasOverride ? VALIDATED_LABEL.ranNoneOfHarnessList : VALIDATED_LABEL.ranHarnessList
     const passPayload = buildPassPayload(taskNum, t, attempt, passValidatedLabel)
     const testResult = await runTests(`test-${taskNum}-${attempt}`, { gatingOnly: testDepth === 'fast', taskCommands: taskCommandsFor(taskNum), expectRedSet: expectRedFor(taskNum), onPass: passPayload, engineFiles: engineFilesFor(taskNum) })
+    // BT.ticket.gate-results-and-failure-attribution (task 3): fold into the IN-MEMORY task entry
+    // regardless of outcome — mirrors t.issues/t.fixes below. This is what lets a later dedicated
+    // writeFlowState() call and the review stage (which reads state.tasks after every task, via
+    // aggregateGateResults, never off disk) see this attempt's gate_results even when the folded
+    // onPass disk write already happened.
+    t.gate_results = (testResult && testResult.gate_results) || t.gate_results || []
     if (testResult && testResult.allPassed) {
       t.validated = passValidatedLabel
       // D63 — a task that ran ZERO harness.json gating checks must be VISIBLE in terminal output,
       // never only recorded in state. In this engine that is the ordinary override case (pure
-      // substitute), backstopped by the end review's unconditional full-suite re-run.
-      log(`Task ${taskNum}: validated → "${passValidatedLabel}".${passValidatedLabel === VALIDATED_LABEL.ranNoneOfHarnessList ? ' NOTE: this task ran ZERO planning/harness.json gates:true checks on its per-task tripwire; the end review will re-run the full gating suite over the integrated tree.' : ''}`)
+      // substitute), backstopped by the end review reading the aggregated gate_results across all
+      // tasks (task 3) — a check no task ever ran still shows up with NO RECORDED ENTRY there.
+      log(`Task ${taskNum}: validated → "${passValidatedLabel}".${passValidatedLabel === VALIDATED_LABEL.ranNoneOfHarnessList ? ' NOTE: this task ran ZERO planning/harness.json gates:true checks on its per-task tripwire; the end review reads the aggregated gate_results across all tasks and will run any check with no recorded entry directly.' : ''}`)
       taskPassed = true
       if (testResult.stateWritten) {
         // The folded write went straight to disk (no STATE_WRITE_SCHEMA result to read startedAt
@@ -3171,7 +3283,10 @@ ${renderImplementPrompt({ roleIntro, runRootLabel: runRootLabel, runRoot: worktr
   // resume merge below can recover this run's bail even on the rare path where the dedicated
   // `bails` read comes back empty; the merge deletes it the moment it is consumed, so it is
   // transient scaffolding, never load-bearing on its own.
-  if (bailed && !taskPassed) { state.status = 'blocked'; state.bail_reason = bailReason }; if (bailed && !taskPassed) { const bailEntry = { occurred_at: '__BAIL_OCCURRED_AT__', task_id: state.current_task, check_id: null, failing_artifact: null, ownership: null, bail_class: null, reason: bailReason, resolution: null }; state.bails = [...state.bails, bailEntry]; state.tasks.__pendingBails = [...(state.tasks.__pendingBails || []), bailEntry] }
+  // BT.ticket.gate-results-and-failure-attribution (task 3): check_id resolved from this task's
+  // own gate_results (folded onto `t` above) via the shared resolveCheckId/lastFailingCheckId
+  // lookup, falling back to t.issues only when no gate_results entry exists at all.
+  if (bailed && !taskPassed) { state.status = 'blocked'; state.bail_reason = bailReason }; if (bailed && !taskPassed) { const terminalCheckIdCandidate = lastFailingCheckId(t.gate_results) || ((t.issues && t.issues.length) ? t.issues[t.issues.length - 1] : null); const terminalResolvedCheckId = resolveCheckId(terminalCheckIdCandidate, harnessCfg); const bailEntry = { occurred_at: '__BAIL_OCCURRED_AT__', task_id: state.current_task, check_id: terminalResolvedCheckId.check_id, check_id_raw: terminalResolvedCheckId.check_id_raw, failing_artifact: null, ownership: null, bail_class: null, reason: bailReason, resolution: null }; state.bails = [...state.bails, bailEntry]; state.tasks.__pendingBails = [...(state.tasks.__pendingBails || []), bailEntry] }
   const worklogEntry = [
     `## Task ${taskNum} — ${t.status.toUpperCase()} (${t.attempts} attempt${t.attempts === 1 ? '' : 's'})`,
     t.summary ? `What: ${t.summary}` : '',
@@ -3239,10 +3354,18 @@ but it does NOT replace verifying the criteria against the code:
    Run: cd ${worktreePath} && ${GIT} diff --stat ${prBase}..HEAD
    Run: cd ${worktreePath} && ${GIT} diff ${prBase}..HEAD        (read the real changes; spot-check key files)
 
-3. Run the FRESH AUTHORITATIVE checks (this determines the verdict — NOT the per-task tripwire):
-   Re-run the FULL gating suite below in order. A fresh failure of any GATING check ALWAYS prevents PASS.
+3. Determine gating-check status from the per-task gate_results ALREADY RECORDED above (every task's
+   own test stage populated this) — do NOT re-run the full gating suite from scratch. Aggregated
+   across every task run this pass (latest recorded entry per check wins):
 
-${renderCheckList(harnessCfg, { gatingOnly: false, cwd: worktreePath, engineFiles: [...new Set(taskList.flatMap(n => engineFilesFor(n)))] })}
+${renderAggregatedGateResults(state.tasks, harnessCfg)}
+
+   Any check above showing "NO RECORDED ENTRY" must be run directly RIGHT NOW, exactly as its own
+   command states in planning/harness.json — never guessed. A recorded "fail" is authoritative as-is
+   (do not re-run it to double-check) UNLESS this is the FINAL review pass (attempt ${reviewAttempts}
+   of ${MAX_REVIEW_ATTEMPTS}), in which case re-run every still-failing check fresh as the last
+   authoritative word before a bail. A fresh or recorded failure of any GATING check ALWAYS prevents
+   PASS.
 
    Plus the universal emoji gate, DIFF-SCOPED to ${prBase}..HEAD (only lines ADDED across the
    branch are judged, never a whole changed file — same script as the per-task gate above, same
@@ -3256,15 +3379,23 @@ ${renderCheckList(harnessCfg, { gatingOnly: false, cwd: worktreePath, engineFile
    yourself — report them as FAIL for the fix loop to resolve.
 
 5. Verdict:
-   PASS    — ALL in-scope criteria MET AND every fresh gating check passes.
+   PASS    — ALL in-scope criteria MET AND every gating check (recorded or freshly run per step 3) passes.
    PARTIAL — some criteria PARTIAL, or gating passes but some criteria not fully met.
-   FAIL    — any criterion NOT_MET, or any fresh gating check fails.
+   FAIL    — any criterion NOT_MET, or any gating check fails.
 
 6. localized — set true if the FAIL/PARTIAL issues are small and localized (a bounded fix can close
    them: a few files, clear cause); false if broad/structural (cross-cutting, ambiguous, or needs a
    human re-plan). PASS → localized is irrelevant (set true).
 
-Return via StructuredOutput: verdict, failureReasons, unmetCriteria, localized, reportFile="", notes.
+7. gapKind — ONLY when verdict is FAIL/PARTIAL: classify the remaining gap. 'fixable' (the default —
+   leave the field omitted or set it explicitly) if a bounded fix pass can close it. 'design' if
+   closing it requires a design tradeoff only a human should make (not a defect — the spec is
+   ambiguous or the "right" fix has more than one reasonable shape). 'operator' if it requires a
+   credential, a live decision, or something only the human operator holds. Either 'design' or
+   'operator' stops this review loop IMMEDIATELY, with no further review/fix pass — do not set one
+   of these to avoid a fix pass; only set it when the gap is genuinely not a fixable defect.
+
+Return via StructuredOutput: verdict, failureReasons, unmetCriteria, localized, gapKind, reportFile="", notes.
 `, withModel({ label: `review-${reviewAttempts}`, schema: REVIEW_SCHEMA, phase: 'Review' }, reviewModel))
 
     lastReview = reviewResult || { verdict: 'FAIL', failureReasons: ['Review agent returned null'], unmetCriteria: [], localized: false }
@@ -3274,8 +3405,35 @@ Return via StructuredOutput: verdict, failureReasons, unmetCriteria, localized, 
 
     if (lastReview.verdict === 'PASS') { finalVerdict = 'PASS'; break }
 
-    // FAIL/PARTIAL → triage the findings: localized → bounded fix loop; broad → bail.
     const findingsBlob = [...(lastReview.failureReasons || []), ...(lastReview.unmetCriteria || [])].join('\n') || '(no detail)'
+
+    // BT.ticket.gate-results-and-failure-attribution (task 3): the reviewer's OWN verdict schema
+    // already classified the gap — a 'design' or 'operator' gapKind stops the loop IMMEDIATELY,
+    // with no triage call and no further review pass (i.e. no further suite run), since the gap is
+    // by definition not something a bounded fix pass can close.
+    const humanGap = lastReview.gapKind === 'design' || lastReview.gapKind === 'operator'
+    // check_id (task 3): 'review' names an sdlc-flow-only pipeline stage, never a
+    // planning/harness.json check name, and never will be — it is brought under the SAME
+    // resolveCheckId rule as every other bail-fold site (rather than an ad-hoc exemption) so both
+    // engines agree on how check_id is derived. It will always resolve to null with
+    // check_id_raw: 'review', by design.
+    const reviewResolvedCheckId = resolveCheckId('review', harnessCfg)
+
+    if (humanGap) {
+      bailed = true
+      bailReason = `Review ${lastReview.verdict} classified as a '${lastReview.gapKind}' gap, not a fixable defect: ${findingsBlob.slice(0, 300)}`
+      finalVerdict = lastReview.verdict
+      state.status = 'blocked'
+      // APPEND-ONLY (BT.ticket.bails-must-be-append-only) — no single task to attribute a review
+      // bail to (it fires after every task's own tripwire already passed), so task_id stays null.
+      state.bails = [...state.bails, { occurred_at: '__BAIL_OCCURRED_AT__', task_id: null, check_id: reviewResolvedCheckId.check_id, check_id_raw: reviewResolvedCheckId.check_id_raw, failing_artifact: null, ownership: null, bail_class: lastReview.gapKind, reason: bailReason, resolution: null }]
+      state.bail_reason = bailReason
+      log(`Review → bail (${lastReview.gapKind} gap — no further review/suite pass). ${bailReason}`)
+      await writeFlowState(`review ${lastReview.verdict} — bail (${lastReview.gapKind})`, `## Review — ${lastReview.verdict} (bail: ${lastReview.gapKind})\n${findingsBlob}`, { cwd: worktreePath })
+      break
+    }
+
+    // FAIL/PARTIAL, fixable → triage the findings: localized → bounded fix loop; broad → bail.
     const tr = await triage(`consolidated review`, reviewAttempts, MAX_REVIEW_ATTEMPTS, findingsBlob, null)
     const broad = lastReview.localized === false || (tr && tr.class === 'MAJOR')
     if (broad || reviewAttempts >= MAX_REVIEW_ATTEMPTS) {
@@ -3285,7 +3443,7 @@ Return via StructuredOutput: verdict, failureReasons, unmetCriteria, localized, 
       state.status = 'blocked'
       // APPEND-ONLY (BT.ticket.bails-must-be-append-only) — no single task to attribute a review
       // bail to (it fires after every task's own tripwire already passed), so task_id stays null.
-      state.bails = [...state.bails, { occurred_at: '__BAIL_OCCURRED_AT__', task_id: null, check_id: 'review', failing_artifact: null, ownership: null, bail_class: (tr && typeof tr.class !== 'undefined') ? tr.class : null, reason: bailReason, resolution: null }]
+      state.bails = [...state.bails, { occurred_at: '__BAIL_OCCURRED_AT__', task_id: null, check_id: reviewResolvedCheckId.check_id, check_id_raw: reviewResolvedCheckId.check_id_raw, failing_artifact: null, ownership: null, bail_class: (tr && typeof tr.class !== 'undefined') ? tr.class : null, reason: bailReason, resolution: null }]
       state.bail_reason = bailReason
       log(`Review → bail. ${bailReason}`)
       await writeFlowState(`review ${lastReview.verdict} — bail`, `## Review — ${lastReview.verdict} (bail)\n${findingsBlob}`, { cwd: worktreePath })

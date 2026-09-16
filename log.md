@@ -6,6 +6,38 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-16
 
 ---
+## 2026-09-16 — BT.ticket.gate-results-and-failure-attribution: done (5 of 5 tasks, PASS)
+
+Ran `/sdlc-flow` tasks 1-5 to PASS. Both engines now record per-task `gate_results`
+(check_id/status/failing_ids/sha) via an extended `TEST_SCHEMA` and a shared `renderTestPrompt`
+(task 1). `sdlc-task.js` folds `gate_results` into every per-task state write and resolves
+`check_id` at all three bail-fold sites (per-task terminal, reconcile, acceptance-criteria) through
+one shared `resolveCheckId`/`mostRecentRecordedGateResults` lookup against `planning/harness.json`
+check names, storing unmatched text in a new `check_id_raw` field (task 2). `sdlc-flow.js` gets the
+same fold/resolution, brings its previously-hardcoded `check_id: 'review'` bail site under the same
+rule, and its end-of-flow review now reads aggregated per-task `gate_results` instead of re-running
+the full gating suite — capped at 2 passes, stopping immediately on a reviewer-classified
+`design`/`operator` `gapKind` via a new `REVIEW_SCHEMA` field (task 3). `scripts/test_gate_results.py`
+and `scripts/test_bail_check_id.py` cover both schema shapes and real node-executed `resolveCheckId`
+fixtures, both negative-control verified (task 4). Docs sweep: `harness.schema.json` gained a new
+`$defs.gateResult` authoring aid, both `docs/workflows/*.md` pipeline tables and both `.agents/skills/
+{sdlc-task,sdlc-flow}/SKILL.md` guides describe the new recording/resolution/2-pass-review behavior,
+and the drifted `check_skill_sync.py`/`check_engine_docs_sync.py` anchors (line-shifted by tasks 1-3,
+content unchanged) were re-picked and both manifests re-stamped (task 5). Notable decision: task 5
+did not attempt to fix 7 pre-existing `gates:true` harness failures confirmed (via `git stash`)
+already red before any task-5 change and outside task 5's declared `files[]`. Review pass 1 landed
+one fix commit; verdict PASS. Next: `BT.ticket.failure-attribution-and-gate-cache` (the split-out
+ownership/cache/attribution half) and the operator gate `OP.operator-sync-harness-gate-results`.
+
+```
+9caee9f fix: review pass 1 for BT.ticket.gate-results-and-failure-attribution
+7a1ff90 feat: implement BT.ticket.gate-results-and-failure-attribution-task5
+2ff988b feat: implement BT.ticket.gate-results-and-failure-attribution-task4
+fa96c7b feat: implement BT.ticket.gate-results-and-failure-attribution-task3
+59d045e feat: implement BT.ticket.gate-results-and-failure-attribution-task2
+e398b68 feat: implement BT.ticket.gate-results-and-failure-attribution-task1
+```
+
 ## 2026-09-16 — BT.ticket.prepare-run-replaces-setup-agents: closed — tasks 7-8 finished inline, PR #13 + #14
 
 Closed out the `runs-that-finish-cheaply` engines lane's `BT.ticket.prepare-run-replaces-setup-agents`
