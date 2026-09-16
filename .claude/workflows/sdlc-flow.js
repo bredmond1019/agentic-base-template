@@ -3245,8 +3245,32 @@ ${renderImplementPrompt({ roleIntro, runRootLabel: runRootLabel, runRoot: worktr
     }
 
     // 5. Failure → triage.
-    const failBlob = (testResult && testResult.failBlob) || `Test stage failed or returned null (failCount=${testResult?.failCount ?? '?'}, failed=${(testResult?.failedTests || []).join(', ')}).`
+    let failBlob = (testResult && testResult.failBlob) || `Test stage failed or returned null (failCount=${testResult?.failCount ?? '?'}, failed=${(testResult?.failedTests || []).join(', ')}).`
     t.issues = [...(t.issues || []), ...((testResult?.failedTests) || [])]
+
+    // BT.ticket.failure-attribution-and-gate-cache (task 3): attribute this failure BEFORE burning
+    // a fix attempt or a bail on it. Only meaningful when exactly ONE check is red (a mixed-failure
+    // attempt falls straight through to the unchanged triage flow below, the safe default) and a
+    // real check_id resolved off THIS attempt's own gate_results.
+    const failingCheckIds = ((testResult && testResult.gate_results) || []).filter(g => g && g.status === 'fail' && g.check_id).map(g => g.check_id)
+    let attribution = null
+    if (failingCheckIds.length === 1) {
+      attribution = await attributionLookback({ checkId: failingCheckIds[0], state, taskNum, runRoot: worktreePath, baseSha, harnessCfg, GIT })
+      if (attribution) {
+        t.attribution = attribution
+        log(`Task ${taskNum}: attribution → ownership=${attribution.ownership}${attribution.failure_class ? `, failure_class=${attribution.failure_class}` : ''} for check ${failingCheckIds[0]}. ${attribution.reason}`)
+      }
+    }
+    if (attribution && attribution.ownership === 'foreign') {
+      log(`Task ${taskNum}: sole failing check "${failingCheckIds[0]}" is foreign (already red at base_sha) — carried, no attempt burned, no bail; treating this task's gating as clean.`)
+      t.validated = passValidatedLabel
+      taskPassed = true
+      break
+    }
+    if (attribution && attribution.inSpecDebt) {
+      failBlob += `\n\nATTRIBUTION (BT.ticket.failure-attribution-and-gate-cache): check "${failingCheckIds[0]}" is IN-SPEC DEBT -- ${attribution.reason} Your writable set for the next fix pass is WIDENED: in addition to this task's own files[], you may also edit the failing artifact(s) ${JSON.stringify(attribution.writableSet)}, since this debt was declared by an earlier task in this spec, not introduced by you.`
+    }
+
     // This call site DOES have an attempt-exhaustion bail path (below), with its own fallback text
     // that ignores the triage agent's own bailReason/reason entirely — pass both fallbacks through so
     // the folded write mirrors whichever terminal path actually fires, exactly.
@@ -4283,3 +4307,181 @@ above, which is why it is suffixed \` || true\`):
 `
 }
 // <</shared:renderLaneHeartbeatRecipe>>
+
+// <<shared:buildTaskGateHistory>>
+// BT.ticket.failure-attribution-and-gate-cache, task 3: a PURE helper -- no agent call, no I/O --
+// that reads this run's own `state.tasks` (already in memory; every task's gate_results is folded
+// onto it right after its own test stage, see the `t.gate_results = ...` fold at each engine's
+// per-task test-failure call site) into the ordered history decideAttribution() needs: one entry
+// per EARLIER task (task_id < beforeTaskNum) that actually recorded a gate_results array, oldest
+// first. A task with no recorded gate_results (never reached its test stage this run, e.g. a
+// resumed run's still-pending task) is simply absent from the result -- not a zero-length entry --
+// so decideAttribution's lookback naturally skips it.
+function buildTaskGateHistory(stateTasks, beforeTaskNum) {
+  return Object.keys(stateTasks || {})
+    .filter(k => k !== '__pendingBails')
+    .map(Number)
+    .filter(n => Number.isFinite(n) && n < beforeTaskNum)
+    .sort((a, b) => a - b)
+    .map(n => ({ taskId: n, gateResults: (stateTasks[String(n)] || {}).gate_results || [] }))
+    .filter(entry => entry.gateResults.length > 0)
+}
+// <</shared:buildTaskGateHistory>>
+
+// <<shared:decideAttribution>>
+// BT.ticket.failure-attribution-and-gate-cache, task 3: the attribution decision itself -- PURE,
+// deterministic, and callable over already-recorded inputs with NO agent call and NO engine launch
+// (task 6 replays fixtures through this exact function). Verdict vocabulary is
+// .claude/workflows/sdlc-state-vocab.json's `ownership` (self|foreign) and `failure_class`
+// (fixable|escalate) -- never a third spelling.
+//
+// Decision order (the block record's own `what`, reproduced here so the two live side by side):
+//   1. Look back through THIS RUN's own recorded gate_results (`taskGateHistory`, most-recent-first)
+//      for an earlier task that already ran this same check_id:
+//        - that task recorded it PASS  -> the breakage was introduced strictly after that task's
+//          commit -> ownership=self, failure_class=fixable (today's ordinary fix loop, UNCHANGED --
+//          this is the regression control, including the plain "green at N-1, red at N" case).
+//        - that task recorded it FAIL  -> it was ALREADY red at that earlier task and never fixed
+//          -> in-spec debt: failure_class=fixable, ownership=self (declared by that earlier task,
+//          not introduced by the current one), writable set widened to the failing artifact plus
+//          the current task's own files[]. Carries forward (failure_class=escalate) if it reaches
+//          the task that declared it, or terminal reconcile, still unresolved -- that escalation is
+//          the CALLER's responsibility (it owns "which task is that" and "have we reached it"); this
+//          function only reports the debt and who declared it.
+//   2. No record in this run's own history at all (first time this check has been evaluated this
+//      run) -> consult the gate cache at base_sha (`cacheStatus`, resolved by the caller via
+//      attributionLookback() below -- a cache MISS re-runs ONLY this check id, never the suite):
+//        - red at base_sha  -> ownership=foreign, carried and recorded, NO attempt burned, no bail.
+//        - green at base_sha -> in-spec debt, same shape as above, but declaredByTask is unknown
+//          (the cache has no per-task resolution) -- the caller decides where it carries forward to.
+//   3. Nothing decides (no history record AND cacheStatus is null/unknown, e.g. the cache could not
+//      be consulted) -> returns null. The caller's existing, unchanged triage flow is the correct
+//      fallback for a null verdict -- this function never guesses.
+//
+// `currentTaskFiles` is caller-supplied (the current task's own tasks.json files[]) purely so the
+// returned writableSet is complete without a second call; this function does no file-system I/O of
+// its own to obtain it.
+function decideAttribution({ checkId, taskGateHistory, cacheStatus = null, currentTaskFiles = [] }) {
+  const history = [...(taskGateHistory || [])].sort((a, b) => b.taskId - a.taskId)
+  for (const entry of history) {
+    const found = (entry.gateResults || []).find(g => g && g.check_id === checkId)
+    if (!found) continue
+    if (found.status === 'pass') {
+      return {
+        ownership: 'self',
+        failure_class: 'fixable',
+        inSpecDebt: false,
+        declaredByTask: null,
+        introducedAfterTask: entry.taskId,
+        writableSet: [...currentTaskFiles],
+        reason: `check ${checkId} was green at task ${entry.taskId}'s own recorded gate_results -- introduced after that, ordinary fix loop (regression control).`,
+      }
+    }
+    const failingIds = Array.isArray(found.failing_ids) ? found.failing_ids : []
+    return {
+      ownership: 'self',
+      failure_class: 'fixable',
+      inSpecDebt: true,
+      declaredByTask: entry.taskId,
+      introducedAfterTask: null,
+      writableSet: [...new Set([...failingIds, ...currentTaskFiles])],
+      reason: `check ${checkId} was already red at task ${entry.taskId} in this run's own gate_results (never fixed) -- in-spec debt declared by task ${entry.taskId}, carries forward.`,
+    }
+  }
+  if (cacheStatus === 'fail') {
+    return {
+      ownership: 'foreign',
+      failure_class: null,
+      inSpecDebt: false,
+      declaredByTask: null,
+      introducedAfterTask: null,
+      writableSet: [],
+      reason: `check ${checkId} was already red at base_sha per the gate cache -- carried and recorded, no attempt burned, no bail.`,
+    }
+  }
+  if (cacheStatus === 'pass') {
+    return {
+      ownership: 'self',
+      failure_class: 'fixable',
+      inSpecDebt: true,
+      declaredByTask: null,
+      introducedAfterTask: null,
+      writableSet: [...currentTaskFiles],
+      reason: `check ${checkId} was green at base_sha per the gate cache but has no recorded pass in this run's own history -- introduced by an earlier task in this spec, never caught until now.`,
+    }
+  }
+  return null
+}
+// <</shared:decideAttribution>>
+
+// <<shared:ATTRIBUTION_CACHE_SCHEMA>>
+const ATTRIBUTION_CACHE_SCHEMA = {
+  type: 'object',
+  required: ['cacheStatus'],
+  properties: {
+    cacheStatus: { type: 'string', enum: ['pass', 'fail', 'unknown'], description: 'the check\'s status at base_sha per the gate cache -- "pass" or "fail" from a cache hit or a safe re-run, "unknown" only when neither was possible' },
+    notes: { type: 'string' }
+  }
+}
+// <</shared:ATTRIBUTION_CACHE_SCHEMA>>
+
+// <<shared:renderAttributionCacheLookup>>
+// The read-only gate-cache consult for decideAttribution()'s step 2 -- an agent turn because the
+// engine script itself has no filesystem/subprocess access (base-template CLAUDE.md's "stamp-
+// workflow-run-id" note: the same reason runPrepareRun() exists). A cache MISS re-runs ONLY this
+// one check id, and NEVER on this run's own branch/tree -- an isolated, throwaway `git worktree add
+// --detach` at base_sha, removed again immediately, so a concurrent sibling session sharing this
+// same working tree is never touched (this repo's own commit-in-this-fleet discipline).
+function renderAttributionCacheLookup({ runRoot, checkId, baseSha, repoSlug, checkCommand, GIT }) {
+  const repoArg = repoSlug || 'unknown-repo'
+  const checkIdJson = JSON.stringify(checkId)
+  return `You are the attribution-cache-lookup agent (BT.ticket.failure-attribution-and-gate-cache,
+task 3). Determine whether check ${checkIdJson} was ALREADY red at base_sha ${baseSha}, using the
+lazy cross-lane gate cache -- read-only by default, never touching this run's own branch or tree.
+
+Run exactly this ONE Bash call from ${runRoot}:
+  cd ${runRoot} && python3 .claude/workflows/bin/gate_cache.py lookup --repo ${repoArg} --base-sha ${baseSha} --check-ids ${checkIdJson}
+
+Parse its JSON stdout. If ${checkIdJson} appears under "hits", that recorded status ("pass"/"fail")
+IS the answer -- report it as cacheStatus directly, do NOT re-run anything.
+
+${checkCommand ? `If ${checkIdJson} appears under "misses" instead (a cache miss), re-run ONLY this
+one check id at base_sha -- never the whole suite, and NEVER against this run's own branch/tree. Use
+an isolated, throwaway git worktree so nothing here touches the shared branch:
+  cd ${runRoot} && WT=$(mktemp -d) && ${GIT} worktree add --detach "$WT" ${baseSha} >/dev/null 2>&1 && (cd "$WT" && ${checkCommand}); CHECK_EXIT=$?; ${GIT} worktree remove --force "$WT" >/dev/null 2>&1
+CHECK_EXIT 0 means the check PASSED at base_sha; non-zero means it FAILED. Then warm the cache with
+exactly what you found (a manual verb, never scheduled -- out_of_scope):
+  cd ${runRoot} && python3 .claude/workflows/bin/gate_cache.py warm --repo ${repoArg} --base-sha ${baseSha} --result "${checkId}=<pass or fail, from CHECK_EXIT>"
+Report the status you just determined as cacheStatus.` : `If ${checkIdJson} appears under "misses"
+instead, this run has no known command to safely re-run it against base_sha (it is not one of
+planning/harness.json's named checks) -- report cacheStatus "unknown" rather than guessing.`}
+
+Return via StructuredOutput: cacheStatus ("pass" | "fail" | "unknown" -- "unknown" only when neither
+a cache hit nor a safe re-run was possible), notes (what you actually observed, quoting the cache
+lookup's JSON or the re-run's exit code).`
+}
+// <</shared:renderAttributionCacheLookup>>
+
+// <<shared:attributionLookback>>
+// The full orchestration for one failing check_id: PURE history lookback first (no agent call --
+// decideAttribution() alone answers it whenever this run's own gate_results already saw this check
+// at an earlier task), falling back to ONE cheap gate-cache-lookup agent turn only when this run's
+// history has nothing to say. Returns decideAttribution()'s verdict object, or null when nothing
+// decides (the caller's existing, unchanged triage flow is the correct fallback for null).
+async function attributionLookback({ checkId, state, taskNum, runRoot, baseSha, harnessCfg, GIT, currentTaskFiles = [] }) {
+  const history = buildTaskGateHistory(state.tasks, taskNum)
+  const fromHistory = decideAttribution({ checkId, taskGateHistory: history, cacheStatus: null, currentTaskFiles })
+  if (fromHistory) return fromHistory
+  if (!baseSha) return null
+  const scopeFlagRaw = await renderScopeFlag()
+  const scopeMatch = scopeFlagRaw.match(/--scope\s+(\S+)/)
+  const repoSlug = scopeMatch ? scopeMatch[1] : null
+  const checkCfg = (harnessCfg?.validation?.checks || []).find(c => c.name === checkId)
+  const checkCommand = checkCfg ? (checkCfg.command || null) : null
+  const result = await tracedAgent(`
+${renderAttributionCacheLookup({ runRoot, checkId, baseSha, repoSlug, checkCommand, GIT })}
+`, { label: `attribution-cache:${checkId}`, schema: ATTRIBUTION_CACHE_SCHEMA, model: 'haiku' })
+  if (!result || result.cacheStatus === 'unknown') return null
+  return decideAttribution({ checkId, taskGateHistory: history, cacheStatus: result.cacheStatus, currentTaskFiles })
+}
+// <</shared:attributionLookback>>
