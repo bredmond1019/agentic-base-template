@@ -153,7 +153,7 @@ FLOW_BUILD_PASS_PAYLOAD_PATTERN = (
 TASK_HARNESS_AUGMENT_PATTERN = (
     r"if \(usingOverride\) \{\n"
     r"\s*const harnessPart = harnessGatingCheckCount > 0\n"
-    r"\s*\? renderCheckList\(harnessCfg, \{ gatingOnly: true, cwd: runDir, engineFiles: \[\] \}\)\n"
+    r"\s*\? renderCheckList\(harnessCfg, \{ gatingOnly: true, cwd: runDir, engineFiles: \[\], baseSha \}\)\n"
     r"\s*: ''\n"
 )
 TASK_ZERO_GATES_REPORTED_PATTERN = (
@@ -175,7 +175,7 @@ FLOW_OVERRIDE_REPLACES_PATTERN = (
     r"\s*renderTaskCheckList\(taskCommands, worktreePath, expectRedSet\),\n"
     r"\s*renderEngineParseChecks\(engineFiles, cd, taskCommands\.length \+ 1\),\n"
     r"\s*\]\.filter\(Boolean\)\.join\('\\n\\n'\)\n"
-    r"\s*: renderCheckList\(harnessCfg, \{ gatingOnly, cwd: worktreePath, engineFiles \}\)"
+    r"\s*: renderCheckList\(harnessCfg, \{ gatingOnly, cwd: worktreePath, engineFiles, baseSha \}\)"
 )
 
 # SUPERSEDED 2026-09-16 by BT.ticket.gate-results-and-failure-attribution (task 3): the end review
@@ -470,7 +470,10 @@ class CostCaseSurvivesTest(unittest.TestCase):
         # `testDepth`/`gatingOnly` flag -- if this ever reads the outer (possibly full-suite)
         # value instead, an overridden task could pay for the authoritative form per task, which
         # is exactly the cost this feature exists to avoid.
-        self.assertIn("renderCheckList(harnessCfg, { gatingOnly: true, cwd: runDir, engineFiles: [] })", block)
+        self.assertIn(
+            "renderCheckList(harnessCfg, { gatingOnly: true, cwd: runDir, engineFiles: [], baseSha })",
+            block,
+        )
 
     def test_flow_engine_override_still_fully_substitutes_not_augments(self):
         # Confirms /sdlc-flow's per-task override still costs only the task's own commands (never
@@ -506,7 +509,7 @@ class CostCaseSurvivesTest(unittest.TestCase):
         pre_fix_shape = (
             "const checklistBody = usingOverride\n"
             "    ? renderTaskCheckList(taskCommands, worktreePath, expectRedSet)\n"
-            "    : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath, engineFiles })"
+            "    : renderCheckList(harnessCfg, { gatingOnly, cwd: worktreePath, engineFiles, baseSha })"
         )
         with self.assertRaises(AssertionError):
             extract(pre_fix_shape, FLOW_OVERRIDE_REPLACES_PATTERN, "synthetic pre-D3 fixture")
@@ -526,11 +529,11 @@ class CostCaseSurvivesTest(unittest.TestCase):
         regressed_block = (
             "if (usingOverride) {\n"
             "    const harnessPart = harnessGatingCheckCount > 0\n"
-            "      ? renderCheckList(harnessCfg, { gatingOnly: false, cwd: runDir, engineFiles: [] })\n"
+            "      ? renderCheckList(harnessCfg, { gatingOnly: false, cwd: runDir, engineFiles: [], baseSha })\n"
             "      : ''\n"
         )
         self.assertNotIn(
-            "renderCheckList(harnessCfg, { gatingOnly: true, cwd: runDir, engineFiles: [] })",
+            "renderCheckList(harnessCfg, { gatingOnly: true, cwd: runDir, engineFiles: [], baseSha })",
             regressed_block,
         )
 
