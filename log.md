@@ -6,6 +6,51 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-16
 
 ---
+## 2026-09-16 — BT.ticket.failure-attribution-and-gate-cache: BLOCKED (9 of 9 tasks implemented, review FAIL)
+
+Ran `/sdlc-flow` tasks 1-9. Task 1 added `ownership`/`failure_class` verdict vocabularies to
+`sdlc-state-vocab.json`; task 2 added `.claude/workflows/bin/gate_cache.py` (lazy cross-lane cache
+keyed by repo/base_sha/lockfile hash, config-resolved location, fail-soft on corruption); task 3
+wired a pure `decideAttribution()` into both engines' shared prompt region to classify a red gate
+as foreign/pre-existing, in-spec debt, or an ordinary regression via a look-back over this run's own
+`gate_results` plus the gate cache; task 4 added a post-commit removed-literal scan routing
+out-of-scope hits into the same in-spec-debt fix loop; task 5 added a fail-closed baseline-diff
+check at the terminal reconcile stage, naming the specific cause (non-array/empty/unparseable
+output, missing baseline, base-SHA mismatch, or a pre-sidecar baseline) rather than silently
+passing; tasks 6-7 added `scripts/test_failure_attribution.py` and
+`scripts/test_baseline_diff_gate.py`, replaying real fixtures through logic extracted verbatim from
+the built engines; task 8 documented the validate-brain-by-delta recipe in `docs/harness.md` and
+re-picked/re-stamped `check_engine_docs_sync.py`'s anchors after earlier tasks shifted them; task 9
+mirrored the new behavior into both `.agents/skills/sdlc-{task,flow}/SKILL.md` guides, re-picked
+`check_skill_sync.py`'s anchors, and fixed a genuine in-spec bug (a bare `git` instead of `${GIT}`
+in the removed-literal-scan heredoc, breaking the git-env-strip allowlist). The run BAILED at
+consolidated review (2 attempts) on `sdlc-state-vocab-tests`: task 1's `ownership`/`failure_class`
+keys were added at the TOP LEVEL of `sdlc-state-vocab.json`, and
+`scripts/check_sdlc_state_vocab.py`'s `load_vocab()` treats every top-level key as the allowed
+`sdlc-*-state.json` `status` enum — silently widening it so a state file written with
+`"status":"ownership"` or `"status":"failure_class"` now passes the gate. Verified self-owned
+against `main`'s vocab file (exactly the 10 status keys) — a real schema defect, not a stale test,
+needing a design choice (a dedicated `verdicts` container, or an explicit exclusion in
+`load_vocab()`) plus the `docs/workflows/sdlc-state-vocabulary.md` update the checker's own
+docstring requires. A prior fix pass (344c2cf) already attempted this and the same class of
+regression remains at attempt 2/2, so retries are exhausted this run. Next: a fresh
+task/fix pass to give the verdict vocabularies their own container (or exclude them in
+`load_vocab()`), update `sdlc-state-vocabulary.md`, and re-run consolidated review.
+
+```
+344c2cf fix: review pass 1 for BT.ticket.failure-attribution-and-gate-cache
+43c11ee feat: implement BT.ticket.failure-attribution-and-gate-cache-task9
+608f0b9 feat: implement BT.ticket.failure-attribution-and-gate-cache-task8
+041951d feat: implement BT.ticket.failure-attribution-and-gate-cache-task7
+a57c145 feat: implement BT.ticket.failure-attribution-and-gate-cache-task6
+7407bb3 feat: implement BT.ticket.failure-attribution-and-gate-cache-task5
+7904a69 feat: implement BT.ticket.failure-attribution-and-gate-cache-task4
+5065671 feat: implement BT.ticket.failure-attribution-and-gate-cache-task3
+2d3a918 feat: implement BT.ticket.failure-attribution-and-gate-cache-task2
+6e0d5cc feat: implement BT.ticket.failure-attribution-and-gate-cache-task1
+```
+
+---
 ## 2026-09-16 — BT.ticket.gate-results-and-failure-attribution: done (5 of 5 tasks, PASS)
 
 Ran `/sdlc-flow` tasks 1-5 to PASS. Both engines now record per-task `gate_results`
