@@ -123,7 +123,8 @@ FLOW_DECISION_PATTERN = (
 TASK_BUILD_PASS_PAYLOAD_PATTERN = (
     r"function buildPassPayload\(taskNum, t, validatedLabel\) \{\n"
     r"\s*const snapshot = JSON\.parse\(JSON\.stringify\(state\)\)\n"
-    r"\s*snapshot\.tasks\[String\(taskNum\)\] = \{ \.\.\.t, status: 'passed', validated: validatedLabel \}\n"
+    r"(?:[^\n]*\n)*?"
+    r"\s*snapshot\.tasks\[String\(taskNum\)\] = \{ \.\.\.t, status: 'passed', validated: validatedLabel, gate_results: '__GATE_RESULTS__' \}\n"
     r"\s*snapshot\.tokens = buildTokensBlock\(\)\n"
     r"\s*return \{ stateFile, stateJson: JSON\.stringify\(snapshot, null, 2\) \}\n"
     r"\}"
@@ -131,7 +132,8 @@ TASK_BUILD_PASS_PAYLOAD_PATTERN = (
 FLOW_BUILD_PASS_PAYLOAD_PATTERN = (
     r"function buildPassPayload\(taskNum, t, attempt, validatedLabel\) \{\n"
     r"\s*const snapshot = JSON\.parse\(JSON\.stringify\(state\)\)\n"
-    r"\s*snapshot\.tasks\[String\(taskNum\)\] = \{ \.\.\.t, status: 'passed', validated: validatedLabel \}\n"
+    r"(?:[^\n]*\n)*?"
+    r"\s*snapshot\.tasks\[String\(taskNum\)\] = \{ \.\.\.t, status: 'passed', validated: validatedLabel, gate_results: '__GATE_RESULTS__' \}\n"
     r"\s*snapshot\.tokens = buildTokensBlock\(\)\n"
     r"\s*const worklogEntry = \[[\s\S]*?\n\s*\]\.filter\(Boolean\)\.join\('\\n'\)\n"
     r"\s*return \{\n"
@@ -176,11 +178,22 @@ FLOW_OVERRIDE_REPLACES_PATTERN = (
     r"\s*: renderCheckList\(harnessCfg, \{ gatingOnly, cwd: worktreePath, engineFiles \}\)"
 )
 
-# /sdlc-flow's end review re-runs the FULL suite unconditionally -- no reference to any per-task
-# override anywhere near it. Regression guard for task 3's "unregressed" AC.
-FLOW_END_REVIEW_FULL_SUITE_PATTERN = (
-    r"\$\{renderCheckList\(harnessCfg, \{ gatingOnly: false, cwd: worktreePath, "
-    r"engineFiles: \[\.\.\.new Set\(taskList\.flatMap\(n => engineFilesFor\(n\)\)\)\] \}\)\}"
+# SUPERSEDED 2026-09-16 by BT.ticket.gate-results-and-failure-attribution (task 3): the end review
+# no longer re-runs the full gating suite unconditionally on every pass -- it reads gate_results
+# aggregated from the tasks that already ran them (why: the 2026-09-13 token analysis measured
+# review re-running the suite 4.0 times per agent). The safety backstop this pattern used to pin is
+# now TWO conditions instead of one blanket re-run, both still unconditional: (a) any check with no
+# recorded gate_results entry must be run directly, right now, never guessed; (b) the FINAL review
+# pass re-runs every still-failing check fresh as the last authoritative word before a bail. Pin
+# both, not the retired single re-run.
+FLOW_END_REVIEW_NO_RECORDED_ENTRY_PATTERN = (
+    r'Any check above showing "NO RECORDED ENTRY" must be run directly RIGHT NOW, exactly as its own\n'
+    r"\s*command states in planning/harness\.json — never guessed\."
+)
+FLOW_END_REVIEW_FINAL_PASS_RERUN_PATTERN = (
+    r"UNLESS this is the FINAL review pass \(attempt \$\{reviewAttempts\}\n"
+    r"\s*of \$\{MAX_REVIEW_ATTEMPTS\}\), in which case re-run every still-failing check fresh as the last\n"
+    r"\s*authoritative word before a bail\."
 )
 
 # The terminal-output visibility line, both engines -- must be conditioned on the exact
@@ -498,11 +511,14 @@ class CostCaseSurvivesTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             extract(pre_fix_shape, FLOW_OVERRIDE_REPLACES_PATTERN, "synthetic pre-D3 fixture")
 
-    def test_flow_engine_end_review_unconditionally_reruns_full_suite(self):
-        # Regression guard for task 3's "unregressed" AC: the backstop that makes /sdlc-flow's
-        # substitute-not-augment choice safe must still be unconditional.
+    def test_flow_engine_end_review_still_unconditionally_verifies_every_gating_check(self):
+        # Updated 2026-09-16 (BT.ticket.gate-results-and-failure-attribution task 3): the backstop
+        # that makes /sdlc-flow's substitute-not-augment choice safe is no longer "re-run the full
+        # suite every pass" -- it's "never trust an unrecorded check, and always re-verify what's
+        # still failing on the final pass." Both halves must still be unconditional.
         src = _read(FLOW_JS)
-        extract(src, FLOW_END_REVIEW_FULL_SUITE_PATTERN, "sdlc-flow.js end-review full suite")
+        extract(src, FLOW_END_REVIEW_NO_RECORDED_ENTRY_PATTERN, "sdlc-flow.js end-review: unrecorded check must run directly")
+        extract(src, FLOW_END_REVIEW_FINAL_PASS_RERUN_PATTERN, "sdlc-flow.js end-review: final pass re-runs still-failing checks fresh")
 
     def test_cost_case_pin_can_fail_if_full_suite_becomes_hardcoded_in_augment_branch(self):
         """Sanity check: the fast-form assertion must fail against a synthetic 'always pay full
