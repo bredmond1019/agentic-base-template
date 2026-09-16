@@ -117,7 +117,13 @@ ANCHORS = [
     # lines into sdlc-task.js entirely ABOVE this anchor, shifting it 1911->1920, 1992->2001.
     # Re-picked from CONTENT at the new position (confirmed byte-identical to the pre-shift
     # content via hash match against the manifest), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2005, 2086,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 8: resolveRepoRoot() now wraps
+    # runPrepareRun() and can return { refused: true, reason }, genuinely changing the ~18 lines
+    # right above WORKTREE MODE, shifting this anchor 2005->2080, 2086->2161. docs/workflows/
+    # sdlc-task.md's "## In-place vs. `--worktree`" section updated with the prepare-run-refusal
+    # paragraph; the rest of the section (the in-place/worktree table, the fail-closed guard) is
+    # unaffected.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2080, 2161,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -126,13 +132,14 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 650->659, 698->707. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 712, 760,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 6: unrelated prepare-run plumbing landed
+    # entirely ABOVE this anchor in shared.js, shifting it 712->800, 760->848 with NO content
+    # change to this region itself -- verified byte-identical ("function renderTriagePrompt("
+    # through the trailing "<</shared:renderTriagePrompt>>" boundary).
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 800, 848,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
-    # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
-    # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
-    # engine) shifted this anchor 650->659, 698->707. Re-picked from CONTENT (sha256 match against the
-    # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 712, 760,
+    # Same shift, same evidence as the entry immediately above (one shared.js region, two docs).
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 800, 848,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
     # BT.ticket.sdlc-bookkeep-writes-block-status-deterministically, tasks 1-3: the new
     # renderStateFlipScript deterministic `mev set-block-status` dispatch was inlined ABOVE these
@@ -190,7 +197,11 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 3498->3499, 3525->3526. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3592, 3619,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 6: the setup-collapse changes landed
+    # entirely ABOVE this anchor, shifting it 3592->3686, 3619->3713 with NO content change --
+    # verified byte-identical ("7. Commit your edits (stage explicitly" through the trailing
+    # `git log --oneline -1`).
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3686, 3713,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
@@ -205,7 +216,10 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 938->947, 955->964. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1017, 1034,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 6: setup-collapse changes landed entirely
+    # ABOVE this anchor, shifting it 1017->1085, 1034->1102 with NO content change -- verified
+    # byte-identical ("const autoMergeFlag = hasFlag('--auto-merge')" onward).
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1085, 1102,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
@@ -218,7 +232,17 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 1880->1889, 2010->2019. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1960, 2090,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 8: same cause as the sdlc-task.js
+    # isolation-and-branch-naming entry above (D83 parity) -- resolveRepoRoot() now wraps
+    # runPrepareRun() and can return { refused: true, reason }, genuinely changing the ~14 lines
+    # right above `const worktreeRecipe =`, shifting this anchor 1960->2011, 2090->2141. NOTE:
+    # the OLD fixed window (1960-2090) still happened to contain the trigger string at its new
+    # position (2025 falls inside [1960,2090]), so this anchor was NOT flagged by the "drifted
+    # onto unrelated code" heuristic even though its content had genuinely changed -- caught only
+    # by direct diff against the pre-task-6 baseline (f54c1b0), not by the tool's own drift
+    # message. docs/workflows/sdlc-flow.md's isolation-mode section updated with the same
+    # prepare-run-refusal paragraph as sdlc-task.md's.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2011, 2141,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
     # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
@@ -230,7 +254,11 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 3554->3564, 3589->3599. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3635, 3670,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 6: same cause as the sdlc-task.js
+    # bookkeep-vault-commit entry above, shifting this anchor 3635->3705, 3670->3740 with NO
+    # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
+    # trailing `git log --oneline -1`).
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3705, 3740,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

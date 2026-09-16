@@ -535,6 +535,16 @@ Default is **in-place**, on the current branch in the main working tree — chea
 relative `planning/` symlink intact. Pass `--worktree` for true isolation: a second checkout under
 `trees/<branch>/`, so an in-flight run cannot collide with other work on the main tree.
 
+**Since `BT.ticket.prepare-run-replaces-setup-agents`, setup runs ONE `prepare-run` agent before
+any of this** — its entire job is running `.claude/workflows/bin/prepare_run.py`, which resolves
+`repoRoot`/vault detection/harness config/task enumeration by code (never by a model re-deriving
+them) and can return `refused: true` when a gated check's `requires`/`probeCommand` isn't
+satisfiable. A refusal stops the run right here — before any worktree is created or branch chosen,
+and before any implement-stage agent ever runs — surfacing `reason` exactly as a setup agent would
+report an unrunnable spec. `--resume` reads this same result back from the run's meta bundle
+(`sdlc-task-state.json`'s `setup` field) instead of re-running it. Only after a non-refused result
+does the actual worktree-creation agent (below) run.
+
 `--worktree` was suspended fleet-wide from 2026-08-23 to 2026-08-28 (brain decision
 `D81-worktree-moratorium`) after three separate whole-repo-deletion incidents behind a GREEN run.
 The moratorium was lifted after `BT.ticket.worktree-smoke-fixture` verified a real `--worktree`

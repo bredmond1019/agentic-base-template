@@ -48,6 +48,15 @@ tree** — no `trees/` worktree, no sparse-checkout. This keeps a relative `plan
 fresh run refuses to start on a **dirty** working tree (commit or stash first). Pass `--worktree`
 for a genuine isolated checkout under `trees/<spec>-flow/` instead.
 
+**Since `BT.ticket.prepare-run-replaces-setup-agents`, setup runs ONE `prepare-run` agent before
+any of this** (D83 parity with `/sdlc-task` — see `docs/workflows/sdlc-task.md`'s equivalent
+paragraph) — its entire job is running `.claude/workflows/bin/prepare_run.py`, which resolves
+`repoRoot`/vault detection/harness config/task enumeration by code and can return `refused: true`
+when a gated check's `requires`/`probeCommand` isn't satisfiable. A refusal stops the run right
+here — before any branch or worktree work, and before any implement-stage agent ever runs. `--resume`
+reads this same result back from the run's meta bundle (`sdlc-flow-state.json`'s `setup` field)
+instead of re-running it.
+
 **Brain-root exception:** at a repo root where `brain.toml` is present (the HQ vault root, where
 `repoRoot` is the whole fleet and every sibling repo's `planning/` symlinks into HQ's own git index
 under a `_planning/<repo>/` path), dirt confined entirely to `_planning/` paths does **not** trip

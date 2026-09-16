@@ -449,6 +449,14 @@ AGENT_SKILL_SLUGS: list[str] = [
     # `bastion brain`/`bastion code` verb-surface reference. Same hand-mirror rule as the block
     # above - no blind claude->antigravity substitution on path/filename literals.
     "brain-graph",
+    # Added by BT.ticket.prepare-run-replaces-setup-agents-task7 (2026-09-15): mirrors of
+    # .claude/skills/create-llm-node/, create-node/ and create-molecule/ SKILL.md, added by
+    # 9ca6941/f1f8887/6fa6eec with .agents mirrors but no registry entries - unregistered since
+    # creation, which is exactly the drift test_every_skill_directory_is_registered_or_allowlisted
+    # exists to catch.
+    "create-llm-node",
+    "create-node",
+    "create-molecule",
 ]
 
 

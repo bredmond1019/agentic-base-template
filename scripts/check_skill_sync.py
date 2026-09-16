@@ -96,7 +96,14 @@ ANCHORS = [
     # runTests() heartbeatRecipe call (+2 net lines) landed BELOW it, so only +5 applies here:
     # 1906->1911, 1987->1992. Text unchanged -- verified by diffing the old range against the new
     # range: byte-identical ("WORKTREE MODE (--worktree)" through the trailing content).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2005, 2086,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 8: resolveRepoRoot() now wraps
+    # runPrepareRun() (the single prepare-run agent, task 6) and can return { refused: true,
+    # reason } -- the region right above WORKTREE MODE genuinely changed content (a refusal check
+    # + state.setup caching replaced the old bare-null-on-failure check), shifting this anchor
+    # 2005->2080, 2086->2161. Re-verified: the WORKTREE MODE text itself onward is byte-identical
+    # to before; only the ~18 lines before it changed. .agents/skills/sdlc-task/SKILL.md Step 1
+    # updated with the prepare_run.py-direct-invocation + refusal + --resume-from-meta note.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2080, 2161,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -108,13 +115,20 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 650->659, 698->707. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 712, 760,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 6: unrelated content (prepare-run
+    # plumbing) landed entirely ABOVE this anchor in shared.js, shifting it 712->800, 760->848
+    # with NO content change to this region itself -- verified by diffing the old range against
+    # the new range: byte-identical text ("function renderTriagePrompt(" through the trailing
+    # "<</shared:renderTriagePrompt>>" boundary).
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 800, 848,
      ".agents/skills/sdlc-task/SKILL.md"),
     # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 650->659, 698->707. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 712, 760,
+    # Same shift, same evidence as the sdlc-task entry immediately above (one shared.js region,
+    # two guides). BT.ticket.prepare-run-replaces-setup-agents, task 6: 712->800, 760->848.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 800, 848,
      ".agents/skills/sdlc-flow/SKILL.md"),
     # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: the
     # loadHarnessConfig() unwrap + bail additions inserted 52 net lines into sdlc-task.js and
@@ -175,7 +189,12 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 3498->3499, 3525->3526. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3592, 3619,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 6: the setup-collapse changes landed
+    # entirely ABOVE this anchor, shifting it 3592->3686, 3619->3713 with NO content change to
+    # this region itself -- verified by diffing the old range against the new range:
+    # byte-identical text ("7. Commit your edits (stage explicitly" through the trailing
+    # `git log --oneline -1`).
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3686, 3713,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
@@ -187,7 +206,13 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 1880->1889, 2010->2019. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 1960, 2090,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 8: same cause as the sdlc-task.js
+    # isolation-and-branch-naming entry above -- resolveRepoRoot() now wraps runPrepareRun() and
+    # can return { refused: true, reason }, genuinely changing the ~14 lines right above
+    # `const worktreeRecipe =`, shifting this anchor 1960->2011, 2090->2141. Re-verified: the
+    # worktreeRecipe text itself onward is byte-identical to before.
+    # .agents/skills/sdlc-flow/SKILL.md's setup step updated with the same prepare_run.py note.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2011, 2141,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -201,7 +226,11 @@ ANCHORS = [
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
     # engine) shifted this anchor 3554->3564, 3589->3599. Re-picked from CONTENT (sha256 match against the
     # manifest at the new position), not blindly renumbered.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3635, 3670,
+    # BT.ticket.prepare-run-replaces-setup-agents, task 6: same cause as the sdlc-task.js
+    # bookkeep-vault-commit entry above, shifting this anchor 3635->3705, 3670->3740 with NO
+    # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
+    # trailing `git log --oneline -1`).
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3705, 3740,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 
