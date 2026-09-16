@@ -6,7 +6,7 @@ doc_id: harness-verdict-scoping
 layer: [factory]
 project: base-template
 status: active
-keywords: [gated checks, verdict scoping, delta attribution, fleet-shared state, D64, ownership, harness]
+keywords: [gated checks, verdict scoping, delta attribution, D64, baseline-diff, validate-brain]
 related: [harness-json, brain:D64-push-gate-delta-attribution, base-template-docs-index]
 ---
 
@@ -202,3 +202,117 @@ changing what any check considers a failure; routing these through an equivalent
 a failing Python test to the fixture path it exercised, or `<no-artifact>` when that mapping is
 unavailable) is follow-on work for task 3, not a new finding — noted here so the audit is
 complete.
+
+## Gating `validate-brain` by DELTA — the `baseline-diff` check kind (BT.ticket.failure-attribution-and-gate-cache)
+
+`bastion validate-brain` reads a corpus shared by the whole fleet — the same class of fleet-shared
+state this page opens with, but the fix here is not verdict scoping (that rule needs a `repo` field
+per record; `validate-brain` diagnostics don't carry one). Instead the engines gate it by **delta**:
+fail only on an error `validate-brain` did not already report before this run started. This is the
+Test-stage machinery that makes that possible — the `baseline-diff` check kind, wired into
+`.claude/workflows/sdlc-task.js` / `sdlc-flow.js` via the shared `renderBaselineDiffCheck` region in
+[`.claude/workflows/prompts/shared.js`](../.claude/workflows/prompts/shared.js).
+
+### Quickstart
+
+Add a `baseline-diff` check to `planning/harness.json` (schema:
+[`.claude/workflows/harness.schema.json`](../.claude/workflows/harness.schema.json)`#/$defs/check`;
+full field table: [harness-json.md](harness-json.md)):
+
+```json
+{
+  "name": "validate-brain-state-net-new",
+  "kind": "baseline-diff",
+  "command": "bastion validate-brain --state --json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(json.dumps([x for x in d['diagnostics'] if x['severity']=='error']))\"",
+  "baselineCommand": "bastion validate-brain --state --json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(json.dumps([x for x in d['diagnostics'] if x['severity']=='error']))\"",
+  "compareKeys": ["file", "locator", "message"],
+  "gates": true,
+  "purpose": "validate-brain --state, gated on NET-NEW errors only (D64: by delta, never by path)"
+}
+```
+
+`bastion validate-brain --<flag> --json` emits one JSON envelope — `{validator, root, errors,
+warnings, diagnostics: [{severity, file, locator, message}, ...]}` — and `command` /
+`baselineCommand` filter that envelope down to `diagnostics` where `severity == "error"`. The
+filtered array's length always equals the envelope's own `errors` count for that flag, because it
+is the same field, re-derived — that identity is what the un-gateable evidence obligation below
+proves on a live corpus.
+
+**One check per flag, never path-scoped.** `--state`, `--links`, `--structure`, `--graph` and
+`--sync` do not compose — run one `baseline-diff` check per flag you want gated, each with its own
+`baselineCommand`/`command` pair, never a single invocation combining two flags (`bastion
+validate-brain`'s own dispatch precedence silently drops every flag but the highest-priority one
+given — see `bastion validate-brain --help`). Never scope the command to a changed-files subset
+either: HQ D64 (`agentic-portfolio/docs/decisions/D64-push-gate-delta-attribution.md`, restated in
+this page's own "Why" section above) pins that path scoping misses the delete-a-doc case — deleting
+a document can surface the resulting error on a file the run never touched, so the scan must stay
+corpus-wide and only the **verdict** narrow to net-new.
+
+### The baseline file and its `.sha` sidecar
+
+`snapshotBaselines` (the pre-run stage in both engines) writes the baseline once, resume-safe — an
+existing baseline is kept as-is, never overwritten:
+
+```
+${reportsDir}/<check-name>-baseline.json       ← baselineCommand's captured output (a JSON array)
+${reportsDir}/<check-name>-baseline.json.sha   ← the run's base_sha, stamped the moment the baseline
+                                                   is FIRST written
+```
+
+The sidecar exists so the fail-closed reconcile-time check (`renderBaselineDiffCheck`) can tell a
+baseline taken against *this* run's base commit from a stale one taken against some earlier base —
+never assumed compatible just because the file is present.
+
+### Every fail-closed cause
+
+`renderBaselineDiffCheck` never treats a broken input as zero items or as a pass — every one of the
+following FAILS, naming the specific cause (`BASELINE-DIFF FAILED: <cause>`), not merely a
+non-zero exit:
+
+| Cause | When |
+|---|---|
+| `missing baseline at <path>` | the baseline file does not exist |
+| `could not read baseline at <path>: <error>` | the baseline file exists but cannot be read |
+| `baseline predates base-SHA stamping` | the baseline has no `.sha` sidecar at all |
+| `could not read baseline SHA sidecar at <path>: <error>` | the `.sha` sidecar exists but cannot be read |
+| `base-SHA mismatch: baseline=<sha> run=<sha>` | the sidecar's SHA disagrees with this run's `base_sha` |
+| `baseline at <path> is not valid JSON: <error>` | the baseline file's contents do not parse |
+| `baseline at <path> is not a JSON array (got <type>)` | the baseline parses but is not a list (e.g. a JSON object) |
+| `could not read current output at <path>: <error>` | the check's own `command` output cannot be read back |
+| `current output is empty` | the check's own `command` produced no output |
+| `current output is not valid JSON (<error>) -- unparseable output fails closed, never treated as zero items` | the current output does not parse |
+| `current output is not a JSON array (got <type>) -- non-array output fails closed` | the current output parses but is not a list |
+| `NET-NEW (<n> introduced by this run, absent from baseline): ...` | every other cause has passed and at least one current item's `compareKeys` tuple is absent from the baseline |
+
+Only a clean current output whose every item's `compareKeys` tuple already exists in the baseline
+passes: `CHECK <n> PASSED: no net-new items (baseline <n>, current <n>, base_sha <sha>)`. Fixture
+coverage for all twelve rows: [`scripts/test_baseline_diff_gate.py`](../scripts/test_baseline_diff_gate.py).
+
+### Re-stamping a baseline
+
+A baseline is resume-safe by design — re-running the same spec never rewrites one that already
+exists. To force a fresh baseline (e.g. after deliberately fixing pre-existing errors and wanting
+the new, lower count to become the floor), delete both files and let the next run's
+`snapshotBaselines` stage recreate them:
+
+```bash
+rm -f <reportsDir>/<check-name>-baseline.json <reportsDir>/<check-name>-baseline.json.sha
+```
+
+There is no in-place "bump the baseline" command — deleting forces a fresh capture at the next
+run's `base_sha`, which is the only way the `.sha` sidecar can legitimately change.
+
+### Un-gateable evidence obligations (D64)
+
+Two acceptance criteria for this recipe are un-gateable by construction — no `harness.json` check
+in *this* repo can observe them (see [harness-json.md](harness-json.md)'s "un-gateable acceptance
+criteria" section for the full diagnostic and why the fix is declaring the gap, not chasing a
+check that cannot exist):
+
+| Criterion | Evidence lives | Why this repo's checks can't observe it |
+|---|---|---|
+| jynx test-stage dollars per launch at or below 50% of the 2026-08-31..09-13 baseline | `jynx show --by-stage`, run after the sync gate and recorded in the run notes | jynx cost telemetry is an external system this repo's `harness.json` checks never call |
+| This recipe's `command` emits a JSON array whose length equals the `validate-brain` envelope's `errors` count, for the same flag | run against the HQ corpus (outside this repo), both counts recorded per flag in the worklog | this repo's own corpus is too small to exercise the HQ-scale case, and the comparison needs a live `bastion validate-brain --json` envelope this repo's fixture suites do not shell out to |
+
+Both criteria are declared `"gateable": false` on the block record rather than silently dropped —
+the D64 rule this page's own harness-json.md section covers.

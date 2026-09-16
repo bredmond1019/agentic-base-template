@@ -129,7 +129,15 @@ ANCHORS = [
     # "WORKTREE MODE (--worktree)" needle at its shifted position, so the bracket check did not
     # flag it; caught only by the hash mismatch. Verified byte-identical against the manifest hash
     # at the new offset, same shift as check_skill_sync.py's twin anchor (--relocate).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2107, 2188,
+    # BT.ticket.failure-attribution-and-gate-cache, tasks 3-5: the attribution look-back, gate-cache
+    # lookup/fill, removed-literal scan and baseline-diff regions this block added all landed
+    # ABOVE this anchor in sdlc-task.js, this time actually moving the needle OUTSIDE the old fixed
+    # window (2107-2188), which is why this run flagged it as "drifted onto unrelated code" rather
+    # than passing the bracket check silently. Re-picked from CONTENT: old needle
+    # "WORKTREE MODE (--worktree)" sat at line 2152 inside the old range (offset 45 from 2107); the
+    # same text now sits at line 2221, a +69 shift. New range 2176-2257 diffed byte-identical
+    # against the pre-shift 2107-2188 window (git show 2d3a918:.claude/workflows/sdlc-task.js).
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2176, 2257,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -142,10 +150,18 @@ ANCHORS = [
     # entirely ABOVE this anchor in shared.js, shifting it 712->800, 760->848 with NO content
     # change to this region itself -- verified byte-identical ("function renderTriagePrompt("
     # through the trailing "<</shared:renderTriagePrompt>>" boundary).
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 800, 848,
+    # BT.ticket.failure-attribution-and-gate-cache, tasks 3-5: the attribution decision region
+    # (`decideAttribution` / ownership+failure_class verdicts), the gate-cache lookup/fill helpers,
+    # the removed-literal scan and `renderBaselineDiffCheck` all landed in shared.js ABOVE this
+    # anchor, moving the needle outside the old fixed window (800-848) -- flagged as "drifted onto
+    # unrelated code". Re-picked from CONTENT: old needle "function renderTriagePrompt(" sat at
+    # line 821 inside the old range (offset 21 from 800); the same text now sits at line 913, a +92
+    # shift. New range 892-940 diffed byte-identical against the pre-shift 800-848 window (git show
+    # 2d3a918:.claude/workflows/prompts/shared.js).
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 892, 940,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
     # Same shift, same evidence as the entry immediately above (one shared.js region, two docs).
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 800, 848,
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 892, 940,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
     # BT.ticket.sdlc-bookkeep-writes-block-status-deterministically, tasks 1-3: the new
     # renderStateFlipScript deterministic `mev set-block-status` dispatch was inlined ABOVE these
@@ -212,7 +228,14 @@ ANCHORS = [
     # anchor, shifting it 3686->3787, 3713->3814 with NO content change to this region itself --
     # verified byte-identical ("7. Commit your edits (stage explicitly" through the trailing
     # `git log --oneline -1`), same shift as check_skill_sync.py's twin anchor (--relocate).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3787, 3814,
+    # BT.ticket.failure-attribution-and-gate-cache, tasks 3-5: same attribution/gate-cache/
+    # removed-literal-scan/baseline-diff additions noted above also landed entirely ABOVE this
+    # anchor in sdlc-task.js, shifting it out of the old fixed window (3787-3814) -- flagged as
+    # "drifted onto unrelated code". Re-picked from CONTENT: old needle "7. Commit your edits
+    # (stage explicitly" sat at line 3801 inside the old range (offset 14 from 3787); the same text
+    # now sits at line 3931, a +130 shift. New range 3917-3944 diffed byte-identical against the
+    # pre-shift 3787-3814 window (git show 2d3a918:.claude/workflows/sdlc-task.js).
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3917, 3944,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
@@ -261,7 +284,17 @@ ANCHORS = [
     # isolation-and-branch-naming entry above, shifting it 2011->2047, 2141->2177 with NO content
     # change -- verified byte-identical against the manifest hash at the new offset, same shift
     # as check_skill_sync.py's twin anchor.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2047, 2177,
+    # BT.ticket.failure-attribution-and-gate-cache, tasks 3-5: same attribution/gate-cache/
+    # removed-literal-scan/baseline-diff additions landed entirely ABOVE this anchor in
+    # sdlc-flow.js too, genuinely shifting its content -- but the OLD fixed window (2047-2177)
+    # still happened to contain the "const worktreeRecipe =" needle at its shifted position
+    # (2130 falls inside [2047,2177]), so this anchor was NOT flagged by the "drifted onto
+    # unrelated code" heuristic even though its content had changed -- caught only by direct diff
+    # against the pre-task-3 baseline (2d3a918), not by the tool's own drift message (same failure
+    # mode as the BT.ticket.prepare-run-replaces-setup-agents task-8 note above). Re-picked from
+    # CONTENT: old needle sat at line 2061 (offset 14 from 2047); new needle at 2130, a +69 shift.
+    # New range 2116-2246 diffed byte-identical against the pre-shift 2047-2177 window.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2116, 2246,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
     # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
@@ -281,7 +314,14 @@ ANCHORS = [
     # bookkeep-vault-commit entry above, shifting this anchor 3705->3863, 3740->3898 with NO
     # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
     # trailing `git log --oneline -1`), same shift as check_skill_sync.py's twin anchor.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3863, 3898,
+    # BT.ticket.failure-attribution-and-gate-cache, tasks 3-5: same attribution/gate-cache/
+    # removed-literal-scan/baseline-diff additions noted above also landed entirely ABOVE this
+    # anchor in sdlc-flow.js, shifting it out of the old fixed window (3863-3898) -- flagged as
+    # "drifted onto unrelated code". Re-picked from CONTENT: old needle "5. Commit (stage
+    # explicitly" sat at line 3896 inside the old range (offset 33 from 3863); the same text now
+    # sits at line 4026, a +130 shift. New range 3993-4028 diffed byte-identical against the
+    # pre-shift 3863-3898 window (git show 2d3a918:.claude/workflows/sdlc-flow.js).
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3993, 4028,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 
