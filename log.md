@@ -3,7 +3,49 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-15
+**Last updated:** 2026-09-16
+
+---
+## 2026-09-16 — BT.ticket.prepare-run-replaces-setup-agents: closed — tasks 7-8 finished inline, PR #13 + #14
+
+Closed out the `runs-that-finish-cheaply` engines lane's `BT.ticket.prepare-run-replaces-setup-agents`
+after two engine-driven bails on task 7, both traced to the same pre-existing, unrelated defect:
+`create-llm-node`/`create-node`/`create-molecule` (added `9ca6941`/`f1f8887`/`6fa6eec`, before this
+ticket started) were never registered in `AGENT_SKILL_SLUGS`, and `create-llm-node`'s `.agents`
+mirror body had drifted from its `.claude` source. Fixed both inline (registered all three;
+merged the more-accurate 2026-09-14 correction into the `.claude` source and regenerated the mirror
+via `scripts/generate_skill_surfaces.py`) — `test_sync_downstream_harness.py` went from 2 failures
+in 52 to 0 in 55.
+
+With the bail cause cleared, completed task 8 inline (operator: "let's just fix the test issues and
+close this ticket out inline") rather than relaunching the engine a third time: wired
+`/generate-tasks`/`/ticket`/`/chore`/`/breakdown` to require `check_tasks_json.py` exit 0 before
+committing a spec; mirrored task 6's setup-stage collapse (one `prepare-run` agent replaces the old
+fact-gathering agents; a refused `prepare_run.py` verdict stops the run before any worktree/implement
+work; `--resume` reads from the run meta bundle) into both SKILL.md guides and `docs/workflows/*.md`;
+re-picked `check_skill_sync.py`'s and `check_engine_docs_sync.py`'s anchors from content (re-verifying
+content-changed vs. pure-shift per anchor, per base-template AGENTS.md item 6 — never blind
+`--update`) and re-stamped both manifests.
+
+Found one drift-detection gap while re-picking anchors: `check_engine_docs_sync.py`'s
+`sdlc-flow.js::isolation-and-branch-naming` anchor genuinely changed content but was NOT flagged by
+the tool's own "drifted onto unrelated code" heuristic, because its old fixed window (131 lines) was
+wide enough that the shifted trigger string still fell inside it. Filed as carryover
+`docs-sync-window-height-masks-drift` (no mechanical `clears_when` — the fix is an algorithm change).
+
+**Merge mishap, caught and fixed:** `gh pr merge 13 --squash` merged the branch's last *pushed*
+state; task 8's commit (`5ea7f40`) had only been made locally and was silently dropped from PR #13.
+Caught by diffing the squash commit's stat against the expected file list, fixed by cherry-picking
+`5ea7f40` onto a fresh branch off the true post-#13 `main` and merging it separately as PR #14.
+Lesson: `git push` before `gh pr merge`, never assume local HEAD is what a PR will merge.
+
+Block closed (`mev set-block-status ... closed --write`); both worktrees and their local branches
+removed now that everything is confirmed on `origin/main` (`git show origin/main:<path> | grep ...`
+spot-checks on task 7 and task 8 files).
+
+Next: block 3 of the `engines` lane, `BT.ticket.gate-results-and-failure-attribution`, remains
+behind the fleet-wide operator gate `operator-sync-harness-prepare-run`
+(`/sync-downstream-harness`, then `--apply --commit`, with no lane mid-block) — needs the operator.
 
 ---
 ## 2026-09-15 — BT.ticket.prepare-run-replaces-setup-agents: sdlc-flow BAILED again at task 7 (resume)
