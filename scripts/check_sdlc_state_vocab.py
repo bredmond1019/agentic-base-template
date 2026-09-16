@@ -70,7 +70,9 @@ def load_vocab(path: Path = VOCAB_PATH) -> set[str]:
         data = json.load(fh)
     if not isinstance(data, dict) or not data:
         raise ValueError(f"{path}: expected a non-empty JSON object of status -> {{meaning, emitters}}")
-    return set(data.keys())
+    # "verdicts" is a separate container for non-status vocabularies (ownership, failure_class,
+    # ...) -- its keys are NOT sdlc-*-state.json top-level `status` values, so it is excluded here.
+    return set(data.keys()) - {"verdicts"}
 
 
 def find_state_files(root: Path) -> list[Path]:

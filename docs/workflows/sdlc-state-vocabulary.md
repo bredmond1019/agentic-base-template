@@ -42,6 +42,17 @@ can hold somewhere in the file.
 | `docs` | `sdlc-flow` only. Review passed and the run is now in the documentation-patch stage. | `sdlc-flow` |
 | `wrapup` | `sdlc-flow` only. Docs are patched and the run is in its final wrap-up/PR stage. | `sdlc-flow` |
 
+## Verdict vocabularies (not `status` values)
+
+`sdlc-state-vocab.json` also carries a sibling `verdicts` container for the failure-attribution
+decision, keyed separately from the ten `status` values above so `load_vocab()`'s status-enum check
+never treats them as valid `status` strings:
+
+| Vocabulary | Values | Meaning |
+|---|---|---|
+| `verdicts.ownership` | `self`, `foreign` | Whether a failing check was introduced by this run (`self`, ordinary fix loop) or was already red at `base_sha` per the gate cache (`foreign`, carried without burning an attempt). |
+| `verdicts.failure_class` | `fixable`, `escalate` | Whether an attributed failure is routed into a fix loop (`fixable`) or is a hard stop — in-spec debt never fixed by the task that declared it (`escalate`). |
+
 ## Terminal status → state.json block status mapping
 
 Only a **terminal** run status (one that ends the run) ever has an opinion about `state.json`'s
