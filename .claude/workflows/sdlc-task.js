@@ -1033,11 +1033,21 @@ ${renderEmojiGate({ runRoot, baseSha: diffBase, stateFile, recordedCommitsJson }
   commit on a shared branch, does not.
 
 For each check record: name, passed (true iff exit code 0), the command, and failure output.
+
+ALSO populate \`gate_results\` — one entry per check you ran above (same set, same order), each
+\`{check_id, status, failing_ids}\`: check_id is the check's own name exactly as it appears in its
+"CHECK N — <name>" header (or the harness.json check name, when the checklist is driven by one);
+status is \`"pass"\` or \`"fail"\`; failing_ids is an array of the specific ids that failed FOR THAT
+CHECK — derive it from the check's own structured runner output where one exists (nextest's JUnit
+XML, pytest's \`--junitxml\` or \`-rf\` flag output: use the individual failing test/case ids), and
+when the check produces no such structured per-item output, fall back to a single-element array
+holding the check's own check_id as the one failing id. A passing check still gets an entry (status
+\`"pass"\`, failing_ids \`[]\`).
 ${heartbeatRecipe || ''}
 ${onPassRecipe}
 Return via StructuredOutput: allPassed (true only if EVERY gating check passed and the emoji gate is
 clean), passCount, failCount, failedTests (names), failBlob (compact: failing check names + the tail of
-their output; empty when allPassed)${stateWrittenNote}.`
+their output; empty when allPassed), gate_results (the per-check array described above)${stateWrittenNote}.`
 }
 // <</shared:renderTestPrompt>>
 
@@ -1379,6 +1389,23 @@ const TEST_SCHEMA = {
     failedTests: { type: 'array', items: { type: 'string' } },
     failBlob:    { type: 'string', description: 'Compact failure output (failing check names + the tail of their output) for triage; empty when allPassed' },
     stateWritten: { type: 'boolean', description: 'true if the agent ALSO persisted sdlc-task-state.json this same turn (the per-task pass-path state-write fold); false/omitted when it did not (no onPass instructions given, a check failed, or the write was not attempted/completed)' },
+    // BT.ticket.gate-results-and-failure-attribution (task 1): per-check structured output, one
+    // entry per gating check run this turn, driving triage-only-on-red and (in sdlc-flow) review's
+    // gate_results-based pass loop instead of a suite re-run.
+    gate_results: {
+      type: 'array',
+      description: 'One entry per check run this turn, from the rendered checklist',
+      items: {
+        type: 'object',
+        required: ['check_id', 'status', 'failing_ids'],
+        properties: {
+          check_id:    { type: 'string', description: "The check's own name, as it appeared in its CHECK N header (or the harness.json check name)" },
+          status:      { type: 'string', enum: ['pass', 'fail'] },
+          failing_ids: { type: 'array', items: { type: 'string' }, description: 'Specific failing ids from structured runner output (nextest JUnit, pytest --junitxml/-rf) where available; otherwise a single-element array holding check_id' }
+        }
+      }
+    },
+    check_id_raw: { type: 'string', description: 'Raw agent-reported check identifier when check_id validation could not match it to a real planning/harness.json check name' },
     notes:       { type: 'string' }
   }
 }
