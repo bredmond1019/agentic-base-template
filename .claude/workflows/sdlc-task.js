@@ -313,7 +313,13 @@ async function detectPlanningVault(repoRoot) {
 // cheap Haiku agent turn instead of resolving the path in-process. Returns null on failure (unlike
 // detectPlanningVault's safe fallback) — a wrong repoRoot silently accepted here is exactly the
 // defect this ticket exists to remove, so the caller must abort rather than guess.
-// <<shared:RESOLVE_REPO_ROOT_SCHEMA>>
+// RESOLVE_REPO_ROOT_SCHEMA: engine-local, not shared -- BT.chore.fix-pre-existing-test-defects.
+// Left over from before BT.ticket.prepare-run-replaces-setup-agents (task 6) moved
+// resolveRepoRoot() onto the runPrepareRun() cache; the function below no longer makes its own
+// agent() call and never references this schema, and sdlc-flow.js never carried a copy at all.
+// Marking it <<shared:...>> falsely claimed both engines used it, which is what
+// test_build_engines.py::test_both_engines_carry_the_same_shared_region_names caught. Kept
+// in place (unused) rather than deleted, to keep this fix scoped to the marker mismatch.
 const RESOLVE_REPO_ROOT_SCHEMA = {
   type: 'object',
   required: ['repoRoot', 'gitCommonDir', 'tierPrefix', 'brainTomlAtRoot'],
@@ -324,7 +330,6 @@ const RESOLVE_REPO_ROOT_SCHEMA = {
     brainTomlAtRoot: { type: 'boolean', description: 'true iff the BRAIN_TOML: line reads "yes" — a brain.toml exists at repoRoot' }
   }
 }
-// <</shared:RESOLVE_REPO_ROOT_SCHEMA>>
 // <<shared:resolveRepoRoot>>
 // BT.ticket.prepare-run-replaces-setup-agents, task 6: the FIRST caller of runPrepareRun() on a
 // fresh (non-resumed) run — Setup calls this before anything else (see the engine body below), so
