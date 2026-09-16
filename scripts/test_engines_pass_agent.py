@@ -211,13 +211,19 @@ STANDALONE_SITE_RE = re.compile(
 # +61 in sdlc-flow.js (3577->3638, 3867->3928). Text unchanged -- verified by diffing the old line
 # against the new line at all three sites, byte-identical (the `${await renderAgentFlag()}${await
 # renderScopeFlag()}` interpolations are untouched) -- only the keys moved.
+# Re-pinned again 2026-09-16 (BT.chore.fix-pre-existing-test-defects): BT.ticket.prepare-run-
+# replaces-setup-agents task 6 inlined the runPrepareRun()-cache rewrite of resolveRepoRoot() /
+# detectPlanningVault() / loadHarnessConfig() etc. ABOVE these sites in both engines, net +200
+# lines in sdlc-task.js (3590->3790) and +228 in sdlc-flow.js (3638->3866, 3928->4156). Text
+# unchanged once the flag interpolation is stripped (diffed against the pre-shift content,
+# byte-identical) -- only the keys moved.
 FROZEN_BASELINE = {
     str(TASK_JS): {
-        3590:'     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
+        3790:'     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
     },
     str(FLOW_JS): {
-        3638: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
-        3928: "   mev emit-state --write",
+        3866: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
+        4156: "   mev emit-state --write",
     },
 }
 
@@ -271,28 +277,35 @@ def extract_shared_block(name: str) -> str | None:
 # this suite) is precisely how two previous fixes shipped past a green suite while dead in the
 # real runtime -- the suite exercised a sandbox the engine never runs in.
 #
-# The fix here is NOT to write a Python/JS re-implementation of the resolution logic (AC5
+# RECONCILED 2026-09-16 (BT.chore.fix-pre-existing-test-defects): as of
+# BT.ticket.prepare-run-replaces-setup-agents task 6, renderAgentFlag() no longer calls agent()
+# itself -- it reads a field off the ONE shared runPrepareRun() cache, and runPrepareRun() is the
+# thing that now calls agent(), with a prompt whose body is a single literal Bash line (`REPO_ROOT=
+# $(...) && python3 ".../prepare_run.py"...`), not a fenced ```...``` block -- the old regex below
+# never matched it, which is the direct cause of the `runPrepareRun is not defined` crash this
+# suite used to hit (the schema+resolver-only extraction never pulled in runPrepareRun() itself).
+#
+# The fix here is still NOT to write a Python/JS re-implementation of the resolution logic (AC5
 # forbids that, for good reason -- a re-implementation can silently drift from what the prompt
 # text actually says to run). Instead, `agent()` is stubbed to do exactly what a real subagent is
-# instructed to do: extract the ONE fenced ```...``` script from the prompt verbatim and execute
-# it for real via `bash -c` -- so the exact probe script the engine ships (TOML parsing, lease
-# lookup, env fallback, all of it) is what actually runs, under its real interpreter (python3),
+# instructed to do: extract that ONE literal Bash line from the prompt verbatim and execute it for
+# real via `bash -c` -- so the exact command the engine ships (git rev-parse, prepare_run.py, the
+# TOML/lease walk-up inside it) is what actually runs, under its real interpreters (bash/python3),
 # with only the "a subagent conversation happened" step stubbed out (unavoidable without spawning
-# a real Claude session). This exercises both halves of the real path: the async JS wrapper that
-# calls `agent()` with this exact prompt shape, and the exact script text that prompt carries.
+# a real Claude session). This exercises the whole real path: the async JS wrapper that calls
+# agent() with this exact prompt shape, and the exact command text that prompt carries.
 AGENT_STUB_JS = r"""
 global.agent = async function (prompt, opts) {
   const { execSync } = require('child_process')
-  const m = prompt.match(/```\n([\s\S]*?)\n```/)
-  if (!m) return { value: '' }
+  const m = prompt.match(/^  (REPO_ROOT=.*)$/m)
+  if (!m) return { rawOutput: '' }
   let out
   try {
     out = execSync(m[1], { shell: '/bin/bash' }).toString()
   } catch (e) {
     out = (e.stdout || '').toString()
   }
-  const vm = out.match(/^VALUE:(.*)$/m)
-  return { value: vm ? vm[1] : '' }
+  return { rawOutput: out }
 };
 """
 
@@ -307,7 +320,10 @@ def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, st
 
     Run with `cwd` set to a hermetic scratch directory with no `brain.toml` anywhere in its
     ancestry (never this repo's own cwd) -- see the original note this replaces: the no-identity
-    case must not depend on whether this suite happens to run inside a live fleet lease.
+    case must not depend on whether this suite happens to run inside a live fleet lease. The
+    stubbed agent() (see AGENT_STUB_JS) runs the real `REPO_ROOT=$(git rev-parse --show-toplevel)
+    && ...` line, so the scratch dir must itself be a git repo -- `git init -q` makes it its own
+    toplevel, isolated from this repo's real .git.
     """
     import os
 
@@ -320,6 +336,14 @@ def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, st
         f.write(script)
         tmp_path = f.name
     scratch_dir = tempfile.mkdtemp(prefix="render-agent-flag-eval-")
+    subprocess.run(
+        ["git", "init", "-q"], cwd=scratch_dir, capture_output=True, text=True, timeout=15
+    )
+    # The real command resolves `.claude/workflows/bin/prepare_run.py` relative to
+    # `$REPO_ROOT` (= this fresh scratch repo's own toplevel) -- symlink `.claude` in so the
+    # script (and its sibling imports, e.g. check_tasks_json) are reachable without making the
+    # scratch dir a clone of, or dependent on, this repo's real git state or brain.toml lease.
+    os.symlink(REPO_ROOT / ".claude", Path(scratch_dir) / ".claude")
     try:
         env = dict(os.environ)
         env.pop("FLEET_LANE_AGENT", None)
@@ -343,7 +367,9 @@ def node_eval_resolver(source: str, env_overrides: dict) -> tuple[str | None, st
     finally:
         Path(tmp_path).unlink(missing_ok=True)
         try:
-            os.rmdir(scratch_dir)
+            import shutil as _shutil
+
+            _shutil.rmtree(scratch_dir, ignore_errors=True)
         except OSError:
             pass
 
@@ -412,6 +438,21 @@ def main() -> int:
     # both engines (build_engines.py parity), and actually behaves per the contract.
     resolver_src = extract_shared_block(RESOLVER_NAME)
     schema_src = extract_shared_block("RENDER_IDENTITY_SCHEMA")
+    # BT.chore.fix-pre-existing-test-defects: renderAgentFlag() itself no longer calls agent() --
+    # it just reads runPrepareRun()'s cache (BT.ticket.prepare-run-replaces-setup-agents task 6) --
+    # so the probe must also pull in runPrepareRun() and its own dependencies (GIT, the schema its
+    # agent() call passes, and the output parser) or `runPrepareRun is not defined` crashes the
+    # node subprocess. These three are dependencies the probe needs to run at all, not part of the
+    # byte-identity contract this suite polices (that is scoped to RESOLVER_NAME + identity schema,
+    # same as before).
+    dep_names = ["GIT", "PREPARE_RUN_SCHEMA", "parsePrepareRunOutput", "runPrepareRun"]
+    dep_srcs = {name: extract_shared_block(name) for name in dep_names}
+    missing_deps = [name for name, src in dep_srcs.items() if src is None]
+    if missing_deps:
+        failures.append(
+            f"shared.js is missing `<<shared:NAME>>` block(s) {missing_deps} -- runPrepareRun() "
+            f"(which {RESOLVER_NAME}() now depends on) cannot be assembled without them"
+        )
     if resolver_src is None:
         failures.append(
             f"shared.js has no `<<shared:{RESOLVER_NAME}>>` block -- the resolver referenced at "
@@ -422,8 +463,10 @@ def main() -> int:
             f"shared.js has no `<<shared:RENDER_IDENTITY_SCHEMA>>` block -- {RESOLVER_NAME}() "
             "references it as an agent() schema and cannot run without it"
         )
+    elif missing_deps:
+        pass  # already reported above; nothing more to evaluate
     else:
-        shared_src = schema_src + "\n" + resolver_src
+        shared_src = "\n".join(dep_srcs[name] for name in dep_names) + "\n" + schema_src + "\n" + resolver_src
         for engine_path in (TASK_JS, FLOW_JS):
             engine_text = engine_path.read_text()
             if resolver_src not in engine_text:
