@@ -3208,6 +3208,43 @@ ${renderImplementPrompt({ roleIntro, runRootLabel: 'run root', runRoot: runDir, 
       }
     }
 
+    // Removed-literal scan (BT.ticket.failure-attribution-and-gate-cache, task 4) — after every
+    // task's commit, before the fast test loop: catches a string literal/identifier this task's
+    // own commit REMOVED that still survives in a test OUTSIDE this task's own files[], a silent
+    // breakage the fast tripwire below would not otherwise surface on its own. A hit inside the
+    // task's own files[] is never reported (filtered by the script itself). instrumentOk=false
+    // (no candidate test files found, or an incomplete transcription) is treated as inconclusive,
+    // never as "no hits" — the task proceeds normally rather than blocking on a broken instrument.
+    const scanResult = await removedLiteralScan({ runRoot: runDir, taskNum, tasksJsonPath: tasksJsonFile, prevSha, harnessCfg })
+    if (!scanResult.instrumentOk) {
+      log(`Task ${taskNum}: removed-literal scan inconclusive — ${scanResult.note || 'no reason given'}. Proceeding without it.`)
+    } else if (scanResult.hits.length) {
+      const hitList = scanResult.hits.map(h => `${h.file}:${h.line ?? '?'} (${h.literal})`).join(', ')
+      log(`Task ${taskNum}: removed-literal scan found ${scanResult.hits.length} hit(s) outside files[] — ${hitList}.`)
+      const scanFailBlob = `REMOVED_LITERAL_SURVIVES (BT.ticket.failure-attribution-and-gate-cache, task 4) — this task's own commit removed a literal/identifier still referenced by a test outside this task's files[]: ${hitList}. This is IN-SPEC DEBT, failure_class=fixable: fix the surviving reference (update or remove it) as part of this task's fix pass. Your writable set for the next fix pass is WIDENED to include the hit file(s) in addition to this task's own files[].`
+      t.issues = [...(t.issues || []), 'removed literal survives outside files[]']
+      const scanBailPayload = buildBailPayload(taskNum, t, `Task ${taskNum}: removed literal survives outside files[] — ${hitList}`)
+      const tr = await triage(`task ${taskNum} removed-literal`, attempt, MAX_TASK_ATTEMPTS, scanFailBlob, prevFailBlob, scanBailPayload)
+      prevFailBlob = scanFailBlob
+      if (tr && tr.class === 'MAJOR') {
+        bailed = true
+        bailReason = tr.bailReason || tr.reason || scanFailBlob
+        if (tr.stateWritten) taskStateWritten = true
+        log(`Task ${taskNum}: triage → MAJOR on removed-literal scan — bailing immediately.`)
+        break
+      }
+      if (attempt === MAX_TASK_ATTEMPTS) {
+        bailed = true
+        bailReason = `Task ${taskNum} still leaving a removed literal outside files[] after ${MAX_TASK_ATTEMPTS} attempts: ${hitList}`
+        if (tr && tr.stateWritten) taskStateWritten = true
+        log(`Task ${taskNum}: exhausted ${MAX_TASK_ATTEMPTS} attempts on a removed-literal scan hit — bailing.`)
+        break
+      }
+      if (tr) t.fixes = [...(t.fixes || []), tr.reason]
+      log(`Task ${taskNum}: triage → RETRYABLE on removed-literal scan hit — fix pass ${attempt}/${MAX_TASK_ATTEMPTS - 1}. ${tr?.reason || ''}`)
+      continue
+    }
+
     // Fast test (tripwire) — gating checks only unless testDepth=full. A task declaring its own
     // `validation_commands` in tasks.json AUGMENTS those gating checks rather than replacing them
     // (D63). passValidatedLabel is always one of the shared VALIDATED_LABEL trichotomy.
@@ -4166,3 +4203,188 @@ ${renderAttributionCacheLookup({ runRoot, checkId, baseSha, repoSlug, checkComma
   return decideAttribution({ checkId, taskGateHistory: history, cacheStatus: result.cacheStatus, currentTaskFiles })
 }
 // <</shared:attributionLookback>>
+
+// <<shared:REMOVED_LITERAL_SCAN_CONFIG>>
+// BT.ticket.failure-attribution-and-gate-cache, task 4: defaults for the post-commit removed-
+// literal scan -- all three are config knobs (standing rule 12), never literals baked into the
+// scan script itself. A project overrides any of them via planning/harness.json's optional
+// `removedLiteralScan: { testGlobRegex, minLiteralLen, identifierMinLen }` object; absent-or-partial
+// falls back here. `identifierMinLen` exists SEPARATELY from `minLiteralLen` (quoted strings) because
+// a bare-identifier match at the same low threshold is noisy -- ordinary English words removed from
+// a comment or log message (e.g. "failed", "returned") are common at 6-8 chars and are not the
+// distinctive symbol names this scan exists to catch; an underscored identifier of any length (a
+// real snake_case/CONST_CASE symbol) is always reported regardless of identifierMinLen.
+const REMOVED_LITERAL_SCAN_CONFIG = {
+  // Matches this fleet's own test-naming conventions plus the common cross-language ones, so the
+  // harness ships one sane default without hardcoding a single project's directory layout.
+  testGlobRegex: '(^|/)test_[^/]+\\.py$|(^|/)[^/]+_test\\.py$|(^|/)tests?/.*|\\.test\\.[jt]sx?$|\\.spec\\.[jt]sx?$',
+  minLiteralLen: 8,
+  identifierMinLen: 12,
+}
+// <</shared:REMOVED_LITERAL_SCAN_CONFIG>>
+
+// <<shared:REMOVED_LITERAL_SCAN_SCHEMA>>
+const REMOVED_LITERAL_SCAN_SCHEMA = {
+  type: 'object',
+  required: ['rawOutput'],
+  properties: {
+    rawOutput: { type: 'string', description: 'Everything the removed-literal scan script printed to stdout, verbatim, unmodified, unsummarized' }
+  }
+}
+// <</shared:REMOVED_LITERAL_SCAN_SCHEMA>>
+
+// <<shared:parseRemovedLiteralScanOutput>>
+// Parses runRemovedLiteralScan()'s transcribed stdout -- never throws; a malformed/empty
+// transcription is reported as instrumentOk=false rather than silently read as "no hits" (the
+// task's own positive-control requirement: an empty result must be distinguishable from a broken
+// instrument, never asserted by an empty grep alone).
+function parseRemovedLiteralScanOutput(rawOutput) {
+  if (!rawOutput || typeof rawOutput !== 'string') return { hits: [], instrumentOk: false, note: 'no output transcribed' }
+  const lines = rawOutput.split('\n').map(l => l.trim()).filter(Boolean)
+  if (lines.some(l => l.startsWith('INSTRUMENT_BROKEN:'))) {
+    const broken = lines.find(l => l.startsWith('INSTRUMENT_BROKEN:'))
+    return { hits: [], instrumentOk: false, note: broken.slice('INSTRUMENT_BROKEN:'.length) }
+  }
+  if (!lines.some(l => l.startsWith('CANDIDATE_TEST_COUNT:'))) {
+    return { hits: [], instrumentOk: false, note: 'scan script never reported CANDIDATE_TEST_COUNT -- transcription incomplete or script did not run' }
+  }
+  const hits = []
+  for (const line of lines) {
+    if (!line.startsWith('HIT:')) continue
+    const rest = line.slice('HIT:'.length)
+    const parts = rest.split('|')
+    if (parts.length < 2) continue
+    const [literal, file, lineNo] = parts
+    hits.push({ literal, file, line: lineNo ? Number(lineNo) || null : null })
+  }
+  return { hits, instrumentOk: true, note: lines.find(l => l.startsWith('CANDIDATE_TEST_COUNT:')) || '' }
+}
+// <</shared:parseRemovedLiteralScanOutput>>
+
+// <<shared:renderRemovedLiteralScanScript>>
+// A mechanical, single Python invocation -- the agent's only job is to run it and transcribe stdout
+// (same "script decides, agent transcribes" discipline as runPrepareRun()/verifyVaultCommit()), so
+// no per-literal or per-file judgment is delegated to the model. `range` is the SAME prevSha-or-
+// HEAD~1 commit-range boundary renderWorkAssertion() already uses for this task, so the scan and the
+// work assertion agree on exactly what this task's own commit contains.
+function renderRemovedLiteralScanScript({ range, tasksJsonPath, taskNum, testGlobRegex, minLiteralLen, identifierMinLen }) {
+  return `cat > "$RLS_TMP" <<'PYEOF'
+import json, re, subprocess, sys
+
+def sh(cmd):
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True).stdout
+
+TASK_NUM = ${JSON.stringify(taskNum)}
+TASKS_PATH = ${JSON.stringify(tasksJsonPath)}
+RANGE = ${JSON.stringify(range)}
+TEST_GLOB_REGEX = ${JSON.stringify(testGlobRegex)}
+MIN_LEN = ${JSON.stringify(minLiteralLen)}
+IDENT_MIN_LEN = ${JSON.stringify(identifierMinLen)}
+
+try:
+    data = json.load(open(TASKS_PATH))
+except (OSError, ValueError):
+    data = []
+matches = [x for x in data if isinstance(x, dict) and x.get('task_id') == TASK_NUM]
+task_files = matches[0].get('files', []) if matches else []
+
+def is_own(path):
+    for tf in task_files:
+        tf = tf.rstrip('/')
+        if path == tf or path.startswith(tf + '/'):
+            return True
+    return False
+
+test_re = re.compile(TEST_GLOB_REGEX)
+candidates = [l for l in sh('git ls-files').splitlines() if test_re.search(l)]
+if not candidates:
+    print('INSTRUMENT_BROKEN:no candidate test files matched TEST_GLOB_REGEX=%r under this repo' % TEST_GLOB_REGEX)
+    sys.exit(0)
+print('CANDIDATE_TEST_COUNT:%d' % len(candidates))
+
+diff = sh('git diff --unified=0 %s HEAD -- .' % RANGE)
+removed_lines = [l[1:] for l in diff.splitlines() if l.startswith('-') and not l.startswith('---')]
+# Quoted-string literals gate on MIN_LEN. Bare identifiers gate on EITHER containing an underscore
+# (a real snake_case/CONST_CASE symbol, reported at any length) OR being at least IDENT_MIN_LEN chars
+# with no underscore -- this is what keeps an ordinary removed English word ("failed", "returned")
+# out of the result: those are short and underscore-free, unlike a real removed symbol name.
+lit_re = re.compile(
+    r'"([^"]{%d,})"' % MIN_LEN
+    + r"|'([^']{%d,})'" % MIN_LEN
+    + r'|\\b([A-Za-z_][A-Za-z0-9]*_[A-Za-z0-9_]*)\\b'
+    + r'|\\b([A-Za-z][A-Za-z0-9]{%d,})\\b' % (IDENT_MIN_LEN - 1)
+)
+literals = set()
+for line in removed_lines:
+    for m in lit_re.finditer(line):
+        lit = m.group(1) or m.group(2) or m.group(3) or m.group(4)
+        if lit:
+            literals.add(lit)
+
+if not literals:
+    print('NO_LITERALS_REMOVED')
+    sys.exit(0)
+
+hits = []
+for lit in sorted(literals):
+    for f in candidates:
+        if is_own(f):
+            continue
+        try:
+            with open(f, encoding='utf-8', errors='ignore') as fh:
+                for i, line in enumerate(fh, 1):
+                    if lit in line:
+                        hits.append((lit, f, i))
+                        break
+        except OSError:
+            continue
+
+if not hits:
+    print('NO_HITS')
+else:
+    for lit, f, i in hits:
+        print('HIT:%s|%s|%d' % (lit, f, i))
+PYEOF
+python3 "$RLS_TMP"; RLS_EXIT=$?; rm -f "$RLS_TMP"; exit $RLS_EXIT`
+}
+// <</shared:renderRemovedLiteralScanScript>>
+
+// <<shared:renderRemovedLiteralScan>>
+function renderRemovedLiteralScan({ runRoot, taskNum, tasksJsonPath, range, testGlobRegex, minLiteralLen, identifierMinLen }) {
+  const script = renderRemovedLiteralScanScript({ range, tasksJsonPath, taskNum, testGlobRegex, minLiteralLen, identifierMinLen })
+  return `You are the removed-literal-scan agent (BT.ticket.failure-attribution-and-gate-cache, task
+4). Task ${taskNum}'s own commit(s) (range ${range}..HEAD) may have removed a string literal or
+identifier that a test OUTSIDE this task's own files[] still references -- a silent breakage the
+fast test tripwire does not otherwise catch. Do NOT reason about which literals matter yourself; the
+script below already decided it. Run exactly this ONE Bash call from ${runRoot}, verbatim:
+
+  cd ${runRoot} && RLS_TMP=$(mktemp) && ${script}
+
+Transcribe every line it prints to stdout, in order, exactly as printed -- do not summarize,
+reformat, or drop any line (including INSTRUMENT_BROKEN:, CANDIDATE_TEST_COUNT:, NO_LITERALS_REMOVED,
+NO_HITS, or any HIT: line).
+
+Return via StructuredOutput: rawOutput (everything printed above, verbatim, in order).`
+}
+// <</shared:renderRemovedLiteralScan>>
+
+// <<shared:removedLiteralScan>>
+// Orchestrates one post-commit removed-literal scan for the current task: resolves the config knobs
+// (project override via harnessCfg.removedLiteralScan, else REMOVED_LITERAL_SCAN_CONFIG's default),
+// renders and runs the mechanical script above, and returns { hits, instrumentOk, note }. A hit
+// inside the task's own files[] is filtered out BY THE SCRIPT ITSELF (never reported here at all) --
+// see renderRemovedLiteralScanScript's is_own() check. instrumentOk=false means the scan could not
+// positively confirm it ran (no candidate test files, or an incomplete transcription) -- callers
+// must treat that as "scan inconclusive", never as "no hits found".
+async function removedLiteralScan({ runRoot, taskNum, tasksJsonPath, prevSha, harnessCfg }) {
+  const cfg = harnessCfg?.removedLiteralScan || {}
+  const testGlobRegex = typeof cfg.testGlobRegex === 'string' && cfg.testGlobRegex ? cfg.testGlobRegex : REMOVED_LITERAL_SCAN_CONFIG.testGlobRegex
+  const minLiteralLen = Number.isInteger(cfg.minLiteralLen) && cfg.minLiteralLen > 0 ? cfg.minLiteralLen : REMOVED_LITERAL_SCAN_CONFIG.minLiteralLen
+  const identifierMinLen = Number.isInteger(cfg.identifierMinLen) && cfg.identifierMinLen > 0 ? cfg.identifierMinLen : REMOVED_LITERAL_SCAN_CONFIG.identifierMinLen
+  const range = prevSha || 'HEAD~1'
+  const result = await tracedAgent(`
+${renderRemovedLiteralScan({ runRoot, taskNum, tasksJsonPath, range, testGlobRegex, minLiteralLen, identifierMinLen })}
+`, { label: `removed-literal-scan-${taskNum}`, schema: REMOVED_LITERAL_SCAN_SCHEMA, model: 'haiku' })
+  return parseRemovedLiteralScanOutput(result && result.rawOutput)
+}
+// <</shared:removedLiteralScan>>
