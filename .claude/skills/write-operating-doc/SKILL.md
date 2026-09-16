@@ -61,12 +61,18 @@ That's it. Everything below is a lookup table, not reading.
 The last sentence is doing real work: it gives permission to stop reading, which is what makes the
 rest of the page safe to open.
 
-### 2. Tables carry the load; paragraphs are the exception
+When the doc has no single command, the first lines are **3–5 at-a-glance bullets** instead — the
+situation, the one number that matters, the next act — each linking down. Never a paragraph.
 
-A table is scannable at a glance and has a visible end. A paragraph has to be entered. Use prose
-only where a table would lie — and then keep it to two or three sentences.
+### 2. Tables and bullets carry the load; paragraphs never
 
-**Rule of thumb: if a section is more than four lines of prose, it belongs in the rationale file.**
+A table is scannable at a glance and has a visible end. A paragraph has to be entered. In his words
+(2026-09-15): *"Long paragraphs make all these docs really hard to read and timely."*
+
+- **No prose block over two lines.** Longer becomes bullets, a table, or the rationale file.
+- **Table cells are keywords and fragments**, not sentences: `10 min · open draft · publish`.
+- **Every `##` opens with 1–3 bullets** saying what the section holds — no lead-in sentence.
+- **One fact per bullet.**
 
 ### 3. Every item is one physical act with a time estimate
 
@@ -129,9 +135,9 @@ else" beats "Documentation of the operating rhythm".
 
 ## Checklist
 
-- [ ] Line 1 (after the title) is a command or a single-table decision, not prose
+- [ ] Line 1 (after the title) is a command, a single-table decision, or 3–5 at-a-glance bullets — never prose
 - [ ] The whole file fits one screen — roughly 100 lines
-- [ ] No section has more than four consecutive lines of prose
+- [ ] No prose block over two lines; every `##` opens with bullets; table cells are keywords
 - [ ] At most **five** things to do are shown
 - [ ] Every action is one physical act with a time estimate, all under 20 minutes
 - [ ] Items that are *not* the reader's are listed and labelled as such
