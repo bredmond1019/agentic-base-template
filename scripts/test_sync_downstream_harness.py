@@ -263,6 +263,58 @@ class EnginesOnlyGuard(unittest.TestCase):
             self.assertNotIn("test_sync_downstream_harness.py", names,
                              "base-template's own tooling must never propagate")
 
+    def test_workflows_bin_and_agent_rules_ship_to_every_eligible_target(self):
+        """Task 7: harness_files() previously never shipped workflows/bin/ at all, which is why
+        the lint-rule registry (task 3's check_tasks_json.py + lint_rules/*.py) reached zero of
+        60+ downstream harness.json files (block's `why`). agent-rules.md already synced via the
+        pre-existing workflows/*.md glob; pinned here alongside bin/ so a future narrowing of that
+        glob can't silently drop it without this test noticing.
+
+        Recursive (lint_rules/__init__.py is nested one level under bin/) and NOT gated on
+        engines_only - same rule as workflows/*.js and workflows/*.md: mechanism, not a
+        brain-specific command."""
+        _write(self.bt / ".claude" / "workflows" / "bin" / "prepare_run.py", "# prepare-run\n")
+        _write(self.bt / ".claude" / "workflows" / "bin" / "check_tasks_json.py", "# umbrella\n")
+        _write(
+            self.bt / ".claude" / "workflows" / "bin" / "lint_rules" / "__init__.py",
+            "# rule registry\n",
+        )
+        _write(self.bt / ".claude" / "workflows" / "agent-rules.md", "engine-owned rules\n")
+        for engines_only in (False, True):
+            names = {p.name for p in sync.harness_files(self.bt, engines_only=engines_only)}
+            for expected in ("prepare_run.py", "check_tasks_json.py", "__init__.py", "agent-rules.md"):
+                self.assertIn(expected, names, f"missing {expected} with engines_only={engines_only}")
+
+    def test_workflows_bin_reaches_a_leaf_repos_dry_run_listing(self):
+        """Positive case at the diff_repo level (what --dry-run actually prints): a fixture
+        eligible repo (has .claude/workflows/) is offered the new bin/ files and agent-rules.md as
+        'new' diffs."""
+        _write(self.bt / ".claude" / "workflows" / "bin" / "prepare_run.py", "# prepare-run\n")
+        _write(self.bt / ".claude" / "workflows" / "agent-rules.md", "engine-owned rules\n")
+        report = sync.diff_repo(self.bt.resolve(), self.brain.resolve(), self._targets()["leaf"])
+        rel_paths = {d.rel_path for d in report.diffs if d.status == "new"}
+        self.assertIn("workflows/bin/prepare_run.py", rel_paths)
+        self.assertIn("workflows/agent-rules.md", rel_paths)
+
+    def test_an_ineligible_repo_never_receives_workflows_bin(self):
+        """Negative case: a repo with no .claude/workflows/ directory is not an eligible sync
+        target at all (discover_targets' own eligibility rule), so it is never even offered these
+        paths - not filtered out at file-selection time, excluded before diff_repo ever runs."""
+        _write(self.bt / ".claude" / "workflows" / "bin" / "prepare_run.py", "# prepare-run\n")
+        ineligible = self.brain / "core" / "no-workflows"
+        _write(ineligible / ".claude" / "commands" / "prime.md", "no engines here\n")
+        _write(
+            self.brain / "brain.toml",
+            '# brain.toml\n'
+            '[[repos]]\nslug = "brain"\nrepo_path = "."\n\n'
+            '[[repos]]\nslug = "base-template"\nrepo_path = "base-template"\n\n'
+            '[[repos]]\nslug = "leaf"\nrepo_path = "core/leaf"\n\n'
+            '[[repos]]\nslug = "no-workflows"\nrepo_path = "core/no-workflows"\n',
+        )
+        targets = self._targets()
+        self.assertNotIn("no-workflows", targets,
+                          "a repo with no .claude/workflows/ must never be an eligible target")
+
     def test_harness_files_excludes_generate_roadmap_for_any_target(self):
         """generate-roadmap.md is HQ-only by nature (Step 1A: 'this command runs at HQ') and
         stays single-copy at base-template — excluded regardless of engines_only, unlike
