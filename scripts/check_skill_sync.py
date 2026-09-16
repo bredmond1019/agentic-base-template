@@ -103,7 +103,7 @@ ANCHORS = [
     # 2005->2080, 2086->2161. Re-verified: the WORKTREE MODE text itself onward is byte-identical
     # to before; only the ~18 lines before it changed. .agents/skills/sdlc-task/SKILL.md Step 1
     # updated with the prepare_run.py-direct-invocation + refusal + --resume-from-meta note.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2080, 2161,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2107, 2188,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -194,7 +194,7 @@ ANCHORS = [
     # this region itself -- verified by diffing the old range against the new range:
     # byte-identical text ("7. Commit your edits (stage explicitly" through the trailing
     # `git log --oneline -1`).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3686, 3713,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3787, 3814,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
@@ -212,7 +212,7 @@ ANCHORS = [
     # `const worktreeRecipe =`, shifting this anchor 1960->2011, 2090->2141. Re-verified: the
     # worktreeRecipe text itself onward is byte-identical to before.
     # .agents/skills/sdlc-flow/SKILL.md's setup step updated with the same prepare_run.py note.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2011, 2141,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2047, 2177,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -230,7 +230,7 @@ ANCHORS = [
     # bookkeep-vault-commit entry above, shifting this anchor 3635->3705, 3670->3740 with NO
     # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
     # trailing `git log --oneline -1`).
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3705, 3740,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3863, 3898,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 
