@@ -6,6 +6,42 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-15
 
 ---
+## 2026-09-15 — BT.ticket.prepare-run-replaces-setup-agents: sdlc-flow BAILED again at task 7 (resume)
+
+Resumed `BT.ticket.prepare-run-replaces-setup-agents` via `/sdlc-flow --worktree --resume` after
+the prior bail. Tasks 1-6 (unchanged from the prior run) stayed passed. On task 7, the resumed
+attempt found the task's diff and regression test already implemented and committed on this branch
+at `12f2e94` (a prior attempt in this sequential worktree) — `harness_files()` now ships
+`.claude/workflows/bin/*.py` and `agent-rules.md` to eligible downstream repos, with pinning tests
+— so no new commit was made this attempt; the existing diff was verified against the prior task-6
+commit (`b762920`) to match its declared `files[]` exactly, and its own regression tests plus the
+grep validation command pass.
+
+**Task 7 BAILED again**, same root cause as the prior run and reproduced fresh: `task_validation_1`
+(`test_every_skill_directory_is_registered_or_allowlisted`, `test_mirrored_bodies_match_generically`)
+fails identically against base `main` (HEAD `6fa6eec`) — the `create-llm-node` skill directory is
+unregistered in `AGENT_SKILL_SLUGS` and its `.agents` mirror body has drifted from its `.claude`
+source. Both defects pre-date task 7's diff and sit outside its declared `files[]` scope
+(`scripts/sync_downstream_harness.py`, `scripts/test_sync_downstream_harness.py` never touch
+`create-llm-node`) — an upstream-repo defect this task cannot bound-fix. Filed as the run's second
+bail; block stays open (status: blocked) pending a fix to the `create-llm-node` skill
+registration/mirror drift upstream (outside this ticket's scope) before task 7 can be re-attempted.
+
+Next: fix the pre-existing `create-llm-node` skill registration (`AGENT_SKILL_SLUGS`) and
+`.agents`/`.claude` mirror drift in a separate ticket, then resume
+`BT.ticket.prepare-run-replaces-setup-agents` from task 7.
+
+```
+12f2e94 feat: implement BT.ticket.prepare-run-replaces-setup-agents-task7
+b762920 feat: implement BT.ticket.prepare-run-replaces-setup-agents-task6
+b80ee77 feat: implement BT.ticket.prepare-run-replaces-setup-agents-task5
+590bbc3 feat: implement BT.ticket.prepare-run-replaces-setup-agents-task4
+b544f4e feat: implement BT.ticket.prepare-run-replaces-setup-agents-task3
+8e80691 feat: implement BT.ticket.prepare-run-replaces-setup-agents-task2
+d68c808 feat: implement BT.ticket.prepare-run-replaces-setup-agents-task1
+```
+
+---
 ## 2026-09-15 — BT.ticket.prepare-run-replaces-setup-agents: sdlc-flow BAILED at task 7
 
 Ran tasks 1-7 of `BT.ticket.prepare-run-replaces-setup-agents` via `/sdlc-flow --worktree`. Tasks
