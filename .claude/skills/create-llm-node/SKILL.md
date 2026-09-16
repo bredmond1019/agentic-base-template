@@ -111,9 +111,10 @@ happened precisely because the author reasonably thought of it as "a one-off jud
    (`crates/engine-core/src/workflows/sdlc_flow/task_loop.rs`'s `TriageTaskNode`) or a plain
    function (`crates/engine-serve/src/journal.rs`'s `compose_ledger_entries_via_agent`).
 3. Check whether the four-layer policy resolution (`event_override > profile > harness_defaults >
-   builtin`) applies to your call site, or only a subset — some seams (the ledger composer) have no
-   per-run event to resolve a profile against and deliberately resolve only two of the four layers.
-   Say so in a doc comment if you're deliberately narrowing it; don't silently under-resolve.
+   builtin`) applies to your call site, or only a subset — some seams may have no per-run event to
+   resolve a profile against. Say so in a doc comment if you're deliberately narrowing it; don't
+   silently under-resolve. (As of 2026-09-14 the ledger composer itself was fixed to resolve all
+   four layers — check its current state before citing it as an example of a narrowed seam.)
 4. Give every new tier/backend-resolving knob a behavior-stable built-in default (adding the knob
    must not change what an existing run does) and, where the workflow has named profiles at all,
    set it explicitly in each one — per this repo's own standing rule 6.
