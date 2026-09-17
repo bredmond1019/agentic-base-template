@@ -359,7 +359,20 @@ def harness_files(root: Path, engines_only: bool = False) -> list[Path]:
 # makes this script REMOVE the stale downstream copies on the next sync (it reconciles removals,
 # not just copies -- the same pass that retires sdlc-block.js and sdlc-run.js). Do not re-add it.
 # check_block_records.py is the interim block-record gate until mev's W_BLOCK_* checks ship.
-SCRIPT_FILENAMES: list[str] = ["check_block_records.py"]
+#
+# check_task_files.py, check_spec_validation_commands.py, check_task_gate_boundaries.py and
+# check_observed_red.py were added 2026-09-17: prepare_run.py's replacement setup-agent path
+# (BT.ticket.prepare-run-replaces-setup-agents) imports these four via
+# `.claude/workflows/bin/lint_rules/__init__.py`, which IS synced as part of `.claude/workflows/`,
+# but this list was never widened to match -- every downstream repo's `/sdlc-task`/`/sdlc-flow`
+# crashed at Setup with `ModuleNotFoundError: No module named 'check_task_files'` until this fix.
+SCRIPT_FILENAMES: list[str] = [
+    "check_block_records.py",
+    "check_task_files.py",
+    "check_spec_validation_commands.py",
+    "check_task_gate_boundaries.py",
+    "check_observed_red.py",
+]
 
 
 def collect_script_files(root: Path) -> list[Path]:
