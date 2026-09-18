@@ -109,7 +109,7 @@ ANCHORS = [
     # content change to this region itself -- verified by diffing the old range against the new
     # range: byte-identical ("WORKTREE MODE (--worktree)" through the trailing IN-PLACE MODE text).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2181->2190, 2262->2271 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2190, 2271,
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2202, 2283,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -216,7 +216,7 @@ ANCHORS = [
     # byte-identical ("7. Commit your edits (stage explicitly" through the trailing
     # `git log --oneline -1`).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3922->3999, 3949->4026 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3999, 4026,
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4011, 4038,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
@@ -240,7 +240,7 @@ ANCHORS = [
     # content change -- verified byte-identical ("const worktreeRecipe =" through the trailing
     # content).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2116->2125, 2246->2255 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2125, 2255,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2137, 2267,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -263,7 +263,7 @@ ANCHORS = [
     # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
     # trailing `git log --oneline -1`).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3993->4025, 4028->4060 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4025, 4060,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4037, 4072,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

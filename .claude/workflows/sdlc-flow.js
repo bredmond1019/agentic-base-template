@@ -1670,6 +1670,7 @@ const HARNESS_CONFIG_SCHEMA = {
 const HARNESS_CONFIG_BAIL = {
   unparseable: 'HARNESS_CONFIG_UNPARSEABLE',
   zeroGatingChecks: 'HARNESS_CONFIG_ZERO_GATING_CHECKS',
+  transcriptionIncomplete: 'HARNESS_CONFIG_TRANSCRIPTION_INCOMPLETE',
 }
 
 // BT.ticket.prepare-run-replaces-setup-agents, task 6: sourced from the shared runPrepareRun()
@@ -1687,6 +1688,17 @@ async function loadHarnessConfig(cwd) {
   if (!pr || pr.refused) return null
   const cfg = pr.harness_config
   if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return null
+  // prepare_run.py reports how many validation.checks[] the file on disk holds. The config reaches
+  // this engine through a model's verbatim copy of that script's stdout, and a copy that drops
+  // checks still parses -- measured 2026-09-18: runs gated on 1 of 113 checks, silently. A count
+  // mismatch is a hard bail, never a degraded run. Absent count (older prepare_run.py) skips this.
+  if (typeof pr.harness_check_count === 'number') {
+    const got = Array.isArray(cfg.validation && cfg.validation.checks) ? cfg.validation.checks.length : 0
+    if (got !== pr.harness_check_count) {
+      log(`harness-config: transcribed config carries ${got} check(s) but prepare_run.py read ${pr.harness_check_count} from disk.`)
+      return { __bail: HARNESS_CONFIG_BAIL.transcriptionIncomplete }
+    }
+  }
   return cfg
 }
 
@@ -1757,7 +1769,7 @@ function renderCheckList(cfg, { gatingOnly = false, cwd, engineFiles = [], baseS
     const gate = c.gates
       ? 'GATING — a failure here blocks the verdict'
       : 'non-gating — informational; a failure here does not block the verdict'
-    const header = `CHECK ${n} — ${c.name} (${c.purpose}) [${gate}]`
+    const header = `CHECK ${n} — ${c.name}${c.purpose ? ` (${c.purpose})` : ''} [${gate}]`
 
     if (kind === 'baseline-diff') {
       const baselinePath = `${cwd ? cwd + '/' : ''}${reportsDir}/${slug}-baseline.json`

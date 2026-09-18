@@ -33,7 +33,9 @@ Prints one JSON object to stdout. On success:
     "vault_root": "<abs path — realpath of planning/, same whether vaulted or not>",
     "agent_flag": " --agent <slug>" | "",
     "scope_flag": " --scope <slug>" | "",
-    "harness_config": <planning/harness.json parsed, or null if absent/invalid>,
+    "harness_config": <planning/harness.json parsed and compacted (prose-only keys removed -- see
+                       compact_harness_config), or null if absent/invalid>,
+    "harness_check_count": <len(validation.checks) as read from disk, or null>,
     "tasks_enumeration": [{"task_id": 1, "dependsOn": [...]}, ...],
     "task_commits": {"<N>": {"shas": ["<newest short sha>", ...], "newest": "<sha>",
                               "earliest_parent": "<short sha>" | null}, ...},
@@ -431,6 +433,33 @@ def verify_requires_and_probes(repo_root, harness_config, simulate_missing_env=N
     return (None, probes)
 
 
+# Prose-only keys a harness.json check (or the config itself) may carry that NO engine reads. They
+# are the bulk of the file (base-template: ~190 KB of 193 KB), and this script's stdout is copied
+# verbatim by a model turn (runPrepareRun) -- a copy that size is never verbatim: measured
+# 2026-09-18, four launches in a row got 1-of-113 or 0-of-113 gating checks back. Stripping them
+# keeps every field an engine consumes while shrinking the payload ~10x; harness_check_count lets
+# the engine prove the copy it received is complete (loadHarnessConfig fails closed on a mismatch).
+_HARNESS_PROSE_KEYS = frozenset({'purpose', 'observed_red', 'evidence', 'gates_reason', 'rationale'})
+
+
+def compact_harness_config(cfg):
+    """Return `cfg` minus _HARNESS_PROSE_KEYS and any `_`-prefixed key, at every depth. None -> None."""
+    if isinstance(cfg, dict):
+        return {k: compact_harness_config(v) for k, v in cfg.items()
+                if k not in _HARNESS_PROSE_KEYS and not k.startswith('_')}
+    if isinstance(cfg, list):
+        return [compact_harness_config(v) for v in cfg]
+    return cfg
+
+
+def harness_check_count(cfg):
+    """Number of validation.checks[] entries in the config as read from disk, or None."""
+    if not isinstance(cfg, dict):
+        return None
+    checks = (cfg.get('validation') or {}).get('checks')
+    return len(checks) if isinstance(checks, list) else 0
+
+
 def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_env=None, block_id=None):
     cwd = cwd or os.getcwd()
     repo_root = resolve_repo_root(explicit_repo_root)
@@ -457,7 +486,8 @@ def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_e
         'vault_root': vault_root,
         'agent_flag': agent_flag,
         'scope_flag': scope_flag,
-        'harness_config': harness_config,
+        'harness_config': compact_harness_config(harness_config),
+        'harness_check_count': harness_check_count(harness_config),
         'tasks_enumeration': tasks_enumeration,
         'task_commits': task_commits,
         'lint': lint,
@@ -486,7 +516,8 @@ def main(argv=None):
         simulate_missing_env=args.simulate_missing_env,
         block_id=args.block_id,
     )
-    print(json.dumps(result, indent=2))
+    # Compact separators: this output is copied by a model turn, so every byte is a transcription risk.
+    print(json.dumps(result, separators=(',', ':')))
     return 1 if result.get('refused') else 0
 
 

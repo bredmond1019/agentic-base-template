@@ -138,7 +138,8 @@ ANCHORS = [
     # same text now sits at line 2221, a +69 shift. New range 2176-2257 diffed byte-identical
     # against the pre-shift 2107-2188 window (git show 2d3a918:.claude/workflows/sdlc-task.js).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2181->2190, 2262->2271 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2190, 2271,
+    # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 2190->2202, 2271->2283 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2202, 2283,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -239,7 +240,8 @@ ANCHORS = [
     # now sits at line 3931, a +130 shift. New range 3917-3944 diffed byte-identical against the
     # pre-shift 3787-3814 window (git show 2d3a918:.claude/workflows/sdlc-task.js).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3922->3999, 3949->4026 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3999, 4026,
+    # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 3999->4011, 4026->4038 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4011, 4038,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
@@ -300,7 +302,8 @@ ANCHORS = [
     # CONTENT: old needle sat at line 2061 (offset 14 from 2047); new needle at 2130, a +69 shift.
     # New range 2116-2246 diffed byte-identical against the pre-shift 2047-2177 window.
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2116->2125, 2246->2255 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2125, 2255,
+    # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 2125->2137, 2255->2267 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2137, 2267,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
     # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
@@ -328,7 +331,8 @@ ANCHORS = [
     # sits at line 4026, a +130 shift. New range 3993-4028 diffed byte-identical against the
     # pre-shift 3863-3898 window (git show 2d3a918:.claude/workflows/sdlc-flow.js).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3993->4025, 4028->4060 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4025, 4060,
+    # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 4025->4037, 4060->4072 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4037, 4072,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 
