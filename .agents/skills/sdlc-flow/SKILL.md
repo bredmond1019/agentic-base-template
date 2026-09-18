@@ -42,6 +42,10 @@ description: >
      implement → fast-test → (triage → fix/​bail) ×≤3
      One state-commit per task. A triage MAJOR / immediate-bail reason breaks
      straight to wrap-up (draft PR) — it does NOT burn three attempts.
+     Triage's "same failure, no progress" must be measured THIS attempt: a work-assertion,
+     vault-commit or removed-literal-scan failure precedes the test stage, so gate_results/issues
+     may be carried over from an earlier attempt (DATA FRESHNESS WARNING) and never alone justify
+     sameFailureAsBefore=true.
 
    End-review: ONE review over the integrated tree, fed state.json as the index but
    reading `git diff <prBase>..HEAD` + tasks.md criteria directly + the AGGREGATED

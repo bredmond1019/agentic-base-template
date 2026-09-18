@@ -154,6 +154,10 @@ def extract_shared_block(name: str) -> str | None:
 # `runPrepareRun is not defined` crashed the node subprocess (the schema+resolver-only extraction
 # never pulled in runPrepareRun() itself -- see main()'s dep_names below).
 AGENT_STUB_JS = r"""
+// Both engines declare a top-level `const blockId = tokens[0]`, which runPrepareRun() reads to
+// render `--block-id` (BT.ticket.work-assertion-base-sha-self-comparison). The extracted functions
+// run without that top-level, so supply it here -- a stub id matches no commit, so task_commits is {}.
+global.blockId = 'TEST.stub.A';
 global.agent = async function (prompt, opts) {
   const { execSync } = require('child_process')
   const m = prompt.match(/^  (REPO_ROOT=.*)$/m)

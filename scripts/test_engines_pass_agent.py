@@ -218,13 +218,17 @@ STANDALONE_SITE_RE = re.compile(
 # unchanged once the flag interpolation is stripped (diffed against the pre-shift content,
 # Re-pinned again 2026-09-16: inlined shared regions shifted sites +130 lines in both
 # engines: 3790->3920 in sdlc-task.js and 3866->3996 / 4156->4286 in sdlc-flow.js. Text unchanged.
+# Re-pinned again 2026-09-18 (BT.ticket.work-assertion-base-sha-self-comparison lane close): 7547dda's
+# bail-payload freshness warning plus this block's resolvePrevSha()/task_commits plumbing and the
+# removed-literal-scan subtraction shifted the sites 3920->3997 in sdlc-task.js and 3996->4028 /
+# 4286->4318 in sdlc-flow.js. Text unchanged -- the suite asserts each baseline string at its new line.
 FROZEN_BASELINE = {
     str(TASK_JS): {
-        3920: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
+        3997: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
     },
     str(FLOW_JS): {
-        3996: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
-        4286: "   mev emit-state --write",
+        4028: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
+        4318: "   mev emit-state --write",
     },
 }
 
@@ -296,6 +300,10 @@ def extract_shared_block(name: str) -> str | None:
 # a real Claude session). This exercises the whole real path: the async JS wrapper that calls
 # agent() with this exact prompt shape, and the exact command text that prompt carries.
 AGENT_STUB_JS = r"""
+// Both engines declare a top-level `const blockId = tokens[0]`, which runPrepareRun() reads to
+// render `--block-id` (BT.ticket.work-assertion-base-sha-self-comparison). The extracted functions
+// run without that top-level, so supply it here -- a stub id matches no commit, so task_commits is {}.
+global.blockId = 'TEST.stub.A';
 global.agent = async function (prompt, opts) {
   const { execSync } = require('child_process')
   const m = prompt.match(/^  (REPO_ROOT=.*)$/m)

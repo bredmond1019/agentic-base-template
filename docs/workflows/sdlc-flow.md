@@ -401,6 +401,9 @@ the `flow` block. Every key has a CLI flag that overrides it for a single run.
 3. Environment/credential/auth/network failure (not a code defect).
 4. Change would require a destructive or out-of-scope action.
 5. Same failure twice with no progress (stuck), or a structural design flaw needing a re-plan.
+   "No progress" must be measured on this attempt: a work-assertion, vault-commit or removed-literal-scan
+   failure happens before the test stage, so `gate_results`/`issues` may be carried over from an earlier
+   attempt (flagged by a DATA FRESHNESS WARNING) and never alone justify `sameFailureAsBefore=true`.
 
 Projects append project-specific reasons via `flow.bailReasons[]`. The triage agent's bias is
 **when unsure, bail** — a wasted retry loop costs more than one human glance at a draft PR. See

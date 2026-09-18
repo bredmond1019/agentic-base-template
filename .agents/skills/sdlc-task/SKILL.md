@@ -720,6 +720,11 @@ For each `taskNum` in `taskList` (skip any already in the resume skip-set, loggi
        4. The needed change would be destructive or out-of-scope.
        5. The SAME failure twice with no progress (stuck), or a structural design flaw needing a
           re-plan.
+          "No progress" must be MEASURED this attempt: a work-assertion, vault-commit or
+          removed-literal-scan failure happens BEFORE the test stage, so any gate_results/issues in
+          the state can be CARRIED OVER from an earlier attempt (look for a DATA FRESHNESS WARNING).
+          Never set sameFailureAsBefore=true or call data "byte-identical" from carried-over data
+          alone -- say the check was not re-run this attempt.
 
        Those five are hardcoded mechanism. A project may APPEND its own via
        `planning/harness.json`'s `flow.bailReasons[]` — read that key and treat any entry there as

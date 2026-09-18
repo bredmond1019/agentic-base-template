@@ -137,7 +137,8 @@ ANCHORS = [
     # "WORKTREE MODE (--worktree)" sat at line 2152 inside the old range (offset 45 from 2107); the
     # same text now sits at line 2221, a +69 shift. New range 2176-2257 diffed byte-identical
     # against the pre-shift 2107-2188 window (git show 2d3a918:.claude/workflows/sdlc-task.js).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2181, 2262,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2181->2190, 2262->2271 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2190, 2271,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -158,10 +159,12 @@ ANCHORS = [
     # line 821 inside the old range (offset 21 from 800); the same text now sits at line 913, a +92
     # shift. New range 892-940 diffed byte-identical against the pre-shift 800-848 window (git show
     # 2d3a918:.claude/workflows/prompts/shared.js).
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 879, 927,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: 7547dda added a carried-over-data clause INSIDE renderTriagePrompt and the window had already drifted to start in renderStatusWriteScript; re-picked from CONTENT to the region markers <<shared:renderTriagePrompt>>..<</shared:renderTriagePrompt>> (879-927 -> 889-947); guides re-verified and given the clause, then re-stamped.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 889, 947,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
     # Same shift, same evidence as the entry immediately above (one shared.js region, two docs).
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 879, 927,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: 7547dda added a carried-over-data clause INSIDE renderTriagePrompt and the window had already drifted to start in renderStatusWriteScript; re-picked from CONTENT to the region markers <<shared:renderTriagePrompt>>..<</shared:renderTriagePrompt>> (879-927 -> 889-947); guides re-verified and given the clause, then re-stamped.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 889, 947,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
     # BT.ticket.sdlc-bookkeep-writes-block-status-deterministically, tasks 1-3: the new
     # renderStateFlipScript deterministic `mev set-block-status` dispatch was inlined ABOVE these
@@ -235,7 +238,8 @@ ANCHORS = [
     # (stage explicitly" sat at line 3801 inside the old range (offset 14 from 3787); the same text
     # now sits at line 3931, a +130 shift. New range 3917-3944 diffed byte-identical against the
     # pre-shift 3787-3814 window (git show 2d3a918:.claude/workflows/sdlc-task.js).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3922, 3949,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3922->3999, 3949->4026 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3999, 4026,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
@@ -257,7 +261,8 @@ ANCHORS = [
     # field plus the shared renderTestPrompt gate_results instructions landed entirely ABOVE this
     # anchor, shifting it 1085->1095, 1102->1112 with NO content change to this region itself --
     # verified byte-identical ("const autoMergeFlag = hasFlag('--auto-merge')" onward).
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1095, 1112,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 1095->1104, 1112->1121 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1104, 1121,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
@@ -294,7 +299,8 @@ ANCHORS = [
     # mode as the BT.ticket.prepare-run-replaces-setup-agents task-8 note above). Re-picked from
     # CONTENT: old needle sat at line 2061 (offset 14 from 2047); new needle at 2130, a +69 shift.
     # New range 2116-2246 diffed byte-identical against the pre-shift 2047-2177 window.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2116, 2246,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2116->2125, 2246->2255 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2125, 2255,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
     # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
@@ -321,7 +327,8 @@ ANCHORS = [
     # explicitly" sat at line 3896 inside the old range (offset 33 from 3863); the same text now
     # sits at line 4026, a +130 shift. New range 3993-4028 diffed byte-identical against the
     # pre-shift 3863-3898 window (git show 2d3a918:.claude/workflows/sdlc-flow.js).
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3993, 4028,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3993->4025, 4028->4060 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4025, 4060,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 
