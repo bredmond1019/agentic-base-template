@@ -202,9 +202,12 @@ def render_work_assertion_script(
     real `node` process with the given arguments, and returns the bash script string it produces.
     Never re-types the shell logic -- only ever executes the function's own return value.
 
-    `prev_sha`, when given, is the persisted commit the assertion's range should start from (the
-    previous task's own recorded commit, or the run's base_sha for task 1) -- omitting it exercises
-    the pre-fix/no-caller-context fallback to a literal `HEAD~1`."""
+    `prev_sha`, when given, is the persisted commit the assertion's range should start from --
+    resolved by the caller (sdlc-task.js's `resolvePrevSha()`, see
+    `BT.ticket.work-assertion-base-sha-self-comparison`) as the previous task's own recorded
+    commit, else a git-history lookup over that commit, else the run's base_sha, never a commit
+    the current task's own history attributes to it -- omitting it exercises the pre-fix/
+    no-caller-context fallback to a literal `HEAD~1`."""
     fn_src = extract_render_work_assertion(engine_path)
     prev_sha_arg = json.dumps(prev_sha) if prev_sha else "undefined"
     node_script = (
