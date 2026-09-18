@@ -3,9 +3,39 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-16T15:23:52Z
+**Last updated:** 2026-09-18T00:00:00Z
 
 ---
+## 2026-09-18 — `create-node` / `create-molecule`: node I/O is a declared contract, and both skills go cross-repo
+
+Both skills were scoped to `core/engine-rs` alone, and neither said anything about a node's input
+or output *shape* — only about whether the node already existed and whether its values were config
+knobs. That left the fleet's most expensive node-level failure mode uncovered: `engine-rs` and
+`feli` implement **eight of the same nodes** (`CompanyResearchNode`, `ProposalWriter/Review/Revise`,
+`SelfCriticNode`, `ReviseNode`, the fetch pair, `SourceRouterNode`) and the same workflows, with node
+output typed as `HashMap<String, serde_json::Value>` on one side and a free dict on the other.
+
+- **`create-node`** — rescoped to cover engine-rs *and* feli, and gained **Step 2b — the node's I/O
+  is a contract, not an ad-hoc dict**: brain D97's four-layer table (who authors L1 run envelope,
+  L2 collaboration, L3 node I/O, L4 brain RAG), the JSON-Schema-plus-fixtures interchange rule, the
+  per-repo authoring instructions, the stable-`node_id` rule, and the tolerant-read/typed-write
+  discipline. It also names **the one place looseness is correct** — `SDLC_FLOW`/`SDLC_TASK`'s
+  committed state file, which has a second writer (this repo's `sdlc-flow.js`/`sdlc-task.js`) plus
+  external `jq` consumers, and whose Rust side is already typed — so the next author does not
+  "fix" a deliberate forward-tolerance boundary. Step 4 now requires each atom's row to carry its
+  `node_id`, a link to its `schema.json` (or an explicit untyped-because), and whether the other
+  repo implements the same node.
+- **`create-molecule`** — rescoped the same way, and gained **Step 1b — pin the molecule's KEY
+  CONVENTIONS, not just its node order**: a molecule's real contract is the context keys its members
+  read and write, which is what actually drifts. The worked instance is already in the tree —
+  `content_pipeline::TranslateSkipRouterNode` and `linkedin_post::TranslateGateNode` were
+  deliberately not unified over "different upstream key conventions," not over node shape.
+
+Mirrors regenerated with `scripts/generate_skill_surfaces.py`; `--check` clean. No engine, command
+or schema changed, so no ADR — this is guidance catching up to a contract decided in the brain
+(HQ.13.A -> D97) and filed as `FE.9.A`/`FE.9.B` (feli authors L3) and `EN.18.B`/`EN.18.C` (engine-rs
+adopts).
+
 ## 2026-09-16 — BT.ticket.failure-attribution-and-gate-cache: BLOCKED (9 of 9 tasks implemented, review FAIL)
 
 Ran `/sdlc-flow` tasks 1-9. Task 1 added `ownership`/`failure_class` verdict vocabularies to
