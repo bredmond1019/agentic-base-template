@@ -3,9 +3,30 @@
 *The template's own change history. One dated entry per session, newest at the top. This file
 records changes to the **factory** — it is never copied into generated projects.*
 
-**Last updated:** 2026-09-18T00:00:00Z
+**Last updated:** 2026-09-18T16:16:01Z
 
 ---
+## 2026-09-18 — unattended-runs: prevSha self-comparison, per-task running marker, and the prepare-run gate bypass
+
+- **What:**
+  - Closed `BT.ticket.work-assertion-base-sha-self-comparison`: `resolvePrevSha()` plus
+    `prepare_run.py` `task_commits`.
+  - Closed `BT.ticket.per-task-state-write-before-implement`: a STEP 0 `running` marker plus
+    `start_sha`, written inside the implement turn.
+  - Hotfixed prepare-run (`ea95e3e`): compacted harness payload and a fail-closed
+    `harness_check_count` guard.
+  - Synced `sdlc-flow.js`'s header comment to its SKILL.md guide, so `sync-all` stops reverting it
+    (`93cc3bf`).
+  - Cleared pre-existing sync-anchor and pin drift from `7547dda` (`0d50924`).
+  - Gated `scripts/test_removed_literal_scan.py`.
+  - Synced the harness to all 18 downstream repos.
+- **Why:** engine-rs hit both engine bugs on its first JS-engine run after the recent changes.
+  Driving the fixes showed that every engine run since 09-16 had gated on 1 of 113 checks, because
+  a model was copying a 193 KB setup payload "verbatim".
+- **Refs:** `planning/orchestration-run/unattended-runs/`, and carryovers
+  `removed-literal-scan-same-commit-subtraction-is-untested` and
+  `workflow-relay-overrides-engine-task-with-operator-message`.
+
 ## 2026-09-18 — `create-node` / `create-molecule`: node I/O is a declared contract, and both skills go cross-repo
 
 Both skills were scoped to `core/engine-rs` alone, and neither said anything about a node's input
