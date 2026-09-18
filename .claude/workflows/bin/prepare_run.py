@@ -35,6 +35,8 @@ Prints one JSON object to stdout. On success:
     "scope_flag": " --scope <slug>" | "",
     "harness_config": <planning/harness.json parsed, or null if absent/invalid>,
     "tasks_enumeration": [{"task_id": 1, "dependsOn": [...]}, ...],
+    "task_commits": {"<N>": {"shas": ["<newest short sha>", ...], "newest": "<sha>",
+                              "earliest_parent": "<short sha>" | null}, ...},
     "lint": {"passed": bool, "findings": [...], "enabled_rules": int, "total_rules": int},
     "probes": [{"check": "<name>", "command": "<probeCommand>", "passed": true}, ...],
     "refused": false
@@ -47,6 +49,7 @@ On refusal (nonzero exit), ONLY:
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -235,6 +238,75 @@ def enumerate_tasks(repo_root, spec_slug):
     return enumeration
 
 
+def find_task_commits(repo_root, block_id):
+    """BT.ticket.work-assertion-base-sha-self-comparison, task 1: report this block's own
+    per-task commits from git history, so sdlc-task.js's per-task prevSha resolution can fall
+    back to a real prior commit instead of blindly trusting state.base_sha (which is only the
+    correct pre-task baseline for task 1 of a fresh run — see that ticket's `what`).
+
+    Parses `git log --format=%h%x09%s` (newest first) in repo_root and matches ONLY the engine's
+    own commit-subject convention for block_id:
+      feat: implement <block_id>-task<N>
+      fix: fix pass <P> for <block_id>-task<N>
+    anchored to the WHOLE subject, so a ` (vault)`-suffixed variant (those commits live in the
+    brain vault, not this repo) and a prefix-sharing block id (e.g. block_id `BT.x.A` against a
+    commit for `BT.x.AB`) never match. block_id is regex-escaped (dots in a block id are literal,
+    not "any character").
+
+    Returns {"<N>": {"shas": [sha, ...] newest first, "newest": sha,
+                      "earliest_parent": short sha of the parent of the OLDEST matching commit,
+                      or null if it has none}}.
+
+    No block_id, not a git repo, or no matches -> {}. Never raises and never refuses a run — any
+    subprocess failure degrades to {}, the same contract enumerate_tasks() already uses for a
+    missing tasks.json."""
+    if not block_id:
+        return {}
+    escaped = re.escape(block_id)
+    pattern = re.compile(
+        r'^(?:feat: implement|fix: fix pass \d+ for) ' + escaped + r'-task(\d+)$'
+    )
+    try:
+        result = subprocess.run(
+            ['git', 'log', '-n', '500', '--format=%h%x09%s'],
+            cwd=repo_root, capture_output=True, text=True,
+        )
+    except OSError:
+        return {}
+    if result.returncode != 0:
+        return {}
+
+    by_task = {}
+    for line in result.stdout.splitlines():
+        if '\t' not in line:
+            continue
+        sha, subject = line.split('\t', 1)
+        m = pattern.match(subject)
+        if not m:
+            continue
+        by_task.setdefault(m.group(1), []).append(sha)
+
+    task_commits = {}
+    for task_num, shas in by_task.items():
+        oldest = shas[-1]
+        earliest_parent = None
+        try:
+            parent_result = subprocess.run(
+                ['git', 'rev-parse', '--short', f'{oldest}^'],
+                cwd=repo_root, capture_output=True, text=True,
+            )
+            if parent_result.returncode == 0:
+                earliest_parent = parent_result.stdout.strip() or None
+        except OSError:
+            earliest_parent = None
+        task_commits[task_num] = {
+            'shas': shas,
+            'newest': shas[0],
+            'earliest_parent': earliest_parent,
+        }
+    return task_commits
+
+
 def run_lint(repo_root, spec_slug):
     """Fold check_tasks_json.py's own verdict into prepare_run.py's output. Reimplements its
     main() loop field-for-field (same registry, same resolve_enabled(), same per-finding
@@ -359,7 +431,7 @@ def verify_requires_and_probes(repo_root, harness_config, simulate_missing_env=N
     return (None, probes)
 
 
-def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_env=None):
+def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_env=None, block_id=None):
     cwd = cwd or os.getcwd()
     repo_root = resolve_repo_root(explicit_repo_root)
     if not repo_root:
@@ -377,6 +449,7 @@ def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_e
     agent_flag = render_agent_flag(cwd)
     scope_flag = render_scope_flag(cwd)
     tasks_enumeration = enumerate_tasks(repo_root, spec_slug) if spec_slug else []
+    task_commits = find_task_commits(repo_root, block_id)
     lint = run_lint(repo_root, spec_slug)
     return {
         'repo_root': repo_root,
@@ -386,6 +459,7 @@ def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_e
         'scope_flag': scope_flag,
         'harness_config': harness_config,
         'tasks_enumeration': tasks_enumeration,
+        'task_commits': task_commits,
         'lint': lint,
         'probes': probes,
         'refused': False,
@@ -397,6 +471,10 @@ def main(argv=None):
     parser.add_argument('--spec-slug', default=None, help='spec slug under planning/<slug>/tasks.json')
     parser.add_argument('--repo-root', default=None, help='override repo root instead of resolving via git')
     parser.add_argument(
+        '--block-id', default=None,
+        help='block id whose own per-task commits to report as task_commits (e.g. BT.x.A)',
+    )
+    parser.add_argument(
         '--simulate-missing-env', action='append', default=None, metavar='VAR',
         help='test-only: refuse if VAR is unset, as if a check declared requires.env: [VAR]',
     )
@@ -406,6 +484,7 @@ def main(argv=None):
         args.spec_slug,
         explicit_repo_root=args.repo_root,
         simulate_missing_env=args.simulate_missing_env,
+        block_id=args.block_id,
     )
     print(json.dumps(result, indent=2))
     return 1 if result.get('refused') else 0

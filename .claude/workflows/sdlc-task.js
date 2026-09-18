@@ -225,8 +225,8 @@ const PREPARE_RUN_SCHEMA = {
 // brainTomlAtRoot } — never throws; returns null on any parse failure so callers fail exactly the
 // way resolveRepoRoot() returning null already did before this ticket. `prepareRun` is
 // prepare_run.py's own JSON object verbatim (repo_root, is_vaulted, vault_root, agent_flag,
-// scope_flag, harness_config, tasks_enumeration, lint, probes, refused[, reason]) — see that
-// script's module docstring for the field list.
+// scope_flag, harness_config, tasks_enumeration, task_commits, lint, probes, refused[, reason])
+// — see that script's module docstring for the field list.
 function parsePrepareRunOutput(rawOutput) {
   if (!rawOutput || typeof rawOutput !== 'string') return null
   const marker = '---PREPARE_RUN_EXTRA---'
@@ -269,10 +269,11 @@ let _prepareRunCacheSlug = undefined
 async function runPrepareRun(specSlug) {
   if (_prepareRunCache && _prepareRunCacheSlug === (specSlug || null)) return _prepareRunCache
   const specFlag = specSlug ? ` --spec-slug ${specSlug}` : ''
+  const blockIdFlag = blockId ? ` --block-id ${blockId}` : ''
   const result = await agent(`
 Run exactly this ONE Bash call, from the invoking directory — do not cd anywhere first, do not
 substitute or re-derive any value, and do not run any other command:
-  REPO_ROOT=$(${GIT} rev-parse --show-toplevel) && python3 "$REPO_ROOT/.claude/workflows/bin/prepare_run.py"${specFlag} --repo-root "$REPO_ROOT"; echo "---PREPARE_RUN_EXTRA---" && echo "GIT_COMMON_DIR:$(${GIT} rev-parse --path-format=absolute --git-common-dir)" && echo "TIER_PREFIX:$(python3 -c "import os; r=os.path.relpath(os.getcwd(), '$REPO_ROOT'); print('' if r=='.' else r+'/')")" && { [ -f "$REPO_ROOT/brain.toml" ] && echo "BRAIN_TOML:yes" || echo "BRAIN_TOML:no"; }
+  REPO_ROOT=$(${GIT} rev-parse --show-toplevel) && python3 "$REPO_ROOT/.claude/workflows/bin/prepare_run.py"${specFlag}${blockIdFlag} --repo-root "$REPO_ROOT"; echo "---PREPARE_RUN_EXTRA---" && echo "GIT_COMMON_DIR:$(${GIT} rev-parse --path-format=absolute --git-common-dir)" && echo "TIER_PREFIX:$(python3 -c "import os; r=os.path.relpath(os.getcwd(), '$REPO_ROOT'); print('' if r=='.' else r+'/')")" && { [ -f "$REPO_ROOT/brain.toml" ] && echo "BRAIN_TOML:yes" || echo "BRAIN_TOML:no"; }
 This is a two-turn shell task, not a reasoning task: prepare_run.py already resolved every setup
 fact, ran the tasks.json lint, and probed runnability. Do not interpret, summarize, or reformat its
 JSON — transcribe stdout EXACTLY as printed (including the JSON's own newlines and indentation)
