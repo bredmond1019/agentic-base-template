@@ -576,6 +576,17 @@ report an unrunnable spec. `--resume` reads this same result back from the run's
 (`sdlc-task-state.json`'s `setup` field) instead of re-running it. Only after a non-refused result
 does the actual worktree-creation agent (below) run.
 
+**The config still crosses a model on its way in.** The Workflow runtime has no filesystem, so the
+`prepare-run` agent copies `prepare_run.py`'s stdout back verbatim. When that stdout embedded the whole
+`harness.json` (~193 KB), the copy never was verbatim: measured 2026-09-18, runs received 1 or 0 of 113
+gating checks and gated silently on the remainder. Two guards now close this:
+
+- `prepare_run.py` strips prose-only keys (`purpose`, `observed_red`, `evidence`, `gates_reason`,
+  `rationale`, `_`-prefixed) and prints compact JSON — about 14 KB, every engine-read field kept.
+- It reports `harness_check_count`, and `loadHarnessConfig()` bails
+  `HARNESS_CONFIG_TRANSCRIPTION_INCOMPLETE` when the copied config holds a different number of checks.
+  Pinned by `scripts/test_harness_transcription_guard.py`.
+
 `--worktree` was suspended fleet-wide from 2026-08-23 to 2026-08-28 (brain decision
 `D81-worktree-moratorium`) after three separate whole-repo-deletion incidents behind a GREEN run.
 The moratorium was lifted after `BT.ticket.worktree-smoke-fixture` verified a real `--worktree`

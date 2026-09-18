@@ -57,6 +57,17 @@ here — before any branch or worktree work, and before any implement-stage agen
 reads this same result back from the run's meta bundle (`sdlc-flow-state.json`'s `setup` field)
 instead of re-running it.
 
+**The config still crosses a model on its way in.** The Workflow runtime has no filesystem, so the
+`prepare-run` agent copies `prepare_run.py`'s stdout back verbatim. When that stdout embedded the whole
+`harness.json` (~193 KB), the copy never was verbatim: measured 2026-09-18, runs received 1 or 0 of 113
+gating checks and gated silently on the remainder. Two guards now close this:
+
+- `prepare_run.py` strips prose-only keys (`purpose`, `observed_red`, `evidence`, `gates_reason`,
+  `rationale`, `_`-prefixed) and prints compact JSON — about 14 KB, every engine-read field kept.
+- It reports `harness_check_count`, and `loadHarnessConfig()` bails
+  `HARNESS_CONFIG_TRANSCRIPTION_INCOMPLETE` when the copied config holds a different number of checks.
+  Pinned by `scripts/test_harness_transcription_guard.py`.
+
 **Brain-root exception:** at a repo root where `brain.toml` is present (the HQ vault root, where
 `repoRoot` is the whole fleet and every sibling repo's `planning/` symlinks into HQ's own git index
 under a `_planning/<repo>/` path), dirt confined entirely to `_planning/` paths does **not** trip
