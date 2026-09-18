@@ -943,8 +943,75 @@ their output; empty when allPassed), gate_results (the per-check array described
 //   runRootLabel       what to call the run directory in prose.
 //   extraReturnFields  StructuredOutput fields this engine wants that the other does not
 //                      (/sdlc-flow's reportFile). Empty string in the lean engine.
-function renderImplementPrompt({ roleIntro, runRootLabel, runRoot, extraReturnFields, isFix, taskNum, attempt, stem, blockId, specFile, specDesc, tasksJsonFile, breakdownFile, prevFailBlob, vault, GIT, renderCommitSafetyGuard, renderWorkAssertion, prevSha }) {
+//
+// BT.ticket.per-task-state-write-before-implement (task 1): three more caller-supplied seams —
+//   stateFile        this engine's own run-state path (sdlc-task-state.json / sdlc-flow-state.json),
+//                    relative to runRoot. Used only by the STEP 0 marker below, never read/written
+//                    anywhere else in this prompt.
+//   startedMarker    true renders STEP 0, a deterministic python3 heredoc that merges
+//                    tasks["<taskNum>"] = {..existing, status:'running', start_sha:<HEAD short sha>,
+//                    marker_at:<UTC ISO now>} into stateFile BEFORE any edit or commit — the caller
+//                    decides this per-attempt (true only on attempt 1 with no start_sha recorded
+//                    yet; a fix attempt must NEVER re-stamp start_sha, since by then HEAD already
+//                    includes attempt 1's own commit). The agent transcribes the printed sha back as
+//                    `startSha` in its StructuredOutput return; the engine persists it onto
+//                    state.tasks[N].start_sha so the next full state write keeps it.
+//   resumingRunning  true when this task was found at status `running` on disk with a start_sha
+//                    already recorded (a crashed prior attempt) — renders a note telling the agent
+//                    to check for and reuse an already-complete commit rather than blindly
+//                    re-implementing.
+function renderImplementPrompt({ roleIntro, runRootLabel, runRoot, extraReturnFields, isFix, taskNum, attempt, stem, blockId, specFile, specDesc, tasksJsonFile, breakdownFile, prevFailBlob, vault, GIT, renderCommitSafetyGuard, renderWorkAssertion, prevSha, stateFile, startedMarker, resumingRunning }) {
+  const markerStep = startedMarker ? `
+
+STEP 0 — write a 'started' marker to ${stateFile} BEFORE reading, editing, or committing anything,
+so a crash between this task's commit and its normal end-of-task state write still leaves a record
+that this task started and exactly where from:
+  cd ${runRoot} && python3 - <<'PY'
+import json, os, subprocess
+from datetime import datetime, timezone
+
+path = "${stateFile}"
+try:
+    with open(path) as f:
+        data = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    data = {}
+if not isinstance(data, dict):
+    data = {}
+if not isinstance(data.get("tasks"), dict):
+    data["tasks"] = {}
+sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+existing = data["tasks"].get("${taskNum}")
+if not isinstance(existing, dict):
+    existing = {}
+existing["status"] = "running"
+existing["start_sha"] = sha
+existing["marker_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+data["tasks"]["${taskNum}"] = existing
+parent = os.path.dirname(path)
+if parent:
+    os.makedirs(parent, exist_ok=True)
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\\n")
+print("STARTED_MARKER:" + sha)
+PY
+  Every other key already in ${stateFile} (prior tasks, bails, setup, started_at) is preserved
+  byte-for-byte in meaning — this is a merge, never a rewrite. A missing/unparseable state file is
+  created as the minimal valid document above; the run's own later state write fully supersedes it.
+  Report the sha printed after \`STARTED_MARKER:\` as \`startSha\` in your StructuredOutput return.` : ''
+  const resumeNote = resumingRunning ? `
+
+NOTE — this task was found at status \`running\` on disk with a start_sha already recorded: a
+crashed prior attempt may already have committed this task's work (commit subject
+\`feat: implement ${stem}\`). Before implementing anything, run
+\`cd ${runRoot} && ${GIT} log --oneline ${prevSha || 'HEAD~5'}..HEAD\` and check whether such a
+commit already exists. If it does, and the work is complete and correct against the spec, make NO
+new commit — report that commit's own short hash as \`commitHash\`, proceed straight to step 7a's
+work assertion, and skip the implementation steps below. Only implement from scratch if no such
+commit exists, or the existing one is incomplete or wrong.` : ''
   return `${roleIntro}
+${markerStep}${resumeNote}
 
 Target:
   Spec:        ${blockId}
@@ -1091,6 +1158,7 @@ Return via StructuredOutput:${extraReturnFields}
     (cd ${runRoot} && wc -c <each file>), divide the total by 1024, and report the number.
   workAssertionPassed: true only if step 7a's FINAL run this attempt printed no WORK_ASSERTION_ABORT
     and exited 0; false otherwise. Never omit this field.
+  startSha: ${startedMarker ? "the exact sha STEP 0 printed after `STARTED_MARKER:`" : "empty string — STEP 0 was not rendered this attempt"}
   notes: one-line status${vault.vaulted ? ' — mention explicitly whether a vault commit (step 7b) happened and, if so, its outcome' : ''}`
 }
 // <</shared:renderImplementPrompt>>
@@ -1314,6 +1382,11 @@ const STAGE_SCHEMA = {
     // on the implement/fix stage (this schema is shared with the review-fix stage too, which does
     // not run step 7a and may leave it unset).
     workAssertionPassed: { type: 'boolean', description: 'true only if step 7a\'s renderWorkAssertion check printed no WORK_ASSERTION_ABORT and exited 0 on its final run this attempt; false/absent means the terminal write must refuse to record this task done/passed' },
+    // BT.ticket.per-task-state-write-before-implement (task 1): the sha STEP 0's marker printed
+    // after `STARTED_MARKER:`, transcribed verbatim. Empty/absent when STEP 0 was not rendered this
+    // attempt (a fix attempt, or a resumed `running` task that already has one recorded). Only
+    // meaningful on the implement/fix stage, like workAssertionPassed above.
+    startSha:            { type: 'string', description: 'the sha printed by STEP 0\'s STARTED_MARKER line when rendered this attempt; empty string otherwise' },
     notes:               { type: 'string' }
   }
 }
@@ -3200,6 +3273,10 @@ for (const taskNum of taskList) {
   const stem = `${blockId}-task${taskNum}`
   state.tasks[String(taskNum)] = state.tasks[String(taskNum)] || { status: 'running', attempts: 0, summary: '', issues: [], fixes: [], decisions: [], files_changed: [], commit: '', validated: '' }
   const t = state.tasks[String(taskNum)]
+  // BT.ticket.per-task-state-write-before-implement (task 1): captured BEFORE the attempt loop
+  // below touches `t` at all. A start_sha already present here can only have arrived via a prior
+  // run's STEP 0 marker surviving a crash — the "resumed a running task" case.
+  const resumingRunning = t.status === 'running' && !!t.start_sha
 
   // "in-progress" is already tracked in state.tasks[N].status (set below, committed by the
   // state-writer) — tasks.json is a task-definition file, not a live-status file, so there is no
@@ -3220,8 +3297,13 @@ for (const taskNum of taskList) {
     const roleIntro = `You are the ${isFix ? 'fix' : 'implementation'} agent for the /sdlc-flow pipeline. You run IN PLACE in
     ${useWorktree ? 'the shared worktree' : 'the main working tree on this run\'s branch'} (sequential — earlier tasks in this spec are already committed on this branch). Work ONLY
     on Task ${taskNum} of this spec.`
+    // BT.ticket.per-task-state-write-before-implement (task 1): renders only on attempt 1 of a task
+    // with no start_sha recorded yet — a fix attempt never re-stamps it, and a resumed `running`
+    // task keeps its existing start_sha and gets no marker either. sdlc-flow's own work-assertion
+    // range is UNCHANGED by this ticket (no prevSha passed — stays on HEAD~1, out of scope).
+    const startedMarker = attempt === 1 && !t.start_sha
     const stageResult = await tracedAgent(`${W}
-${renderImplementPrompt({ roleIntro, runRootLabel: runRootLabel, runRoot: worktreePath, extraReturnFields: '\n  reportFile: ""   (flow keeps state in state.json, not per-stage reports)', isFix, taskNum, attempt, stem, blockId, specFile, specDesc, tasksJsonFile, breakdownFile, prevFailBlob, vault, GIT, renderCommitSafetyGuard, renderWorkAssertion })}
+${renderImplementPrompt({ roleIntro, runRootLabel: runRootLabel, runRoot: worktreePath, extraReturnFields: '\n  reportFile: ""   (flow keeps state in state.json, not per-stage reports)', isFix, taskNum, attempt, stem, blockId, specFile, specDesc, tasksJsonFile, breakdownFile, prevFailBlob, vault, GIT, renderCommitSafetyGuard, renderWorkAssertion, stateFile, startedMarker, resumingRunning })}
 `, withModel({ label: `${isFix ? 'fix' : 'implement'}-${taskNum}-${attempt}`, schema: STAGE_SCHEMA, phase: 'Tasks' }, isFix ? fixModel : MODEL.implement))
     recordFilesRead(stageResult)
 
@@ -3252,6 +3334,14 @@ ${renderImplementPrompt({ roleIntro, runRootLabel: runRootLabel, runRoot: worktr
     if (stageResult.summary) t.summary = stageResult.summary
     if (Array.isArray(stageResult.filesModified)) t.files_changed = [...new Set([...(t.files_changed || []), ...stageResult.filesModified])]
     if (Array.isArray(stageResult.decisions) && stageResult.decisions.length) t.decisions = [...(t.decisions || []), ...stageResult.decisions]
+    // BT.ticket.per-task-state-write-before-implement (task 1): persist STEP 0's marker sha onto
+    // state.tasks[N].start_sha so the next full writeFlowState() keeps it. Only ever fills an EMPTY
+    // start_sha — a fix attempt's stageResult.startSha is always '' (startedMarker was false), so
+    // this can never overwrite attempt 1's already-recorded value with a later attempt's HEAD.
+    if (!t.start_sha) {
+      const rawStartSha = (stageResult.startSha || '').replace(/["']/g, '').trim()
+      if (/^[0-9a-f]{7,40}$/i.test(rawStartSha)) t.start_sha = rawStartSha
+    }
 
     // 2a. Work-assertion evidence gate (BT.ticket.engine-terminal-state-needs-evidence, task 3,
     // Gap 1). renderWorkAssertion's files[]-vs-diff check (BT.ticket.a-run-must-prove-its-commits-
