@@ -435,10 +435,34 @@ instance, which is exactly the shape that shipped as a green PASS in EN.11.O (44
 `BT.ticket.work-assertion-cannot-express-a-correct-empty-intersection`) is the complement: it runs
 immediately *after* the per-task work commit in both engines' per-task loop (never before — it
 inspects the commit it is checking via `git diff --name-status <range> HEAD`, where `<range>` is
-`prevSha` when the caller passes one — the previous task's own recorded commit, or the run's
-`base_sha` for task 1, both persisted in state and therefore identical whether the engine is
-running fresh or resuming — and only the literal `HEAD~1` for a caller that passes none), reading
-`tasksJsonPath` at run time to get task `taskNum`'s declared `files[]`, and aborts
+`prevSha` when the caller passes one — and only the literal `HEAD~1` for a caller that passes
+none), reading `tasksJsonPath` at run time to get task `taskNum`'s declared `files[]`, and aborts
+
+`sdlc-task.js` resolves `prevSha` via a hoisted `resolvePrevSha(state, taskNum, taskCommits)`
+(`BT.ticket.work-assertion-base-sha-self-comparison`), in this order: (1) `state.tasks[taskNum -
+1].commit` — the ordinary fresh-run path, identical whether the engine is running fresh or
+resuming; (2) `taskCommits[taskNum - 1].newest` — `prepare_run.py`'s own `find_task_commits()`
+lookup (a deterministic git-log scan over the block's own `feat: implement <blockId>-task<N>` /
+`fix: fix pass <P> for <blockId>-task<N>` commit-subject convention, resolved once per run and
+surfaced through the cached prepare-run result's `task_commits`, costing no extra agent turn per
+task); (3) `state.base_sha` — the pre-RUN `HEAD`, the last resort once git history has nothing
+either. Step (3) alone is *not* always a safe pre-task boundary: it is the pre-RUN `HEAD`, which is
+only the correct pre-task baseline for task 1 of a fresh run. Whenever a run starts at task N>1
+without task N-1 in state — a task-range launch, or a relaunch after a crash lost
+`sdlc-task-state.json` — `base_sha` can already contain task N's own commit, making the diff a
+structurally empty self-comparison (reproduced on a real engine-rs `EN.19.C` run, 2026-09-17:
+`state.base_sha` resolved to task 2's own just-committed sha because it was already `HEAD` at
+re-launch, so `git diff <base_sha> HEAD` was empty and the work assertion false-negatived on real,
+correctly-committed work). Independent of which step resolved `prevSha`, a guard then checks it
+against `taskCommits[taskNum]` (the *current* task's own commits): if it matches one of them, the
+guard replaces it with that task's `earliest_parent` — the parent of the oldest commit
+`find_task_commits()` attributes to task `taskNum` — and the per-task log line records that the
+guard fired. `taskCommits` defaults to `{}` on a resume seeded from a pre-change `state.setup` that
+predates the `task_commits` field, in which case resolution falls straight through to `base_sha`
+unchanged. `removedLiteralScan()` is fed the same resolved `prevSha`. `sdlc-flow.js` is unaffected:
+it calls `renderImplementPrompt` without a `prevSha` at all, so it always uses the `HEAD~1`
+fallback, which is that task's own non-empty diff on an already-committed task and does not exhibit
+this self-comparison.
 
  VAULT-ONLY TASKS (D46): if EVERY path in the task's declared files[] begins with `planning/`,
  the work landed in the VAULT repo, not this one, and this repo's history structurally cannot

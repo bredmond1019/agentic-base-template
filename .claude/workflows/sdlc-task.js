@@ -3177,6 +3177,48 @@ const vault = await detectPlanningVault(runDir)
 let bailed = false
 let bailReason = null
 
+// BT.ticket.work-assertion-base-sha-self-comparison (task 2): resolve the PREVIOUS task's own
+// commit deterministically instead of assuming state.base_sha is always a safe pre-task boundary.
+// Order: (1) state.tasks[N-1].commit — the ordinary fresh-run path, unchanged; (2)
+// taskCommits[N-1].newest — prepare_run.py's own git-history lookup (task 1's find_task_commits),
+// covering a task-range launch or a relaunch after a crash lost state.tasks; (3) state.base_sha —
+// the pre-RUN HEAD, the only remaining fallback once git history has nothing either. Independent of
+// HOW it resolved, GUARD: never let the result be a sha taskCommits attributes to task N itself
+// (self-comparison — engine-rs EN.19.C, 2026-09-17: base_sha == task 2's own commit) — fall back to
+// that task's earliest_parent when the guard fires, and report which path was taken. Hoisted
+// function declaration, not a const arrow, to avoid the top-level-const TDZ hazard
+// scripts/test_engine_tdz_ordering.py exists to catch (this is engine-local, called only from
+// inside the per-task loop below, but keeping it a declaration matches the rest of this file).
+function resolvePrevSha(taskState, taskNum, taskCommits) {
+  const tc = taskCommits || {}
+  const prevKey = String(taskNum - 1)
+  const ownKey = String(taskNum)
+  let prevSha
+  let source
+  const stateCommit = taskState.tasks[prevKey] && taskState.tasks[prevKey].commit
+  if (stateCommit) {
+    prevSha = stateCommit
+    source = 'state'
+  } else if (tc[prevKey] && tc[prevKey].newest) {
+    prevSha = tc[prevKey].newest
+    source = 'git-history'
+  } else {
+    prevSha = taskState.base_sha
+    source = 'base_sha'
+  }
+  let guardFired = false
+  const own = tc[ownKey]
+  if (prevSha && own && Array.isArray(own.shas)) {
+    const isOwnCommit = own.shas.some(sha => sha && (sha.startsWith(prevSha) || prevSha.startsWith(sha)))
+    if (isOwnCommit && own.earliest_parent) {
+      prevSha = own.earliest_parent
+      source = 'guard:earliest_parent'
+      guardFired = true
+    }
+  }
+  return { prevSha, source, guardFired }
+}
+
 for (const taskNum of taskList) {
   if (passedFromState.has(taskNum)) {
     log(`Task ${taskNum}: already passed (resume) — skipping.`)
@@ -3188,12 +3230,17 @@ for (const taskNum of taskList) {
   const t = state.tasks[String(taskNum)]
 
   // Work-assertion commit-range boundary (BT.ticket.work-assertion-cannot-express-a-correct-empty-
-  // intersection, task 3): the range's start is the PREVIOUS task's own recorded commit, or the
-  // run's base_sha for task 1 — both already persisted in state.tasks/state.base_sha, so this value
-  // is identical whether the engine is running fresh or resuming (a literal `HEAD~1`, by contrast,
-  // silently re-points at whatever commit is immediately before HEAD, which a resume-time wrap-up
-  // commit changes without changing the underlying work).
-  const prevSha = state.tasks[String(taskNum - 1)]?.commit || state.base_sha
+  // intersection, task 3): the range's start is the PREVIOUS task's own recorded commit — resolved
+  // via resolvePrevSha() above (state, else git history, else base_sha, never task N's own commit;
+  // see BT.ticket.work-assertion-base-sha-self-comparison) — so this value is identical whether the
+  // engine is running fresh or resuming (a literal `HEAD~1`, by contrast, silently re-points at
+  // whatever commit is immediately before HEAD, which a resume-time wrap-up commit changes without
+  // changing the underlying work). taskCommits defaults to {} on a resume seeded from a
+  // pre-change state.setup that predates this field.
+  const prepareRunCacheForTask = await runPrepareRun()
+  const taskCommitsForTask = (prepareRunCacheForTask && prepareRunCacheForTask.prepareRun && prepareRunCacheForTask.prepareRun.task_commits) || {}
+  const { prevSha, source: prevShaSource, guardFired: prevShaGuardFired } = resolvePrevSha(state, taskNum, taskCommitsForTask)
+  log(`Task ${taskNum}: prevSha resolved via ${prevShaSource}${prevShaGuardFired ? ' (self-comparison guard fired)' : ''}.`)
 
   let taskPassed = false
   let prevFailBlob = null

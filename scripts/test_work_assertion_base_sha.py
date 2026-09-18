@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Fixture suite for BT.ticket.work-assertion-base-sha-self-comparison.
 
-Task 1 of this spec (THIS FILE): the `prepare_run.py`-side half — a new
-`find_task_commits(repo_root, block_id)` that reports a block's own per-task commits from real
-git history, matched against the engine's own commit-subject convention (`feat: implement
-<blockId>-task<N>` / `fix: fix pass <P> for <blockId>-task<N>`). Task 2 (not this file's job)
-wires the result into `sdlc-task.js`'s per-task `prevSha` resolution.
+Task 1 of this spec: the `prepare_run.py`-side half — a new `find_task_commits(repo_root,
+block_id)` that reports a block's own per-task commits from real git history, matched against the
+engine's own commit-subject convention (`feat: implement <blockId>-task<N>` / `fix: fix pass <P>
+for <blockId>-task<N>`).
+
+Task 2 of this spec (also in THIS FILE, appended below): the engine-side half — `sdlc-task.js`'s
+`resolvePrevSha()`, which wires `find_task_commits()`'s result into the per-task `prevSha`
+resolution (state, else git history, else `base_sha`, never task N's own commit).
 
 WHY THIS EXISTS (see the block record's `what`/`why`)
 -------------------------------------------------------
@@ -49,6 +52,8 @@ run directly: python3 scripts/test_work_assertion_base_sha.py
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -163,6 +168,129 @@ class FindTaskCommitsTests(unittest.TestCase):
         self.assertEqual(
             result_with_id["task_commits"]["1"]["shas"], [self.shas["task1"]],
         )
+
+
+# ============================================================================
+# Task 2 of this spec: sdlc-task.js's engine-side resolvePrevSha() -- wires find_task_commits()
+# (task 1, above) into the per-task prevSha resolution. Extracts the REAL function body from the
+# engine file via balanced-brace scanning (same idiom as
+# scripts/test_work_assertion_empty_intersection.py's extract_function(), itself modelled on
+# scripts/test_bail_path_runtime.py) and evaluates it through a real `node` process -- never
+# re-types the resolution logic under test.
+# ============================================================================
+
+_TASK_ENGINE = _REPO_ROOT / '.claude' / 'workflows' / 'sdlc-task.js'
+
+
+def _extract_function(text: str, name: str) -> str:
+    m = re.search(rf"function {re.escape(name)}\([^)]*\)\s*\{{", text)
+    if not m:
+        raise AssertionError(f"function {name}() not found")
+    depth = 0
+    i = text.index("{", m.start())
+    start = m.start()
+    while i < len(text):
+        c = text[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+        i += 1
+    raise AssertionError(f"unbalanced braces extracting function {name}()")
+
+
+def _resolve_prev_sha_via_node(state: dict, task_num: int, task_commits: dict) -> dict:
+    """Extracts the REAL resolvePrevSha() body from sdlc-task.js and evaluates it through a real
+    node process."""
+    src = _TASK_ENGINE.read_text(encoding="utf-8")
+    fn_src = _extract_function(src, "resolvePrevSha")
+    node_script = (
+        fn_src
+        + "\n"
+        + f"process.stdout.write(JSON.stringify(resolvePrevSha({json.dumps(state)}, {task_num}, {json.dumps(task_commits)})))\n"
+    )
+    result = subprocess.run(["node", "-e", node_script], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise AssertionError(f"node failed to evaluate resolvePrevSha():\n{result.stderr}")
+    return json.loads(result.stdout)
+
+
+def _old_formula_via_node(state: dict, task_num: int) -> str:
+    """Runtime inversion: evaluate the OLD, pre-fix one-line formula directly -- it no longer
+    exists in the engine source -- and return what it resolves to. Proves the reproduction case
+    below actually discriminates between the old (broken) and new (fixed) behavior."""
+    node_script = (
+        f"const state = {json.dumps(state)};\n"
+        f"const taskNum = {task_num};\n"
+        "const prevSha = (state.tasks[String(taskNum - 1)] || {}).commit || state.base_sha;\n"
+        "process.stdout.write(prevSha || '')\n"
+    )
+    result = subprocess.run(["node", "-e", node_script], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise AssertionError(f"node failed to evaluate the old formula:\n{result.stderr}")
+    return result.stdout
+
+
+class ResolvePrevShaEngineTests(unittest.TestCase):
+    """Task 2: sdlc-task.js's resolvePrevSha(), extracted verbatim from source and evaluated
+    through node -- the reproduction shape, the ordinary path, the fallback-unchanged path, and the
+    self-attribution guard."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.repo, cls.shas = _build_fixture_repo(Path(cls._tmp.name))
+        cls.task_commits = prepare_run.find_task_commits(str(cls.repo), "BT.x.A")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_reproduction_no_state_base_sha_is_own_commit_resolves_to_predecessor(self):
+        """(a) engine-rs EN.19.C shape: state.tasks is empty (crash lost the state file before any
+        write), base_sha == task 2's own commit (it was already HEAD at re-launch). The resolution
+        must land on task 1's commit -- never task 2's own commit."""
+        state = {"tasks": {}, "base_sha": self.shas["task2"]}
+        result = _resolve_prev_sha_via_node(state, 2, self.task_commits)
+        self.assertEqual(result["prevSha"], self.shas["task1"])
+        self.assertIn(result["source"], ("git-history", "guard:earliest_parent"))
+
+        # Runtime inversion: the OLD one-line formula on the SAME inputs resolves to task 2's own
+        # commit -- proving this case actually discriminates old (broken) from new (fixed).
+        old_result = _old_formula_via_node(state, 2)
+        self.assertEqual(old_result, self.shas["task2"])
+
+    def test_ordinary_path_state_commit_present_is_unchanged(self):
+        """(b) The fresh-run path: state.tasks['1'].commit is present -- prevSha is exactly that
+        value, regardless of what git history or base_sha say."""
+        state = {"tasks": {"1": {"commit": self.shas["task1"]}}, "base_sha": self.shas["init"]}
+        result = _resolve_prev_sha_via_node(state, 2, self.task_commits)
+        self.assertEqual(result["prevSha"], self.shas["task1"])
+        self.assertEqual(result["source"], "state")
+        self.assertFalse(result["guardFired"])
+
+    def test_no_history_no_state_falls_back_to_base_sha_unchanged(self):
+        """(c) No task_commits at all (e.g. a resume seeded from a pre-change state.setup with no
+        `task_commits` field) and no state.tasks entry -- prevSha is exactly state.base_sha, the
+        fallback unchanged from before this fix."""
+        state = {"tasks": {}, "base_sha": self.shas["init"]}
+        result = _resolve_prev_sha_via_node(state, 2, {})
+        self.assertEqual(result["prevSha"], self.shas["init"])
+        self.assertEqual(result["source"], "base_sha")
+        self.assertFalse(result["guardFired"])
+
+    def test_guard_fires_when_base_sha_is_own_commit_and_no_predecessor_anywhere(self):
+        """(d) base_sha equals task N's own commit AND task N-1 has no commit anywhere (no state,
+        no git history) -- the guard fires against base_sha itself and falls back to
+        earliest_parent."""
+        state = {"tasks": {}, "base_sha": self.shas["task1"]}
+        task_commits_task1_only = {"1": self.task_commits["1"]}
+        result = _resolve_prev_sha_via_node(state, 1, task_commits_task1_only)
+        self.assertTrue(result["guardFired"])
+        self.assertEqual(result["source"], "guard:earliest_parent")
+        self.assertEqual(result["prevSha"], self.shas["init"])
 
 
 if __name__ == "__main__":
