@@ -240,7 +240,7 @@ ANCHORS = [
     # content change -- verified byte-identical ("const worktreeRecipe =" through the trailing
     # content).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2116->2125, 2246->2255 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2210, 2340,
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2219, 2349,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -263,7 +263,7 @@ ANCHORS = [
     # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
     # trailing `git log --oneline -1`).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3993->4025, 4028->4060 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4127, 4162,
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4136, 4171,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

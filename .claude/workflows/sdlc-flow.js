@@ -1,4 +1,4 @@
-// =============================================================================
+//=============================================================================
 // sdlc-flow — single-branch, single-review, PR-terminating SDLC engine
 // =============================================================================
 //
@@ -36,10 +36,19 @@
 //     implement → fast-test → (triage → fix/​bail) ×≤3
 //     One state-commit per task. A triage MAJOR / immediate-bail reason breaks
 //     straight to wrap-up (draft PR) — it does NOT burn three attempts.
+//     Triage's "same failure, no progress" must be measured THIS attempt: a work-assertion,
+//     vault-commit or removed-literal-scan failure precedes the test stage, so gate_results/issues
+//     may be carried over from an earlier attempt (DATA FRESHNESS WARNING) and never alone justify
+//     sameFailureAsBefore=true.
 //
 //   End-review: ONE review over the integrated tree, fed state.json as the index but
-//   reading `git diff <prBase>..HEAD` + tasks.md criteria directly + re-running the
-//   FULL gating suite (authoritative). PASS → docs; FAIL/PARTIAL → triage findings:
+//   reading `git diff <prBase>..HEAD` + tasks.md criteria directly + the AGGREGATED
+//   gate_results already recorded by every task's own fast-test stage (latest entry
+//   per check_id wins) instead of re-running the full gating suite from scratch — a
+//   check with no recorded entry is run directly, and on the FINAL review pass every
+//   still-failing check is re-run fresh as the authoritative last word before a bail.
+//   PASS → docs; FAIL/PARTIAL → a `gapKind` of 'design'/'operator' stops the loop
+//   immediately (no further review/suite pass); otherwise triage findings:
 //   small/localized → bounded fix→test→review (≤2, Opus last); broad → bail.
 //
 // COMMIT STRATEGY (crash recovery — everything lands on the branch)

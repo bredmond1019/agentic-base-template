@@ -267,9 +267,11 @@ ANCHORS = [
     # verified byte-identical ("const autoMergeFlag = hasFlag('--auto-merge')" onward).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 1095->1104, 1112->1121 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
     # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 1104->1172, 1121->1189 with NO content change -- verified byte-identical against the manifest hash at HEAD.
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1172, 1189,
+    # 2026-09-18 sdlc-flow.js header comment synced to its SKILL.md guide (+9 lines at the top of the file), shifting this anchor 1172->1181, 1189->1198 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1181, 1198,
      "docs/workflows/sdlc-flow.md", "## Usage"),
-    (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
+    # 2026-09-18 sdlc-flow.js header comment synced to its SKILL.md guide (+9 lines at the top of the file), shifting this anchor 62->71, 74->83 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-flow.js", "stage-list", 71, 83,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
     # renderTestPrompt() doc-comment + param shift (+5 net lines) landed ABOVE this anchor; the
@@ -307,7 +309,8 @@ ANCHORS = [
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2116->2125, 2246->2255 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
     # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 2125->2137, 2255->2267 with NO content change -- verified byte-identical against the manifest hash at HEAD.
     # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 2137->2210, 2267->2340 with NO content change -- verified byte-identical against the manifest hash at HEAD (relocated via check_skill_sync.py --relocate, same window, same evidence).
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2210, 2340,
+    # 2026-09-18 sdlc-flow.js header comment synced to its SKILL.md guide (+9 lines at the top of the file), shifting this anchor 2210->2219, 2340->2349 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2219, 2349,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
     # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
@@ -337,7 +340,8 @@ ANCHORS = [
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3993->4025, 4028->4060 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
     # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 4025->4037, 4060->4072 with NO content change -- verified byte-identical against the manifest hash at HEAD.
     # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 4037->4127, 4072->4162 with NO content change -- verified byte-identical against the manifest hash at HEAD.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4127, 4162,
+    # 2026-09-18 sdlc-flow.js header comment synced to its SKILL.md guide (+9 lines at the top of the file), shifting this anchor 4127->4136, 4162->4171 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4136, 4171,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 
