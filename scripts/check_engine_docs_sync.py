@@ -139,7 +139,8 @@ ANCHORS = [
     # against the pre-shift 2107-2188 window (git show 2d3a918:.claude/workflows/sdlc-task.js).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2181->2190, 2262->2271 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
     # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 2190->2202, 2271->2283 with NO content change -- verified byte-identical against the manifest hash at HEAD.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2202, 2283,
+    # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 (renderImplementPrompt) plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 2202->2274, 2283->2355 with NO content change -- verified byte-identical against the manifest hash at HEAD (relocated via check_skill_sync.py --relocate, same window, same evidence).
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2274, 2355,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -241,7 +242,8 @@ ANCHORS = [
     # pre-shift 3787-3814 window (git show 2d3a918:.claude/workflows/sdlc-task.js).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3922->3999, 3949->4026 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
     # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 3999->4011, 4026->4038 with NO content change -- verified byte-identical against the manifest hash at HEAD.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4011, 4038,
+    # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 4011->4111, 4038->4138 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4111, 4138,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
@@ -264,7 +266,8 @@ ANCHORS = [
     # anchor, shifting it 1085->1095, 1102->1112 with NO content change to this region itself --
     # verified byte-identical ("const autoMergeFlag = hasFlag('--auto-merge')" onward).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 1095->1104, 1112->1121 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1104, 1121,
+    # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 1104->1172, 1121->1189 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1172, 1189,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     (".claude/workflows/sdlc-flow.js", "stage-list", 62, 74,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
@@ -303,7 +306,8 @@ ANCHORS = [
     # New range 2116-2246 diffed byte-identical against the pre-shift 2047-2177 window.
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2116->2125, 2246->2255 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
     # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 2125->2137, 2255->2267 with NO content change -- verified byte-identical against the manifest hash at HEAD.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2137, 2267,
+    # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 2137->2210, 2267->2340 with NO content change -- verified byte-identical against the manifest hash at HEAD (relocated via check_skill_sync.py --relocate, same window, same evidence).
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2210, 2340,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
     # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
@@ -332,7 +336,8 @@ ANCHORS = [
     # pre-shift 3863-3898 window (git show 2d3a918:.claude/workflows/sdlc-flow.js).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3993->4025, 4028->4060 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
     # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 4025->4037, 4060->4072 with NO content change -- verified byte-identical against the manifest hash at HEAD.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4037, 4072,
+    # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 4037->4127, 4072->4162 with NO content change -- verified byte-identical against the manifest hash at HEAD.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4127, 4162,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

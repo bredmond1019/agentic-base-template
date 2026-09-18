@@ -224,13 +224,18 @@ STANDALONE_SITE_RE = re.compile(
 # 4286->4318 in sdlc-flow.js. Text unchanged -- the suite asserts each baseline string at its new line.
 # Re-pinned again 2026-09-18 (prepare-run transcription hotfix): loadHarnessConfig()'s count guard
 # (+12 per engine) shifted all three sites: 3997->4009, 4028->4040, 4318->4330. Text unchanged.
+# Re-pinned again 2026-09-18 (BT.ticket.per-task-state-write-before-implement, task 1 fix pass): the
+# per-task `running` marker STEP 0 (renderImplementPrompt) plus resolvePrevSha's start_sha precedence
+# landed entirely ABOVE all three sites, shifting them 4009->4109 in sdlc-task.js and 4040->4130 /
+# 4330->4420 in sdlc-flow.js. Text unchanged once the flag interpolation is stripped (diffed against
+# the pre-shift content, byte-identical) -- only the keys moved.
 FROZEN_BASELINE = {
     str(TASK_JS): {
-        4009: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
+        4109: '     : `- This run is IN PLACE on main, so emit-state is safe: cd ${runDir} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation.`}',
     },
     str(FLOW_JS): {
-        4040: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
-        4330: "   mev emit-state --write",
+        4130: "      : `- This run is IN PLACE on branch ${branchName} (in the main repo tree, not an isolated worktree) — emit-state is safe to run right here on the branch, the same way \\`git commit\\` already lands right here: cd ${worktreePath} && mev emit-state --write . If \\`mev\\` or brain.toml is absent (standalone repo), skip it silently and set emitStateRan=false; else emitStateRan=true. Do NOT hand-reimplement focus/rollup derivation. (This is separate from the --auto-merge path's own emit-state call in step 5 below, which re-derives again on ${prBase} after the PR merges — that call is unaffected and still runs unconditionally there.)`}",
+        4420: "   mev emit-state --write",
     },
 }
 
