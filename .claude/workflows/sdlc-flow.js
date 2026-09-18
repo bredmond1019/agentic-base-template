@@ -4701,6 +4701,7 @@ print('CANDIDATE_TEST_COUNT:%d' % len(candidates))
 
 diff = sh('${GIT} diff --unified=0 %s HEAD -- .' % RANGE)
 removed_lines = [l[1:] for l in diff.splitlines() if l.startswith('-') and not l.startswith('---')]
+added_lines = [l[1:] for l in diff.splitlines() if l.startswith('+') and not l.startswith('+++')]
 # Quoted-string literals gate on MIN_LEN. Bare identifiers gate on EITHER containing an underscore
 # (a real snake_case/CONST_CASE symbol, reported at any length) OR being at least IDENT_MIN_LEN chars
 # with no underscore -- this is what keeps an ordinary removed English word ("failed", "returned")
@@ -4711,12 +4712,23 @@ lit_re = re.compile(
     + r'|\\b([A-Za-z_][A-Za-z0-9]*_[A-Za-z0-9_]*)\\b'
     + r'|\\b([A-Za-z][A-Za-z0-9]{%d,})\\b' % (IDENT_MIN_LEN - 1)
 )
-literals = set()
-for line in removed_lines:
-    for m in lit_re.finditer(line):
-        lit = m.group(1) or m.group(2) or m.group(3) or m.group(4)
-        if lit:
-            literals.add(lit)
+def extract(lines):
+    found = set()
+    for line in lines:
+        for m in lit_re.finditer(line):
+            lit = m.group(1) or m.group(2) or m.group(3) or m.group(4)
+            if lit:
+                found.add(lit)
+    return found
+
+removed_literals = extract(removed_lines)
+added_literals = extract(added_lines)
+# A literal that still appears in this SAME commit's added lines was not actually removed from the
+# codebase -- a single-line edit (e.g. inserting a flag into an existing command string) shows the
+# whole line as both '-' and '+' in a unified diff, so its unchanged tokens would otherwise be
+# reported as "removed" even though they survive, unmoved, in this very commit. Only a literal that
+# disappears from the diff's added side entirely is a genuine removal worth scanning for elsewhere.
+literals = removed_literals - added_literals
 
 if not literals:
     print('NO_LITERALS_REMOVED')
