@@ -143,7 +143,11 @@ ANCHORS = [
     # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
     # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
     # 2274->2280, 2355->2361 (+6) with NO content change -- verified byte-identical.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2280, 2361,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor, shifting it 2280->2228, 2361->2309 with NO content change -- verified byte-for-byte
+    # identical via a direct block search, not a guessed renumbering.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2228, 2309,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -253,7 +257,11 @@ ANCHORS = [
     # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
     # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
     # 4111->4117, 4138->4144 (+6) with NO content change -- verified byte-identical.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4117, 4144,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor, shifting it 4117->4054, 4144->4081 with NO content change -- verified byte-for-byte
+    # identical via a direct block search, not a guessed renumbering.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4054, 4081,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
@@ -327,7 +335,11 @@ ANCHORS = [
     # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
     # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
     # 2219->2225, 2349->2355 (+6) with NO content change -- verified byte-identical.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2225, 2355,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor in sdlc-flow.js, shifting it 2225->2171, 2355->2301 with NO content change -- verified
+    # byte-for-byte identical via a direct block search, not a guessed renumbering.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2171, 2301,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
     # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
@@ -361,7 +373,11 @@ ANCHORS = [
     # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
     # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
     # 4136->4142, 4171->4177 (+6) with NO content change -- verified byte-identical.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4142, 4177,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor in sdlc-flow.js, shifting it 4142->4077, 4177->4112 with NO content change -- verified
+    # byte-for-byte identical via a direct block search, not a guessed renumbering.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4077, 4112,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

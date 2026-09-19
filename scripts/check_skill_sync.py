@@ -113,7 +113,13 @@ ANCHORS = [
     # default-slug + force-refresh rewrite (shared.js's <<shared:runPrepareRun>> region, inlined
     # well above this anchor) shifted it 2274->2280, 2355->2361 (+6) with NO content change --
     # verified byte-identical ("WORKTREE MODE (--worktree)" through the trailing IN-PLACE MODE text).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2280, 2361,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor (ENUMERATE_SCHEMA const removed at ~1359, MODEL.enumerate entry removed at ~1584),
+    # shifting it 2280->2228, 2361->2309 with NO content change to this region itself -- verified
+    # byte-for-byte identical against the pre-shift block ("WORKTREE MODE (--worktree)" through the
+    # trailing IN-PLACE MODE text) via a direct block search, not a guessed renumbering.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2228, 2309,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -230,7 +236,12 @@ ANCHORS = [
     # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
     # 4111->4117, 4138->4144 (+6) with NO content change -- verified byte-identical
     # ("7. Commit your edits (stage explicitly" through the trailing `git log --oneline -1`).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4117, 4144,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor, shifting it 4117->4054, 4144->4081 with NO content change -- verified byte-for-byte
+    # identical against the pre-shift block ("7. Commit your edits (stage explicitly" through the
+    # trailing `git log --oneline -1`) via a direct block search, not a guessed renumbering.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4054, 4081,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
@@ -258,7 +269,13 @@ ANCHORS = [
     # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
     # 2219->2225, 2349->2355 (+6) with NO content change -- verified byte-identical
     # ("const worktreeRecipe =" through the trailing content).
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2225, 2355,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor in sdlc-flow.js, shifting it 2225->2171, 2355->2301 with NO content change to this
+    # region itself -- verified byte-for-byte identical against the pre-shift block ("const
+    # worktreeRecipe =" through the trailing content) via a direct block search, not a guessed
+    # renumbering.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2171, 2301,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -286,7 +303,12 @@ ANCHORS = [
     # well above this anchor) landed entirely ABOVE this anchor, shifting it 4136->4142, 4171->4177
     # (+6) with NO content change to this region itself -- verified byte-identical ("5. Commit
     # (stage explicitly" through the trailing `git log --oneline -1`).
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4142, 4177,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor in sdlc-flow.js, shifting it 4142->4077, 4177->4112 with NO content change -- verified
+    # byte-for-byte identical against the pre-shift block ("5. Commit (stage explicitly" through the
+    # trailing `git log --oneline -1`) via a direct block search, not a guessed renumbering.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4077, 4112,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

@@ -1284,66 +1284,13 @@ const SETUP_SCHEMA = {
 // D16 preflight lint — the spec MUST carry a non-empty tasks.json array (a bare array of
 // SDLCTask-shaped objects, matching orchestrator's app/schemas/sdlc_schema.py — see D45) or the
 // per-task loop would have to guess the task count non-deterministically.
-const ENUMERATE_SCHEMA = {
-  type: 'object',
-  required: ['hasTasks', 'allTasks'],
-  properties: {
-    hasTasks: { type: 'boolean', description: 'true if tasks.json parses as a non-empty array' },
-    allTasks: { type: 'array', items: { type: 'integer' }, description: 'Every task_id in tasks.json, in array order' },
-    // Per-task validation override. `validation_commands` is a real field in orchestrator's SDLCTask
-    // schema that this engine used to ignore entirely. Honouring it lets a spec declare that a
-    // given task needs a CHEAPER (or no) tripwire than the harness-wide gating set — the payoff is
-    // largest in compile-expensive repos, where a docs-only or config-only task otherwise pays a
-    // full build to validate a markdown edit. Empty array => fall back to the harness checks, so
-    // every existing spec behaves exactly as before.
-    taskChecks: {
-      type: 'array',
-      description: "One entry per task that declares a non-empty validation_commands array. Omit tasks whose validation_commands is absent or empty.",
-      items: {
-        type: 'object',
-        required: ['taskId', 'validationCommands'],
-        properties: {
-          taskId:             { type: 'integer' },
-          validationCommands: { type: 'array', items: { type: 'string' } }
-        }
-      }
-    },
-    // expect_red — BT.ticket.sdlc-task-cannot-express-a-deliberate-failing-test. A task whose
-    // declared deliverable IS a test observed FAILING (D68) may name a subset of its own
-    // validation_commands whose verdict is inverted: the check PASSES when that command exits
-    // NON-ZERO and FAILS when it exits 0. Scoped strictly to that task's own validationCommands —
-    // it can never touch a project-wide gates:true harness check (those are computed separately by
-    // gatingChecks() and this field is never consulted there).
-    taskExpectRed: {
-      type: 'array',
-      description: "One entry per task that declares a non-empty expect_red array. Omit tasks whose expect_red is absent or empty. Every command listed here MUST also appear in that same task's own validationCommands entry above — an expect_red command names ONE of the task's own declared checks and inverts its verdict, it does not add a new command.",
-      items: {
-        type: 'object',
-        required: ['taskId', 'commands'],
-        properties: {
-          taskId:   { type: 'integer' },
-          commands: { type: 'array', items: { type: 'string' }, description: "Subset of this task's own validationCommands whose verdict is inverted: PASSES on non-zero exit, FAILS on exit 0." }
-        }
-      }
-    },
-    // Hardcoded engine-parse gate — mechanism, not project policy (see renderCheckList). Captures,
-    // per task, ONLY the entries of that task's "files" array that live under .claude/workflows/ —
-    // never the full files[] list. Omit tasks with no such path.
-    engineFiles: {
-      type: 'array',
-      description: "One entry per task whose 'files' array includes at least one path under .claude/workflows/. 'files' holds ONLY the matching .claude/workflows/ paths (not the task's full files[] list). Omit tasks with no such path.",
-      items: {
-        type: 'object',
-        required: ['taskId', 'files'],
-        properties: {
-          taskId: { type: 'integer' },
-          files:  { type: 'array', items: { type: 'string' } }
-        }
-      }
-    },
-    notes:    { type: 'string' }
-  }
-}
+//
+// BT.ticket.prepare-run-never-receives-a-spec-slug (task 3): the enumResult shape below —
+// {hasTasks, allTasks, taskChecks: [{taskId, validationCommands}], taskExpectRed:
+// [{taskId, commands}], engineFiles: [{taskId, files}], notes} — used to be an agent-facing
+// StructuredOutput schema (ENUMERATE_SCHEMA); it is now produced deterministically by
+// prepare_run.py's enumerate_tasks() (see .claude/workflows/bin/prepare_run.py) and consumed
+// as-is via enumerateFromPrepareRun() below, with zero translation.
 
 // D16 derive-from-tasks.md fallback — see the abort below. Mirrors /generate-tasks' --from mode:
 // read the spec's authored step decomposition and
@@ -1583,7 +1530,6 @@ const STATE_WRITE_SCHEMA = {
 // ----------------------------------------------------------------
 const MODEL = {
   worktreeSetup: 'haiku',    // scripted git following an exact free-name + sparse-checkout recipe
-  enumerate:     'haiku',    // read + parse tasks.json's task list — a fixed procedure
   derive:        'opus',     // D16 fallback: author a fresh tasks.json from tasks.md's step list — real judgment
   stateLoad:     'haiku',    // read + parse one JSON file (resume only)
   generateTasks: 'opus',     // PLANNING — authors the spec (fallback path only)
@@ -2559,36 +2505,23 @@ if (!setupResult.specFileExists) {
   return { error: 'Missing spec', blockId, searchedRoot: [rootBlockRecordFile, rootSpecFile], searchedTier: tierPaths ? [`${tierPrefixCandidate}planning/blocks/${blockId}.json`, `${tierPrefixCandidate}planning/${blockId}/tasks.md`] : [] }
 }
 
-const ENUMERATE_PROMPT = `${W}
-You enumerate the tasks defined in a spec's tasks.json. Do NOT modify anything.
+// BT.ticket.prepare-run-never-receives-a-spec-slug (task 3): enumerate_tasks() is now a
+// deterministic Python parse inside prepare_run.py's cached call — no agent turn needed to read
+// and reshape tasks.json. force:true bypasses the one-turn-per-run cache for a caller that just
+// wrote a NEW tasks.json to disk (the D16 derive fallbacks below), so it sees the fresh file
+// rather than replaying the pre-derive (empty) cached result.
+async function enumerateFromPrepareRun(force) {
+  const cache = await runPrepareRun(blockId, force ? { force: true } : undefined)
+  const pr = cache && cache.prepareRun
+  return (pr && !pr.refused && pr.tasks_enumeration) || { hasTasks: false, allTasks: [] }
+}
 
-STEP 1 — read the task list:
-  cd ${worktreePath} && cat ${tasksJsonFile} 2>/dev/null || echo "NO_TASKS_JSON"
-
-STEP 2 — Parse it as JSON. It is a BARE ARRAY (not wrapped in an object — matches orchestrator's
-  SDLCTask schema). Collect every task's "task_id" (in array order) into allTasks.
-  Set hasTasks=true iff it parsed as an array with at least one entry.
-
-STEP 3 — Per-task validation overrides. For each task whose "validation_commands" is present AND a
-  non-empty array, add {taskId, validationCommands} to taskChecks. Skip every task whose
-  "validation_commands" is absent, null, or [] — those fall back to the project-wide harness checks.
-  Copy the command strings VERBATIM; do not normalize, reorder, or invent commands.
-
-STEP 4 — Engine-parse gate scan. For each task, look at its "files" array. If ANY entry is a path
-  under .claude/workflows/ (e.g. ".claude/workflows/sdlc-task.js"), add {taskId, files} to
-  engineFiles, where files is ONLY the matching .claude/workflows/ path(s) from that task (never the
-  task's other files). Skip every task whose "files" has no such path.
-
-STEP 5 — Deliberate-failing-test overrides (D68). For each task whose "expect_red" is present AND a
-  non-empty array, add {taskId, commands} to taskExpectRed. Skip every task whose "expect_red" is
-  absent, null, or []. Copy the command strings VERBATIM. Do NOT validate the subset rule yourself —
-  the engine enforces it after this call; just report exactly what tasks.json contains.
-
-Return via StructuredOutput: hasTasks, allTasks (integers in order), taskChecks, taskExpectRed,
-engineFiles, notes.
-`
-
-let enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
+let enumResult = await enumerateFromPrepareRun()
+{
+  const lintCache = await runPrepareRun(blockId)
+  const lint = lintCache && lintCache.prepareRun && lintCache.prepareRun.lint
+  if (lint && !lint.passed) log(`prepare-run lint (check_tasks_json.py, non-gating): ${lint.findings.length} finding(s) — ${JSON.stringify(lint.findings)}`)
+}
 
 if (!enumResult || !enumResult.hasTasks || !(enumResult.allTasks || []).length) {
   if (specSource === 'block-record') {
@@ -2650,7 +2583,7 @@ Return via StructuredOutput: derivable, written, commitHash, taskCount, notes.
 
     if (deriveFromRecordResult?.derivable && deriveFromRecordResult?.written) {
       log(`Derived tasks.json from block record (D16 derive-from-block-record fallback) — ${deriveFromRecordResult.taskCount || '?'} task(s), commit ${deriveFromRecordResult.commitHash || 'unknown'}.`)
-      enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate-post-derive', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
+      enumResult = await enumerateFromPrepareRun(true)
     }
   } else {
   // D16 derive-from-tasks.md fallback — before refusing, check whether the spec's authored
@@ -2701,7 +2634,7 @@ Return via StructuredOutput: derivable, written, commitHash, taskCount, notes.
 
   if (deriveResult?.derivable && deriveResult?.written) {
     log(`Derived tasks.json from tasks.md (D16 derive-from-tasks.md fallback) — ${deriveResult.taskCount || '?'} task(s), commit ${deriveResult.commitHash || 'unknown'}.`)
-    enumResult = await tracedAgent(ENUMERATE_PROMPT, withModel({ label: 'enumerate-post-derive', schema: ENUMERATE_SCHEMA, phase: 'Plan' }, MODEL.enumerate))
+    enumResult = await enumerateFromPrepareRun(true)
   }
   }
 }
@@ -2717,7 +2650,9 @@ const allTasks = enumResult.allTasks
 let taskList = selectedTasks ? allTasks.filter(n => selectedTasks.has(n)) : allTasks.slice()
 log(`Tasks in spec: ${allTasks.join(', ')}${selectedTasks ? ` | selected: ${taskList.join(', ')}` : ''}`)
 
-// Per-task validation overrides from tasks.json's `validation_commands` (see ENUMERATE_SCHEMA).
+// Per-task validation overrides from tasks.json's `validation_commands` (shape produced by
+// prepare_run.py's enumerate_tasks() — see the comment above enumerateFromPrepareRun()'s
+// definition).
 // Returns null when the task declared none, which means "use the harness gating checks" — the
 // pre-existing behaviour for every task in every existing spec.
 // D63 (planning/decisions/D63-per-task-validation-commands-augment-gating.md) — DELIBERATELY
