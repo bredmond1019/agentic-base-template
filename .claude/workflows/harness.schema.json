@@ -263,6 +263,14 @@
             }
           }
         },
+        "gates_reason": {
+          "type": "string",
+          "description": "Optional. Explanation of why this check is gated (gates:true) or not gated (gates:false). For gating checks, documents the consequence of a regression. For non-gating checks, explains why it produces findings without blocking the verdict."
+        },
+        "evidence": {
+          "type": "string",
+          "description": "Optional. Supplementary evidence or context about the check beyond what observed_red records (e.g. empirical measurement of the gate's behavior)."
+        },
         "observed_red": {
           "type": "object",
           "additionalProperties": false,

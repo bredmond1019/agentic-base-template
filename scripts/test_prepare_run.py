@@ -141,16 +141,106 @@ def field_for_field_match():
             "vault_root": str((repo / "planning").resolve()),
             "agent_flag": " --agent agent-fixture",
             "scope_flag": " --scope repo-fixture",
-            "harness_config": harness_config,
-            "tasks_enumeration": [
-                {"task_id": 1, "dependsOn": []},
-                {"task_id": 2, "dependsOn": [1]},
-            ],
+            # prepare_run() returns the COMPACTED harness config (ea95e3e): every prose-only key
+            # -- `purpose`, `observed_red`, and any `_`-prefixed key -- is stripped at every depth
+            # before the config crosses a model. So the expectation here is the fixture config
+            # minus those keys, hand-written rather than piped back through
+            # compact_harness_config() so it pins the contract instead of restating the code.
+            "harness_config": {
+                "validation": {
+                    "checks": [
+                        {"name": "smoke", "command": "true", "gates": True}
+                    ]
+                },
+                "uiTest": {"enabled": False},
+            },
+            "tasks_enumeration": {
+                "hasTasks": True,
+                "allTasks": [1, 2],
+                "taskChecks": [],
+                "taskExpectRed": [],
+                "engineFiles": [],
+            },
             "refused": False,
         }
         for field, expected_value in expected.items():
             check(
                 f"field-for-field: {field} matches expected setup fact",
+                result.get(field) == expected_value,
+                f"expected {expected_value!r}, got {result.get(field)!r}",
+            )
+
+
+# --- 1b. enumerate_tasks() full-shape fixture (BT.ticket.prepare-run-never-receives-a-spec-slug,
+#         task 1, AC5): all four optional cases in ONE tasks.json, asserting the exact taskChecks/
+#         taskExpectRed/engineFiles output hand-derived from ENUMERATE_PROMPT's STEP2-5 rules text
+#         (sdlc-task.js ~2609-2636 / sdlc-flow.js ~2556-2581, read pre-deletion) -------------------
+
+def enumerate_tasks_full_shape():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_root = Path(tmp)
+        spec_slug = "fixture-spec"
+        tasks = [
+            # Case 1: a task with a non-empty validation_commands array -> taskChecks entry.
+            {
+                "task_id": 1,
+                "title": "has validation commands",
+                "files": ["src/a.py"],
+                "validation_commands": ["python3 -m pytest tests/test_a.py"],
+            },
+            # Case 2: expect_red is a (D68) subset of its own validation_commands -> taskExpectRed
+            # entry. The subset rule is the ENGINE's job to enforce, not enumerate_tasks()'s — this
+            # fixture just pins that the raw array is reported verbatim.
+            {
+                "task_id": 2,
+                "title": "has expect_red subset of validation_commands",
+                "files": ["src/b.py"],
+                "validation_commands": [
+                    "python3 -m pytest tests/test_b.py::test_red",
+                    "python3 -m pytest tests/test_b.py::test_green",
+                ],
+                "expect_red": ["python3 -m pytest tests/test_b.py::test_red"],
+            },
+            # Case 3: a .claude/workflows/ path in files -> engineFiles entry containing ONLY the
+            # matching path(s), never the task's other files.
+            {
+                "task_id": 3,
+                "title": "touches an engine file",
+                "files": [".claude/workflows/sdlc-task.js", "docs/workflows/sdlc-task.md"],
+            },
+            # Case 4: a plain task with none of the above -> contributes to allTasks only.
+            {
+                "task_id": 4,
+                "title": "plain task",
+                "files": ["src/d.py"],
+            },
+        ]
+        repo = _init_fixture_repo(tmp_root, spec_slug, tasks)
+        result = prepare_run.enumerate_tasks(str(repo), spec_slug)
+
+        expected = {
+            "hasTasks": True,
+            "allTasks": [1, 2, 3, 4],
+            "taskChecks": [
+                {"taskId": 1, "validationCommands": ["python3 -m pytest tests/test_a.py"]},
+                {
+                    "taskId": 2,
+                    "validationCommands": [
+                        "python3 -m pytest tests/test_b.py::test_red",
+                        "python3 -m pytest tests/test_b.py::test_green",
+                    ],
+                },
+            ],
+            "taskExpectRed": [
+                {"taskId": 2, "commands": ["python3 -m pytest tests/test_b.py::test_red"]},
+            ],
+            "engineFiles": [
+                {"taskId": 3, "files": [".claude/workflows/sdlc-task.js"]},
+            ],
+        }
+        for field, expected_value in expected.items():
+            check(
+                f"enumerate_tasks() full shape: {field} matches hand-derived expectation",
                 result.get(field) == expected_value,
                 f"expected {expected_value!r}, got {result.get(field)!r}",
             )
@@ -311,6 +401,7 @@ def config_over_code_control():
 
 def main() -> int:
     field_for_field_match()
+    enumerate_tasks_full_shape()
     unset_env_var_negative_control()
     no_diff_kind_validate_pair()
     config_over_code_control()

@@ -6,7 +6,10 @@ render-scope-flag, harness-config, enumerate, state-load).
 BT.ticket.prepare-run-replaces-setup-agents, task 2: this script computes ONLY the setup facts
 those agents mechanically derive today — repo root, vault detection, the rendered `--agent`/
 `--scope` mev flags, the project's harness.json parsed directly (never model-copied), and the
-target spec's tasks.json enumeration (task_id + dependsOn per task). It makes NO network or LLM
+target spec's tasks.json enumeration (BT.ticket.prepare-run-never-receives-a-spec-slug, task 1:
+hasTasks, allTasks (every entry's task_id, in file order), plus the per-task taskChecks/
+taskExpectRed/engineFiles breakdowns — see "tasks_enumeration" below for the exact shape).
+It makes NO network or LLM
 call — every fact below is read straight off the filesystem or a `git`/`python3` subprocess, the
 same mechanism the setup agents were instructed to run verbatim and merely transcribe.
 
@@ -33,8 +36,15 @@ Prints one JSON object to stdout. On success:
     "vault_root": "<abs path — realpath of planning/, same whether vaulted or not>",
     "agent_flag": " --agent <slug>" | "",
     "scope_flag": " --scope <slug>" | "",
-    "harness_config": <planning/harness.json parsed, or null if absent/invalid>,
-    "tasks_enumeration": [{"task_id": 1, "dependsOn": [...]}, ...],
+    "harness_config": <planning/harness.json parsed and compacted (prose-only keys removed -- see
+                       compact_harness_config), or null if absent/invalid>,
+    "harness_check_count": <len(validation.checks) as read from disk, or null>,
+    "tasks_enumeration": {"hasTasks": bool, "allTasks": [1, 2, ...],
+                          "taskChecks": [{"taskId": N, "validationCommands": [...]}, ...],
+                          "taskExpectRed": [{"taskId": N, "commands": [...]}, ...],
+                          "engineFiles": [{"taskId": N, "files": [...]}, ...]},
+    "task_commits": {"<N>": {"shas": ["<newest short sha>", ...], "newest": "<sha>",
+                              "earliest_parent": "<short sha>" | null}, ...},
     "lint": {"passed": bool, "findings": [...], "enabled_rules": int, "total_rules": int},
     "probes": [{"check": "<name>", "command": "<probeCommand>", "passed": true}, ...],
     "refused": false
@@ -47,6 +57,7 @@ On refusal (nonzero exit), ONLY:
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -208,31 +219,166 @@ def load_harness_config(repo_root):
         return None
 
 
+def _empty_enumeration():
+    """The degrade shape used both when tasks.json is absent/invalid/empty and when no spec_slug
+    was given at all (prepare_run()'s own fallback) — hasTasks=False, everything else empty."""
+    return {
+        'hasTasks': False,
+        'allTasks': [],
+        'taskChecks': [],
+        'taskExpectRed': [],
+        'engineFiles': [],
+    }
+
+
 def enumerate_tasks(repo_root, spec_slug):
-    """enumerate: read planning/<spec-slug>/tasks.json (a bare array, D45 shape) and report each
-    task's task_id and dependsOn, in file order — replacing the enumerate + state-load agents'
-    mechanical transcription with a direct parse. Returns [] if the file is missing, not valid
-    JSON, or not a non-empty array — the caller (task 4 / the engine) decides whether that is a
-    D16 refusal condition; this function only reports what is on disk."""
+    """enumerate: read planning/<spec-slug>/tasks.json (a bare array, D45 shape) and report the
+    FULL shape the (now-retired) ENUMERATE_PROMPT agent used to self-report via StructuredOutput
+    in sdlc-task.js/sdlc-flow.js — hasTasks, allTasks, taskChecks, taskExpectRed, engineFiles —
+    replacing that agent's zero-judgment JSON parse with a direct one. Mirrors ENUMERATE_PROMPT's
+    STEP1-5 rules literally (BT.ticket.prepare-run-never-receives-a-spec-slug, task 1):
+
+      STEP2 (hasTasks/allTasks) — hasTasks is True iff the file parses as a non-empty JSON array;
+        allTasks collects every entry's task_id, in array order, skipping any entry missing
+        task_id (same skip behavior as before this task).
+
+      STEP3 (taskChecks) — for each task whose "validation_commands" is present AND a non-empty
+        array, add {taskId, validationCommands} (the array copied verbatim — never normalized,
+        reordered, or invented). Skip a task whose validation_commands is absent, null, or [].
+
+      STEP4 (engineFiles) — for each task, scan its "files" array for any path under
+        .claude/workflows/. If found, add {taskId, files} where files is ONLY the matching
+        .claude/workflows/ path(s) from that task, never its other files. Skip a task with no such
+        path.
+
+      STEP5 (taskExpectRed, D68) — for each task whose "expect_red" is present AND a non-empty
+        array, add {taskId, commands} (copied verbatim). Skip a task whose expect_red is absent,
+        null, or []. The subset-of-validation_commands rule is enforced by the engine, not here —
+        this function only reports what tasks.json contains.
+
+    Returns the empty-enumeration shape (hasTasks=False, all lists empty) if the file is missing,
+    not valid JSON, or not a non-empty array — the caller (task 4 / the engine) decides whether
+    that is a D16 refusal condition; this function only reports what is on disk."""
     tasks_path = os.path.join(repo_root, 'planning', spec_slug, 'tasks.json')
     if not os.path.exists(tasks_path):
-        return []
+        return _empty_enumeration()
     try:
         with open(tasks_path) as f:
             data = json.load(f)
     except (OSError, ValueError):
-        return []
-    if not isinstance(data, list):
-        return []
-    enumeration = []
+        return _empty_enumeration()
+    if not isinstance(data, list) or not data:
+        return _empty_enumeration()
+
+    all_tasks = []
+    task_checks = []
+    task_expect_red = []
+    engine_files = []
     for task in data:
         if not isinstance(task, dict) or 'task_id' not in task:
             continue
-        enumeration.append({
-            'task_id': task.get('task_id'),
-            'dependsOn': task.get('dependsOn', []),
-        })
-    return enumeration
+        task_id = task.get('task_id')
+        all_tasks.append(task_id)
+
+        validation_commands = task.get('validation_commands')
+        if isinstance(validation_commands, list) and validation_commands:
+            task_checks.append({
+                'taskId': task_id,
+                'validationCommands': validation_commands,
+            })
+
+        files = task.get('files')
+        if isinstance(files, list):
+            matching = [
+                f for f in files
+                if isinstance(f, str) and '.claude/workflows/' in f
+            ]
+            if matching:
+                engine_files.append({'taskId': task_id, 'files': matching})
+
+        expect_red = task.get('expect_red')
+        if isinstance(expect_red, list) and expect_red:
+            task_expect_red.append({'taskId': task_id, 'commands': expect_red})
+
+    return {
+        # hasTasks tracks STEP2 literally: "the file parsed as an array with at least one
+        # entry" — already established above (data is a non-empty list past that guard),
+        # independent of whether any individual entry carried a usable task_id.
+        'hasTasks': True,
+        'allTasks': all_tasks,
+        'taskChecks': task_checks,
+        'taskExpectRed': task_expect_red,
+        'engineFiles': engine_files,
+    }
+
+
+def find_task_commits(repo_root, block_id):
+    """BT.ticket.work-assertion-base-sha-self-comparison, task 1: report this block's own
+    per-task commits from git history, so sdlc-task.js's per-task prevSha resolution can fall
+    back to a real prior commit instead of blindly trusting state.base_sha (which is only the
+    correct pre-task baseline for task 1 of a fresh run — see that ticket's `what`).
+
+    Parses `git log --format=%h%x09%s` (newest first) in repo_root and matches ONLY the engine's
+    own commit-subject convention for block_id:
+      feat: implement <block_id>-task<N>
+      fix: fix pass <P> for <block_id>-task<N>
+    anchored to the WHOLE subject, so a ` (vault)`-suffixed variant (those commits live in the
+    brain vault, not this repo) and a prefix-sharing block id (e.g. block_id `BT.x.A` against a
+    commit for `BT.x.AB`) never match. block_id is regex-escaped (dots in a block id are literal,
+    not "any character").
+
+    Returns {"<N>": {"shas": [sha, ...] newest first, "newest": sha,
+                      "earliest_parent": short sha of the parent of the OLDEST matching commit,
+                      or null if it has none}}.
+
+    No block_id, not a git repo, or no matches -> {}. Never raises and never refuses a run — any
+    subprocess failure degrades to {}, the same contract enumerate_tasks() already uses for a
+    missing tasks.json."""
+    if not block_id:
+        return {}
+    escaped = re.escape(block_id)
+    pattern = re.compile(
+        r'^(?:feat: implement|fix: fix pass \d+ for) ' + escaped + r'-task(\d+)$'
+    )
+    try:
+        result = subprocess.run(
+            ['git', 'log', '-n', '500', '--format=%h%x09%s'],
+            cwd=repo_root, capture_output=True, text=True,
+        )
+    except OSError:
+        return {}
+    if result.returncode != 0:
+        return {}
+
+    by_task = {}
+    for line in result.stdout.splitlines():
+        if '\t' not in line:
+            continue
+        sha, subject = line.split('\t', 1)
+        m = pattern.match(subject)
+        if not m:
+            continue
+        by_task.setdefault(m.group(1), []).append(sha)
+
+    task_commits = {}
+    for task_num, shas in by_task.items():
+        oldest = shas[-1]
+        earliest_parent = None
+        try:
+            parent_result = subprocess.run(
+                ['git', 'rev-parse', '--short', f'{oldest}^'],
+                cwd=repo_root, capture_output=True, text=True,
+            )
+            if parent_result.returncode == 0:
+                earliest_parent = parent_result.stdout.strip() or None
+        except OSError:
+            earliest_parent = None
+        task_commits[task_num] = {
+            'shas': shas,
+            'newest': shas[0],
+            'earliest_parent': earliest_parent,
+        }
+    return task_commits
 
 
 def run_lint(repo_root, spec_slug):
@@ -359,7 +505,34 @@ def verify_requires_and_probes(repo_root, harness_config, simulate_missing_env=N
     return (None, probes)
 
 
-def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_env=None):
+# Prose-only keys a harness.json check (or the config itself) may carry that NO engine reads. They
+# are the bulk of the file (base-template: ~190 KB of 193 KB), and this script's stdout is copied
+# verbatim by a model turn (runPrepareRun) -- a copy that size is never verbatim: measured
+# 2026-09-18, four launches in a row got 1-of-113 or 0-of-113 gating checks back. Stripping them
+# keeps every field an engine consumes while shrinking the payload ~10x; harness_check_count lets
+# the engine prove the copy it received is complete (loadHarnessConfig fails closed on a mismatch).
+_HARNESS_PROSE_KEYS = frozenset({'purpose', 'observed_red', 'evidence', 'gates_reason', 'rationale'})
+
+
+def compact_harness_config(cfg):
+    """Return `cfg` minus _HARNESS_PROSE_KEYS and any `_`-prefixed key, at every depth. None -> None."""
+    if isinstance(cfg, dict):
+        return {k: compact_harness_config(v) for k, v in cfg.items()
+                if k not in _HARNESS_PROSE_KEYS and not k.startswith('_')}
+    if isinstance(cfg, list):
+        return [compact_harness_config(v) for v in cfg]
+    return cfg
+
+
+def harness_check_count(cfg):
+    """Number of validation.checks[] entries in the config as read from disk, or None."""
+    if not isinstance(cfg, dict):
+        return None
+    checks = (cfg.get('validation') or {}).get('checks')
+    return len(checks) if isinstance(checks, list) else 0
+
+
+def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_env=None, block_id=None):
     cwd = cwd or os.getcwd()
     repo_root = resolve_repo_root(explicit_repo_root)
     if not repo_root:
@@ -376,7 +549,12 @@ def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_e
     is_vaulted, vault_root = detect_vault(repo_root)
     agent_flag = render_agent_flag(cwd)
     scope_flag = render_scope_flag(cwd)
-    tasks_enumeration = enumerate_tasks(repo_root, spec_slug) if spec_slug else []
+    # Empty-case fallback is now {} (an object), not [], to match enumerate_tasks()'s new object
+    # shape — task 3 (the engine call sites) treats {} identically to a real hasTasks=False
+    # enumeration, keeping this function's own logic the simplest of the two options named in
+    # the task record.
+    tasks_enumeration = enumerate_tasks(repo_root, spec_slug) if spec_slug else {}
+    task_commits = find_task_commits(repo_root, block_id)
     lint = run_lint(repo_root, spec_slug)
     return {
         'repo_root': repo_root,
@@ -384,8 +562,10 @@ def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_e
         'vault_root': vault_root,
         'agent_flag': agent_flag,
         'scope_flag': scope_flag,
-        'harness_config': harness_config,
+        'harness_config': compact_harness_config(harness_config),
+        'harness_check_count': harness_check_count(harness_config),
         'tasks_enumeration': tasks_enumeration,
+        'task_commits': task_commits,
         'lint': lint,
         'probes': probes,
         'refused': False,
@@ -397,6 +577,10 @@ def main(argv=None):
     parser.add_argument('--spec-slug', default=None, help='spec slug under planning/<slug>/tasks.json')
     parser.add_argument('--repo-root', default=None, help='override repo root instead of resolving via git')
     parser.add_argument(
+        '--block-id', default=None,
+        help='block id whose own per-task commits to report as task_commits (e.g. BT.x.A)',
+    )
+    parser.add_argument(
         '--simulate-missing-env', action='append', default=None, metavar='VAR',
         help='test-only: refuse if VAR is unset, as if a check declared requires.env: [VAR]',
     )
@@ -406,8 +590,10 @@ def main(argv=None):
         args.spec_slug,
         explicit_repo_root=args.repo_root,
         simulate_missing_env=args.simulate_missing_env,
+        block_id=args.block_id,
     )
-    print(json.dumps(result, indent=2))
+    # Compact separators: this output is copied by a model turn, so every byte is a transcription risk.
+    print(json.dumps(result, separators=(',', ':')))
     return 1 if result.get('refused') else 0
 
 

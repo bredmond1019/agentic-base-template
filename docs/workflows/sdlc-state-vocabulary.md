@@ -31,7 +31,7 @@ can hold somewhere in the file.
 
 | Value | Meaning | Emitted by |
 |---|---|---|
-| `running` | The engine has started this run and is actively working through tasks — the initial status written when state is first created. | `sdlc-task`, `sdlc-flow` |
+| `running` | The engine has started this run and is actively working through tasks — the initial status written when state is first created. **Also a per-task status** (`tasks["<N>"].status`): a "started" marker the implement agent writes as its own turn's first step, before reading, editing, or committing anything for that task — `tasks["<N>"].start_sha` (HEAD short sha at that moment) and `.marker_at` (UTC ISO timestamp) are written alongside it. The marker is written only on a task's first implement attempt with no `start_sha` recorded yet; a fix attempt never re-stamps it, and a task resumed while already at `running` keeps its original `start_sha`. The happy path fully supersedes the marker with the task's real terminal status (`passed`/`failed`) once it finishes — see "A task stuck at `running`" below. | `sdlc-task`, `sdlc-flow` |
 | `passed` | A single task's implement→test loop finished clean. **Per-task status**, not the top-level run status. | `sdlc-task`, `sdlc-flow` |
 | `failed` | A single task's implement→test loop did not finish clean after its retry budget. **Per-task status**, not the top-level run status. | `sdlc-task`, `sdlc-flow` |
 | `blocked` | The run bailed before reaching a terminal outcome — a task failed and triage judged it stuck, or another stop condition fired. Top-level run status. | `sdlc-task`, `sdlc-flow` |
@@ -66,6 +66,25 @@ also out of scope for this table.
 | `blocked` | *(no forced transition — stays whatever `state.json` already said)* | A bail is a stop, not a verdict on the block; it neither closes nor reopens anything. |
 | `criteria_refused` | *(stays `open`/`in_progress`, not `closed`)* | The run explicitly refused to call the work clean; forcing `closed` here would launder a refused verdict into a false "done". |
 | `reconcile_failed` | *(stays `open`/`in_progress`, not `closed`)* | Same shape as `criteria_refused` — the authoritative re-check failed, so the block is not reported done. |
+
+## A task stuck at `running`
+
+If a run's process dies mid-task (a crash, a killed session) after the per-task marker was written
+but before the task reached a terminal status, `tasks["<N>"].status` is left at `running` on disk
+with a `start_sha` and `marker_at` pointing at the moment the marker was written — this is the
+*normal*, expected trace of an interrupted task, not corruption.
+
+**Operator action:** treat a task found at `running` as **unknown**, never as `passed` or `failed`
+— the marker only proves the task *started*, not how it ended; the prior attempt may or may not have
+committed real work before the crash. Re-launch with `--resume` (or a task-range relaunch covering
+that task): the engine re-enters the task at implement attempt 1 (not a fix attempt, and the
+attempt counter is not advanced by the crashed attempt), with a note in the implement prompt that a
+crashed prior attempt may already have committed the work since `start_sha` — the agent checks for
+that commit against the spec before deciding whether new work is needed. `start_sha` also becomes
+the work-assertion baseline (`prevSha`) for that resumed attempt on `sdlc-task`, ahead of the
+`state.tasks[N-1].commit` / git-history / `base_sha` resolution chain — see
+[sdlc-task.md](sdlc-task.md)'s prevSha resolution order. `sdlc-flow` writes the same marker but its
+work-assertion range is unchanged (`HEAD~1`, no `prevSha`).
 
 ## Related
 

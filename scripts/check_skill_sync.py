@@ -108,7 +108,18 @@ ANCHORS = [
     # entirely ABOVE this anchor in sdlc-task.js, shifting it 2107->2176, 2188->2257 (+69) with NO
     # content change to this region itself -- verified by diffing the old range against the new
     # range: byte-identical ("WORKTREE MODE (--worktree)" through the trailing IN-PLACE MODE text).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2181, 2262,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2181->2190, 2262->2271 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite (shared.js's <<shared:runPrepareRun>> region, inlined
+    # well above this anchor) shifted it 2274->2280, 2355->2361 (+6) with NO content change --
+    # verified byte-identical ("WORKTREE MODE (--worktree)" through the trailing IN-PLACE MODE text).
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor (ENUMERATE_SCHEMA const removed at ~1359, MODEL.enumerate entry removed at ~1584),
+    # shifting it 2280->2228, 2361->2309 with NO content change to this region itself -- verified
+    # byte-for-byte identical against the pre-shift block ("WORKTREE MODE (--worktree)" through the
+    # trailing IN-PLACE MODE text) via a direct block search, not a guessed renumbering.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2228, 2309,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -131,7 +142,12 @@ ANCHORS = [
     # shifting it 800->892, 848->940 (+92) with NO content change to this region itself -- verified
     # by diffing the old range against the new range: byte-identical ("function
     # renderTriagePrompt(" through the trailing "<</shared:renderTriagePrompt>>" boundary).
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 879, 927,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: 7547dda added a carried-over-data clause INSIDE renderTriagePrompt and the window had already drifted to start in renderStatusWriteScript; re-picked from CONTENT to the region markers <<shared:renderTriagePrompt>>..<</shared:renderTriagePrompt>> (879-927 -> 889-947); guides re-verified and given the clause, then re-stamped.
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor in shared.js, shifting
+    # it 889->895, 947->953 (+6) with NO content change -- verified byte-identical
+    # ("function renderTriagePrompt(" through the trailing "<</shared:renderTriagePrompt>>" boundary).
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 895, 953,
      ".agents/skills/sdlc-task/SKILL.md"),
     # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
@@ -141,7 +157,10 @@ ANCHORS = [
     # two guides). BT.ticket.prepare-run-replaces-setup-agents, task 6: 712->800, 760->848.
     # Same shift, same evidence as the sdlc-task entry immediately above (one shared.js region,
     # two guides). BT.ticket.failure-attribution-and-gate-cache, task 9: 800->892, 848->940.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 879, 927,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: 7547dda added a carried-over-data clause INSIDE renderTriagePrompt and the window had already drifted to start in renderStatusWriteScript; re-picked from CONTENT to the region markers <<shared:renderTriagePrompt>>..<</shared:renderTriagePrompt>> (879-927 -> 889-947); guides re-verified and given the clause, then re-stamped.
+    # Same shift, same evidence as the sdlc-task entry immediately above (one shared.js region,
+    # two guides). BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: 889->895, 947->953.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 895, 953,
      ".agents/skills/sdlc-flow/SKILL.md"),
     # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: the
     # loadHarnessConfig() unwrap + bail additions inserted 52 net lines into sdlc-task.js and
@@ -212,7 +231,17 @@ ANCHORS = [
     # anchor, shifting it 3787->3917, 3814->3944 (+130) with NO content change -- verified
     # byte-identical ("7. Commit your edits (stage explicitly" through the trailing
     # `git log --oneline -1`).
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 3922, 3949,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3922->3999, 3949->4026 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
+    # 4111->4117, 4138->4144 (+6) with NO content change -- verified byte-identical
+    # ("7. Commit your edits (stage explicitly" through the trailing `git log --oneline -1`).
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor, shifting it 4117->4054, 4144->4081 with NO content change -- verified byte-for-byte
+    # identical against the pre-shift block ("7. Commit your edits (stage explicitly" through the
+    # trailing `git log --oneline -1`) via a direct block search, not a guessed renumbering.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4054, 4081,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
@@ -235,7 +264,18 @@ ANCHORS = [
     # entirely ABOVE this anchor in sdlc-flow.js, shifting it 2047->2116, 2177->2246 (+69) with NO
     # content change -- verified byte-identical ("const worktreeRecipe =" through the trailing
     # content).
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2116, 2246,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2116->2125, 2246->2255 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
+    # 2219->2225, 2349->2355 (+6) with NO content change -- verified byte-identical
+    # ("const worktreeRecipe =" through the trailing content).
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor in sdlc-flow.js, shifting it 2225->2171, 2355->2301 with NO content change to this
+    # region itself -- verified byte-for-byte identical against the pre-shift block ("const
+    # worktreeRecipe =" through the trailing content) via a direct block search, not a guessed
+    # renumbering.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2171, 2301,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -257,7 +297,18 @@ ANCHORS = [
     # isolation-and-branch-naming entry above -- shifted 3863->3993, 3898->4028 (+130) with NO
     # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
     # trailing `git log --oneline -1`).
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 3993, 4028,
+    # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3993->4025, 4028->4060 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite (in shared.js's <<shared:runPrepareRun>> region, inlined
+    # well above this anchor) landed entirely ABOVE this anchor, shifting it 4136->4142, 4171->4177
+    # (+6) with NO content change to this region itself -- verified byte-identical ("5. Commit
+    # (stage explicitly" through the trailing `git log --oneline -1`).
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 3: the ENUMERATE_PROMPT/ENUMERATE_SCHEMA/
+    # MODEL.enumerate deletion + enumerateFromPrepareRun() replacement landed entirely ABOVE this
+    # anchor in sdlc-flow.js, shifting it 4142->4077, 4177->4112 with NO content change -- verified
+    # byte-for-byte identical against the pre-shift block ("5. Commit (stage explicitly" through the
+    # trailing `git log --oneline -1`) via a direct block search, not a guessed renumbering.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4077, 4112,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

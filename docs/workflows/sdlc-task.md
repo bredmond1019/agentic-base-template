@@ -87,9 +87,9 @@ flowchart TD
 | Stage | Model | What it does |
 |---|---|---|
 | **Scout / setup** | haiku | Reads the spec and existing report state (for `--resume`). In-place by default; with `--worktree`, creates (or re-attaches on `--resume`) a `trees/<branch>/` cone-mode sparse-checkout worktree — see [In-place vs. `--worktree`](#in-place-vs-worktree) above. Resolves the spec source (D65 stage 2): checks `planning/blocks/<BlockID>.json` first and prefers it when present; falls back to the legacy `planning/<spec>/tasks.md` only when no block record exists. `specSource` (`'block-record'` / `'tasks-md'` / `'missing'`) drives which file the run treats as the spec and, downstream, which D16 derive branch fires (see below). The D19 thin-spec check runs only when `specSource == 'tasks-md'`. |
-| **Implement** | sonnet | Executes every task (or the selected range) against `tasks.md` (and `breakdown.md` if present). Runs the D8 (`planning/decisions/D8-implement-completeness-self-check.md`) completeness self-check before committing `feat:`/`fix:`. |
+| **Implement** | sonnet | Executes every task (or the selected range) against `tasks.md` (and `breakdown.md` if present). Its own turn opens with a STEP 0 marker (`BT.ticket.per-task-state-write-before-implement`) — before reading, editing, or committing anything, a deterministic merge writes `tasks[N] = {status: 'running', start_sha: <HEAD short sha>, marker_at}` into `sdlc-task-state.json`, rendered only on a first attempt with no `start_sha` recorded yet. Runs the D8 (`planning/decisions/D8-implement-completeness-self-check.md`) completeness self-check before committing `feat:`/`fix:`. |
 | **Fast test** | haiku | Runs the `gates:true` checks from `harness.json` plus the universal emoji gate on changed markdown. Falls back to the spec's `## Validation Commands` if no config. Records structured `gate_results` (`{check_id, status, failing_ids}`, one entry per check run) into the per-task state — `check_id` is validated against `harness.json`'s check names at write time, a non-match storing `check_id: null` with the raw agent text kept in `check_id_raw`. Triage fires only on a red `gate_results` entry — a green task's fold spawns no triage agent. Also re-stamps the holding lane's heartbeat (BT.ticket.lane-heartbeat-goes-stale-mid-block): calls `python3 scripts/lane_heartbeat.py --agent <identity> --repo <repo>` (the same `--agent` identity threaded to `scripts/fleet_concurrency_check.py`) as a **non-fatal, best-effort** step — a spec run outside `/orchestrate` has no claim or lease to re-stamp, and that must never fail the task. This is the fix for `check_lane_agents.py`'s staleness verdict only ever restamping at a block boundary: a block whose wall-clock span exceeds `STALE_THRESHOLD_SECONDS` (10800s) now gets a fresh heartbeat after every task instead of red-gating its own lane's `lane-agent-schema` check at close. |
-| **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. Stuck → commit the current state as `FAIL` and exit, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, check_id_raw, failing_artifact, ownership, bail_class, reason, resolution: null`) — `check_id` resolved from the task's own recorded `gate_results` (the last `'fail'` entry), validated against `harness.json` check names — rather than only overwriting `bail_reason` — see BT.ticket.bails-must-be-append-only (`planning/blocks/BT.ticket.bails-must-be-append-only.json`). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail that is later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
+| **Triage** | sonnet | Classifies a failing test as `RETRYABLE` (transient, or failure changed — progress is possible) or stuck (same criteria twice, or structural). "Same twice" must be measured this attempt — `gate_results`/`issues` carried over from an earlier attempt past a pre-test-stage failure (work assertion, vault commit, removed-literal scan; flagged by a DATA FRESHNESS WARNING) never alone justify `sameFailureAsBefore=true`. Before asserting a pre-existing/baseline claim, the failing check must be re-run against base state (`evidence` + `baseStateChecked` fields record this); otherwise the claim must be phrased as an explicit hypothesis. Harness-created workspace state is a candidate cause, not a fixed backdrop. Stuck → commit the current state as `FAIL` and exit, **appending** one entry to `state.bails[]` (`occurred_at, task_id, check_id, check_id_raw, failing_artifact, ownership, bail_class, reason, resolution: null`) — `check_id` resolved from the task's own recorded `gate_results` (the last `'fail'` entry), validated against `harness.json` check names — rather than only overwriting `bail_reason` — see BT.ticket.bails-must-be-append-only (`planning/blocks/BT.ticket.bails-must-be-append-only.json`). A resumed run merges the prior snapshot's `bails[]` forward instead of re-initialising it, so a bail that is later retried cleanly is annotated (`resolution: "resumed-clean"`), never erased. |
 | **Fix** | sonnet | Targeted fix for the failing checks only — never a re-implement. Escalates to `opus` on the final attempt (`ESCALATION_MODEL`). |
 | **Commit + state** | haiku | Writes `sdlc-task-state.json` (per-task status + token usage) and commits all work + state: in-place, one final `chore:` commit; under `--worktree`, a per-phase-write commit shape on the throwaway branch. |
 | **Terminal reconcile** (D56 (`planning/decisions/D56-sdlc-task-authoritative-reconcile.md`)) | haiku | Runs once, after every task has passed on a full spec run, before bookkeep. See [Terminal authoritative reconcile](#terminal-authoritative-reconcile-d56) below. |
@@ -435,10 +435,37 @@ instance, which is exactly the shape that shipped as a green PASS in EN.11.O (44
 `BT.ticket.work-assertion-cannot-express-a-correct-empty-intersection`) is the complement: it runs
 immediately *after* the per-task work commit in both engines' per-task loop (never before — it
 inspects the commit it is checking via `git diff --name-status <range> HEAD`, where `<range>` is
-`prevSha` when the caller passes one — the previous task's own recorded commit, or the run's
-`base_sha` for task 1, both persisted in state and therefore identical whether the engine is
-running fresh or resuming — and only the literal `HEAD~1` for a caller that passes none), reading
-`tasksJsonPath` at run time to get task `taskNum`'s declared `files[]`, and aborts
+`prevSha` when the caller passes one — and only the literal `HEAD~1` for a caller that passes
+none), reading `tasksJsonPath` at run time to get task `taskNum`'s declared `files[]`, and aborts
+
+`sdlc-task.js` resolves `prevSha` via a hoisted `resolvePrevSha(state, taskNum, taskCommits)`
+(`BT.ticket.work-assertion-base-sha-self-comparison`), in this order: (0) `state.tasks[taskNum].
+start_sha` — the per-task "started" marker's own recorded pre-task `HEAD` (`BT.ticket.per-task-
+state-write-before-implement`), the exact boundary for a task resumed from `running` and the
+highest-precedence source whenever it is present; (1) `state.tasks[taskNum -
+1].commit` — the ordinary fresh-run path, identical whether the engine is running fresh or
+resuming; (2) `taskCommits[taskNum - 1].newest` — `prepare_run.py`'s own `find_task_commits()`
+lookup (a deterministic git-log scan over the block's own `feat: implement <blockId>-task<N>` /
+`fix: fix pass <P> for <blockId>-task<N>` commit-subject convention, resolved once per run and
+surfaced through the cached prepare-run result's `task_commits`, costing no extra agent turn per
+task); (3) `state.base_sha` — the pre-RUN `HEAD`, the last resort once git history has nothing
+either. Step (3) alone is *not* always a safe pre-task boundary: it is the pre-RUN `HEAD`, which is
+only the correct pre-task baseline for task 1 of a fresh run. Whenever a run starts at task N>1
+without task N-1 in state — a task-range launch, or a relaunch after a crash lost
+`sdlc-task-state.json` — `base_sha` can already contain task N's own commit, making the diff a
+structurally empty self-comparison (reproduced on a real engine-rs `EN.19.C` run, 2026-09-17:
+`state.base_sha` resolved to task 2's own just-committed sha because it was already `HEAD` at
+re-launch, so `git diff <base_sha> HEAD` was empty and the work assertion false-negatived on real,
+correctly-committed work). Independent of which step resolved `prevSha`, a guard then checks it
+against `taskCommits[taskNum]` (the *current* task's own commits): if it matches one of them, the
+guard replaces it with that task's `earliest_parent` — the parent of the oldest commit
+`find_task_commits()` attributes to task `taskNum` — and the per-task log line records that the
+guard fired. `taskCommits` defaults to `{}` on a resume seeded from a pre-change `state.setup` that
+predates the `task_commits` field, in which case resolution falls straight through to `base_sha`
+unchanged. `removedLiteralScan()` is fed the same resolved `prevSha`. `sdlc-flow.js` is unaffected:
+it calls `renderImplementPrompt` without a `prevSha` at all, so it always uses the `HEAD~1`
+fallback, which is that task's own non-empty diff on an already-committed task and does not exhibit
+this self-comparison.
 
  VAULT-ONLY TASKS (D46): if EVERY path in the task's declared files[] begins with `planning/`,
  the work landed in the VAULT repo, not this one, and this repo's history structurally cannot
@@ -548,6 +575,17 @@ and before any implement-stage agent ever runs — surfacing `reason` exactly as
 report an unrunnable spec. `--resume` reads this same result back from the run's meta bundle
 (`sdlc-task-state.json`'s `setup` field) instead of re-running it. Only after a non-refused result
 does the actual worktree-creation agent (below) run.
+
+**The config still crosses a model on its way in.** The Workflow runtime has no filesystem, so the
+`prepare-run` agent copies `prepare_run.py`'s stdout back verbatim. When that stdout embedded the whole
+`harness.json` (~193 KB), the copy never was verbatim: measured 2026-09-18, runs received 1 or 0 of 113
+gating checks and gated silently on the remainder. Two guards now close this:
+
+- `prepare_run.py` strips prose-only keys (`purpose`, `observed_red`, `evidence`, `gates_reason`,
+  `rationale`, `_`-prefixed) and prints compact JSON — about 14 KB, every engine-read field kept.
+- It reports `harness_check_count`, and `loadHarnessConfig()` bails
+  `HARNESS_CONFIG_TRANSCRIPTION_INCOMPLETE` when the copied config holds a different number of checks.
+  Pinned by `scripts/test_harness_transcription_guard.py`.
 
 `--worktree` was suspended fleet-wide from 2026-08-23 to 2026-08-28 (brain decision
 `D81-worktree-moratorium`) after three separate whole-repo-deletion incidents behind a GREEN run.
