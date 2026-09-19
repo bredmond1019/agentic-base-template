@@ -15,13 +15,20 @@ inverting the gate by hand, which is the workaround CLAUDE.md's D68 discipline e
 Task 1 therefore only asserts the fixture *parses* and that the engine/docs/harness are untouched;
 this script's real, non-zero exit is captured by hand into the task notes instead.
 
-Five named, independent assertions (A-E), each checked against the file SOURCE as plain text and
+Named, independent assertions (A, A-producer, B-F), each checked against the file SOURCE as plain text and
 located by symbol/heading -- never by line number, because `scripts/skill_sync_manifest.json` and
 `scripts/engine_docs_sync_manifest.json` already pin `sdlc-task.js` by line range and this block's
 own `ENUMERATE_SCHEMA` edit shifts every one of them (see the block record's step 5):
 
-  A. `ENUMERATE_SCHEMA` in `sdlc-task.js` declares a `taskExpectRed` array whose items carry both
-     `taskId` and `commands` properties.
+  A. the engine CONSUMES a `taskExpectRed` array whose entries carry both `taskId` and `commands`
+     -- anchored on the `enumResult.taskExpectRed` loop that builds `taskExpectRedMap`. Until
+     BT.ticket.prepare-run-never-receives-a-spec-slug task 3 this assertion was anchored on the
+     `ENUMERATE_SCHEMA` const, which declared that shape for the Plan-stage enumerate AGENT; that
+     agent, its prompt and its schema are all deleted -- the shape is now produced deterministically
+     by `.claude/workflows/bin/prepare_run.py`'s `enumerate_tasks()` (assertion A-producer below)
+     and read unchanged by both engines, so the contract is pinned at both ends instead.
+  A-producer. `prepare_run.py`'s `enumerate_tasks()` emits `taskExpectRed` entries keyed
+     `taskId` + `commands` -- the producer half of the same contract, checked once (not per engine).
   B. somewhere in the per-task render path, wording exists that states the check PASSES on a
      non-zero exit AND FAILS on exit 0, close enough together to be describing one condition
      rather than two unrelated mentions.
@@ -76,13 +83,28 @@ FLOW_GATING_FILTER_RE = re.compile(
     r"if\s*\(gatingOnly\)\s*checks\s*=\s*checks\.filter\("
 )
 
-# --- Assertion A: ENUMERATE_SCHEMA declares taskExpectRed {taskId, commands} ------------------
-ENUMERATE_SCHEMA_RE = re.compile(r"const\s+ENUMERATE_SCHEMA\s*=\s*\{")
-TASK_EXPECT_RED_PROP_RE = re.compile(r"taskExpectRed\s*:\s*\{")
-# How far past the `taskExpectRed:` property key to look for its nested `taskId`/`commands` item
-# fields -- wide enough to span a multi-line `items: { properties: { ... } }` block, narrow enough
-# not to accidentally wander into an unrelated sibling schema property further down the object.
+# --- Assertion A: the engine consumes taskExpectRed entries keyed {taskId, commands} -----------
+# Anchored on the consumption site (the loop that fills taskExpectRedMap), not on a schema const:
+# the Plan-stage enumerate agent, its ENUMERATE_PROMPT and its ENUMERATE_SCHEMA were deleted by
+# BT.ticket.prepare-run-never-receives-a-spec-slug task 3, so the only remaining statement of this
+# shape inside an engine is where it is read.
+TASK_EXPECT_RED_CONSUMER_RE = re.compile(r"enumResult\.taskExpectRed")
+TASK_EXPECT_RED_ID_RE = re.compile(r"\.taskId\b")
+TASK_EXPECT_RED_COMMANDS_RE = re.compile(r"\.commands\b")
+# How far past the `enumResult.taskExpectRed` anchor to look for the entry fields it reads --
+# wide enough to span the whole subset-guard loop body, narrow enough not to wander into unrelated
+# code further down the file.
 SCHEMA_PROP_WINDOW = 700
+
+# --- Assertion A-producer: prepare_run.py's enumerate_tasks() emits {taskId, commands} ---------
+PREPARE_RUN_PATH = REPO_ROOT / ".claude" / "workflows" / "bin" / "prepare_run.py"
+ENUMERATE_TASKS_DEF_RE = re.compile(r"^def\s+enumerate_tasks\s*\(", re.MULTILINE)
+NEXT_TOP_LEVEL_DEF_RE = re.compile(r"^def\s+", re.MULTILINE)
+PRODUCER_ENTRY_RE = re.compile(
+    r"\{\s*'taskId'\s*:[^}]*'commands'\s*:[^}]*\}"
+    r"|\{\s*\"taskId\"\s*:[^}]*\"commands\"\s*:[^}]*\}"
+)
+PRODUCER_KEY_RE = re.compile(r"['\"]taskExpectRed['\"]\s*:")
 
 # --- Assertion B: inverted-verdict wording in the per-task render path -------------------------
 INVERTED_PASS_RE = re.compile(r"PASS[A-Za-z]*[^.\n]{0,160}NON-?ZERO", re.IGNORECASE)
@@ -147,22 +169,41 @@ def _read(path: Path) -> str | None:
 
 
 def assertion_a(text: str, r: Result) -> None:
-    schema_m = ENUMERATE_SCHEMA_RE.search(text)
-    if not schema_m:
-        r.check("A (taskExpectRed declared with taskId + commands)", False,
-                "ENUMERATE_SCHEMA declaration not found")
+    anchor_m = TASK_EXPECT_RED_CONSUMER_RE.search(text)
+    if not anchor_m:
+        r.check("A (taskExpectRed consumed with taskId + commands)", False,
+                "no 'enumResult.taskExpectRed' read found -- the engine no longer consumes the "
+                "per-task expect_red enumeration at all")
         return
-    prop_m = TASK_EXPECT_RED_PROP_RE.search(text, schema_m.end())
-    if not prop_m:
-        r.check("A (taskExpectRed declared with taskId + commands)", False,
-                "no 'taskExpectRed:' property found in/after ENUMERATE_SCHEMA")
+    window = text[anchor_m.end(): anchor_m.end() + SCHEMA_PROP_WINDOW]
+    has_task_id = bool(TASK_EXPECT_RED_ID_RE.search(window))
+    has_commands = bool(TASK_EXPECT_RED_COMMANDS_RE.search(window))
+    r.check("A (taskExpectRed consumed with taskId + commands)", has_task_id and has_commands,
+             f".taskId read={has_task_id}, .commands read={has_commands} within "
+             f"{SCHEMA_PROP_WINDOW} chars of the enumResult.taskExpectRed anchor")
+
+
+def assertion_a_producer(text: str, r: Result) -> None:
+    """The producer half of assertion A, checked once against prepare_run.py.
+
+    `enumerate_tasks()` replaced the deleted ENUMERATE_PROMPT agent as the thing that builds
+    taskExpectRed; if it stopped emitting the {taskId, commands} entry shape the engines read,
+    expect_red would silently never fire while every engine-side assertion here still passed.
+    """
+    def_m = ENUMERATE_TASKS_DEF_RE.search(text)
+    if not def_m:
+        r.check("A-producer (enumerate_tasks emits taskExpectRed {taskId, commands})", False,
+                "def enumerate_tasks( not found in prepare_run.py")
         return
-    window = text[prop_m.end(): prop_m.end() + SCHEMA_PROP_WINDOW]
-    has_task_id = "taskId" in window
-    has_commands = "commands" in window
-    r.check("A (taskExpectRed declared with taskId + commands)", has_task_id and has_commands,
-             f"taskId present={has_task_id}, commands present={has_commands} within "
-             f"{SCHEMA_PROP_WINDOW} chars of the property key")
+    next_m = NEXT_TOP_LEVEL_DEF_RE.search(text, def_m.end())
+    body = text[def_m.end(): next_m.start() if next_m else len(text)]
+    has_key = bool(PRODUCER_KEY_RE.search(body))
+    has_entry = bool(PRODUCER_ENTRY_RE.search(body))
+    r.check("A-producer (enumerate_tasks emits taskExpectRed {taskId, commands})",
+            has_key and has_entry,
+            f"'taskExpectRed' key emitted={has_key}, "
+            f"{{taskId, commands}} entry literal present={has_entry} "
+            "inside enumerate_tasks()'s body")
 
 
 def assertion_b(text: str, r: Result) -> None:
@@ -351,6 +392,12 @@ def main(argv: list[str] | None = None) -> int:
         assertion_f(engine_text, flow_text, r)
 
     r.prefix = ""
+    prepare_run_text = _read(PREPARE_RUN_PATH)
+    if prepare_run_text is None:
+        r.check("prepare_run.py exists", False, f"{PREPARE_RUN_PATH} not found")
+    else:
+        assertion_a_producer(prepare_run_text, r)
+
     docs_text = _read(GENERATE_TASKS_PATH)
     if docs_text is None:
         r.check("generate-tasks.md exists", False, f"{GENERATE_TASKS_PATH} not found")
