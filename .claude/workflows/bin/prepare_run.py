@@ -6,7 +6,9 @@ render-scope-flag, harness-config, enumerate, state-load).
 BT.ticket.prepare-run-replaces-setup-agents, task 2: this script computes ONLY the setup facts
 those agents mechanically derive today — repo root, vault detection, the rendered `--agent`/
 `--scope` mev flags, the project's harness.json parsed directly (never model-copied), and the
-target spec's tasks.json enumeration (task_id + dependsOn per task). It makes NO network or LLM
+target spec's tasks.json enumeration (BT.ticket.prepare-run-never-receives-a-spec-slug, task 1:
+hasTasks/allTasks plus the per-task taskChecks/taskExpectRed/engineFiles breakdowns — see
+"tasks_enumeration" below for the exact shape). It makes NO network or LLM
 call — every fact below is read straight off the filesystem or a `git`/`python3` subprocess, the
 same mechanism the setup agents were instructed to run verbatim and merely transcribe.
 
