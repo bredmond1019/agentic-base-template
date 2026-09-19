@@ -4543,8 +4543,26 @@ if not candidates:
 print('CANDIDATE_TEST_COUNT:%d' % len(candidates))
 
 diff = sh('${GIT} diff --unified=0 %s HEAD -- .' % RANGE)
-removed_lines = [l[1:] for l in diff.splitlines() if l.startswith('-') and not l.startswith('---')]
-added_lines = [l[1:] for l in diff.splitlines() if l.startswith('+') and not l.startswith('+++')]
+# Group '-'/'+' lines by hunk (a new hunk starts at 'diff --git' or '@@'), so pairing below only
+# compares a removed line against an added line from the SAME hunk. Pairing across the whole diff
+# would let a literal removed in one file/hunk get wrongly cancelled by an unrelated '+' line
+# elsewhere in the same commit (carryover removed-literal-scan-same-commit-subtraction-is-untested).
+hunks = []
+cur_removed, cur_added = [], []
+def flush_hunk():
+    if cur_removed or cur_added:
+        hunks.append((list(cur_removed), list(cur_added)))
+for l in diff.splitlines():
+    if l.startswith('diff --git') or l.startswith('@@'):
+        flush_hunk()
+        cur_removed, cur_added = [], []
+    elif l.startswith('---') or l.startswith('+++'):
+        continue
+    elif l.startswith('-'):
+        cur_removed.append(l[1:])
+    elif l.startswith('+'):
+        cur_added.append(l[1:])
+flush_hunk()
 # Quoted-string literals gate on MIN_LEN. Bare identifiers gate on EITHER containing an underscore
 # (a real snake_case/CONST_CASE symbol, reported at any length) OR being at least IDENT_MIN_LEN chars
 # with no underscore -- this is what keeps an ordinary removed English word ("failed", "returned")
@@ -4564,14 +4582,15 @@ def extract(lines):
                 found.add(lit)
     return found
 
-removed_literals = extract(removed_lines)
-added_literals = extract(added_lines)
-# A literal that still appears in this SAME commit's added lines was not actually removed from the
+# A literal that still appears in the SAME HUNK's added lines was not actually removed from the
 # codebase -- a single-line edit (e.g. inserting a flag into an existing command string) shows the
 # whole line as both '-' and '+' in a unified diff, so its unchanged tokens would otherwise be
 # reported as "removed" even though they survive, unmoved, in this very commit. Only a literal that
-# disappears from the diff's added side entirely is a genuine removal worth scanning for elsewhere.
-literals = removed_literals - added_literals
+# disappears from its own hunk's added side is a genuine removal worth scanning for elsewhere; a
+# literal cancelled only by an unrelated hunk/file's '+' line is NOT treated as surviving.
+literals = set()
+for hunk_removed, hunk_added in hunks:
+    literals |= extract(hunk_removed) - extract(hunk_added)
 
 if not literals:
     print('NO_LITERALS_REMOVED')
