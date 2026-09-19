@@ -6,6 +6,48 @@ records changes to the **factory** — it is never copied into generated project
 **Last updated:** 2026-09-18T16:16:01Z
 
 ---
+## 2026-09-19 — prepare-run enumerate: two tasks landed, task 3 bailed on a persistent removed-literal false-positive
+
+- **What:**
+  - Task 1 (passed, 3 attempts): expanded `prepare_run.py`'s `enumerate_tasks()` to return the full
+    `hasTasks`/`allTasks`/`taskChecks`/`taskExpectRed`/`engineFiles` shape the Plan-stage
+    `ENUMERATE_PROMPT` agent used to extract by hand; also fixed a pre-existing stale
+    `harness_config` field-for-field expectation in `scripts/test_prepare_run.py` (the fixture still
+    compared against the raw, uncompacted config).
+  - Task 2 (passed, 1 attempt): `runPrepareRun(specSlug, opts)` now defaults its slug to the
+    enclosing `blockId` and accepts `opts.force` to bypass the one-turn-per-run cache; re-inlined
+    into both engines via `scripts/build_engines.py`, with the `skill_sync_manifest.json` /
+    `engine_docs_sync_manifest.json` anchors and `scripts/test_engines_pass_agent.py`'s frozen
+    baseline re-picked and re-stamped for the resulting +6 line shift (content confirmed
+    byte-identical before re-stamping).
+  - Task 3 (failed, 3 attempts) re-anchored `scripts/test_expect_red_contract.py`'s assertion A off
+    the deleted `ENUMERATE_SCHEMA` const onto the engines' `enumResult.taskExpectRed` consumption
+    site and added an A-producer assertion pinning `enumerate_tasks()` as the `{taskId, commands}`
+    producer, but the run's removed-literal scan kept surfacing hits outside `files[]` across all
+    three attempts (a mix of the genuine `SCHEMA_PROP_WINDOW` anchor move and a long tail of scan
+    false positives on `commands`/`has_commands`/`has_task_id`/`schema_m` across ~30 unrelated test
+    files) — the run BAILED rather than force an out-of-scope edit to files the task never touched.
+  - Task 4 (block-graph closing check) was never reached.
+  - `mev emit-state --write --scope base-template .` regenerated derived surfaces cleanly (0 errors,
+    60 pre-existing warnings unrelated to this run).
+  - The block stays open in `planning/state.json` (BAILED runs never flip status); `planning/status.md`'s
+    Current-focus line records the bail reason.
+- **Next:** a fresh `/sdlc-task` or `/sdlc-flow` resume on task 3 needs to re-triage the removed-literal
+  hit list itself — separate the one real `SCHEMA_PROP_WINDOW` anchor-move hit from the scan false
+  positives before attempting another fix pass, rather than repeating the same three-attempt pattern.
+
+```
+cb27204 fix: fix pass 2 for BT.ticket.prepare-run-never-receives-a-spec-slug-task3
+4168ab4 feat: implement BT.ticket.prepare-run-never-receives-a-spec-slug-task3
+8eacd6c fix: re-pin test_engines_pass_agent baseline to new line numbers (+6 from shared.js edits)
+3c84c1b feat: implement BT.ticket.prepare-run-never-receives-a-spec-slug-task2
+1828c42 fix: fix pass 2 for BT.ticket.prepare-run-never-receives-a-spec-slug-task1
+2aa7b41 fix: fix pass 1 for BT.ticket.prepare-run-never-receives-a-spec-slug-task1
+08c1546 feat: implement BT.ticket.prepare-run-never-receives-a-spec-slug-task1
+37494bd fix(engines): scope removed-literal-scan subtraction to each hunk, not the whole diff
+```
+
+---
 ## 2026-09-18 — unattended-runs: prevSha self-comparison, per-task running marker, and the prepare-run gate bypass
 
 - **What:**
