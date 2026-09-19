@@ -36,7 +36,10 @@ Prints one JSON object to stdout. On success:
     "harness_config": <planning/harness.json parsed and compacted (prose-only keys removed -- see
                        compact_harness_config), or null if absent/invalid>,
     "harness_check_count": <len(validation.checks) as read from disk, or null>,
-    "tasks_enumeration": [{"task_id": 1, "dependsOn": [...]}, ...],
+    "tasks_enumeration": {"hasTasks": bool, "allTasks": [1, 2, ...],
+                          "taskChecks": [{"taskId": N, "validationCommands": [...]}, ...],
+                          "taskExpectRed": [{"taskId": N, "commands": [...]}, ...],
+                          "engineFiles": [{"taskId": N, "files": [...]}, ...]},
     "task_commits": {"<N>": {"shas": ["<newest short sha>", ...], "newest": "<sha>",
                               "earliest_parent": "<short sha>" | null}, ...},
     "lint": {"passed": bool, "findings": [...], "enabled_rules": int, "total_rules": int},
@@ -213,31 +216,97 @@ def load_harness_config(repo_root):
         return None
 
 
+def _empty_enumeration():
+    """The degrade shape used both when tasks.json is absent/invalid/empty and when no spec_slug
+    was given at all (prepare_run()'s own fallback) — hasTasks=False, everything else empty."""
+    return {
+        'hasTasks': False,
+        'allTasks': [],
+        'taskChecks': [],
+        'taskExpectRed': [],
+        'engineFiles': [],
+    }
+
+
 def enumerate_tasks(repo_root, spec_slug):
-    """enumerate: read planning/<spec-slug>/tasks.json (a bare array, D45 shape) and report each
-    task's task_id and dependsOn, in file order — replacing the enumerate + state-load agents'
-    mechanical transcription with a direct parse. Returns [] if the file is missing, not valid
-    JSON, or not a non-empty array — the caller (task 4 / the engine) decides whether that is a
-    D16 refusal condition; this function only reports what is on disk."""
+    """enumerate: read planning/<spec-slug>/tasks.json (a bare array, D45 shape) and report the
+    FULL shape the (now-retired) ENUMERATE_PROMPT agent used to self-report via StructuredOutput
+    in sdlc-task.js/sdlc-flow.js — hasTasks, allTasks, taskChecks, taskExpectRed, engineFiles —
+    replacing that agent's zero-judgment JSON parse with a direct one. Mirrors ENUMERATE_PROMPT's
+    STEP1-5 rules literally (BT.ticket.prepare-run-never-receives-a-spec-slug, task 1):
+
+      STEP2 (hasTasks/allTasks) — hasTasks is True iff the file parses as a non-empty JSON array;
+        allTasks collects every entry's task_id, in array order, skipping any entry missing
+        task_id (same skip behavior as before this task).
+
+      STEP3 (taskChecks) — for each task whose "validation_commands" is present AND a non-empty
+        array, add {taskId, validationCommands} (the array copied verbatim — never normalized,
+        reordered, or invented). Skip a task whose validation_commands is absent, null, or [].
+
+      STEP4 (engineFiles) — for each task, scan its "files" array for any path under
+        .claude/workflows/. If found, add {taskId, files} where files is ONLY the matching
+        .claude/workflows/ path(s) from that task, never its other files. Skip a task with no such
+        path.
+
+      STEP5 (taskExpectRed, D68) — for each task whose "expect_red" is present AND a non-empty
+        array, add {taskId, commands} (copied verbatim). Skip a task whose expect_red is absent,
+        null, or []. The subset-of-validation_commands rule is enforced by the engine, not here —
+        this function only reports what tasks.json contains.
+
+    Returns the empty-enumeration shape (hasTasks=False, all lists empty) if the file is missing,
+    not valid JSON, or not a non-empty array — the caller (task 4 / the engine) decides whether
+    that is a D16 refusal condition; this function only reports what is on disk."""
     tasks_path = os.path.join(repo_root, 'planning', spec_slug, 'tasks.json')
     if not os.path.exists(tasks_path):
-        return []
+        return _empty_enumeration()
     try:
         with open(tasks_path) as f:
             data = json.load(f)
     except (OSError, ValueError):
-        return []
-    if not isinstance(data, list):
-        return []
-    enumeration = []
+        return _empty_enumeration()
+    if not isinstance(data, list) or not data:
+        return _empty_enumeration()
+
+    all_tasks = []
+    task_checks = []
+    task_expect_red = []
+    engine_files = []
     for task in data:
         if not isinstance(task, dict) or 'task_id' not in task:
             continue
-        enumeration.append({
-            'task_id': task.get('task_id'),
-            'dependsOn': task.get('dependsOn', []),
-        })
-    return enumeration
+        task_id = task.get('task_id')
+        all_tasks.append(task_id)
+
+        validation_commands = task.get('validation_commands')
+        if isinstance(validation_commands, list) and validation_commands:
+            task_checks.append({
+                'taskId': task_id,
+                'validationCommands': validation_commands,
+            })
+
+        files = task.get('files')
+        if isinstance(files, list):
+            matching = [
+                f for f in files
+                if isinstance(f, str) and '.claude/workflows/' in f
+            ]
+            if matching:
+                engine_files.append({'taskId': task_id, 'files': matching})
+
+        expect_red = task.get('expect_red')
+        if isinstance(expect_red, list) and expect_red:
+            task_expect_red.append({'taskId': task_id, 'commands': expect_red})
+
+    return {
+        # hasTasks tracks STEP2 literally: "the file parsed as an array with at least one
+        # entry" — already established above (data is a non-empty list past that guard),
+        # independent of whether any individual entry carried a usable task_id.
+        'hasTasks': True,
+        'allTasks': all_tasks,
+        'taskChecks': task_checks,
+        'taskExpectRed': task_expect_red,
+        'engineFiles': engine_files,
+    }
 
 
 def find_task_commits(repo_root, block_id):
@@ -477,7 +546,11 @@ def prepare_run(spec_slug, explicit_repo_root=None, cwd=None, simulate_missing_e
     is_vaulted, vault_root = detect_vault(repo_root)
     agent_flag = render_agent_flag(cwd)
     scope_flag = render_scope_flag(cwd)
-    tasks_enumeration = enumerate_tasks(repo_root, spec_slug) if spec_slug else []
+    # Empty-case fallback is now {} (an object), not [], to match enumerate_tasks()'s new object
+    # shape — task 3 (the engine call sites) treats {} identically to a real hasTasks=False
+    # enumeration, keeping this function's own logic the simplest of the two options named in
+    # the task record.
+    tasks_enumeration = enumerate_tasks(repo_root, spec_slug) if spec_slug else {}
     task_commits = find_task_commits(repo_root, block_id)
     lint = run_lint(repo_root, spec_slug)
     return {
