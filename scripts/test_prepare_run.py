@@ -141,7 +141,19 @@ def field_for_field_match():
             "vault_root": str((repo / "planning").resolve()),
             "agent_flag": " --agent agent-fixture",
             "scope_flag": " --scope repo-fixture",
-            "harness_config": harness_config,
+            # prepare_run() returns the COMPACTED harness config (ea95e3e): every prose-only key
+            # -- `purpose`, `observed_red`, and any `_`-prefixed key -- is stripped at every depth
+            # before the config crosses a model. So the expectation here is the fixture config
+            # minus those keys, hand-written rather than piped back through
+            # compact_harness_config() so it pins the contract instead of restating the code.
+            "harness_config": {
+                "validation": {
+                    "checks": [
+                        {"name": "smoke", "command": "true", "gates": True}
+                    ]
+                },
+                "uiTest": {"enabled": False},
+            },
             "tasks_enumeration": {
                 "hasTasks": True,
                 "allTasks": [1, 2],
