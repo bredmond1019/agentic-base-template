@@ -109,7 +109,11 @@ ANCHORS = [
     # content change to this region itself -- verified by diffing the old range against the new
     # range: byte-identical ("WORKTREE MODE (--worktree)" through the trailing IN-PLACE MODE text).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2181->2190, 2262->2271 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2274, 2355,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite (shared.js's <<shared:runPrepareRun>> region, inlined
+    # well above this anchor) shifted it 2274->2280, 2355->2361 (+6) with NO content change --
+    # verified byte-identical ("WORKTREE MODE (--worktree)" through the trailing IN-PLACE MODE text).
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2280, 2361,
      ".agents/skills/sdlc-task/SKILL.md"),
     # The triage prompt itself -- the five immediate-bail reasons, the "when unsure, BAIL" bias and
     # the evidence clause -- now lives ONCE in the shared library (D83) rather than twice in the
@@ -133,7 +137,11 @@ ANCHORS = [
     # by diffing the old range against the new range: byte-identical ("function
     # renderTriagePrompt(" through the trailing "<</shared:renderTriagePrompt>>" boundary).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: 7547dda added a carried-over-data clause INSIDE renderTriagePrompt and the window had already drifted to start in renderStatusWriteScript; re-picked from CONTENT to the region markers <<shared:renderTriagePrompt>>..<</shared:renderTriagePrompt>> (879-927 -> 889-947); guides re-verified and given the clause, then re-stamped.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 889, 947,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor in shared.js, shifting
+    # it 889->895, 947->953 (+6) with NO content change -- verified byte-identical
+    # ("function renderTriagePrompt(" through the trailing "<</shared:renderTriagePrompt>>" boundary).
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 895, 953,
      ".agents/skills/sdlc-task/SKILL.md"),
     # BT.ticket.sdlc-state-status-vocabulary task 3 fix pass 2: renderStateFlipScript's refusal moved into
     # shared.js (+9 lines there, rebuilt into sdlc-flow.js) and the FLIP_REFUSED bookkeep bullet (+1 line per
@@ -144,7 +152,9 @@ ANCHORS = [
     # Same shift, same evidence as the sdlc-task entry immediately above (one shared.js region,
     # two guides). BT.ticket.failure-attribution-and-gate-cache, task 9: 800->892, 848->940.
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: 7547dda added a carried-over-data clause INSIDE renderTriagePrompt and the window had already drifted to start in renderStatusWriteScript; re-picked from CONTENT to the region markers <<shared:renderTriagePrompt>>..<</shared:renderTriagePrompt>> (879-927 -> 889-947); guides re-verified and given the clause, then re-stamped.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 889, 947,
+    # Same shift, same evidence as the sdlc-task entry immediately above (one shared.js region,
+    # two guides). BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: 889->895, 947->953.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-guide", 895, 953,
      ".agents/skills/sdlc-flow/SKILL.md"),
     # BT.ticket.harness-config-must-bail-not-warn-on-a-malformed-payload, tasks 1-2: the
     # loadHarnessConfig() unwrap + bail additions inserted 52 net lines into sdlc-task.js and
@@ -216,7 +226,11 @@ ANCHORS = [
     # byte-identical ("7. Commit your edits (stage explicitly" through the trailing
     # `git log --oneline -1`).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3922->3999, 3949->4026 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4111, 4138,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
+    # 4111->4117, 4138->4144 (+6) with NO content change -- verified byte-identical
+    # ("7. Commit your edits (stage explicitly" through the trailing `git log --oneline -1`).
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4117, 4144,
      ".agents/skills/sdlc-task/SKILL.md"),
         # Same +4 shift, same evidence.
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): the
@@ -240,7 +254,11 @@ ANCHORS = [
     # content change -- verified byte-identical ("const worktreeRecipe =" through the trailing
     # content).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2116->2125, 2246->2255 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2219, 2349,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
+    # 2219->2225, 2349->2355 (+6) with NO content change -- verified byte-identical
+    # ("const worktreeRecipe =" through the trailing content).
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2225, 2355,
      ".agents/skills/sdlc-flow/SKILL.md"),
         # Same +4 shift, same evidence. This is the anchor whose range-drift refusal surfaced the
     # whole thing -- its needle had slid out of the window entirely.
@@ -263,7 +281,12 @@ ANCHORS = [
     # content change -- verified byte-identical ("5. Commit (stage explicitly" through the
     # trailing `git log --oneline -1`).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3993->4025, 4028->4060 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4136, 4171,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite (in shared.js's <<shared:runPrepareRun>> region, inlined
+    # well above this anchor) landed entirely ABOVE this anchor, shifting it 4136->4142, 4171->4177
+    # (+6) with NO content change to this region itself -- verified byte-identical ("5. Commit
+    # (stage explicitly" through the trailing `git log --oneline -1`).
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4142, 4177,
      ".agents/skills/sdlc-flow/SKILL.md"),
 ]
 

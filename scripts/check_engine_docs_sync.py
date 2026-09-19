@@ -140,7 +140,10 @@ ANCHORS = [
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 2181->2190, 2262->2271 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
     # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 2190->2202, 2271->2283 with NO content change -- verified byte-identical against the manifest hash at HEAD.
     # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 (renderImplementPrompt) plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 2202->2274, 2283->2355 with NO content change -- verified byte-identical against the manifest hash at HEAD (relocated via check_skill_sync.py --relocate, same window, same evidence).
-    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2274, 2355,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
+    # 2274->2280, 2355->2361 (+6) with NO content change -- verified byte-identical.
+    (".claude/workflows/sdlc-task.js", "isolation-and-branch-naming", 2280, 2361,
      "docs/workflows/sdlc-task.md", "## In-place vs. `--worktree`"),
     # The triage prompt moved into the shared library (D83), so the anchor follows it. Left at the
     # engines it would hash a one-line function CALL -- green forever, blind to every change in the
@@ -162,11 +165,15 @@ ANCHORS = [
     # shift. New range 892-940 diffed byte-identical against the pre-shift 800-848 window (git show
     # 2d3a918:.claude/workflows/prompts/shared.js).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: 7547dda added a carried-over-data clause INSIDE renderTriagePrompt and the window had already drifted to start in renderStatusWriteScript; re-picked from CONTENT to the region markers <<shared:renderTriagePrompt>>..<</shared:renderTriagePrompt>> (879-927 -> 889-947); guides re-verified and given the clause, then re-stamped.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 889, 947,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor in shared.js, shifting
+    # it 889->895, 947->953 (+6) with NO content change -- verified byte-identical.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy", 895, 953,
      "docs/workflows/sdlc-task.md", "## Pipeline"),
     # Same shift, same evidence as the entry immediately above (one shared.js region, two docs).
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: 7547dda added a carried-over-data clause INSIDE renderTriagePrompt and the window had already drifted to start in renderStatusWriteScript; re-picked from CONTENT to the region markers <<shared:renderTriagePrompt>>..<</shared:renderTriagePrompt>> (879-927 -> 889-947); guides re-verified and given the clause, then re-stamped.
-    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 889, 947,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: same shift, 889->895, 947->953.
+    (".claude/workflows/prompts/shared.js", "triage-bail-taxonomy-flow-doc", 895, 953,
      "docs/workflows/sdlc-flow.md", "## Pipeline"),
     # BT.ticket.sdlc-bookkeep-writes-block-status-deterministically, tasks 1-3: the new
     # renderStateFlipScript deterministic `mev set-block-status` dispatch was inlined ABOVE these
@@ -243,7 +250,10 @@ ANCHORS = [
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 3922->3999, 3949->4026 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
     # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 3999->4011, 4026->4038 with NO content change -- verified byte-identical against the manifest hash at HEAD.
     # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 4011->4111, 4038->4138 with NO content change -- verified byte-identical against the manifest hash at HEAD.
-    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4111, 4138,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
+    # 4111->4117, 4138->4144 (+6) with NO content change -- verified byte-identical.
+    (".claude/workflows/sdlc-task.js", "bookkeep-vault-commit", 4117, 4144,
      "docs/workflows/sdlc-task.md", "## Vaulted `planning/` writes in the per-task loop"),
     # BT.ticket.engines-must-not-author-unverified-records, tasks 1-2: the same two inlined blocks
     # noted above also landed in sdlc-flow.js (renderOperatorGatedACRule call in the wrap-up/docs
@@ -268,7 +278,11 @@ ANCHORS = [
     # BT.ticket.work-assertion-base-sha-self-comparison lane close: unrelated edits above this anchor shifted it 1095->1104, 1112->1121 with NO content change -- verified byte-identical against the manifest hash at 7547dda~1.
     # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 1104->1172, 1121->1189 with NO content change -- verified byte-identical against the manifest hash at HEAD.
     # 2026-09-18 sdlc-flow.js header comment synced to its SKILL.md guide (+9 lines at the top of the file), shifting this anchor 1172->1181, 1189->1198 with NO content change -- verified byte-identical against the manifest hash at HEAD.
-    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1181, 1198,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
+    # 1181->1187, 1198->1204 (+6) with NO content change -- verified byte-identical
+    # ("const autoMergeFlag = hasFlag('--auto-merge')" onward).
+    (".claude/workflows/sdlc-flow.js", "flags-and-defaults", 1187, 1204,
      "docs/workflows/sdlc-flow.md", "## Usage"),
     # 2026-09-18 sdlc-flow.js header comment synced to its SKILL.md guide (+9 lines at the top of the file), shifting this anchor 62->71, 74->83 with NO content change -- verified byte-identical against the manifest hash at HEAD.
     (".claude/workflows/sdlc-flow.js", "stage-list", 71, 83,
@@ -310,7 +324,10 @@ ANCHORS = [
     # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 2125->2137, 2255->2267 with NO content change -- verified byte-identical against the manifest hash at HEAD.
     # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 2137->2210, 2267->2340 with NO content change -- verified byte-identical against the manifest hash at HEAD (relocated via check_skill_sync.py --relocate, same window, same evidence).
     # 2026-09-18 sdlc-flow.js header comment synced to its SKILL.md guide (+9 lines at the top of the file), shifting this anchor 2210->2219, 2340->2349 with NO content change -- verified byte-identical against the manifest hash at HEAD.
-    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2219, 2349,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
+    # 2219->2225, 2349->2355 (+6) with NO content change -- verified byte-identical.
+    (".claude/workflows/sdlc-flow.js", "isolation-and-branch-naming", 2225, 2355,
      "docs/workflows/sdlc-flow.md", "## Isolation mode — branch by default, `--worktree` for true isolation"),
     # Re-pinned again 2026-09-08 (BT.ticket.lane-heartbeat-goes-stale-mid-block, task 4): BOTH the
     # renderTestPrompt() shift (+5) and the runTests() heartbeatRecipe call (+2) sit ABOVE this
@@ -341,7 +358,10 @@ ANCHORS = [
     # 2026-09-18 prepare-run transcription hotfix: loadHarnessConfig()'s count guard (+11) and HARNESS_CONFIG_BAIL (+1) landed ABOVE this anchor, shifting it 4025->4037, 4060->4072 with NO content change -- verified byte-identical against the manifest hash at HEAD.
     # BT.ticket.per-task-state-write-before-implement, task 1 fix pass: the per-task `running` marker STEP 0 plus resolvePrevSha's start_sha precedence landed entirely ABOVE this anchor, shifting it 4037->4127, 4072->4162 with NO content change -- verified byte-identical against the manifest hash at HEAD.
     # 2026-09-18 sdlc-flow.js header comment synced to its SKILL.md guide (+9 lines at the top of the file), shifting this anchor 4127->4136, 4162->4171 with NO content change -- verified byte-identical against the manifest hash at HEAD.
-    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4136, 4171,
+    # BT.ticket.prepare-run-never-receives-a-spec-slug, task 2: the runPrepareRun(specSlug, opts)
+    # default-slug + force-refresh rewrite landed entirely ABOVE this anchor, shifting it
+    # 4136->4142, 4171->4177 (+6) with NO content change -- verified byte-identical.
+    (".claude/workflows/sdlc-flow.js", "bookkeep-vault-commit", 4142, 4177,
      "docs/workflows/sdlc-flow.md", "## Vaulted planning directories (D46)"),
 ]
 

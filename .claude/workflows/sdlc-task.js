@@ -259,16 +259,22 @@ function parsePrepareRunOutput(rawOutput) {
 // seeded directly from a resumed run's recorded `state.setup` (see the --resume block in the engine
 // body) — in that case this function is never called at all for the rest of that run.
 //
-// specSlug is optional: resolveRepoRoot() (the very first caller, before any spec-file existence
-// check has even happened) calls this with no slug, so the very first prepare-run turn never
-// depends on knowing the spec is real yet. A later caller passing a DIFFERENT specSlug than the
-// cached one forces a fresh call — this does not happen in either engine's normal flow, since both
-// resolve blockId once, before Setup, and never change it mid-run.
+// specSlug is optional and now defaults to the enclosing blockId when omitted, so EVERY caller
+// (including resolveRepoRoot(), the very first caller) effectively passes the same slug — the
+// one-agent-turn-per-run cache still hits on every ordinary call, since every caller resolves to
+// that same effective slug. prepare_run.py's enumerate_tasks()/run_lint() already no-op cleanly on
+// a blockId that is not yet a validated real spec (missing file -> {hasTasks: false, ...} /
+// {passed: true, findings: []}, never a crash or refusal), so passing it unvalidated on the very
+// first call is safe. `opts.force` bypasses the cache entirely — for a caller that just wrote a
+// NEW tasks.json to disk (the D16 derive-from-block-record / derive-from-tasks.md fallbacks) and
+// must see the fresh file rather than replaying the pre-derive cached result.
 let _prepareRunCache = null
 let _prepareRunCacheSlug = undefined
-async function runPrepareRun(specSlug) {
-  if (_prepareRunCache && _prepareRunCacheSlug === (specSlug || null)) return _prepareRunCache
-  const specFlag = specSlug ? ` --spec-slug ${specSlug}` : ''
+async function runPrepareRun(specSlug, opts) {
+  const slug = specSlug || (typeof blockId !== 'undefined' ? blockId : null)
+  const force = opts && opts.force
+  if (!force && _prepareRunCache && _prepareRunCacheSlug === (slug || null)) return _prepareRunCache
+  const specFlag = slug ? ` --spec-slug ${slug}` : ''
   const blockIdFlag = blockId ? ` --block-id ${blockId}` : ''
   const result = await agent(`
 Run exactly this ONE Bash call, from the invoking directory — do not cd anywhere first, do not
@@ -281,7 +287,7 @@ into one string.
 Return via StructuredOutput: rawOutput (everything printed above, verbatim, in order).
 `, { label: 'prepare-run', schema: PREPARE_RUN_SCHEMA, model: 'haiku' })
   _prepareRunCache = parsePrepareRunOutput(result && result.rawOutput)
-  _prepareRunCacheSlug = specSlug || null
+  _prepareRunCacheSlug = slug || null
   return _prepareRunCache
 }
 // <</shared:runPrepareRun>>
